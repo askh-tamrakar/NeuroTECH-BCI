@@ -2,11 +2,11 @@
   "sampling_rate": 512,
   "channel_mapping": {
     "ch0": {
-      "sensor": "EMG",
+      "sensor": "EOG",
       "enabled": true
     },
     "ch1": {
-      "sensor": "EEG",
+      "sensor": "EOG",
       "enabled": true
     }
   },
@@ -37,16 +37,22 @@
       ]
     },
     "notch": {
-      "freq": 6
+      "freq": 6,
+      "enabled": true
     },
     "bandpass": {
-      "high": 56
+      "high": 56,
+      "enabled": true,
+      "low": 70.5
     }
   },
   "display": {
-    "timeWindowMs": 8000,
+    "timeWindowMs": 1000,
     "showGrid": true,
-    "scannerX": 0
+    "scannerX": 0,
+    "yMin": -500,
+    "yMax": 500,
+    "manualZoom": true
   },
   "num_channels": 2
 }

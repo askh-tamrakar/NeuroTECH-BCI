@@ -6,6 +6,7 @@ import LiveDashboard from '../views/LiveDashboard'
 import CommandVisualizer from '../views/CommandVisualizer'
 import RecordingsView from '../views/RecordingsView'
 import DevicesView from '../views/DevicesView'
+import Test2 from '../views/Test2'
 //import ChatView from '../views/ChatView'
 //import SettingsView from '../views/SettingsView'
 //import TestView from '../views/TestView'
@@ -85,6 +86,7 @@ export default function Dashboard() {
     //{ label: 'Settings', onClick: () => setCurrentPage('settings'), href: '#settings' },
     //{ label: 'Test', onClick: () => setCurrentPage('test'), href: '#test' },
     { label: 'Dino', onClick: () => setCurrentPage('dino'), href: '#dino' },
+    { label: 'Test2', onClick: () => setCurrentPage('test2'), href: '#test2' },
     {
       label: 'Theme',
       type: 'pill',
@@ -168,9 +170,9 @@ export default function Dashboard() {
         {currentPage === 'settings' && <SettingsView />}
         {currentPage === 'test' && <TestView />}
         {currentPage === 'dino' && <DinoView />}
+        {currentPage === 'test2' && <Test2 />}
       </div>
 
-      {/* Footer */}
       <div className="footer">
         NeuroKeys: BCI Typing Project •{' '}
         <a onClick={() => setAuthView('signup')} className="muted" href="#signup" rel="noreferrer">

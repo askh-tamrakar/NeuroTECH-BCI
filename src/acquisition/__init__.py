@@ -1,7 +1,7 @@
 from .serial_reader import SerialPacketReader
 from .packet_parser import PacketParser, Packet
 from .lsl_streams import LSLStreamer, LSL_AVAILABLE
-from .acquisition_app import AcquisitionApp 
+from .acquisition_app import AcquisitionWindow 
 
 __all__ = [
     "SerialPacketReader",
@@ -9,6 +9,6 @@ __all__ = [
     "Packet",
     "LSLStreamer",
     "LSL_AVAILABLE",
-    "AcquisitionApp"
+    "AcquisitionWindow"
 ]
 
