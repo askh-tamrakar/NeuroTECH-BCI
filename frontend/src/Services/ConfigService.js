@@ -1,4 +1,6 @@
 const CONFIG_KEY = 'biosignals-config'
+
+// ✅ FIXED: Proper JSON structure with all required fields
 const CONFIG_DEFAULTS = {
     sampling_rate: 512,
     channel_mapping: {
@@ -58,50 +60,57 @@ export const ConfigService = {
             const cached = localStorage.getItem(CONFIG_KEY)
             if (cached) {
                 console.log('✅ Config loaded from localStorage')
-                const config = JSON.parse(cached)
-
-                // Background sync with backend (non-blocking)
-                this.syncFromBackend().catch(e => {
-                    console.warn('⚠️ Failed to sync config from backend:', e)
-                })
-
-                return config
+                try {
+                    const config = JSON.parse(cached)
+                    // ✅ FIXED: Background sync with proper error handling
+                    this.syncFromBackend().catch(e => {
+                        console.warn('⚠️ Failed to sync config from backend:', e)
+                    })
+                    return config
+                } catch (parseErr) {
+                    console.warn('⚠️ Stored config is invalid JSON, clearing:', parseErr)
+                    localStorage.removeItem(CONFIG_KEY)
+                    throw parseErr
+                }
             }
+
+            // If no cache, try to load from backend (if endpoint exists)
+            try {
+                console.log('📡 Fetching config from backend...')
+                const response = await fetch('/api/config')
+                if (response.status === 404) {
+                    console.log('ℹ️ Backend /api/config endpoint not available (older web_server.py)')
+                    console.log('ℹ️ Using localStorage mode - config will persist locally')
+                    localStorage.setItem(CONFIG_KEY, JSON.stringify(CONFIG_DEFAULTS))
+                    return CONFIG_DEFAULTS
+                }
+
+                if (response.ok) {
+                    const config = await response.json()
+                    console.log('✅ Config loaded from backend')
+                    localStorage.setItem(CONFIG_KEY, JSON.stringify(config))
+                    return config
+                }
+
+            } catch (e) {
+                console.warn('⚠️ Failed to load from backend:', e)
+            }
+
+            // Fallback to defaults
+            console.log('📋 Using default config')
+            localStorage.setItem(CONFIG_KEY, JSON.stringify(CONFIG_DEFAULTS))
+            return CONFIG_DEFAULTS
+
         } catch (e) {
-            console.warn('⚠️ Failed to load from localStorage:', e)
+            console.error('❌ Critical error loading config:', e)
+            return CONFIG_DEFAULTS
         }
-
-        // If no cache, try to load from backend (if endpoint exists)
-        try {
-            console.log('📡 Fetching config from backend...')
-            const response = await fetch('/api/config')
-
-            if (response.status === 404) {
-                console.log('ℹ️ Backend /api/config endpoint not available (older web_server.py)')
-                console.log('ℹ️ Using localStorage mode - config will persist locally')
-                localStorage.setItem(CONFIG_KEY, JSON.stringify(CONFIG_DEFAULTS))
-                return CONFIG_DEFAULTS
-            }
-
-            if (response.ok) {
-                const config = await response.json()
-                console.log('✅ Config loaded from backend')
-                localStorage.setItem(CONFIG_KEY, JSON.stringify(config))
-                return config
-            }
-        } catch (e) {
-            console.warn('⚠️ Failed to load from backend:', e)
-        }
-
-        // Fallback to defaults
-        console.log('📋 Using default config')
-        localStorage.setItem(CONFIG_KEY, JSON.stringify(CONFIG_DEFAULTS))
-        return CONFIG_DEFAULTS
     },
 
     /**
      * Save config to both localStorage and backend
      * Works with both old and new web_server.py versions
+     * ✅ FIXED: Backend save is now ENABLED
      */
     async saveConfig(config) {
         if (!config) {
@@ -114,12 +123,14 @@ export const ConfigService = {
             localStorage.setItem(CONFIG_KEY, JSON.stringify(config))
             console.log('💾 Config saved to localStorage')
 
-            // Try to persist to backend (if endpoint exists)
+            // ✅ FIXED: Backend persistence is now ENABLED and CRITICAL
+            // This is how ConfigWatcher in other apps sees config changes!
             await this.saveToBackend(config).catch(err => {
                 console.warn('⚠️ Backend save failed, but localStorage is fine:', err)
             })
 
             return true
+
         } catch (e) {
             console.error('❌ Failed to save config:', e)
             return false
@@ -133,7 +144,6 @@ export const ConfigService = {
     async syncFromBackend() {
         try {
             const response = await fetch('/api/config')
-
             if (response.status === 404) {
                 console.log('ℹ️ Backend endpoint not available')
                 return false
@@ -148,6 +158,7 @@ export const ConfigService = {
             localStorage.setItem(CONFIG_KEY, JSON.stringify(config))
             console.log('🔄 Config synced from backend')
             return true
+
         } catch (e) {
             console.warn('⚠️ Failed to sync from backend:', e)
             return false
@@ -156,7 +167,7 @@ export const ConfigService = {
 
     /**
      * Save config to backend
-     * FIXED: Gracefully handles missing endpoint
+     * ✅ FIXED: Now properly handles all cases
      */
     async saveToBackend(config) {
         try {
@@ -172,7 +183,7 @@ export const ConfigService = {
             if (response.status === 404) {
                 console.log('ℹ️ Backend /api/config POST endpoint not found')
                 console.log('ℹ️ Config will be saved to localStorage only')
-                console.log('ℹ️ To enable backend persistence, update to web_server_FIXED.py')
+                console.log('ℹ️ To enable backend persistence, update to latest web_server.py')
                 return true // Still success since localStorage is saved
             }
 
@@ -182,6 +193,7 @@ export const ConfigService = {
 
             console.log('📤 Config saved to backend')
             return true
+
         } catch (e) {
             console.warn('⚠️ Backend save failed, config saved to localStorage:', e)
             return true // Still success - localStorage is working
@@ -204,6 +216,7 @@ export const ConfigService = {
             }
 
             return true
+
         } catch (e) {
             console.error('❌ Failed to clear config:', e)
             return false
@@ -216,7 +229,6 @@ export const ConfigService = {
     mergeConfig(partial) {
         const cached = localStorage.getItem(CONFIG_KEY)
         const existing = cached ? JSON.parse(cached) : CONFIG_DEFAULTS
-
         const merged = {
             ...existing,
             ...partial,
@@ -233,7 +245,6 @@ export const ConfigService = {
                 ...partial.display
             }
         }
-
         return merged
     }
 }

@@ -21,3 +21,20 @@ except Exception:
     pass
 
 __all__ = ["emg_processor", "eog_processor", "eeg_processor"]
+
+
+
+def __getattr__(name):
+    if name == 'filter_router':
+        from . import filter_router
+        return filter_router
+    elif name == 'emg_processor':
+        from . import emg_processor
+        return emg_processor
+    elif name == 'eog_processor':
+        from . import eog_processor
+        return eog_processor
+    elif name == 'eeg_processor':
+        from . import eeg_processor
+        return eeg_processor
+    raise AttributeError(f"module '{__name__}' has no attribute '{name}'")

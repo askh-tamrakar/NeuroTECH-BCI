@@ -1,11 +1,15 @@
-"""
-Top-level package for the BCI project.
+from .config import ConfigWatcher, config
 
-Provides convenient access to acquisition and preprocessing subpackages.
-"""
+__all__ = [
+    'ConfigWatcher',
+    'config'
+]
 
-from . import acquisition
-# from . import preprocessing  # TODO: Create this module
-from . import processing
-
-__all__ = ["acquisition", "processing"]
+def __getattr__(name):
+    if name == 'ConfigWatcher':
+        from .config import ConfigWatcher
+        return ConfigWatcher
+    elif name == 'config':
+        from .config import config
+        return config
+    raise AttributeError(f"module '{__name__}' has no attribute '{name}'")

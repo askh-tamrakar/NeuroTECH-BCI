@@ -84,6 +84,6 @@ class ConfigWatcher:
 # Global instance that all modules will use
 # ------------------------------------------------------
 
-CONFIG_PATH = Path(__file__).parent / "sensor_config.json"
+CONFIG_PATH = Path(__file__).parent.parent.parent / "config" / "sensor_config.json"
 
 config = ConfigWatcher(CONFIG_PATH)

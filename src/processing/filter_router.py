@@ -1,37 +1,14 @@
 """
-src/processing/filter_router_modified.py
-
-IMPROVED FILTER ROUTER - Production Ready Version
-
-Features:
-- ✅ Sends processed data to single unified LSL stream
-- ✅ Handles both channels different sensors (EMG + EOG)
-- ✅ Handles both channels same sensor (EMG + EMG)
-- ✅ Explicitly handles disabled channels with metadata
-- ✅ Handles missing channel config (applies defaults)
-- ✅ Monitors config changes in real-time
-- ✅ Per-channel processor instances with independent state
-- ✅ Better logging and error handling
-- ✅ Channel metadata in LSL stream
-
-Improvements over original:
-1. Disabled channels get explicit mapping (not skipped)
-2. Missing channels apply sensible defaults
-3. All channels guaranteed to have entries
-4. Better logging with emoji for clarity
-5. More robust error handling
-6. Clear channel metadata in output stream
-
 Usage:
     python -m src.processing.filter_router_modified
 
 """
-
-from pathlib import Path
+import sys
 import time
 import json
 import threading
 import hashlib
+from pathlib import Path
 from typing import List, Tuple, Dict, Optional
 
 try:
@@ -51,6 +28,7 @@ try:
     from .emg_processor import EMGFilterProcessor
     from .eog_processor import EOGFilterProcessor
     from .eeg_processor import EEGFilterProcessor
+    from src.utils.config import config
 except ImportError:
     print("[Router] Running from different context, using local imports")
     import sys
@@ -60,12 +38,16 @@ except ImportError:
     from src.processing.eeg_processor import EEGFilterProcessor
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+sys.path.insert(0, str(PROJECT_ROOT / "src"))
+
 CONFIG_PATH = PROJECT_ROOT / "config" / "sensor_config.json"
-RAW_STREAM_NAME = "BioSignals-Raw-uV"
+RAW_STREAM_NAME = "Bio-Proc"
 PROCESSED_STREAM_NAME = "BioSignals-Processed"
 RELOAD_INTERVAL = 2.0
 DEFAULT_SR = 512
 
+def get_current_config() -> dict:
+    return config.get_all()
 
 def load_config() -> dict:
     """Load sensor_config.json with safe fallback defaults."""
@@ -159,7 +141,7 @@ class FilterRouter:
     """Main filter router class - processes multi-channel biomedical signals."""
     
     def __init__(self):
-        self.config = load_config()
+        self.config = get_current_config()
         self.sr = int(self.config.get("sampling_rate", DEFAULT_SR))
         self.inlet = None
         self.outlet = None
