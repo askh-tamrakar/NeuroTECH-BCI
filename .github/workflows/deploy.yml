@@ -64,3 +64,15 @@ jobs:
           # For now, standard sync.
           ARGS: "-avz --delete" 
           SSH_ARGS: "-o IdentitiesOnly=yes -o StrictHostKeyChecking=no"
+
+      - name: Install Dependencies & Restart Backend
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.CPANEL_HOST }}
+          username: ${{ secrets.CPANEL_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd ${{ secrets.CPANEL_PATH_BACKEND }}
+            /usr/bin/pip install --user -r requirements.txt
+            mkdir -p tmp
+            touch tmp/restart.txt

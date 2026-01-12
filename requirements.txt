@@ -14,13 +14,11 @@ pandas>=2.0
 scipy>=1.10
 scikit-learn>=1.2
 joblib>=1.3
-torch>=2.0
-torchvision>=0.15
 
 # EEG Tools
-mne>=1.2
-neurokit2>=0.2
-brainflow>=4.8.0
+# mne>=1.2
+# neurokit2>=0.2
+# brainflow>=4.8.0
 
 # Hardware
 pyserial>=3.5
