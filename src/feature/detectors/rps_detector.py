@@ -49,7 +49,7 @@ class RPSDetector:
         except Exception as e:
             print(f"[RPSDetector] [ERROR] Error loading model: {e}")
         
-    def _predict_instant(self, features: dict) -> tuple[str, float]:
+    def predict_instant(self, features: dict) -> tuple[str, float]:
         """
         Helper: Make a single instant prediction from features.
         Returns: (Label, Confidence)
@@ -102,7 +102,7 @@ class RPSDetector:
         - If Rest -> Resolve any pending candidates.
         - If Gesture -> Add to candidates.
         """
-        label, confidence = self._predict_instant(features)
+        label, confidence = self.predict_instant(features)
         
         # Determine if this instant frame is "Active" (valid gesture) or "Rest"
         is_confident = confidence > self.confidence_threshold

@@ -21,6 +21,7 @@ export default function TestPanel({
     const getGestures = () => {
         if (activeSensor === 'EMG') return ['Rock', 'Paper', 'Scissors', 'Rest'];
         if (activeSensor === 'EOG') return ['SingleBlink', 'DoubleBlink', 'Rest'];
+        if (activeSensor === 'EEG') return ['Concentration', 'Relaxation', 'Rest'];
         return ['Rest'];
     };
 

@@ -64,14 +64,20 @@ const RPSGame = ({ wsEvent }) => {
     };
 
     const resetGame = useCallback(() => {
-        setGameState('idle');
         setPlayerMove(null);
         setResult(null);
         processingRef.current = false;
         pickComputerMove();
-        // Disable prediction when game ends
-        togglePrediction(false);
-    }, [pickComputerMove]);
+
+        if (!manualMode) {
+            setGameState('waiting_for_rest');
+            // Keep prediction running for auto-restart
+        } else {
+            setGameState('idle');
+            // Disable prediction when game sends to idle
+            togglePrediction(false);
+        }
+    }, [pickComputerMove, manualMode]);
 
     // Connect on mount
     useEffect(() => {
@@ -99,6 +105,14 @@ const RPSGame = ({ wsEvent }) => {
 
         // Ignore WS events when manual mode is active
         if (manualMode) return;
+
+        // Check for Auto-Restart Logic (Waiting for Rest)
+        if (gameState === 'waiting_for_rest') {
+            if (eventName === 'REST') {
+                setGameState('waiting');
+            }
+            return;
+        }
 
         // Check if we are in waiting state
         if (gameState !== 'waiting' || processingRef.current) return;
@@ -248,8 +262,9 @@ const RPSGame = ({ wsEvent }) => {
                     </button>
                 )}
                 {gameState === 'waiting' && !manualMode && <span className="pulse">Waiting for Player Gesture...</span>}
+                {gameState === 'waiting_for_rest' && !manualMode && <span className="animate-pulse text-yellow-400">Release Gesture...</span>}
                 {gameState === 'waiting' && manualMode && <span className="pulse">Manual Mode: press <strong>R</strong>/<strong>P</strong>/<strong>S</strong></span>}
-                {gameState !== 'waiting' && gameState !== 'idle' && <span>Result Received</span>}
+                {gameState !== 'waiting' && gameState !== 'waiting_for_rest' && gameState !== 'idle' && <span>Result Received</span>}
             </div>
 
 

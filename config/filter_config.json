@@ -13,7 +13,12 @@
           "order": 4,
           "type": "bandpass"
         }
-      ]
+      ],
+      "notch_enabled": true,
+      "bandpass_enabled": true,
+      "bandpass_high": 30,
+      "bandpass_low": 4,
+      "cutoff": 0.1
     },
     "EMG": {
       "bandpass_enabled": true,
@@ -21,9 +26,9 @@
       "bandpass_low": 70,
       "cutoff": 20.1,
       "notch_enabled": true,
+      "notch_freq": 0,
       "order": 4,
-      "type": "high_pass",
-      "notch_freq": 0
+      "type": "high_pass"
     },
     "EOG": {
       "bandpass_enabled": true,

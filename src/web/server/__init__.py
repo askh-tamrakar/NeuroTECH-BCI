@@ -16,6 +16,7 @@ from src.web.server.routes.config_routes import config_bp
 from src.web.server.routes.stream_routes import stream_bp
 from src.web.server.routes.recording_routes import recording_bp
 from src.web.server.routes.training_routes import training_bp
+from src.web.server.routes.prediction_routes import prediction_bp
 
 # Define Project Root for template folder
 # src/web/server/__init__.py -> ../../../ = root or ../../../../ depending on structure
@@ -53,7 +54,7 @@ def create_app():
     # Initialize Detector
     try:
         # Load config to get detector settings if needed, or default
-        state.rps_detector = RPSDetector() 
+        state.rps_detector = RPSDetector(state.config) 
     except Exception as e:
         print(f"Warning: Failed to init RPSDetector: {e}")
     
@@ -63,6 +64,7 @@ def create_app():
     app.register_blueprint(stream_bp)
     app.register_blueprint(recording_bp)
     app.register_blueprint(training_bp)
+    app.register_blueprint(prediction_bp)
     
     # Index Route
     @app.route('/')

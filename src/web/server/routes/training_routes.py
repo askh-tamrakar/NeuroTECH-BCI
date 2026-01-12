@@ -112,6 +112,8 @@ def api_eval_eog():
 def api_save_window():
     """Accept a recorded window, save as CSV/DB, compute features and update config thresholds."""
     try:
+        from src.calibration.calibration_manager import calibration_manager
+        
         payload = request.get_json()
         if not payload:
             return jsonify({"error": "No payload provided"}), 400
@@ -141,7 +143,7 @@ def api_save_window():
         
         table_name = db_manager.create_session_table(sensor, session_name)
         
-        label_map = {'Rest': 0, 'Rock': 1, 'Paper': 2, 'Scissors': 3}
+        label_map = {'Rest': 0, 'Rock': 1, 'Paper': 2, 'Scissors': 3, 'SingleBlink': 1, 'DoubleBlink': 2, 'Concentration': 1, 'Relaxation': 2}
         label_int = label_map.get(action, -1)
         if label_int == -1 and action.isdigit():
              label_int = int(action)
@@ -151,6 +153,7 @@ def api_save_window():
             db_manager.insert_window(features, label_int, session_id=str(int(ts)), table_name=table_name)
         elif sensor.upper() == 'EOG':
             db_manager.insert_eog_window(features, label_int, session_id=str(int(ts)), table_name=table_name)
+        # EEG support in DB Manager might be needed later, using EMG table for now or skipping specific insert
 
         # Update Config Logic (Auto-Calibration on fly)
         action_entry = sensor_features.setdefault(action, {})
@@ -174,12 +177,50 @@ def api_save_window():
                 updated[k] = [new_lo, new_hi]
 
         save_success = save_config(cfg)
+        
+        # --- PREDICTION / DETECTION LOGIC ---
+        detected = False
+        predicted_label = "Unknown"
+        
+        # 1. Try ML Model first (Priority for EMG)
+        if sensor.upper() == 'EMG' and state.rps_detector:
+            try:
+                # Use stateless prediction for test windows
+                pred_label, pred_conf = state.rps_detector.predict_instant(features)
+                
+                # If confidence is reasonable, use it
+                if pred_label != "Unknown" and pred_conf > 0.4:
+                    predicted_label = pred_label
+                    # Match if label matches action
+                    detected = (predicted_label == action)
+                else:
+                    predicted_label = "Rest" if pred_label == "Rest" else "Unknown"
+                    detected = False
+                    
+            except Exception as e:
+                print(f"[Training] ML params prediction failed: {e}")
+                
+        # 2. Try Threshold Detection (Fallback or for EOG/EEG)
+        # If we didn't get a confident ML prediction (or simpler sensor)
+        if predicted_label == "Unknown" or sensor.upper() != 'EMG':
+             is_det = calibration_manager.detect_signal(sensor, action, features, cfg)
+             detected = is_det
+             if detected:
+                 predicted_label = action
+             else:
+                 # If we already have a prediction (e.g. from EMG low conf), keep it or overwrite?
+                 # ideally for EOG/EEG if validation fails, it's "Rest" or "Miss"
+                 if predicted_label == "Unknown": saved_pred = "Rest"
+                 else: saved_pred = predicted_label
+                 predicted_label = saved_pred
 
         result = {
             "status": "saved",
             "features": features,
             "config_updated": save_success,
-            "db_table": table_name
+            "db_table": table_name,
+            "detected": detected,
+            "predicted_label": predicted_label
         }
 
         try:
@@ -187,7 +228,7 @@ def api_save_window():
         except Exception:
             pass
 
-        print(f"[Training] 💾 Window saved to DB: {table_name}")
+        print(f"[Training] 💾 Window saved to DB: {table_name}. Prediction: {predicted_label} (Match: {detected})")
         return jsonify(result)
 
     except Exception as e:

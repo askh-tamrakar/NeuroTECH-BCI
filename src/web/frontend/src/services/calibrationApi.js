@@ -178,6 +178,38 @@ export const CalibrationApi = {
     },
 
     /**
+     * Send a single window for PREDICTION only (Test Mode).
+     * @param {string} sensorType 
+     * @param {{action: string, samples: number[]}} windowPayload 
+     */
+    async sendPredictionWindow(sensorType, windowPayload) {
+        try {
+            const body = {
+                sensor: sensorType,
+                action: windowPayload.action, // Used as ground truth label or empty
+                label: windowPayload.action,
+                samples: windowPayload.samples
+            };
+
+            const resp = await fetch('/api/prediction/window/predict', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+
+            if (!resp.ok) {
+                const txt = await resp.text();
+                throw new Error(`Prediction error: ${resp.status} ${txt}`);
+            }
+
+            return resp.json();
+        } catch (err) {
+            console.error('[CalibrationApi] sendPredictionWindow error', err);
+            throw err;
+        }
+    },
+
+    /**
      * Lists all available recordings from the server.
      * @returns {Promise<Array<{name: string, size: number, created: number}>>}
      */

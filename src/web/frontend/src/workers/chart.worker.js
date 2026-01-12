@@ -295,9 +295,18 @@ function draw() {
 
             // Label
             if (win.label) {
+                ctx.save();
                 ctx.fillStyle = stroke;
-                ctx.font = '10px monospace';
-                ctx.fillText(win.label, px1 + 2, height - 5);
+                ctx.font = 'bold 32px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'bottom';
+
+                const centerX = px1 + wFunc / 2;
+                const bottomY = height - 10;
+
+                // Draw label at bottom center of the window
+                ctx.fillText(win.label, centerX, bottomY);
+                ctx.restore();
             }
         }
     });

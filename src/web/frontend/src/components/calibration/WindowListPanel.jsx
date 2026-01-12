@@ -161,8 +161,10 @@ export default function WindowListPanel({
                                                 }`}>
                                                 {(win.status === 'recording' || win.status === 'pending') ? 'Recording' :
                                                     (win.status === 'collected') ? 'Ready' :
-                                                        (win.status === 'saved' || win.status === 'correct') ? 'Saved' :
-                                                            'Error'}
+                                                        (win.status === 'saved') ? 'Saved' :
+                                                            (win.status === 'correct') ? 'Correct' :
+                                                                (win.status === 'incorrect') ? 'Incorrect' :
+                                                                    'Error'}
                                             </span>
                                         </div>
                                     </div>

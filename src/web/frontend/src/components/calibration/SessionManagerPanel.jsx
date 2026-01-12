@@ -6,7 +6,8 @@ export default function SessionManagerPanel({
     activeSensor,
     currentSessionName,
     onSessionChange,
-    refreshTrigger = 0
+    refreshTrigger = 0,
+    isTestMode = false // New Prop
 }) {
     const SENSOR_LABEL_MAP = {
         'EMG': { 0: 'Rest', 1: 'Rock', 2: 'Paper', 3: 'Scissors' },
@@ -30,6 +31,7 @@ export default function SessionManagerPanel({
     const lastSessionRef = useRef(null);
 
     const handleCreate = () => {
+        if (isTestMode) return; // Disable create in test mode
         const name = newSessionInput.trim();
         if (!name) return;
 
@@ -67,7 +69,11 @@ export default function SessionManagerPanel({
         e.stopPropagation();
 
         try {
-            const res = await fetch(`/api/sessions/${activeSensor}/${sessionName}`, {
+            const url = isTestMode
+                ? `/api/prediction/sessions/${sessionName}`
+                : `/api/sessions/${activeSensor}/${sessionName}`;
+
+            const res = await fetch(url, {
                 method: 'DELETE'
             });
 
@@ -95,7 +101,11 @@ export default function SessionManagerPanel({
         try {
             await setLoading(true); // Reuse loading or new state
             // 1. Delete the session
-            const res = await fetch(`/api/sessions/${activeSensor}/${fullCurrentSessionName}`, {
+            const url = isTestMode
+                ? `/api/prediction/sessions/${fullCurrentSessionName}`
+                : `/api/sessions/${activeSensor}/${fullCurrentSessionName}`;
+
+            const res = await fetch(url, {
                 method: 'DELETE'
             });
 
@@ -117,7 +127,11 @@ export default function SessionManagerPanel({
     const fetchSessions = async () => {
         setLoading(true);
         try {
-            const res = await fetch(`/api/sessions/${activeSensor}`);
+            const url = isTestMode
+                ? `/api/prediction/sessions`
+                : `/api/sessions/${activeSensor}`;
+
+            const res = await fetch(url);
             const data = await res.json();
             if (data.tables) {
                 setSessions(data.tables.reverse());
@@ -156,7 +170,11 @@ export default function SessionManagerPanel({
 
             try {
                 // Assuming GET returns the rows for the session table
-                const res = await fetch(`/api/sessions/${activeSensor}/${fullCurrentSessionName}`);
+                const url = isTestMode
+                    ? `/api/prediction/sessions/${fullCurrentSessionName}`
+                    : `/api/sessions/${activeSensor}/${fullCurrentSessionName}`;
+
+                const res = await fetch(url);
                 if (res.ok) {
                     const data = await res.json();
                     setSelectedSessionRows(Array.isArray(data) ? data : (data.rows || []));
@@ -184,7 +202,11 @@ export default function SessionManagerPanel({
             const prevRows = [...selectedSessionRows];
             setSelectedSessionRows(prev => prev.filter(r => r.id !== rowId));
 
-            const res = await fetch(`/api/sessions/${activeSensor}/${fullCurrentSessionName}/rows/${rowId}`, {
+            const url = isTestMode
+                ? `/api/prediction/sessions/${fullCurrentSessionName}/rows/${rowId}`
+                : `/api/sessions/${activeSensor}/${fullCurrentSessionName}/rows/${rowId}`;
+
+            const res = await fetch(url, {
                 method: 'DELETE'
             });
 
@@ -229,7 +251,14 @@ export default function SessionManagerPanel({
                             <thead className="bg-surface/50 sticky top-0 z-10 backdrop-blur-sm">
                                 <tr>
                                     <th className="px-3 py-1.5 text-xs font-bold text-primary uppercase border-b border-text w-12">S.No</th>
-                                    <th className="px-3 py-1.5 text-xs font-bold text-primary uppercase border-b border-text w-24">Class</th>
+                                    <th className="px-3 py-1.5 text-xs font-bold text-primary uppercase border-b border-text w-24">
+                                        {isTestMode ? "Actual" : "Class"}
+                                    </th>
+                                    {isTestMode && (
+                                        <th className="px-3 py-1.5 text-xs font-bold text-primary uppercase border-b border-text w-24">
+                                            Predicted
+                                        </th>
+                                    )}
                                     {/* Dynamic Feature Headers */}
                                     {selectedSessionRows.length > 0 && selectedSessionRows[0].features && !Array.isArray(selectedSessionRows[0].features) ? (
                                         Object.keys(selectedSessionRows[0].features).map(key => (
@@ -259,6 +288,11 @@ export default function SessionManagerPanel({
                                         <td className="px-3 py-1.5 font-bold text-text">
                                             {getLabelName(activeSensor, row.label !== undefined ? row.label : (row.class !== undefined ? row.class : 'Unknown'))}
                                         </td>
+                                        {isTestMode && (
+                                            <td className={`px-3 py-1.5 font-bold ${row.class === row.label ? 'text-emerald-500' : 'text-red-500'}`}>
+                                                {row.predicted_label || row.class || '-'}
+                                            </td>
+                                        )}
 
                                         {/* Dynamic Feature Cells */}
                                         {row.features && !Array.isArray(row.features) ? (
@@ -303,22 +337,24 @@ export default function SessionManagerPanel({
                         </button>
                     </h3>
 
-                    {/* Create New */}
-                    <div className="flex gap-1">
-                        <input
-                            className="w-full bg-bg border border-border rounded px-2 py-1 text-xs text-text focus:border-primary outline-none font-mono"
-                            placeholder="New Session..."
-                            value={newSessionInput}
-                            onChange={e => setNewSessionInput(e.target.value)}
-                            onKeyDown={e => e.key === 'Enter' && handleCreate()}
-                        />
-                        <button
-                            onClick={handleCreate}
-                            className="px-2 bg-primary text-white text-xs font-bold rounded hover:opacity-90"
-                        >
-                            <FolderPlus size={20} />
-                        </button>
-                    </div>
+                    {/* Create New - Hidden in Test Mode */}
+                    {!isTestMode && (
+                        <div className="flex gap-1">
+                            <input
+                                className="w-full bg-bg border border-border rounded px-2 py-1 text-xs text-text focus:border-primary outline-none font-mono"
+                                placeholder="New Session..."
+                                value={newSessionInput}
+                                onChange={e => setNewSessionInput(e.target.value)}
+                                onKeyDown={e => e.key === 'Enter' && handleCreate()}
+                            />
+                            <button
+                                onClick={handleCreate}
+                                className="px-2 bg-primary text-white text-xs font-bold rounded hover:opacity-90"
+                            >
+                                <FolderPlus size={20} />
+                            </button>
+                        </div>
+                    )}
                 </div>
 
                 <div className="flex-grow overflow-hidden relative p-0 bg-surface/30">

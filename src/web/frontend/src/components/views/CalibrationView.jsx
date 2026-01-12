@@ -215,18 +215,34 @@ export default function CalibrationView({ wsData, wsEvent, config: initialConfig
             // Use latest signal timestamp tracked via WS
             const latestTs = latestSignalTimeRef.current;
 
+            // Determine Label (Fixed for Calibration, Random for Test)
+            const sensorForWindow = activeSensorRef.current;
+            let labelForWindow = targetLabelRef.current;
+            const currentMode = mode === 'realtime' ? 'realtime' : (mode === 'test' ? 'test' : 'realtime');
+            console.log(`[AutoWindow] Creation tick. Mode: ${currentMode}, Sensor: ${sensorForWindow}`);
+
+            // Random Label Logic for Test Mode
+            if (currentMode === 'test') {
+                const LABELS = {
+                    'EMG': ['Rock', 'Paper', 'Scissors', 'Rest'],
+                    'EOG': ['SingleBlink', 'DoubleBlink', 'Rest'],
+                    'EEG': ['Concentration', 'Relaxation', 'Rest']
+                };
+                const options = LABELS[sensorForWindow] || ['Rest'];
+                labelForWindow = options[Math.floor(Math.random() * options.length)];
+            }
+
             // Visual sync spawn
             const delayToCenter = Math.round(currentTw / 2);
             const start = latestTs + delayToCenter;
             const end = start + currentDur;
 
-            const sensorForWindow = activeSensorRef.current;
-            const labelForWindow = targetLabelRef.current;
             const channelForWindow = activeChannelIndexRef.current;
             const limit = autoLimitRef.current;
 
             // Count pending/collected matching label
-            const currentBatchCount = markedWindowsRef.current.filter(w =>
+            const currentList = markedWindowsRef.current || [];
+            const currentBatchCount = currentList.filter(w =>
                 w.label === labelForWindow &&
                 (w.status === 'pending' || w.status === 'collected')
             ).length;
@@ -235,102 +251,115 @@ export default function CalibrationView({ wsData, wsEvent, config: initialConfig
                 return;
             }
 
-            const newWindow = {
-                id: Math.random().toString(36).substr(2, 9),
-                sensor: sensorForWindow,
-                mode: 'realtime',
-                startTime: start,
-                endTime: end,
-                label: labelForWindow,
-                channel: channelForWindow,
-                status: 'pending',
-                samples: []
-            };
+            try {
+                const newWindow = {
+                    id: Math.random().toString(36).substr(2, 9),
+                    sensor: sensorForWindow,
+                    mode: currentMode,
+                    startTime: start,
+                    endTime: end,
+                    label: labelForWindow,
+                    channel: channelForWindow,
+                    status: 'pending',
+                    samples: []
+                };
 
-            setMarkedWindows(prev => [...prev, newWindow].slice(-MAX_WINDOWS));
-            setActiveWindow(newWindow);
+                console.log("[AutoWind] pushing window", newWindow.id, newWindow.label);
+                setMarkedWindows(prev => [...prev, newWindow].slice(-MAX_WINDOWS));
+                setActiveWindow(newWindow);
 
-            const checkAndCollect = async () => {
-                // Check if still valid
-                if (!markedWindowsRef.current.find(w => w.id === newWindow.id)) return;
+                const checkAndCollect = async () => {
+                    // Check if still valid
+                    if (!markedWindowsRef.current.find(w => w.id === newWindow.id)) return;
 
-                // Sync check
-                const latestDataTs = latestSignalTimeRef.current;
-                const systemLag = Math.max(0, Date.now() - latestDataTs);
+                    // Sync check
+                    const latestDataTs = latestSignalTimeRef.current;
+                    const systemLag = Math.max(0, Date.now() - latestDataTs);
 
-                const shiftedStart = start + systemLag;
-                const shiftedEnd = end + systemLag;
+                    const shiftedStart = start + systemLag;
+                    const shiftedEnd = end + systemLag;
 
-                if (latestDataTs < shiftedEnd - 50) {
-                    // Wait slightly longer
-                    const now = Date.now();
-                    if (now > shiftedEnd + 5000) {
-                        console.warn("[AutoWindow] Timeout waiting for data");
-                        return; // Abort
-                    }
-                    setTimeout(checkAndCollect, 100);
-                    return;
-                }
-
-                try {
-                    // ASYNC FETCH FROM WORKER
-                    if (!chartRef.current) throw new Error("Chart not ready");
-
-                    const samplesPoints = await chartRef.current.getSamples(shiftedStart, shiftedEnd);
-
-                    if (!samplesPoints || samplesPoints.length === 0) {
-                        throw new Error("No data collected");
+                    if (latestDataTs < shiftedEnd - 50) {
+                        // Wait slightly longer
+                        const now = Date.now();
+                        if (now > shiftedEnd + 5000) {
+                            console.warn("[AutoWindow] Timeout waiting for data");
+                            return; // Abort
+                        }
+                        setTimeout(checkAndCollect, 100);
+                        return;
                     }
 
-                    const samples = samplesPoints.map(p => p.value);
-                    const timestamps = samplesPoints.map(p => p.time);
+                    try {
+                        // ASYNC FETCH FROM WORKER
+                        if (!chartRef.current) throw new Error("Chart not ready");
 
-                    const collectedWindow = {
-                        ...newWindow,
-                        startTime: shiftedStart,
-                        endTime: shiftedEnd,
-                        samples,
-                        timestamps,
-                        status: 'collected',
-                        lagCorrection: systemLag
-                    };
+                        const samplesPoints = await chartRef.current.getSamples(shiftedStart, shiftedEnd);
 
-                    setReadyWindows(prev => {
-                        const next = [...prev, collectedWindow];
-                        setWindowProgress(prevProg => ({ ...prevProg, [newWindow.id]: { status: 'collected' } }));
-                        return next;
-                    });
+                        if (!samplesPoints || samplesPoints.length === 0) {
+                            throw new Error("No data collected");
+                        }
 
-                    setMarkedWindows(prev => prev.map(w => w.id === newWindow.id ? collectedWindow : w));
+                        const samples = samplesPoints.map(p => p.value);
+                        const timestamps = samplesPoints.map(p => p.time);
 
-                } catch (err) {
-                    console.error('Auto-collection error:', err);
-                    setWindowProgress(prev => ({ ...prev, [newWindow.id]: { status: 'error', message: String(err) } }));
+                        const collectedWindow = {
+                            ...newWindow,
+                            startTime: shiftedStart,
+                            endTime: shiftedEnd,
+                            samples,
+                            timestamps,
+                            status: 'collected',
+                            lagCorrection: systemLag
+                        };
 
-                    const errorWindow = { ...newWindow, status: 'error', error: String(err) };
-                    setBufferWindows(prev => [...prev, errorWindow]);
-                    setMarkedWindows(prev => prev.map(w => w.id === newWindow.id ? { ...w, status: 'error' } : w));
+                        setReadyWindows(prev => {
+                            const next = [...prev, collectedWindow];
+                            setWindowProgress(prevProg => ({ ...prevProg, [newWindow.id]: { status: 'collected' } }));
+                            return next;
+                        });
 
-                } finally {
-                    setActiveWindow(null);
-                }
-            };
+                        setMarkedWindows(prev => prev.map(w => w.id === newWindow.id ? collectedWindow : w));
 
-            // Initial wait
-            setTimeout(checkAndCollect, delayToCenter + currentDur + 100);
+                    } catch (err) {
+                        console.error('Auto-collection error:', err);
+                        setWindowProgress(prev => ({ ...prev, [newWindow.id]: { status: 'error', message: String(err) } }));
+
+                        const errorWindow = { ...newWindow, status: 'error', error: String(err) };
+                        setBufferWindows(prev => [...prev, errorWindow]);
+                        setMarkedWindows(prev => prev.map(w => w.id === newWindow.id ? { ...w, status: 'error' } : w));
+
+                    } finally {
+                        setActiveWindow(null);
+                    }
+                };
+
+                // Initial wait
+                setTimeout(checkAndCollect, delayToCenter + currentDur + 100);
+            } catch (e) {
+                console.error("Critical error in createNextWindow", e);
+            }
         };
 
-        createNextWindow();
-        windowIntervalRef.current = setInterval(createNextWindow, windowDuration + GAP_DURATION);
-    }, [windowDuration, GAP_DURATION, activeSensor, targetLabel, activeChannelIndex, autoLimit, autoCalibrate]);
+        try {
+            createNextWindow();
+        } catch (e) { console.error("Error creating window", e); }
+
+        windowIntervalRef.current = setInterval(() => {
+            try { createNextWindow(); } catch (e) { console.error("Interval Error", e); }
+        }, windowDuration + GAP_DURATION);
+    }, [windowDuration, GAP_DURATION, activeSensor, targetLabel, activeChannelIndex, autoLimit, autoCalibrate, mode]);
 
     const handleStartCalibration = useCallback(async () => {
+        console.log(`[handleStart] Requesting start. Active Mode: ${mode}`);
         setIsCalibrating(true);
 
-        await CalibrationApi.startCalibration(activeSensor, mode, targetLabel, windowDuration, sessionName);
+        // fire and forget / await
+        CalibrationApi.startCalibration(activeSensor, mode, targetLabel, windowDuration, sessionName)
+            .catch(e => console.error("Start Calib API failed", e));
 
-        if (mode === 'realtime') {
-            // Start auto-windowing logic
+        if (mode === 'realtime' || mode === 'test') {
+            console.log('[handleStart] Triggering auto-windowing...');
             startAutoWindowing();
         }
     }, [activeSensor, mode, targetLabel, windowDuration, sessionName, startAutoWindowing]);
@@ -420,17 +449,29 @@ export default function CalibrationView({ wsData, wsEvent, config: initialConfig
 
             for (const win of toAppend) {
                 try {
-                    const resp = await CalibrationApi.sendWindow(activeSensor, {
-                        action: win.label,
-                        channel: win.channel,
-                        samples: win.samples,
-                        timestamps: win.timestamps
-                    }, sessionName);
+                    // Check Mode (Calibration vs Test)
+                    let resp;
+                    if (mode === 'test') {
+                        resp = await CalibrationApi.sendPredictionWindow(activeSensor, {
+                            action: win.label,
+                            samples: win.samples
+                        });
+                        // Map prediction response to similar structure for internal state
+                        resp.features = resp.features;
+                        resp.predicted_label = resp.predicted_label;
+                    } else {
+                        resp = await CalibrationApi.sendWindow(activeSensor, {
+                            action: win.label,
+                            channel: win.channel,
+                            samples: win.samples,
+                            timestamps: win.timestamps
+                        }, sessionName);
+                    }
 
                     // Success -> Create Saved version for Buffer
                     const savedWindow = {
                         ...win,
-                        status: 'saved', // RED
+                        status: (mode === 'test') ? (resp.match ? 'correct' : 'incorrect') : 'saved',
                         features: resp.features,
                         predictedLabel: resp.predicted_label
                     };
@@ -442,7 +483,7 @@ export default function CalibrationView({ wsData, wsEvent, config: initialConfig
                     // Update UI List to show SAVED (e.g. Red/Blue)
                     setMarkedWindows(prev => prev.map(w => w.id === win.id ? {
                         ...w,
-                        status: 'saved',
+                        status: (mode === 'test') ? (resp.match ? 'correct' : 'incorrect') : 'saved',
                         features: resp.features,
                         predictedLabel: resp.predicted_label
                     } : w));
@@ -989,12 +1030,13 @@ export default function CalibrationView({ wsData, wsEvent, config: initialConfig
             <div className="h-[50%] flex-none min-h-0 px-2 pb-2 pt-0 grid grid-cols-1 lg:grid-cols-12 gap-2">
                 {/* Session Panel */}
                 <div className="lg:col-span-9 h-full min-h-0 overflow-hidden shadow-sm">
-                    {mode === 'realtime' ? (
+                    {(mode === 'realtime' || mode === 'test') ? (
                         <SessionManagerPanel
                             activeSensor={activeSensor}
                             currentSessionName={sessionName}
                             onSessionChange={setSessionName}
                             refreshTrigger={dataLastUpdated}
+                            isTestMode={mode === 'test'}
                         />
                     ) : (
                         <ConfigPanel config={config} sensor={activeSensor} onSave={setConfig} />
