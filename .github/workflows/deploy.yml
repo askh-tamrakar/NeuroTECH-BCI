@@ -38,7 +38,7 @@ jobs:
           SOURCE: "frontend/dist/"
           TARGET: ${{ secrets.CPANEL_PATH }}
           ARGS: "-avz --delete"
-          SSH_ARGS: "-o IdentitiesOnly=yes -o StrictHostKeyChecking=no"
+          SSH_ARGS: "-o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o KexAlgorithms=+diffie-hellman-group-exchange-sha256"
 
       # -------------------------------------------------------------------------
       # BACKEND DEPLOYMENT
@@ -63,11 +63,11 @@ jobs:
           # PRO TIP: Exclude 'venv' or 'virtualenv' if the user stores it in the same dir (bad practice but common).
           # For now, standard sync.
           ARGS: "-avz --delete" 
-          SSH_ARGS: "-o IdentitiesOnly=yes -o StrictHostKeyChecking=no"
+          SSH_ARGS: "-o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o KexAlgorithms=+diffie-hellman-group-exchange-sha256"
 
       - name: Install Dependencies & Restart Backend
         run: |
           mkdir -p ~/.ssh/
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ${{ secrets.CPANEL_USER }}@${{ secrets.CPANEL_HOST }} "cd ${{ secrets.CPANEL_PATH_BACKEND }} && /usr/bin/pip install --user -r requirements.txt && mkdir -p tmp && touch tmp/restart.txt"
+          ssh -o StrictHostKeyChecking=no -o KexAlgorithms=+diffie-hellman-group-exchange-sha256 -i ~/.ssh/id_rsa ${{ secrets.CPANEL_USER }}@${{ secrets.CPANEL_HOST }} "cd ${{ secrets.CPANEL_PATH_BACKEND }} && /usr/bin/pip install --user -r requirements.txt && mkdir -p tmp && touch tmp/restart.txt"
