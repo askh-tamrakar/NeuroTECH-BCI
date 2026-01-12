@@ -1,50 +1,33 @@
 # requirements.txt - BCI Project
-# python>=3.9,<3.12
+# Core
+django>=5.0
+data
+daphne>=4.0
+channels>=4.0
+channels_redis>=4.0
+djangorestframework>=3.14
+django-cors-headers>=4.0
 
-# Core numeric / data
+# Scientific / ML
 numpy>=1.24
 pandas>=2.0
 scipy>=1.10
-
-# EEG/Signal processing
-mne>=1.2
-neurokit2>=0.2
-
-# Streaming & hardware
-pylsl>=1.17.0
-pyserial>=3.5
-brainflow>=4.8.0
-
-# ML
 scikit-learn>=1.2
+joblib>=1.3
 torch>=2.0
 torchvision>=0.15
 
-# Utilities
-matplotlib>=3.6
-h5py>=3.8
-joblib>=1.3
+# EEG Tools
+mne>=1.2
+neurokit2>=0.2
+brainflow>=4.8.0
 
-# Web & backend
-flask>=2.0.0
-fastapi>=0.95
-uvicorn>=0.22
-websockets>=11.0
-flask-cors>=4.0.0
-flask-socketio>=5.0.0
-python-socketio>=5.0.0
-python-engineio>=4.0.0
+# Hardware
+pyserial>=3.5
+pylsl>=1.17.0
 
-# Excel & Office
-openpyxl>=3.0.0
-
-# GUI
-PySide6>=6.4.0
-pyqtgraph>=0.13.0
-PyQt5>=5.15.0
-
-# Dev / lint / packaging
-black
-pytest
+# Legacy / Utils
 python-dotenv
-
+h5py>=3.8
+matplotlib>=3.6
+openpyxl>=3.0.0
