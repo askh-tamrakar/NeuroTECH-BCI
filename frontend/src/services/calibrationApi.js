@@ -37,8 +37,8 @@ export const CalibrationApi = {
      */
     async fetchSensorConfig() {
         console.log('[CalibrationApi] Fetching sensor config...');
-        // In a real app, this would be a fetch call to /api/config
-        const response = await fetch('/api/config'); // Assuming a proxy setup
+        // In a real app, this would be a fetch call to /api/config/
+        const response = await fetch('/api/config/'); // Assuming a proxy setup
         if (!response.ok) {
             // Fallback or mock if backend is not ready
             return {
@@ -61,7 +61,7 @@ export const CalibrationApi = {
      */
     async saveSensorConfig(updatedConfig) {
         console.log('[CalibrationApi] Saving sensor config:', updatedConfig);
-        const response = await fetch('/api/config', {
+        const response = await fetch('/api/config/', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(updatedConfig)
@@ -120,7 +120,7 @@ export const CalibrationApi = {
                 status: w.status
             }));
 
-            const response = await fetch('/api/calibrate', {
+            const response = await fetch('/api/calibrate/', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -159,7 +159,7 @@ export const CalibrationApi = {
                 session_name: sessionName // Pass session name
             };
 
-            const resp = await fetch('/api/window', {
+            const resp = await fetch('/api/window/', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body)
@@ -183,7 +183,7 @@ export const CalibrationApi = {
      */
     async listRecordings() {
         try {
-            const response = await fetch('/api/recordings');
+            const response = await fetch('/api/recordings/');
             if (!response.ok) throw new Error('Failed to list recordings');
             return response.json();
         } catch (error) {
@@ -215,7 +215,7 @@ export const CalibrationApi = {
      */
     async startEmgRecording(label) {
         try {
-            const response = await fetch('/api/emg/start', {
+            const response = await fetch('/api/emg/start/', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ label })
@@ -232,7 +232,7 @@ export const CalibrationApi = {
      */
     async stopEmgRecording() {
         try {
-            const response = await fetch('/api/emg/stop', { method: 'POST' });
+            const response = await fetch('/api/emg/stop/', { method: 'POST' });
             return response.json();
         } catch (error) {
             console.error('[CalibrationApi] Error stopping EMG recording:', error);
@@ -245,7 +245,7 @@ export const CalibrationApi = {
      */
     async getEmgStatus() {
         try {
-            const response = await fetch('/api/emg/status');
+            const response = await fetch('/api/emg/status/');
             if (!response.ok) return null;
             return response.json();
         } catch (error) {
@@ -263,7 +263,7 @@ export const CalibrationApi = {
         if (sensorType !== 'EMG' && sensorType !== 'EOG') return;
         const action = isActive ? 'start' : 'stop';
         try {
-            const response = await fetch(`/api/${sensorType.toLowerCase()}/predict/${action}`, { method: 'POST' });
+            const response = await fetch(`/api/${sensorType.toLowerCase()}/predict/${action}/`, { method: 'POST' });
             return response.json();
         } catch (error) {
             console.error(`[CalibrationApi] Error toggling ${sensorType} prediction:`, error);

@@ -17,7 +17,6 @@ import ScrollStack, { ScrollStackItem } from '../ui/ScrollStack';
 import PillNav from '../ui/PillNav';
 import Pill from '../ui/Pill';
 import { ConnectionButton } from '../ui/ConnectionButton';
-// import SerialConnection from '../ui/SerialConnection'; // [REMOVED]
 
 export default function Dashboard() {
   const { user, logout } = useAuth()
@@ -61,7 +60,7 @@ export default function Dashboard() {
         setSerialBridgeData({ _batch: packets });
 
         // 2. Relay to Backend
-        if (sendMessage && status === 'Open') {
+        if (sendMessage && status === 'connected') {
           sendMessage({ type: 'data', payload: packets });
         }
       }

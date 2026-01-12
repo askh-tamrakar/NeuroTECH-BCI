@@ -2,7 +2,7 @@
   "sampling_rate": 512.0,
   "channel_mapping": {
     "ch0": {
-      "sensor": "EMG"
+      "sensor": "EOG"
     },
     "ch1": {
       "sensor": "EOG"

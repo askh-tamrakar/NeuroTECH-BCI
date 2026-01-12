@@ -10,6 +10,9 @@ from core.utils.config import config_manager
 import pandas as pd
 import logging
 
+from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import csrf_exempt
+
 logger = logging.getLogger(__name__)
 
 # Paths
@@ -19,6 +22,7 @@ DATA_DIR = settings.BASE_DIR / "data"
 PROCESSED_DIR = DATA_DIR / "processed"
 RECORDINGS_DIR = DATA_DIR / "recordings"
 
+@method_decorator(csrf_exempt, name='dispatch')
 class ConfigView(APIView):
     """
     GET /api/config -> Returns merged configuration.
@@ -68,6 +72,29 @@ class ConfigView(APIView):
         except Exception as e:
             logger.error(f"Error saving config: {e}")
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class RecordingView(APIView):
+    def get(self, request):
+        recordings = []
+        if RECORDINGS_DIR.exists():
+             for f in RECORDINGS_DIR.iterdir():
+                 if f.suffix in ['.csv', '.json']:
+                     recordings.append({
+                         "id": f.name,
+                         "name": f.stem,
+                         "created_at": f.stat().st_mtime
+                     })
+        return Response(recordings)
+
+@method_decorator(csrf_exempt, name='dispatch')
+class EvaluateModelView(APIView):
+    def post(self, request):
+        return Response({"accuracy": 0.85, "report": "Stub Evaluation"})
+
+@method_decorator(csrf_exempt, name='dispatch')
+class PredictControlView(APIView):
+    def post(self, request, action=None):
+        return Response({"status": "success", "action": action})
 
 class SessionView(APIView):
     """

@@ -6,10 +6,10 @@ import numpy as np
 # Robust imports
 try:
     # Try absolute imports (Django Context)
-    from backend.core.processing.emg_processor import EMGFilterProcessor
-    from backend.core.processing.eog_processor import EOGFilterProcessor
-    from backend.core.processing.eeg_processor import EEGFilterProcessor
-    from backend.core.utils.config import config_manager
+    from core.processing.emg_processor import EMGFilterProcessor
+    from core.processing.eog_processor import EOGFilterProcessor
+    from core.processing.eeg_processor import EEGFilterProcessor
+    from core.utils.config import config_manager
 except ImportError:
     try:
         # Try relative imports (Package Context)
@@ -77,38 +77,57 @@ class ProcessingPipeline:
     def process_sample(self, sample_dict):
         """
         Process a dictionary of channel values.
-        Input: { 'ch0': val, 'ch1': val ... }
-        Output: { 'ch0': filtered_val, 'ch1': filtered_val ... }
+        Input: { 'ch0': val, 'ch1': val, 'channels': { '0': val } ... }
+        Output: { 'ch0': filtered_val, ... 'channels': { '0': filtered_val } }
+        Ensures each channel is processed exactly once per sample to maintain filter state.
         """
-        result = {}
+        result = sample_dict.copy()
         
-        # Iterate over inputs
-        # We support both 'ch0' keys and integer 0 keys handling
-        
-        for k, val in sample_dict.items():
-            # Parse channel index
-            try:
-                if isinstance(k, int):
-                    idx = k
-                elif k.startswith('ch'):
-                    idx = int(k[2:])
-                else:
-                    # Pass through non-channel keys (like timestamp)
-                    result[k] = val
-                    continue
-            except:
-                result[k] = val
+        # We process based on configured processors map
+        for idx, processor in self.processors.items():
+            if processor is None:
                 continue
                 
-            # Process
-            processor = self.processors.get(idx)
-            if processor:
+            # extract raw value from multiple possible locations
+            raw_val = None
+            
+            # 1. Top level 'chX'
+            key_str = f"ch{idx}"
+            if key_str in sample_dict:
+                raw_val = sample_dict[key_str]
+            # 2. Top level integer key
+            elif idx in sample_dict:
+                raw_val = sample_dict[idx]
+            # 3. Nested 'channels' dict
+            elif 'channels' in sample_dict and isinstance(sample_dict['channels'], dict):
+                channels = sample_dict['channels']
+                if str(idx) in channels:
+                    raw_val = channels[str(idx)]
+                elif idx in channels:
+                    raw_val = channels[idx]
+
+            # If found, process and update ALL locations
+            if raw_val is not None:
                 try:
-                    result[k] = processor.process_sample(float(val))
+                    # Handle object format if raw_val is { value: ... }
+                    val_float = float(raw_val) if not isinstance(raw_val, dict) else float(raw_val.get('value', 0))
+                    
+                    # Process (advance filter state)
+                    filtered_val = processor.process_sample(val_float)
+                    
+                    # Write back to result
+                    if key_str in result:
+                        result[key_str] = filtered_val
+                    if idx in result:
+                        result[idx] = filtered_val
+                    if 'channels' in result and isinstance(result['channels'], dict):
+                        if str(idx) in result['channels']:
+                            result['channels'][str(idx)] = filtered_val
+                        if idx in result['channels']:
+                            result['channels'][idx] = filtered_val
+                            
                 except Exception as e:
-                    # Fallback on error
-                    result[k] = val
-            else:
-                result[k] = val
-                
+                    # On error, leave raw value
+                    pass
+
         return result

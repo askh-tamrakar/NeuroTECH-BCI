@@ -159,7 +159,7 @@ export const ConfigService = {
      */
     async syncFromBackend() {
         try {
-            const response = await fetch('/api/config')
+            const response = await fetch('/api/config/')
 
             if (response.status === 404) {
                 console.log('ℹ️ Backend endpoint not available')
@@ -187,7 +187,7 @@ export const ConfigService = {
      */
     async saveToBackend(config) {
         try {
-            const response = await fetch('/api/config', {
+            const response = await fetch('/api/config/', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

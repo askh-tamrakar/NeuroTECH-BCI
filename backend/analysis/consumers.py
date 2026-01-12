@@ -1,18 +1,25 @@
 import json
 import logging
+import sys
 from channels.generic.websocket import AsyncWebsocketConsumer
 
+def force_log(msg):
+    sys.stdout.write(f"{msg}\n")
+    sys.stdout.flush()
+
 try:
-    from backend.core.feature.extractors.rps_extractor import RPSExtractor
+    from core.feature.extractors.rps_extractor import RPSExtractor
     EXTRACTOR_AVAILABLE = True
 except ImportError:
     EXTRACTOR_AVAILABLE = False
+    force_log("[Consumer] Warning: RPSExtractor not available")
 
 try:
-    from backend.core.processing.pipeline import ProcessingPipeline
+    from core.processing.pipeline import ProcessingPipeline
     PIPELINE_AVAILABLE = True
 except ImportError:
     PIPELINE_AVAILABLE = False
+    force_log("[Consumer] Warning: Pipeline not available")
 
 # Placeholder Detector if missing
 class MockDetector:
@@ -20,38 +27,44 @@ class MockDetector:
 
 try:
     # Attempt import (assuming core.detection or similar)
-    from backend.core.detection.rps_detector import RPSDetector
+    from core.feature.detectors.rps_detector import RPSDetector
 except ImportError:
-    print("[Consumer] Warning: RPSDetector import failed. Using Mock.")
+    force_log("[Consumer] Warning: RPSDetector import failed. Using Mock.")
     RPSDetector = MockDetector
 
 logger = logging.getLogger(__name__)
 
 class SignalConsumer(AsyncWebsocketConsumer):
     async def connect(self):
+        print(f"[DEBUG] SignalConsumer.connect entered") # Direct debug
         try:
-            self.detector = RPSDetector()
-            
-            # Initialize Pipeline
+            # Initialize Pipeline first to get config
             if PIPELINE_AVAILABLE:
                 self.pipeline = ProcessingPipeline()
+                config = self.pipeline.config
             else:
                 self.pipeline = None
+                config = {}
 
+            # Initialize Detector with config
+            self.detector = RPSDetector(config)
+            
             # Initialize Extractor for Channel 0 (EMG)
             if EXTRACTOR_AVAILABLE:
-                # Note: RPSExtractor might expect config. logic
-                self.extractor = RPSExtractor(channel_index=0, config={}, sr=512)
+                self.extractor = RPSExtractor(channel_index=0, config=config, sr=512)
             else:
                 self.extractor = None
                 
             await self.accept()
+            force_log(f"[SignalConsumer] WebSocket CONNECTED! Pipeline={bool(self.pipeline)}")
             logger.info("WebSocket Connected")
         except Exception as e:
+            force_log(f"[SignalConsumer] Connection Crash: {e}")
             logger.error(f"WebSocket Connection Failed: {e}", exc_info=True)
             await self.close()
 
     async def disconnect(self, close_code):
+        force_log(f"[SignalConsumer] Disconnected: {close_code}")
         pass
 
     async def receive(self, text_data):
@@ -60,6 +73,8 @@ class SignalConsumer(AsyncWebsocketConsumer):
             msg_type = data.get('type')
             
             if msg_type == 'data':
+                # force_log("[SignalConsumer] RX Data Packet") # Uncomment to debug flow
+                
                 # Handle Raw Data Stream from Frontend
                 if not self.detector: # Pipeline optional but detector needed
                     return
@@ -101,7 +116,7 @@ class SignalConsumer(AsyncWebsocketConsumer):
                 
                 # 3. Send Back Predictions
                 if prediction_to_send:
-                    print(f"[SignalConsumer] Sending Prediction: {prediction_to_send}")
+                    force_log(f"[SignalConsumer] Prediction: {prediction_to_send}")
                     await self.send(text_data=json.dumps({
                         'type': 'prediction',
                         'payload': prediction_to_send
@@ -112,7 +127,14 @@ class SignalConsumer(AsyncWebsocketConsumer):
                 # To match Frontend 'bio_data_update' or 'signal_update'
                 # Simplest is to mirror the structure but with filtered values.
                 if processed_samples:
-                     # print(f"[SignalConsumer] Sending {len(processed_samples)} backend-processed samples")
+                     # force_log(f"[SignalConsumer] Relaying {len(processed_samples)} samples") 
+                     # Commented out to avoid spam, uncomment if needed.
+                     # But user wants to SEE logs. Let's print every 100th batch or simply print '.'?
+                     # Printing every batch is too much at 250Hz?
+                     # Frontend sends batches (e.g. 10-50 samples).
+                     # Printing "Relaying 10 samples" 20 times a second is readable.
+                     force_log(f"[SignalConsumer] Processed batch of {len(processed_samples)}")
+                     
                      await self.send(text_data=json.dumps({
                         'type': 'bio_data_update',
                         # Frontend expects `_batch` or `channels`
@@ -138,5 +160,5 @@ class SignalConsumer(AsyncWebsocketConsumer):
                 
         except Exception as e:
             # Silence high-freq errors to avoid log spam, or log only type
-            print(f"[SignalConsumer] Error processing message: {e}")
+            force_log(f"[SignalConsumer] Error processing: {e}")
             logger.debug(f"Error processing message: {e}")

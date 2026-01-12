@@ -207,6 +207,57 @@ export default function CalibrationView({ wsData, wsEvent, config: initialConfig
         else if (sensor === 'EEG') setTargetLabel('Concentration');
     };
 
+    // -- REAL-TIME DATA INGESTION --
+    useEffect(() => {
+        if (!wsData || mode === 'recording') return;
+
+        let samples = [];
+
+        // Handle _batch (Preferred from Backend)
+        if (wsData._batch && Array.isArray(wsData._batch)) {
+            samples = wsData._batch;
+        }
+        // Handle direct array (if raw)
+        else if (Array.isArray(wsData)) {
+            samples = wsData;
+        }
+        // Handle legacy single packet
+        else if (wsData.channels || wsData.ch0 !== undefined) {
+            samples = [wsData];
+        }
+
+        if (samples.length === 0) return;
+
+        const targetChIdx = activeChannelIndex;
+        const formatted = [];
+
+        for (const pt of samples) {
+            const ts = pt.timestamp || Date.now();
+            let val = 0;
+            const key = `ch${targetChIdx}`;
+
+            // Try various paths (Pipeline normalizes to top level chX)
+            if (pt[key] !== undefined) val = pt[key];
+            else if (pt[targetChIdx] !== undefined) val = pt[targetChIdx];
+            else if (pt.channels) {
+                if (pt.channels[key] !== undefined) val = pt.channels[key];
+                else if (pt.channels[targetChIdx] !== undefined) val = pt.channels[targetChIdx];
+            }
+
+            if (typeof val === 'object' && val !== null) val = val.value || 0;
+
+            formatted.push({ time: ts, value: Number(val) });
+        }
+
+        if (formatted.length > 0) {
+            if (chartRef.current) {
+                chartRef.current.addData(formatted);
+            }
+            latestSignalTimeRef.current = formatted[formatted.length - 1].time;
+        }
+
+    }, [wsData, mode, activeChannelIndex]);
+
     const startAutoWindowing = useCallback(() => {
         const createNextWindow = () => {
             const currentTw = timeWindowRef.current;
@@ -799,227 +850,230 @@ export default function CalibrationView({ wsData, wsEvent, config: initialConfig
     }), [currentYDomain, activeSensor]);
 
     return (
-        <div className="flex flex-col h-[calc(100dvh-120px)] bg-bg text-text animate-in fade-in duration-500 overflow-hidden">
+        <>
             <div className='h-[94px] shrink-0' />
-            {/* TOP ROW: SIDEBAR + CHART (50%) */}
-            <div className="h-[50%] flex-none flex min-h-0 px-2 pb-2 pt-2 gap-2">
-                {/* SIDEBAR CARD */}
-                <div className="w-[260px] flex-none flex flex-col bg-surface border-border border-2 rounded-xl shadow-sm overflow-hidden">
-                    {/* Sidebar Header */}
-                    <div className="p-3 border-b border-border flex items-center gap-2 bg-surface/50">
-                        <div className="p-1.5 bg-primary/10 rounded-lg border border-primary/20 shrink-0">
-                            <span className="text-lg">🎯</span>
-                        </div>
-                        <div>
-                            <h2 className="text-sm font-bold tracking-tight leading-tight">Calibration</h2>
-                            <p className="text-xs text-muted font-mono uppercase tracking-widest">Controls</p>
-                        </div>
-                    </div>
-
-                    {/* Sidebar Scrollable Content */}
-                    <div className="flex-grow overflow-y-auto p-3 space-y-4 custom-scrollbar">
-
-                        {/* 1. SENSOR & MODE */}
-                        <div className="space-y-2">
-                            <label className="text-xs font-bold text-muted uppercase tracking-wider block">Sensor & Mode</label>
-                            <div className="flex bg-bg p-1 rounded-lg border border-border">
-                                {['EMG', 'EOG', 'EEG'].map(s => (
-                                    <button
-                                        key={s}
-                                        onClick={() => handleSensorChange(s)}
-                                        className={`flex-1 py-1 rounded font-bold text-xs transition-all ${activeSensor === s ? 'bg-primary text-primary-contrast shadow-sm' : 'text-muted hover:text-text'
-                                            }`}
-                                    >
-                                        {s}
-                                    </button>
-                                ))}
+            <div className="flex flex-col h-[calc(100dvh-120px)] bg-bg text-text animate-in fade-in duration-500 overflow-hidden">
+                {/* TOP ROW: SIDEBAR + CHART (50%) */}
+                <div className="h-[50%] flex-none flex min-h-0 px-2 pb-2 pt-2 gap-2">
+                    {/* SIDEBAR CARD */}
+                    <div className="w-[260px] flex-none flex flex-col bg-surface border-border border-2 rounded-xl shadow-sm overflow-hidden">
+                        {/* Sidebar Header */}
+                        <div className="p-3 border-b border-border flex items-center gap-2 bg-surface/50">
+                            <div className="p-1.5 bg-primary/10 rounded-lg border border-primary/20 shrink-0">
+                                <span className="text-lg">🎯</span>
                             </div>
-                            <div className="grid grid-cols-3 gap-1">
-                                {['realtime', 'recording', 'test'].map(m => (
-                                    <button
-                                        key={m}
-                                        onClick={() => setMode(m)}
-                                        className={`px-1 py-1 rounded font-bold text-xs transition-all uppercase tracking-wider border border-transparent ${mode === m
-                                            ? 'bg-accent text-primary-contrast shadow-sm border-accent/20'
-                                            : 'bg-bg text-muted hover:text-text hover:border-border'
-                                            }`}
-                                    >
-                                        {m}
-                                    </button>
-                                ))}
+                            <div>
+                                <h2 className="text-sm font-bold tracking-tight leading-tight">Calibration</h2>
+                                <p className="text-xs text-muted font-mono uppercase tracking-widest">Controls</p>
                             </div>
                         </div>
 
-                        {/* 2. CHANNELS (If Multi) */}
-                        {matchingChannels.length > 1 && (
-                            <div className="space-y-2 animate-in slide-in-from-left-2 duration-300">
-                                <label className="text-xs font-bold text-muted uppercase tracking-wider block">Active Channel</label>
-                                <div className="flex flex-wrap gap-2">
-                                    {matchingChannels.map(ch => (
+                        {/* Sidebar Scrollable Content */}
+                        <div className="flex-grow overflow-y-auto p-3 space-y-4 custom-scrollbar">
+
+                            {/* 1. SENSOR & MODE */}
+                            <div className="space-y-2">
+                                <label className="text-xs font-bold text-muted uppercase tracking-wider block">Sensor & Mode</label>
+                                <div className="flex bg-bg p-1 rounded-lg border border-border">
+                                    {['EMG', 'EOG', 'EEG'].map(s => (
                                         <button
-                                            key={ch.id}
-                                            onClick={() => setActiveChannelIndex(ch.index)}
-                                            className={`px-2 py-1 rounded font-bold text-xs transition-all uppercase tracking-wider border ${activeChannelIndex === ch.index
-                                                ? 'bg-primary text-primary-contrast border-primary shadow-sm'
-                                                : 'bg-bg text-muted border-border hover:text-text'
+                                            key={s}
+                                            onClick={() => handleSensorChange(s)}
+                                            className={`flex-1 py-1 rounded font-bold text-xs transition-all ${activeSensor === s ? 'bg-primary text-primary-contrast shadow-sm' : 'text-muted hover:text-text'
                                                 }`}
                                         >
-                                            {ch.label}
+                                            {s}
+                                        </button>
+                                    ))}
+                                </div>
+                                <div className="grid grid-cols-3 gap-1">
+                                    {['realtime', 'recording', 'test'].map(m => (
+                                        <button
+                                            key={m}
+                                            onClick={() => setMode(m)}
+                                            className={`px-1 py-1 rounded font-bold text-xs transition-all uppercase tracking-wider border border-transparent ${mode === m
+                                                ? 'bg-accent text-primary-contrast shadow-sm border-accent/20'
+                                                : 'bg-bg text-muted hover:text-text hover:border-border'
+                                                }`}
+                                        >
+                                            {m}
                                         </button>
                                     ))}
                                 </div>
                             </div>
-                        )}
 
-                        <div className="h-[1px] w-full bg-border/50"></div>
+                            {/* 2. CHANNELS (If Multi) */}
+                            {matchingChannels.length > 1 && (
+                                <div className="space-y-2 animate-in slide-in-from-left-2 duration-300">
+                                    <label className="text-xs font-bold text-muted uppercase tracking-wider block">Active Channel</label>
+                                    <div className="flex flex-wrap gap-2">
+                                        {matchingChannels.map(ch => (
+                                            <button
+                                                key={ch.id}
+                                                onClick={() => setActiveChannelIndex(ch.index)}
+                                                className={`px-2 py-1 rounded font-bold text-xs transition-all uppercase tracking-wider border ${activeChannelIndex === ch.index
+                                                    ? 'bg-primary text-primary-contrast border-primary shadow-sm'
+                                                    : 'bg-bg text-muted border-border hover:text-text'
+                                                    }`}
+                                            >
+                                                {ch.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
 
-                        {/* 3. COLLECTION CONTROLS */}
-                        <div className="space-y-3">
-                            <label className="text-xs font-bold text-muted uppercase tracking-wider block">Data Collection</label>
+                            <div className="h-[1px] w-full bg-border/50"></div>
 
-                            {/* Target Label */}
-                            <div className="space-y-1">
-                                <span className="text-xs text-muted uppercase">Target Label</span>
-                                <div className="relative">
+                            {/* 3. COLLECTION CONTROLS */}
+                            <div className="space-y-3">
+                                <label className="text-xs font-bold text-muted uppercase tracking-wider block">Data Collection</label>
+
+                                {/* Target Label */}
+                                <div className="space-y-1">
+                                    <span className="text-xs text-muted uppercase">Target Label</span>
+                                    <div className="relative">
+                                        <select
+                                            value={targetLabel}
+                                            onChange={(e) => setTargetLabel(e.target.value)}
+                                            className="w-full appearance-none bg-bg border border-border rounded px-2 py-1.5 text-xs font-bold font-mono outline-none focus:border-primary transition-colors pr-6"
+                                        >
+                                            {activeSensor === 'EMG' && ['Rock', 'Paper', 'Scissors', 'Rest'].map(l => <option key={l} value={l}>{l}</option>)}
+                                            {activeSensor === 'EOG' && ['SingleBlink', 'DoubleBlink', 'Rest'].map(l => <option key={l} value={l}>{l}</option>)}
+                                            {activeSensor === 'EEG' && ['Concentration', 'Relaxation', 'Rest'].map(l => <option key={l} value={l}>{l}</option>)}
+                                        </select>
+                                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-muted pointer-events-none text-[10px]">▼</span>
+                                    </div>
+                                </div>
+
+                                {/* Action Button */}
+                                <button
+                                    onClick={isCalibrating ? handleStopCalibration : handleStartCalibration}
+                                    className={`w-full py-3 rounded-lg font-black text-sm uppercase tracking-widest transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0 ${isCalibrating
+                                        ? 'bg-red-500 text-white hover:bg-red-600 shadow-red-500/20'
+                                        : 'bg-primary text-primary-contrast hover:opacity-90 shadow-primary/25'
+                                        }`}
+                                >
+                                    {isCalibrating ? 'STOP' : 'START CAPTURE'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* CHART CARD */}
+                    <div className="flex-grow min-w-0 bg-surface border-2 border-border rounded-xl shadow-sm overflow-hidden flex flex-col relative group">
+                        {/* Status Badge Overlay */}
+                        <div className="absolute top-1.5 right-3 z-10">
+                            <div className={`px-2 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider border backdrop-blur-sm shadow-sm ${isCalibrating
+                                ? 'bg-red-500/10 text-red-500 border-red-500/20 animate-pulse'
+                                : 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'}`}>
+                                {isCalibrating ? '● REC' : '● IDLE'}
+                            </div>
+                        </div>
+
+                        {/* Chart Header Controls */}
+                        <div className="px-3 py-1.5 border-b border-border bg-surface/50 flex items-center justify-between gap-4 max-h-[40px] flex-none">
+                            <div className="flex items-center gap-3 overflow-x-auto no-scrollbar">
+                                {/* Zoom */}
+                                <div className="flex items-center gap-2 shrink-0">
+                                    <span className="text-xs font-bold text-muted uppercase">Zoom</span>
+                                    <div className="flex gap-0.5">
+                                        {[1, 2, 5, 10, 25].map(z => (
+                                            <button
+                                                key={z}
+                                                onClick={() => { setZoom(z); setManualYRange(""); }}
+                                                className={`px-1.5 py-0.5 text-xs rounded font-bold transition-all ${zoom === z && !manualYRange
+                                                    ? 'bg-primary text-white shadow-sm'
+                                                    : 'bg-surface hover:bg-white/10 text-muted hover:text-text border border-border'
+                                                    }`}
+                                            >
+                                                {z}x
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div className="w-[1px] h-3 bg-border shrink-0"></div>
+
+                                {/* Window / Duration */}
+                                <div className="flex items-center gap-2 shrink-0">
+                                    <label className="text-xs font-bold text-muted uppercase">Win</label>
                                     <select
-                                        value={targetLabel}
-                                        onChange={(e) => setTargetLabel(e.target.value)}
-                                        className="w-full appearance-none bg-bg border border-border rounded px-2 py-1.5 text-xs font-bold font-mono outline-none focus:border-primary transition-colors pr-6"
+                                        value={timeWindow}
+                                        onChange={(e) => setTimeWindow(Number(e.target.value))}
+                                        className="bg-bg border border-border rounded px-1 py-0.5 text-xs font-mono outline-none"
                                     >
-                                        {activeSensor === 'EMG' && ['Rock', 'Paper', 'Scissors', 'Rest'].map(l => <option key={l} value={l}>{l}</option>)}
-                                        {activeSensor === 'EOG' && ['SingleBlink', 'DoubleBlink', 'Rest'].map(l => <option key={l} value={l}>{l}</option>)}
-                                        {activeSensor === 'EEG' && ['Concentration', 'Relaxation', 'Rest'].map(l => <option key={l} value={l}>{l}</option>)}
+                                        {[3000, 5000, 8000, 10000, 15000, 20000].map(v => (
+                                            <option key={v} value={v}>{v / 1000}s</option>
+                                        ))}
                                     </select>
-                                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-muted pointer-events-none text-[10px]">▼</span>
+
+                                    <label className="text-xs font-bold text-muted uppercase ml-1">Dur</label>
+                                    <select
+                                        value={windowDuration}
+                                        onChange={(e) => setWindowDuration(Number(e.target.value))}
+                                        className="bg-bg border border-border rounded px-1 py-0.5 text-xs font-mono outline-none"
+                                    >
+                                        {[500, 1000, 1500, 2000].map(v => (
+                                            <option key={v} value={v}>{v}ms</option>
+                                        ))}
+                                    </select>
                                 </div>
                             </div>
+                        </div>
 
-                            {/* Action Button */}
-                            <button
-                                onClick={isCalibrating ? handleStopCalibration : handleStartCalibration}
-                                className={`w-full py-3 rounded-lg font-black text-sm uppercase tracking-widest transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0 ${isCalibrating
-                                    ? 'bg-red-500 text-white hover:bg-red-600 shadow-red-500/20'
-                                    : 'bg-primary text-primary-contrast hover:opacity-90 shadow-primary/25'
-                                    }`}
-                            >
-                                {isCalibrating ? 'STOP' : 'START CAPTURE'}
-                            </button>
+                        <div className="flex-grow relative">
+                            <div className="absolute inset-0 p-2">
+                                <WorkerTimeSeriesChart
+                                    ref={chartRef}
+                                    timeWindow={timeWindow}
+                                    activeSensor={activeSensor}
+                                    activeChannelIndex={activeChannelIndex}
+                                    config={chartConfig}
+                                    onWindowSelect={handleManualWindowSelect}
+                                />
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                {/* CHART CARD */}
-                <div className="flex-grow min-w-0 bg-surface border-2 border-border rounded-xl shadow-sm overflow-hidden flex flex-col relative group">
-                    {/* Status Badge Overlay */}
-                    <div className="absolute top-1.5 right-3 z-10">
-                        <div className={`px-2 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider border backdrop-blur-sm shadow-sm ${isCalibrating
-                            ? 'bg-red-500/10 text-red-500 border-red-500/20 animate-pulse'
-                            : 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'}`}>
-                            {isCalibrating ? '● REC' : '● IDLE'}
-                        </div>
-                    </div>
-
-                    {/* Chart Header Controls */}
-                    <div className="px-3 py-1.5 border-b border-border bg-surface/50 flex items-center justify-between gap-4 max-h-[40px] flex-none">
-                        <div className="flex items-center gap-3 overflow-x-auto no-scrollbar">
-                            {/* Zoom */}
-                            <div className="flex items-center gap-2 shrink-0">
-                                <span className="text-xs font-bold text-muted uppercase">Zoom</span>
-                                <div className="flex gap-0.5">
-                                    {[1, 2, 5, 10, 25].map(z => (
-                                        <button
-                                            key={z}
-                                            onClick={() => { setZoom(z); setManualYRange(""); }}
-                                            className={`px-1.5 py-0.5 text-xs rounded font-bold transition-all ${zoom === z && !manualYRange
-                                                ? 'bg-primary text-white shadow-sm'
-                                                : 'bg-surface hover:bg-white/10 text-muted hover:text-text border border-border'
-                                                }`}
-                                        >
-                                            {z}x
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-
-                            <div className="w-[1px] h-3 bg-border shrink-0"></div>
-
-                            {/* Window / Duration */}
-                            <div className="flex items-center gap-2 shrink-0">
-                                <label className="text-xs font-bold text-muted uppercase">Win</label>
-                                <select
-                                    value={timeWindow}
-                                    onChange={(e) => setTimeWindow(Number(e.target.value))}
-                                    className="bg-bg border border-border rounded px-1 py-0.5 text-xs font-mono outline-none"
-                                >
-                                    {[3000, 5000, 8000, 10000, 15000, 20000].map(v => (
-                                        <option key={v} value={v}>{v / 1000}s</option>
-                                    ))}
-                                </select>
-
-                                <label className="text-xs font-bold text-muted uppercase ml-1">Dur</label>
-                                <select
-                                    value={windowDuration}
-                                    onChange={(e) => setWindowDuration(Number(e.target.value))}
-                                    className="bg-bg border border-border rounded px-1 py-0.5 text-xs font-mono outline-none"
-                                >
-                                    {[500, 1000, 1500, 2000].map(v => (
-                                        <option key={v} value={v}>{v}ms</option>
-                                    ))}
-                                </select>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="flex-grow relative">
-                        <div className="absolute inset-0 p-2">
-                            <WorkerTimeSeriesChart
-                                ref={chartRef}
-                                timeWindow={timeWindow}
+                {/* BOTTOM ROW: SESSION + WINDOW LIST (50%) */}
+                <div className="h-[50%] flex-none min-h-0 px-2 pb-2 pt-0 grid grid-cols-1 lg:grid-cols-12 gap-2">
+                    {/* Session Panel */}
+                    <div className="lg:col-span-9 h-full min-h-0 overflow-hidden shadow-sm">
+                        {mode === 'realtime' ? (
+                            <SessionManagerPanel
                                 activeSensor={activeSensor}
-                                activeChannelIndex={activeChannelIndex}
-                                config={chartConfig}
-                                onWindowSelect={handleManualWindowSelect}
+                                currentSessionName={sessionName}
+                                onSessionChange={setSessionName}
+                                refreshTrigger={dataLastUpdated}
                             />
-                        </div>
+                        ) : (
+                            <ConfigPanel config={config} sensor={activeSensor} onSave={setConfig} />
+                        )}
+                    </div>
+
+                    {/* Window List */}
+                    <div className="lg:col-span-3 h-full min-h-0 overflow-hidden shadow-sm">
+                        <WindowListPanel
+                            windows={markedWindows}
+                            onDelete={deleteWindow}
+                            onMarkMissed={markMissed}
+                            onHighlight={setHighlightedWindow}
+                            activeSensor={activeSensor}
+                            windowProgress={windowProgress}
+                            autoLimit={autoLimit}
+                            onAutoLimitChange={setAutoLimit}
+                            autoCalibrate={autoCalibrate}
+                            onAutoCalibrateChange={setAutoCalibrate}
+                            onClearSaved={handleAppendSamples}
+                            onDeleteAll={handleClearAllWindows}
+                        />
                     </div>
                 </div>
             </div>
 
-            {/* BOTTOM ROW: SESSION + WINDOW LIST (50%) */}
-            <div className="h-[50%] flex-none min-h-0 px-2 pb-2 pt-0 grid grid-cols-1 lg:grid-cols-12 gap-2">
-                {/* Session Panel */}
-                <div className="lg:col-span-9 h-full min-h-0 overflow-hidden shadow-sm">
-                    {mode === 'realtime' ? (
-                        <SessionManagerPanel
-                            activeSensor={activeSensor}
-                            currentSessionName={sessionName}
-                            onSessionChange={setSessionName}
-                            refreshTrigger={dataLastUpdated}
-                        />
-                    ) : (
-                        <ConfigPanel config={config} sensor={activeSensor} onSave={setConfig} />
-                    )}
-                </div>
-
-                {/* Window List */}
-                <div className="lg:col-span-3 h-full min-h-0 overflow-hidden shadow-sm">
-                    <WindowListPanel
-                        windows={markedWindows}
-                        onDelete={deleteWindow}
-                        onMarkMissed={markMissed}
-                        onHighlight={setHighlightedWindow}
-                        activeSensor={activeSensor}
-                        windowProgress={windowProgress}
-                        autoLimit={autoLimit}
-                        onAutoLimitChange={setAutoLimit}
-                        autoCalibrate={autoCalibrate}
-                        onAutoCalibrateChange={setAutoCalibrate}
-                        onClearSaved={handleAppendSamples}
-                        onDeleteAll={handleClearAllWindows}
-                    />
-                </div>
-            </div>
             <div className='h-[35px] shrink-0' />
-        </div>
+        </>
     );
 }
