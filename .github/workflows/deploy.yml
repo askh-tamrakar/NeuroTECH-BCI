@@ -62,7 +62,14 @@ jobs:
           # but normally sync deletes extraneously. 
           # PRO TIP: Exclude 'venv' or 'virtualenv' if the user stores it in the same dir (bad practice but common).
           # For now, standard sync.
-          ARGS: "-avz --delete" 
+          ARGS: "-avz --delete --exclude=.venus --exclude=venv --exclude=.env --exclude=db.sqlite3 --exclude=media" 
           SSH_ARGS: "-o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o KexAlgorithms=+diffie-hellman-group-exchange-sha256"
+
+      - name: Install Dependencies & Restart Backend
+        run: |
+          mkdir -p ~/.ssh/
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh -o StrictHostKeyChecking=no -o KexAlgorithms=+diffie-hellman-group-exchange-sha256 -i ~/.ssh/id_rsa ${{ secrets.CPANEL_USER }}@${{ secrets.CPANEL_HOST }} "cd ${{ secrets.CPANEL_PATH_BACKEND }} && .venus/bin/pip install -r requirements.txt && .venus/bin/python manage.py migrate --no-input && .venus/bin/python manage.py collectstatic --no-input && mkdir -p tmp && touch tmp/restart.txt"
 
 
