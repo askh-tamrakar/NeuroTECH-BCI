@@ -66,13 +66,8 @@ jobs:
           SSH_ARGS: "-o IdentitiesOnly=yes -o StrictHostKeyChecking=no"
 
       - name: Install Dependencies & Restart Backend
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.CPANEL_HOST }}
-          username: ${{ secrets.CPANEL_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          script: |
-            cd ${{ secrets.CPANEL_PATH_BACKEND }}
-            /usr/bin/pip install --user -r requirements.txt
-            mkdir -p tmp
-            touch tmp/restart.txt
+        run: |
+          mkdir -p ~/.ssh/
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ${{ secrets.CPANEL_USER }}@${{ secrets.CPANEL_HOST }} "cd ${{ secrets.CPANEL_PATH_BACKEND }} && /usr/bin/pip install --user -r requirements.txt && mkdir -p tmp && touch tmp/restart.txt"
