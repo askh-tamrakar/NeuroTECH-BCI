@@ -87,113 +87,113 @@ export default function LiveView({ wsData, wsEvent, config, isPaused }) {
   }
 
   // Update recording timer
-  useEffect(() => {
-    let interval = null
-    if (isRecording) {
-      interval = setInterval(() => {
-        setRecordingTime(Math.floor((Date.now() - recordingStartTime) / 1000))
-      }, 1000)
-    } else {
-      setRecordingTime(0)
-    }
-    return () => clearInterval(interval)
-  }, [isRecording, recordingStartTime])
+    useEffect(() => {
+    if (!wsData || isPaused) return;
 
-  useEffect(() => {
-    if (!wsData || isPaused) return
-
-    let basePayload = null
+    let basePayload = null;
     try {
-      basePayload = wsData.raw ?? (typeof wsData === 'string' ? JSON.parse(wsData) : wsData)
+        basePayload = wsData.raw ?? (typeof wsData === 'string' ? JSON.parse(wsData) : wsData);
     } catch (e) {
-      console.warn('[LiveView] Failed to parse wsData:', e)
-      return
+        console.warn('[LiveView] Failed to parse wsData:', e);
+        return;
     }
 
-    if (!basePayload) return
+    if (!basePayload) return;
 
-    // Handle Batch or Single Sample
-    const samples = basePayload._batch || (basePayload.channels ? [basePayload] : [])
-    if (samples.length === 0) return
+    const samples = basePayload._batch || (basePayload.channels ? [basePayload] : []);
+    if (samples.length > 0) {
+        dataBuffer.current.push(...samples);
+    }
+  }, [wsData, isPaused]);
 
-    const sampleIntervalMs = Math.round(1000 / (samplingRate || 250))
 
-    // Temporary buffers for this update
-    const batchUpdates = { 0: [], 1: [], 2: [], 3: [] }
-    const recordingUpdates = []
+  const dataBuffer = useRef([]);
 
-    samples.forEach(payload => {
-      if (!payload.channels) return
+  useEffect(() => {
+    let animationFrameId;
 
-      let incomingTs = Number(payload.timestamp)
-      // Fix timestamp if needed
-      if (!incomingTs || incomingTs < 1e9) incomingTs = Date.now()
-
-      // Monotonic timestamp logic
-      if (!window.__lastTs) window.__lastTs = incomingTs
-      if (incomingTs <= window.__lastTs) {
-        incomingTs = window.__lastTs + sampleIntervalMs
-      }
-      window.__lastTs = incomingTs
-
-      // Recording accumulation
-      if (isRecording) {
-        const recordPoint = { timestamp: incomingTs, channels: {} }
-        let hasData = false
-        recordingChannels.forEach(chNum => {
-          const chKey = `ch${chNum}` // payload might use integer keys, check Object.entries below
-          // Search in payload.channels (which might be object with keys '0','1'...)
-          Object.entries(payload.channels).forEach(([chIdx, chData]) => {
-            if (parseInt(chIdx) === chNum) {
-              let val = 0
-              if (typeof chData === 'number') val = chData
-              else if (typeof chData === 'object') val = chData.value ?? chData.val ?? 0
-              recordPoint.channels[`ch${chNum}`] = val
-              hasData = true
-            }
-          })
-        })
-        if (hasData) recordingUpdates.push(recordPoint)
-      }
-
-      // View Buffers accumulation
-      Object.entries(payload.channels).forEach(([chIdx, chData]) => {
-        const chNum = parseInt(chIdx)
-        const chKey = `ch${chNum}`
-
-        // Skip disabled
-        const chConfig = channelMapping[chKey]
-        if (chConfig?.enabled === false) return
-
-        let value = 0
-        if (typeof chData === 'number') value = chData
-        else if (typeof chData === 'object') value = chData.value ?? chData.val ?? 0
-
-        if (!Number.isFinite(value)) return
-
-        // Push to temp buffer
-        if (batchUpdates[chNum]) {
-          batchUpdates[chNum].push({ time: incomingTs, value: Number(value) })
+    const processData = () => {
+        if (dataBuffer.current.length === 0) {
+            animationFrameId = requestAnimationFrame(processData);
+            return;
         }
-      })
-    })
 
-    // Commit State Updates - using channel specific or default windows is not critical for *accumulation*, 
-    // but strict buffer management might want to use the largest window to be safe. 
-    // For now, using a safe upper bound (e.g. 30s) or just keeping the old default for buffering is fine 
-    // as long as we don't prune too aggressively.
-    // Let's use a safe large buffer (30s) for addDataPoints to avoid cutting off data needed for a large custom window.
-    const safeBufferMs = 30000
-    if (batchUpdates[0].length) setCh0Data(prev => addDataPoints(prev, batchUpdates[0], safeBufferMs))
-    if (batchUpdates[1].length) setCh1Data(prev => addDataPoints(prev, batchUpdates[1], safeBufferMs))
-    if (batchUpdates[2].length) setCh2Data(prev => addDataPoints(prev, batchUpdates[2], safeBufferMs))
-    if (batchUpdates[3].length) setCh3Data(prev => addDataPoints(prev, batchUpdates[3], safeBufferMs))
+        const samples = dataBuffer.current;
+        dataBuffer.current = [];
 
-    if (recordingUpdates.length > 0) {
-      setRecordedData(prev => [...prev, ...recordingUpdates])
-    }
+        const sampleIntervalMs = Math.round(1000 / (samplingRate || 250));
+        const batchUpdates = { 0: [], 1: [], 2: [], 3: [] };
+        const recordingUpdates = [];
 
-  }, [wsData, isPaused, channelMapping, samplingRate, isRecording, recordingChannels])
+        samples.forEach(payload => {
+            if (!payload.channels) return;
+
+            let incomingTs = Number(payload.timestamp);
+            if (!incomingTs || incomingTs < 1e9) incomingTs = Date.now();
+
+            if (!window.__lastTs) window.__lastTs = incomingTs;
+            if (incomingTs <= window.__lastTs) {
+                incomingTs = window.__lastTs + sampleIntervalMs;
+            }
+            window.__lastTs = incomingTs;
+
+            if (isRecording) {
+                const recordPoint = { timestamp: incomingTs, channels: {} };
+                let hasData = false;
+                recordingChannels.forEach(chNum => {
+                    const chKey = `ch${chNum}`;
+                    Object.entries(payload.channels).forEach(([chIdx, chData]) => {
+                        if (parseInt(chIdx) === chNum) {
+                            let val = 0;
+                            if (typeof chData === 'number') val = chData;
+                            else if (typeof chData === 'object') val = chData.value ?? chData.val ?? 0;
+                            recordPoint.channels[`ch${chNum}`] = val;
+                            hasData = true;
+                        }
+                    });
+                });
+                if (hasData) recordingUpdates.push(recordPoint);
+            }
+
+            Object.entries(payload.channels).forEach(([chIdx, chData]) => {
+                const chNum = parseInt(chIdx);
+                const chKey = `ch${chNum}`;
+
+                const chConfig = channelMapping[chKey];
+                if (chConfig?.enabled === false) return;
+
+                let value = 0;
+                if (typeof chData === 'number') value = chData;
+                else if (typeof chData === 'object') value = chData.value ?? chData.val ?? 0;
+
+                if (!Number.isFinite(value)) return;
+
+                if (batchUpdates[chNum]) {
+                    batchUpdates[chNum].push({ time: incomingTs, value: Number(value) });
+                }
+            });
+        });
+
+        const safeBufferMs = 30000;
+        if (batchUpdates[0].length) setCh0Data(prev => addDataPoints(prev, batchUpdates[0], safeBufferMs));
+        if (batchUpdates[1].length) setCh1Data(prev => addDataPoints(prev, batchUpdates[1], safeBufferMs));
+        if (batchUpdates[2].length) setCh2Data(prev => addDataPoints(prev, batchUpdates[2], safeBufferMs));
+        if (batchUpdates[3].length) setCh3Data(prev => addDataPoints(prev, batchUpdates[3], safeBufferMs));
+
+        if (recordingUpdates.length > 0) {
+            setRecordedData(prev => [...prev, ...recordingUpdates]);
+        }
+
+        animationFrameId = requestAnimationFrame(processData);
+    };
+
+    animationFrameId = requestAnimationFrame(processData);
+
+    return () => {
+        cancelAnimationFrame(animationFrameId);
+    };
+  }, [isPaused, channelMapping, samplingRate, isRecording, recordingChannels]);
+
 
   useEffect(() => {
     const allData = [ch0Data, ch1Data, ch2Data, ch3Data].filter(d => d && d.length)

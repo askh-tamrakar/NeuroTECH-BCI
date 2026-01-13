@@ -1,14 +1,17 @@
-import json
-import os
-import glob
-from pathlib import Path
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from django.conf import settings
 from core.utils.config import config_manager
+from core.database.db_manager import db_manager
+from core.learning.emg_trainer import train_emg_model, evaluate_saved_model as evaluate_emg_model
+from core.learning.eog_trainer import train_eog_model, evaluate_saved_eog_model as evaluate_eog_model
+from core.processing.pipeline import ProcessingPipeline
+from core.feature.extractors.rps_extractor import RPSExtractor
+from core.feature.extractors.blink_extractor import BlinkExtractor
 import pandas as pd
 import logging
+import numpy as np
 
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
@@ -96,130 +99,159 @@ class PredictControlView(APIView):
     def post(self, request, action=None):
         return Response({"status": "success", "action": action})
 
+# ... (keep other imports)
+
 class SessionView(APIView):
     """
-    GET /api/sessions/<sensor_type> -> List sessions
-    GET /api/sessions/<sensor_type>/<session_name> -> Get session rows
-    DELETE /api/sessions/<sensor_type>/<session_name> -> Delete session
+    GET /api/sessions/<sensor_type>/ -> List sessions
+    GET /api/sessions/<sensor_type>/<session_name>/ -> Get session rows
+    DELETE /api/sessions/<sensor_type>/<session_name>/ -> Delete session
     """
     def get(self, request, sensor_type, session_name=None):
         try:
-            # Case-insensitive directory lookup
-            target_dir = None
-            if PROCESSED_DIR.exists():
-                for d in PROCESSED_DIR.iterdir():
-                     if d.is_dir() and d.name.lower() == sensor_type.lower():
-                         target_dir = d
-                         break
-            
-            # Fallback if not found via iter (or dir missing)
-            if not target_dir:
-                 target_dir = PROCESSED_DIR / sensor_type.lower()
-
-            print(f"[SessionView] Request: {sensor_type}, Target: {target_dir}, Exists: {target_dir.exists()}")
-            
-            if not target_dir.exists():
-                 return Response({"tables": []} if not session_name else [])
-
             if session_name:
-                # Get specific session content
-                file_path = target_dir / f"{session_name}.csv"
-                if not file_path.exists(): 
-                    return Response({"error": "Session not found"}, status=status.HTTP_404_NOT_FOUND)
-                
-                try:
-                    df = pd.read_csv(file_path)
-                    rows = df.to_dict(orient='records')
-                    for idx, row in enumerate(rows):
-                        if 'id' not in row:
-                            row['id'] = idx
-                    return Response(rows)
-                except Exception as e:
-                    return Response({"error": f"CSV Read Error: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                rows = db_manager.get_session_data(sensor_type, session_name)
+                return Response(rows)
             else:
-                # List sessions
-                files = glob.glob(str(target_dir / "*.csv"))
-                tables = [Path(f).stem for f in files]
+                tables = db_manager.get_session_tables(sensor_type)
                 return Response({"tables": tables})
         except Exception as e:
-            print(f"[SessionView] CRITICAL ERROR: {e}")
-            return Response({"error": f"Server Error: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            logger.error(f"Error in SessionView GET: {e}")
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def delete(self, request, sensor_type, session_name):
-        sensor_type = sensor_type.lower()
-        file_path = PROCESSED_DIR / sensor_type / f"{session_name}.csv"
-        
-        if file_path.exists():
-            try:
-                os.remove(file_path)
+        try:
+            if db_manager.delete_session_table(sensor_type, session_name):
                 return Response({"status": "deleted"})
-            except Exception as e:
-                return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        return Response({"error": "Not found"}, status=status.HTTP_404_NOT_FOUND)
+            else:
+                return Response({"error": "Failed to delete session"}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            logger.error(f"Error in SessionView DELETE: {e}")
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class WindowView(APIView):
     """
-    POST /api/window -> Append a data window to a session CSV.
+    POST /api/window/ -> Append a data window to a session table.
     """
     def post(self, request):
         try:
             data = request.data
-            sensor_type = data.get('sensor', 'emg').lower()
+            sensor_type = data.get('sensor', 'emg').upper()
             session_name = data.get('session_name')
-            
-            if not session_name:
-                 return Response({"error": "Session name required"}, status=status.HTTP_400_BAD_REQUEST)
-                 
-            # Construct row
-            # Depends on what frontend sends in 'windowPayload'
-            # Typically: samples, action/label, features?
-            # The CalibrationAPI sends: action, channel, samples, timestamps.
-            # BUT the Python backend usually does feature extraction BEFORE saving to CSV?
-            # Or does it save raw?
-            
-            # The SessionManagerPanel expects 'features' in the response.
-            # This implies the backend must calculate features OR the frontend sends them.
-            
-            # Looking at calibrationApi.js: sendWindow
-            # It sends samples.
-            
-            # The legacy Flask `web_server.py` likely handled this.
-            # Since we moved logic to `backend/core`, we might need to invoke Feature Extraction here.
-            # For simplicity in this quick fix, let's just save what we get if features are provided,
-            # OR just stub it.
-            
-            # Wait, `SessionManagerPanel` displays features.
-            # If we just save raw samples, the table will be empty of features.
-            
-            # We need to import feature extraction logic?
-            # `core.feature_router` or `core.processing`?
-            
-            # For now, let's implement the basic file append.
-            # If features are missing, we might fix that later.
-            
-            sensor_dir = PROCESSED_DIR / sensor_type
-            sensor_dir.mkdir(parents=True, exist_ok=True)
-            
-            file_path = sensor_dir / f"{session_name}.csv"
-            
-            # Flatten data for CSV
-            row = data.copy()
-            if 'samples' in row:
-                # Samples is a list, maybe too big for CSV cell?
-                # Usually we save features.
-                pass
-                
-            # If the CSV doesn't exist, create it.
-            df = pd.DataFrame([row])
-            
-            if not file_path.exists():
-                df.to_csv(file_path, index=False)
-            else:
-                df.to_csv(file_path, mode='a', header=False, index=False)
-                
-            return Response({"status": "saved"})
-            
-        except Exception as e:
-             logger.error(f"Error saving window: {e}")
-             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            samples_raw = data.get('samples')
+            timestamps_raw = data.get('timestamps')
 
+            if not session_name:
+                return Response({"error": "Session name required"}, status=status.HTTP_400_BAD_REQUEST)
+            if not samples_raw:
+                return Response({"error": "Samples data required"}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Sanitize and create the table if it doesn't exist
+            table_name = db_manager.create_session_table(sensor_type, session_name)
+
+            # Convert samples to numpy array for processing
+            samples_np = np.array(samples_raw)
+
+            # Initialize pipeline to get sensor config and sampling rate
+            pipeline = ProcessingPipeline()
+            sr = pipeline.sr # Get sampling rate from pipeline config
+
+            features = {}
+            if sensor_type == 'EMG':
+                features = RPSExtractor.extract_features(samples_np, sr)
+            elif sensor_type == 'EOG':
+                features = BlinkExtractor.extract_features(samples_np, sr)
+            # Add other sensor types as needed
+
+            if not features:
+                return Response({"error": "Feature extraction failed"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+            # Add timestamp to features for consistency
+            if timestamps_raw and len(timestamps_raw) > 0:
+                features['timestamp'] = timestamps_raw[-1]
+            else:
+                features['timestamp'] = Date.now() # Fallback, though should be provided by frontend
+
+            # Insert the window data
+            if sensor_type == 'EMG':
+                db_manager.insert_window(features, data.get('action', -1), session_id=session_name, table_name=table_name)
+            elif sensor_type == 'EOG':
+                db_manager.insert_eog_window(features, data.get('action', -1), session_id=session_name, table_name=table_name)
+            else:
+                logger.warn(f"Window saving for sensor type {sensor_type} not fully implemented or features not inserted.")
+                return Response({"error": f"Unsupported sensor type {sensor_type} for feature extraction/saving"}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Respond with the extracted features for the frontend to update its state
+            return Response({"status": "saved", "table_name": table_name, "features": features})
+
+        except Exception as e:
+            logger.error(f"Error in WindowView: {e}")
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@method_decorator(csrf_exempt, name='dispatch')
+class TrainEmgView(APIView):
+    def post(self, request):
+        try:
+            params = request.data
+            result = train_emg_model(
+                n_estimators=params.get('n_estimators', 100),
+                max_depth=params.get('max_depth', None),
+                test_size=params.get('test_size', 0.2),
+                table_name=params.get('table_name') # Pass None if not provided to use default
+            )
+            return Response(result)
+        except Exception as e:
+            return Response({"error": str(e)}, status=500)
+
+@method_decorator(csrf_exempt, name='dispatch')
+class EvaluateModelView(APIView):
+    def post(self, request):
+        try:
+            table_name = request.data.get('table_name')
+            result = evaluate_emg_model(table_name=table_name)
+            return Response(result)
+        except Exception as e:
+            return Response({"error": str(e)}, status=500)
+
+@method_decorator(csrf_exempt, name='dispatch')
+class TrainEogView(APIView):
+    def post(self, request):
+        try:
+            params = request.data
+            result = train_eog_model(
+                n_estimators=params.get('n_estimators', 50),
+                max_depth=params.get('max_depth', 5),
+                test_size=params.get('test_size', 0.2),
+                table_name=params.get('table_name')
+            )
+            return Response(result)
+        except Exception as e:
+            return Response({"error": str(e)}, status=500)
+
+@method_decorator(csrf_exempt, name='dispatch')
+class EvaluateEogView(APIView):
+    def post(self, request):
+        try:
+            table_name = request.data.get('table_name')
+            result = evaluate_eog_model(table_name=table_name)
+            return Response(result)
+        except Exception as e:
+            return Response({"error": str(e)}, status=500)
+
+@method_decorator(csrf_exempt, name='dispatch')
+class StartCalibrationView(APIView):
+    def post(self, request):
+        # Placeholder for starting calibration logic
+        return Response({"success": True, "sessionId": "mock_session_123"})
+
+@method_decorator(csrf_exempt, name='dispatch')
+class StopCalibrationView(APIView):
+    def post(self, request):
+        # Placeholder for stopping calibration logic
+        return Response({"success": True})
+
+@method_decorator(csrf_exempt, name='dispatch')
+class RunCalibrationView(APIView):
+    def post(self, request):
+        # Placeholder for running calibration logic
+        return Response({"recommendations": {}, "summary": {"total": 0, "correct": 0, "missed": 0}})

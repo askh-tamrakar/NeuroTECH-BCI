@@ -76,10 +76,15 @@ export const CalibrationApi = {
      * @param {string} classLabel 
      * @param {number} windowDurationMs 
      */
-    async startCalibration(sensorType, mode, classLabel, windowDurationMs) {
+    async startCalibration(sensorType, mode, classLabel, windowDurationMs, sessionName = null) {
         console.log(`[CalibrationApi] Starting ${mode} calibration for ${sensorType} (${classLabel})`);
-        // Mock command back to backend
-        return { success: true, sessionId: Date.now().toString() };
+        const response = await fetch('/api/calibrate/start/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sensorType, mode, classLabel, windowDurationMs, sessionName })
+        });
+        if (!response.ok) throw new Error('Failed to start calibration');
+        return response.json();
     },
 
     /**
@@ -88,7 +93,13 @@ export const CalibrationApi = {
      */
     async stopCalibration(sensorType) {
         console.log(`[CalibrationApi] Stopping calibration for ${sensorType}`);
-        return { success: true };
+        const response = await fetch('/api/calibrate/stop/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sensorType })
+        });
+        if (!response.ok) throw new Error('Failed to stop calibration');
+        return response.json();
     },
 
     /**
@@ -99,8 +110,13 @@ export const CalibrationApi = {
      */
     async runCalibration(sensorType, labeledWindows) {
         console.log(`[CalibrationApi] Running calibration for ${sensorType} with ${labeledWindows.length} windows`);
-        // Legacy mock - use calibrateThresholds instead
-        return { recommendations: {}, summary: { total: 0, correct: 0, missed: 0 } };
+        const response = await fetch('/api/calibrate/run/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sensorType, labeledWindows })
+        });
+        if (!response.ok) throw new Error('Failed to run calibration');
+        return response.json();
     },
 
     /**

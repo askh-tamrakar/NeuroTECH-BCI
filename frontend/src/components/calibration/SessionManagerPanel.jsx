@@ -67,7 +67,7 @@ export default function SessionManagerPanel({
         e.stopPropagation();
 
         try {
-            const res = await fetch(`/api/sessions/${activeSensor}/${sessionName}`, {
+            const res = await fetch(`/api/sessions/${activeSensor}/${sessionName}/`, {
                 method: 'DELETE'
             });
 
@@ -95,7 +95,7 @@ export default function SessionManagerPanel({
         try {
             await setLoading(true); // Reuse loading or new state
             // 1. Delete the session
-            const res = await fetch(`/api/sessions/${activeSensor}/${fullCurrentSessionName}`, {
+            const res = await fetch(`/api/sessions/${activeSensor}/${fullCurrentSessionName}/`, {
                 method: 'DELETE'
             });
 
@@ -117,7 +117,7 @@ export default function SessionManagerPanel({
     const fetchSessions = async () => {
         setLoading(true);
         try {
-            const res = await fetch(`/api/sessions/${activeSensor}`);
+            const res = await fetch(`/api/sessions/${activeSensor}/`);
             const text = await res.text();
 
             if (!res.ok) {
@@ -165,7 +165,7 @@ export default function SessionManagerPanel({
 
             try {
                 // Assuming GET returns the rows for the session table
-                const res = await fetch(`/api/sessions/${activeSensor}/${fullCurrentSessionName}`);
+                const res = await fetch(`/api/sessions/${activeSensor}/${fullCurrentSessionName}/`);
                 if (res.ok) {
                     const data = await res.json();
                     setSelectedSessionRows(Array.isArray(data) ? data : (data.rows || []));
@@ -193,7 +193,7 @@ export default function SessionManagerPanel({
             const prevRows = [...selectedSessionRows];
             setSelectedSessionRows(prev => prev.filter(r => r.id !== rowId));
 
-            const res = await fetch(`/api/sessions/${activeSensor}/${fullCurrentSessionName}/rows/${rowId}`, {
+            const res = await fetch(`/api/sessions/${activeSensor}/${fullCurrentSessionName}/rows/${rowId}/`, {
                 method: 'DELETE'
             });
 

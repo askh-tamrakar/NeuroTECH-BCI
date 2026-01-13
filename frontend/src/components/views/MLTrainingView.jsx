@@ -96,7 +96,7 @@ const HyperparametersCard = ({ params, onChange }) => (
 const ConfusionMatrixCard = ({ matrix, labels, n_samples }) => (
     <div className="card h-full flex flex-col p-4 bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-sm">
         <div className="flex justify-between items-center border-b border-[var(--border)] pb-2">
-            <h3 className="text-sm font-bold text-[var(--muted)] uppercase tracking-widest">
+            <h3 className="text-[16px] font-bold text-[var(--muted)] uppercase tracking-widest">
                 Confusion Matrix
                 {n_samples !== undefined && <span className="ml-2 text-xs normal-case opacity-70">({n_samples} samples)</span>}
             </h3>
@@ -160,14 +160,14 @@ const DecisionTreeCard = ({ structure }) => {
             <div className="absolute top-4 left-4 z-10 bg-[var(--bg)]/80 backdrop-blur px-3 py-1 rounded border border-[var(--border)]">
                 <h3 className="text-sm font-bold text-[var(--text)]">Decision Tree Visualization</h3>
             </div>
-            <div className="w-full h-full bg-[var(--bg)]" style={{ minHeight: '400px' }}>
+            <div className="w-full h-full bg-[var(--bg)] border-0 rounded-xl" style={{ minHeight: '400px' }}>
                 <Tree
                     data={structure}
                     orientation="vertical"
                     translate={{ x: 400, y: 50 }}
                     pathFunc="step"
                     depthFactor={depth < 10 ? 100 : undefined}
-                    separation={{ siblings: 1.5, nonSiblings: 2 }}
+                    separation={{ siblings: 1.25, nonSiblings: 2 }}
                     zoomable={true}
                     renderCustomNodeElement={renderCustomNodeElement}
                 />
@@ -258,7 +258,7 @@ export default function MLTrainingView() {
     const fetchSessions = async () => {
         try {
             const sensor = activeTab;
-            const res = await fetch(`/api/sessions/${sensor}`);
+            const res = await fetch(`/api/sessions/${sensor}/`);
             if (res.ok) {
                 const data = await res.json();
                 if (data.tables) {
@@ -332,7 +332,7 @@ export default function MLTrainingView() {
     const trainEmg = async () => {
         setLoading(true); setError(null); setEmgResult(null);
         try {
-            const res = await fetch('/api/train-emg-rf', {
+            const res = await fetch('/api/train-emg-rf/', {
                 method: 'POST',
                 body: JSON.stringify({
                     ...emgParams,
@@ -350,7 +350,7 @@ export default function MLTrainingView() {
     const evalEmg = async () => {
         setEvalLoading(true); setError(null); setEmgEvalResult(null);
         try {
-            const res = await fetch('/api/model/evaluate', {
+            const res = await fetch('/api/model/evaluate/', {
                 method: 'POST',
                 body: JSON.stringify({
                     table_name: selectedSession || undefined
@@ -371,7 +371,7 @@ export default function MLTrainingView() {
     const trainEog = async () => {
         setLoading(true); setError(null); setEogResult(null);
         try {
-            const res = await fetch('/api/train-eog-rf', {
+            const res = await fetch('/api/train-eog-rf/', {
                 method: 'POST', body: JSON.stringify({
                     ...eogParams,
                     table_name: selectedSession || undefined
@@ -387,7 +387,7 @@ export default function MLTrainingView() {
     const evalEog = async () => {
         setEvalLoading(true); setError(null); setEogEvalResult(null);
         try {
-            const res = await fetch('/api/model/evaluate/eog', {
+            const res = await fetch('/api/model/evaluate/eog/', {
                 method: 'POST',
                 body: JSON.stringify({ table_name: selectedSession || undefined }),
                 headers: { 'Content-Type': 'application/json' }
@@ -403,99 +403,103 @@ export default function MLTrainingView() {
     };
 
 
-    return (
-        <div className="font-sans w-full h-[calc(100vh-120px)] p-4 flex flex-col items-stretch overflow-hidden">
-
+    return (            
+        <>
             <div className="h-[94px] shrink-0" />
-            {/* ERROR DISPLAY */}
-            {error && <div className="w-full bg-red-900/20 border border-red-500 text-red-200 py-2 rounded mb-4 flex justify-between items-center shrink-0 text-sm px-4">
-                <span><strong>Error:</strong> {error}</span>
-                <button onClick={() => setError(null)} className="underline">Dismiss</button>
-            </div>}
+            <div className="font-sans w-full h-[calc(100vh-120px)] p-4 flex flex-col items-stretch overflow-hidden">
 
-            {/* CONTENT scrollable container */}
-            <div className="flex-1 w-full min-h-0 overflow-y-auto custom-scrollbar">
-                <div className="h-full min-h-[800px] grid grid-cols-12 grid-rows-6 gap-4 pb-2">
-                    {/* LEFT SIDEBAR CONTROLS (Span 3) - NOW CONTAINS ACCURACY & FEATURES TOO */}
-                    <div className="col-span-12 lg:col-span-3 row-span-6 flex flex-col gap-4">
-                        {/* 1. CONTROLS */}
-                        <div className="shrink-0">
-                            <ControlPanel
-                                onTrain={activeTab === 'EMG' ? trainEmg : trainEog}
-                                loading={loading}
-                                onEval={activeTab === 'EMG' ? evalEmg : evalEog}
-                                evalLoading={evalLoading}
-                                sessions={availableSessions}
-                                selectedSession={selectedSession}
-                                onSessionSelect={setSelectedSession}
-                                onRefreshSessions={fetchSessions}
-                                activeTab={activeTab}
-                                setActiveTab={setActiveTab}
-                            />
-                        </div>
 
-                        {/* 2. ACCURACY */}
-                        {((activeTab === 'EMG' ? (emgResult || emgEvalResult) : (eogResult || eogEvalResult))?.accuracy) !== undefined && (
-                            <div className="shrink-0 h-48">
-                                <AccuracyCard
-                                    accuracy={(activeTab === 'EMG' ? (emgResult || emgEvalResult) : (eogResult || eogEvalResult)).accuracy}
-                                    n_samples={(activeTab === 'EMG' ? (emgResult || emgEvalResult) : (eogResult || eogEvalResult)).n_samples}
-                                    source={(activeTab === 'EMG' ? (emgResult || emgEvalResult) : (eogResult || eogEvalResult)).source}
+                {/* ERROR DISPLAY */}
+                {error && <div className="w-full bg-red-900/20 border border-red-500 text-red-200 py-2 rounded mb-4 flex justify-between items-center shrink-0 text-sm px-4">
+                    <span><strong>Error:</strong> {error}</span>
+                    <button onClick={() => setError(null)} className="underline">Dismiss</button>
+                </div>}
+
+                {/* CONTENT scrollable container */}
+                <div className="flex-1 w-full min-h-0 overflow-y-auto custom-scrollbar">
+                    <div className="h-full min-h-[800px] grid grid-cols-12 grid-rows-6 gap-4 pb-2">
+                        {/* LEFT SIDEBAR CONTROLS (Span 3) - NOW CONTAINS ACCURACY & FEATURES TOO */}
+                        <div className="col-span-12 lg:col-span-3 row-span-6 flex flex-col gap-4">
+                            {/* 1. CONTROLS */}
+                            <div className="shrink-0">
+                                <ControlPanel
+                                    onTrain={activeTab === 'EMG' ? trainEmg : trainEog}
+                                    loading={loading}
+                                    onEval={activeTab === 'EMG' ? evalEmg : evalEog}
+                                    evalLoading={evalLoading}
+                                    sessions={availableSessions}
+                                    selectedSession={selectedSession}
+                                    onSessionSelect={setSelectedSession}
+                                    onRefreshSessions={fetchSessions}
+                                    activeTab={activeTab}
+                                    setActiveTab={setActiveTab}
                                 />
                             </div>
-                        )}
 
-                        {/* 3. TOP FEATURES */}
-                        {((activeTab === 'EMG' ? (emgResult || emgEvalResult) : (eogResult || eogEvalResult))?.feature_importances) && (
-                            <div className="flex-1 flex-grow-4 min-h-0">
-                                <FeatureImportanceCard importances={(activeTab === 'EMG' ? (emgResult || emgEvalResult) : (eogResult || eogEvalResult)).feature_importances} />
+                            {/* 2. ACCURACY */}
+                            {((activeTab === 'EMG' ? (emgResult || emgEvalResult) : (eogResult || eogEvalResult))?.accuracy) !== undefined && (
+                                <div className="shrink-0 h-48">
+                                    <AccuracyCard
+                                        accuracy={(activeTab === 'EMG' ? (emgResult || emgEvalResult) : (eogResult || eogEvalResult)).accuracy}
+                                        n_samples={(activeTab === 'EMG' ? (emgResult || emgEvalResult) : (eogResult || eogEvalResult)).n_samples}
+                                        source={(activeTab === 'EMG' ? (emgResult || emgEvalResult) : (eogResult || eogEvalResult)).source}
+                                    />
+                                </div>
+                            )}
+
+                            {/* 3. TOP FEATURES */}
+                            {((activeTab === 'EMG' ? (emgResult || emgEvalResult) : (eogResult || eogEvalResult))?.feature_importances) && (
+                                <div className="flex-1 flex-grow-4 min-h-0">
+                                    <FeatureImportanceCard importances={(activeTab === 'EMG' ? (emgResult || emgEvalResult) : (eogResult || eogEvalResult)).feature_importances} />
+                                </div>
+                            )}
+                        </div>
+
+                        {/* MAIN BENTO GRID (Span 9) */}
+                        {(activeTab === 'EMG' ? (emgResult || emgEvalResult) : (eogResult || eogEvalResult)) ? (
+                            <>
+                                {/* TOP ROW: Hyperparams + Confusion Matrix */}
+
+                                {/* BOTTOM ROW: Tree Viz */}
+                                {/* Tree Viz (Span 9, Row 4) - Extended full width */}
+                                {(activeTab === 'EMG' ? (emgResult || emgEvalResult) : (eogResult || eogEvalResult)).tree_structure && (
+                                    <div className="col-span-12 md:col-span-9 row-span-4">
+                                        <DecisionTreeCard structure={(activeTab === 'EMG' ? (emgResult || emgEvalResult) : (eogResult || eogEvalResult)).tree_structure} />
+                                    </div>
+                                )}
+                                {/* Hyperparameters (Span 3, Row 2) - Replaces old Accuracy spot */}
+                                <div className="col-span-12 md:col-span-3 row-span-2">
+                                    <HyperparametersCard
+                                        params={activeTab === 'EMG' ? emgParams : eogParams}
+                                        onChange={activeTab === 'EMG' ? handleEmgChange : handleEogChange}
+                                    />
+                                </div>
+
+                                {/* Confusion Matrix (Span 6, Row 2) - Replaces old Features spot */}
+                                <div className="col-span-12 md:col-span-6 row-span-2">
+                                    <ConfusionMatrixCard
+                                        matrix={(activeTab === 'EMG' ? (emgResult || emgEvalResult) : (eogResult || eogEvalResult)).confusion_matrix}
+                                        labels={activeTab === 'EMG' ? ['Rest', 'Rock', 'Paper', 'Scissors'] : ['DoubleBlink', 'SingleBlink', 'Rest']}
+                                        n_samples={(activeTab === 'EMG' ? (emgResult || emgEvalResult) : (eogResult || eogEvalResult)).n_samples}
+                                    />
+                                </div>
+                            </>
+                        ) : (
+                            <div className="col-span-12 lg:col-span-9 row-span-6 card border-2 border-dashed border-[var(--border)] rounded-xl flex flex-col items-center justify-center text-[var(--muted)] bg-[var(--surface)]/50">
+                                {/* Empty state showing Hyperparams Card as preview/setup if desired, or just empty */}
+                                <div className="text-center">
+                                    <div className="text-6xl mb-6 opacity-20">📊</div>
+                                    <p className="text-lg font-medium">Model workspace empty</p>
+                                    <p className="text-sm opacity-70">Train a new model or load an existing one from the sidebar.</p>
+                                </div>
                             </div>
                         )}
                     </div>
-
-                    {/* MAIN BENTO GRID (Span 9) */}
-                    {(activeTab === 'EMG' ? (emgResult || emgEvalResult) : (eogResult || eogEvalResult)) ? (
-                        <>
-                            {/* TOP ROW: Hyperparams + Confusion Matrix */}
-
-                            {/* BOTTOM ROW: Tree Viz */}
-                            {/* Tree Viz (Span 9, Row 4) - Extended full width */}
-                            {(activeTab === 'EMG' ? (emgResult || emgEvalResult) : (eogResult || eogEvalResult)).tree_structure && (
-                                <div className="col-span-12 md:col-span-9 row-span-4">
-                                    <DecisionTreeCard structure={(activeTab === 'EMG' ? (emgResult || emgEvalResult) : (eogResult || eogEvalResult)).tree_structure} />
-                                </div>
-                            )}
-                            {/* Hyperparameters (Span 3, Row 2) - Replaces old Accuracy spot */}
-                            <div className="col-span-12 md:col-span-3 row-span-2">
-                                <HyperparametersCard
-                                    params={activeTab === 'EMG' ? emgParams : eogParams}
-                                    onChange={activeTab === 'EMG' ? handleEmgChange : handleEogChange}
-                                />
-                            </div>
-
-                            {/* Confusion Matrix (Span 6, Row 2) - Replaces old Features spot */}
-                            <div className="col-span-12 md:col-span-6 row-span-2">
-                                <ConfusionMatrixCard
-                                    matrix={(activeTab === 'EMG' ? (emgResult || emgEvalResult) : (eogResult || eogEvalResult)).confusion_matrix}
-                                    labels={activeTab === 'EMG' ? ['Rest', 'Rock', 'Paper', 'Scissors'] : ['DoubleBlink', 'SingleBlink', 'Rest']}
-                                    n_samples={(activeTab === 'EMG' ? (emgResult || emgEvalResult) : (eogResult || eogEvalResult)).n_samples}
-                                />
-                            </div>
-                        </>
-                    ) : (
-                        <div className="col-span-12 lg:col-span-9 row-span-6 card border-2 border-dashed border-[var(--border)] rounded-xl flex flex-col items-center justify-center text-[var(--muted)] bg-[var(--surface)]/50">
-                            {/* Empty state showing Hyperparams Card as preview/setup if desired, or just empty */}
-                            <div className="text-center">
-                                <div className="text-6xl mb-6 opacity-20">📊</div>
-                                <p className="text-lg font-medium">Model workspace empty</p>
-                                <p className="text-sm opacity-70">Train a new model or load an existing one from the sidebar.</p>
-                            </div>
-                        </div>
-                    )}
                 </div>
-            </div>
 
+
+            </div>
             <div className="h-[35px] shrink-0" />
-        </div>
+        </>
     );
 }

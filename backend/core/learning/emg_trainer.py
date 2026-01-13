@@ -60,16 +60,16 @@ def train_emg_model(n_estimators=100, max_depth=None, test_size=0.2, table_name=
     feature_cols = ['rms', 'mav', 'var', 'wl', 'peak', 'range', 'iemg', 'entropy', 'energy', 'kurtosis', 'skewness', 'ssc', 'wamp']
     
     # Check if columns exist (handle legacy naming if necessary)
-    missing_cols = [c for c in feature_cols if c not in df.columns]
-    if missing_cols:
-         # Try to be robust: if 'range' is missing but 'rng' exists (legacy), rename it
-         if 'range' in missing_cols and 'rng' in df.columns:
-             df.rename(columns={'rng': 'range'}, inplace=True)
+    # missing_cols = [c for c in feature_cols if c not in df.columns]
+    # if missing_cols:
+    #      # Try to be robust: if 'range' is missing but 'rng' exists (legacy), rename it
+    #      if 'range' in missing_cols and 'rng' in df.columns:
+    #          df.rename(columns={'rng': 'range'}, inplace=True)
          
-         # If entropy/energy/new_feats missing, fill 0 (less ideal but prevents crash)
-         for col in ['entropy', 'energy', 'kurtosis', 'skewness', 'ssc', 'wamp']:
-             if col not in df.columns:
-                 df[col] = 0.0
+    #      # If entropy/energy/new_feats missing, fill 0 (less ideal but prevents crash)
+    #      for col in ['entropy', 'energy', 'kurtosis', 'skewness', 'ssc', 'wamp']:
+    #          if col not in df.columns:
+    #              df[col] = 0.0
 
     X = df[feature_cols]
     y = df['label']

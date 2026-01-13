@@ -34,5 +34,17 @@
       "order": 4,
       "type": "low_pass"
     }
+  },
+  "EMG": {
+    "notch_enabled": true,
+    "bandpass_enabled": true,
+    "bandpass_low": 70,
+    "bandpass_high": 250
+  },
+  "EOG": {
+    "notch_enabled": true,
+    "bandpass_enabled": true,
+    "bandpass_low": 0.4,
+    "bandpass_high": 10
   }
 }

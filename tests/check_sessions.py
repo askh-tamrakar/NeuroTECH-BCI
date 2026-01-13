@@ -1,7 +1,7 @@
 import requests
 
 try:
-    url = "http://localhost:5000/api/sessions/EMG"
+    url = "http://localhost:8000/api/sessions/EMG"
     print(f"GET {url}")
     res = requests.get(url)
     print(f"Status: {res.status_code}")

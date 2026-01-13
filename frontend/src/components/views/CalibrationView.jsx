@@ -207,56 +207,8 @@ export default function CalibrationView({ wsData, wsEvent, config: initialConfig
         else if (sensor === 'EEG') setTargetLabel('Concentration');
     };
 
-    // -- REAL-TIME DATA INGESTION --
-    useEffect(() => {
-        if (!wsData || mode === 'recording') return;
-
-        let samples = [];
-
-        // Handle _batch (Preferred from Backend)
-        if (wsData._batch && Array.isArray(wsData._batch)) {
-            samples = wsData._batch;
-        }
-        // Handle direct array (if raw)
-        else if (Array.isArray(wsData)) {
-            samples = wsData;
-        }
-        // Handle legacy single packet
-        else if (wsData.channels || wsData.ch0 !== undefined) {
-            samples = [wsData];
-        }
-
-        if (samples.length === 0) return;
-
-        const targetChIdx = activeChannelIndex;
-        const formatted = [];
-
-        for (const pt of samples) {
-            const ts = pt.timestamp || Date.now();
-            let val = 0;
-            const key = `ch${targetChIdx}`;
-
-            // Try various paths (Pipeline normalizes to top level chX)
-            if (pt[key] !== undefined) val = pt[key];
-            else if (pt[targetChIdx] !== undefined) val = pt[targetChIdx];
-            else if (pt.channels) {
-                if (pt.channels[key] !== undefined) val = pt.channels[key];
-                else if (pt.channels[targetChIdx] !== undefined) val = pt.channels[targetChIdx];
-            }
-
-            if (typeof val === 'object' && val !== null) val = val.value || 0;
-
-            formatted.push({ time: ts, value: Number(val) });
-        }
-
-        if (formatted.length > 0) {
-            if (chartRef.current) {
-                chartRef.current.addData(formatted);
-            }
-            latestSignalTimeRef.current = formatted[formatted.length - 1].time;
-        }
-
-    }, [wsData, mode, activeChannelIndex]);
+    // -- REAL-TIME DATA INGESTION (NOW HANDLED BY BUFFERED WORKER) --
+    // useEffect(() => { ... }, [wsData, mode, activeChannelIndex]);
 
     const startAutoWindowing = useCallback(() => {
         const createNextWindow = () => {
@@ -720,7 +672,8 @@ export default function CalibrationView({ wsData, wsEvent, config: initialConfig
     // Update chart data from WS or Mock (Buffered and sent to Worker)
     useEffect(() => {
         if ((mode === 'realtime' || mode === 'test') && wsData) {
-            const payload = wsData.raw || wsData;
+            console.log("[CalibrationView] wsData received:", wsData);
+            const payload = wsData.raw.payload || wsData.raw || wsData;
 
             let samples = [];
             if (payload._batch) {
@@ -738,8 +691,7 @@ export default function CalibrationView({ wsData, wsEvent, config: initialConfig
             const channelIndex = activeChannelIndex;
 
             samples.forEach((s) => {
-                let incomingTs = Number(s.timestamp);
-                if (!incomingTs || incomingTs < 1e9) incomingTs = Date.now();
+                let incomingTs = Date.now(); // Always use current time since timestamp is removed from packet
 
                 // Monotonic timestamp logic
                 if (!window.__calibLastTs) window.__calibLastTs = incomingTs;
@@ -748,17 +700,14 @@ export default function CalibrationView({ wsData, wsEvent, config: initialConfig
                 }
                 window.__calibLastTs = incomingTs;
 
-                // Robust channel extraction
-                if (s.channels) {
-                    let rawVal = undefined;
-                    if (s.channels[channelIndex] !== undefined) rawVal = s.channels[channelIndex];
-                    else if (s.channels[`ch${channelIndex}`] !== undefined) rawVal = s.channels[`ch${channelIndex}`];
+                let rawVal = undefined;
+                if (s[`ch${channelIndex}_raw`] !== undefined) rawVal = s[`ch${channelIndex}_raw`]; // Use _raw suffix
+                else if (s[channelIndex] !== undefined) rawVal = s[channelIndex]; // Fallback to direct access if key is number
+                else if (s[`ch${channelIndex}`] !== undefined) rawVal = s[`ch${channelIndex}`]; // Fallback to direct access if key is chX
 
-                    if (rawVal !== undefined) {
-                        const val = typeof rawVal === 'number' ? rawVal : (rawVal.value || 0);
-                        // PUSH TO LOCAL BUFFER
-                        incomingBufferRef.current.push({ time: incomingTs, value: val });
-                    }
+                if (rawVal !== undefined) {
+                    const val = typeof rawVal === 'number' ? rawVal : (rawVal.value || 0);
+                    incomingBufferRef.current.push({ time: incomingTs, value: val });
                 }
             });
 

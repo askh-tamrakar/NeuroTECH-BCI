@@ -211,8 +211,7 @@ export class SerialService extends MicroEventEmitter {
                 1: ch1_uv
             },
             ch0_raw,
-            ch1_raw,
-            timestamp: Date.now()
+            ch1_raw
         };
     }
 

@@ -101,7 +101,7 @@ export const ConfigService = {
         // If no cache, try to load from backend (if endpoint exists)
         try {
             console.log('📡 Fetching config from backend...')
-            const response = await fetch('/api/config')
+            const response = await fetch('/api/config/')
 
             if (response.status === 404) {
                 console.log('ℹ️ Backend /api/config endpoint not available (older web_server.py)')
@@ -225,7 +225,7 @@ export const ConfigService = {
 
             // Also notify backend if endpoint exists
             try {
-                await fetch('/api/config', { method: 'DELETE' }).catch(() => { })
+                await fetch('/api/config/', { method: 'DELETE' }).catch(() => { })
             } catch (e) {
                 console.warn('⚠️ Could not notify backend of config clear')
             }

@@ -210,6 +210,15 @@ function draw() {
         return;
     }
 
+    console.log("[ChartWorker] Drawing parameters:", {
+        width,
+        height,
+        yMin: config.yMin,
+        yMax: config.yMax,
+        firstPoint: points[0],
+        lastPoint: points[points.length - 1]
+    });
+
     // Use wall-clock time adjusted by auto-latency compensation
     const now = Date.now() - (config.offset || 0) - timeOffset;
     const timeWindow = config.timeWindow;

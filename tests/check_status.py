@@ -2,7 +2,7 @@ import requests
 import time
 
 try:
-    resp = requests.get("http://localhost:5000/api/status")
+    resp = requests.get("http://localhost:8000/api/status")
     data = resp.json()
     print("--- Server Status ---")
     print(f"Connected: {data.get('connected')}")

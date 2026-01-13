@@ -114,7 +114,6 @@ export function useWebSocket(url) {
     // Assuming 'lastMessage' consumers expect { data: string, raw: object }
     setLastMessage({
       data: JSON.stringify(data),
-      timestamp: Date.now(),
       raw: data
     });
   };

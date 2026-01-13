@@ -2,7 +2,7 @@ import requests
 import time
 import random
 
-url = "http://localhost:5000/api/window"
+url = "http://localhost:8000/api/window"
 payload = {
     "sensor": "EMG",
     "action": "Rest",

@@ -19,19 +19,12 @@ export default function LiveDashboard({ wsData, wsConfig, wsEvent, sendMessage }
 
     // Sync incoming config from WebSocket
     useEffect(() => {
-        if (wsConfig) {
-            console.log("LiveDashboard: Syncing config from WS", wsConfig)
-
-            // Check if it's actually different to avoid unnecessary resets
-            // But config is an object, so simple reference check might pass if it's the same object (unlikely from WS)
-            // We'll trust the logic for now but log it
-
-            setConfig(wsConfig)
-
-            // Only update local storage to keep them in sync, DO NOT push back to API (causes loop)
-            localStorage.setItem('biosignals-config', JSON.stringify(wsConfig))
+        if (wsConfig && JSON.stringify(wsConfig) !== JSON.stringify(config)) {
+            console.log("LiveDashboard: Syncing config from WS", wsConfig);
+            setConfig(wsConfig);
+            localStorage.setItem('biosignals-config', JSON.stringify(wsConfig));
         }
-    }, [wsConfig])
+    }, [wsConfig, config]);
 
     // Auto-save removed. Manual save only.
     const handleManualSave = (updatedConfig) => {
