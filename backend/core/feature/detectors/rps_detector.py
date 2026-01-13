@@ -1,44 +1,23 @@
 import joblib
 import pandas as pd
 import numpy as np
-<<<<<<< HEAD
-import os
-from pathlib import Path
-=======
 from pathlib import Path
 from collections import Counter
->>>>>>> rps-implement
 
 class RPSDetector:
     """
     Classifies EMG features into Rock, Paper, or Scissors gestures.
     Uses a pre-trained Random Forest model.
-<<<<<<< HEAD
-=======
     
     Refactored to use a Candidate/State-based approach:
     - Buffers predictions while the gesture is active (not Rest).
     - Emits the most frequent prediction when the gesture returns to Rest.
->>>>>>> rps-implement
     """
     
     def __init__(self, config: dict):
         self.config = config
         self.model = None
         self.scaler = None
-<<<<<<< HEAD
-        self.feature_cols = ['rms', 'mav', 'zcr', 'var', 'wl', 'peak', 'range', 'iemg', 'entropy', 'energy']
-        self._load_model()
-        
-    def _load_model(self):
-        """
-        Load the trained model and scaler.
-        """
-        try:
-            # Path relative to this file: src/feature/detectors/ -> data/models
-            # This file: .../src/feature/detectors/rps_detector.py
-            # Root: .../
-=======
         
         # State tracking for candidate-based detection
         self.collecting_candidates = False
@@ -54,7 +33,6 @@ class RPSDetector:
     def _load_model(self):
         try:
             # Locate model paths relative to project root (assuming this file is in src/feature/detectors)
->>>>>>> rps-implement
             project_root = Path(__file__).resolve().parent.parent.parent.parent
             models_dir = project_root / "data" / "models"
             
@@ -177,4 +155,3 @@ class RPSDetector:
         rps_cfg = config.get("features", {}).get("RPS", {})
         self.confidence_threshold = rps_cfg.get("confidence_threshold", 0.6)
         self._load_model()
->>>>>>> rps-implement

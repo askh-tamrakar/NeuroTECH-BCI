@@ -181,8 +181,8 @@ export default function Dashboard() {
           <div className="flex items-center gap-3">
             <div className="relative group cursor-pointer" onClick={logout} title="Click to Logout">
               <div className="absolute inset-0 bg-primary/20 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-              <video muted autoPlay loop playsInline preload="auto" aria-label="logo animation" className="w-16 h-16 relative z-10 rounded-lg border border-border bg-black object-cover">
-                <source src="/Resources/brain_animation.mp4" type="video/mp4" />
+              <video muted autoPlay loop playsInline preload="auto" aria-label="logo animation" className="h-16 relative z-10 rounded-lg border border-border bg-black object-cover">
+                <source src="/Resources/Brain_Model_Bg.mp4" type="video/mp4" />
               </video>
             </div>
 
