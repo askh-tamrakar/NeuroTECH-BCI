@@ -85,13 +85,14 @@ def api_train_eog():
         n_est = int(params.get('n_estimators', 100))
         max_d = params.get('max_depth')
         table_name = params.get('table_name') # Extract session table name
+        model_name = params.get('model_name', 'eog_rf')
 
         if max_d == 'None' or max_d is None: max_d = None
         else: max_d = int(max_d)
         
         test_size = float(params.get('test_size', 0.2))
         
-        result = train_eog_model(n_estimators=n_est, max_depth=max_d, test_size=test_size, table_name=table_name)
+        result = train_eog_model(n_estimators=n_est, max_depth=max_d, test_size=test_size, table_name=table_name, model_name=model_name)
         if "error" in result:
              return jsonify(result), 400
         return jsonify(result)
@@ -283,7 +284,13 @@ def api_load_eog_model():
         if "error" in result:
              return jsonify(result), 400
              
-        # EOG detector logic here if applicable
+        # Update Persisted Config so Router sees it
+        try:
+             from src.utils.config import config_manager
+             config_manager.set_active_model('EOG', model_name)
+             print(f"[Training] Set active EOG model to {model_name}")
+        except Exception as e:
+             print(f"[Training] Warning: Failed to update config manager: {e}")
             
         return jsonify(result)
     except Exception as e:
@@ -374,8 +381,6 @@ def api_save_window():
         
         if sensor.upper() == 'EMG':
             db_manager.insert_window(features, label_int, session_id=str(int(ts)), table_name=table_name)
-        elif sensor.upper() == 'EOG':
-            db_manager.insert_eog_window(features, label_int, session_id=str(int(ts)), table_name=table_name)
         elif sensor.upper() == 'EOG':
             db_manager.insert_eog_window(features, label_int, session_id=str(int(ts)), table_name=table_name)
         elif sensor.upper() == 'EEG':

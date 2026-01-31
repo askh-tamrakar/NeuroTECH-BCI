@@ -26,8 +26,8 @@ def extract_emg_features(samples: list, sr: int = 512) -> dict:
     return RPSExtractor.extract_features(samples, sr)
 
 def extract_eog_features(samples: list, sr: int = 512) -> dict:
-    """Extract EOG blink features matching BlinkExtractor."""
-    return BlinkExtractor.extract_features(samples, sr)
+    """Extract EOG blink features matching BlinkExtractor (Smart Crop)."""
+    return BlinkExtractor.extract_features_smart(samples, sr)
 
 from src.feature.extractors.eeg_extractor import EEGExtractor
 

@@ -78,7 +78,7 @@ class BlinkExtractor:
                 features = self._extract_features(self.candidate_window)
                 self.is_collecting = False
                 self.candidate_window = []
-                # print(f"[DEBUG] Window finished: {len(self.candidate_window)} samples")
+                print(f"[Extractor] Window finished: {len(self.candidate_window)} samples. Features: {features}")
                 return features
                 
         return None
@@ -140,3 +140,59 @@ class BlinkExtractor:
         self.amp_threshold = eog_cfg.get("amp_threshold", self.amp_threshold)
         self.min_duration_ms = eog_cfg.get("min_duration_ms", self.min_duration_ms)
         self.max_duration_ms = eog_cfg.get("max_duration_ms", self.max_duration_ms)
+
+    @staticmethod
+    def extract_features_smart(data: list | np.ndarray, sr: int) -> dict:
+        """
+        Smart extraction for Training Data.
+        Locates the principal pulse/blink within a larger window (e.g. 1s) 
+        and crops it before extracting features, to match real-time behavior.
+        """
+        if not len(data): return {}
+        
+        data = np.array(data)
+        # 1. Remove baseline (simple mean subtraction of first few samples)
+        baseline = np.mean(data[:min(len(data), 20)])
+        data_centered = data - baseline
+        abs_data = np.abs(data_centered)
+        
+        # 2. Find Max Peak
+        peak_idx = np.argmax(abs_data)
+        peak_amp = abs_data[peak_idx]
+        
+        # 3. If Peak is low (likely Rest/Noise), return whole window features
+        # Threshold: assume blinks are > 100uV? 
+        # Real-time uses 300uV. Let's use 100uV to be safe for training data variance.
+        if peak_amp < 100:
+             # Just return standard features on full window (this is a Rest sample)
+             return BlinkExtractor.extract_features(data_centered, sr)
+             
+        # 4. Crop around peak
+        # Walk backwards
+        start_idx = 0
+        threshold_low = peak_amp * 0.1 # Cut at 10% of peak (heuristic)
+        
+        for i in range(peak_idx, -1, -1):
+            if abs_data[i] < threshold_low:
+                start_idx = i
+                break
+                
+        # Walk forwards
+        end_idx = len(data) - 1
+        for i in range(peak_idx, len(data)):
+            if abs_data[i] < threshold_low:
+                end_idx = i
+                break
+                
+        # 5. Extract features on CROP
+        # Ensure crop is at least minimal length (e.g. 10 samples)
+        if end_idx - start_idx < 5:
+            start_idx = max(0, peak_idx - 10)
+            end_idx = min(len(data), peak_idx + 10)
+            
+        cropped = data_centered[start_idx:end_idx+1]
+        
+        # Debug
+        # print(f"[SmartExtract] Crop: {len(cropped)} samples (from {len(data)}). Peak: {peak_amp:.1f}")
+        
+        return BlinkExtractor.extract_features(cropped, sr)

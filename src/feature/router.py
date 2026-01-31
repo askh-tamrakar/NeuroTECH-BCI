@@ -28,6 +28,7 @@ except ImportError:
 
 from .extractors.blink_extractor import BlinkExtractor
 from .detectors.blink_detector import BlinkDetector
+from .detectors.eog_ml_detector import EOGMLDetector
 from .extractors.rps_extractor import RPSExtractor
 from .detectors.rps_detector import RPSDetector
 from .extractors.trigger_extractor import EEGExtractor
@@ -132,7 +133,9 @@ class FeatureRouter:
                 if sensor == "EOG":
                     print(f" [{i}] -> EOG Blink Pipeline (Extractor + Detector)")
                     extractor = BlinkExtractor(i, self.config, self.sr)
-                    detector = BlinkDetector(self.config)
+                    # Use ML Detector if available, logic inside EOGMLDetector handles fallback?
+                    # Or check detection state? EOGMLDetector handles model loading.
+                    detector = EOGMLDetector(self.config)
                     self.pipeline[i] = (extractor, detector, "EOG")
                 elif sensor == "EMG":
                     print(f" [{i}] -> EMG RPS Pipeline (Extractor + Detector)")
@@ -179,7 +182,9 @@ class FeatureRouter:
                             
                             if features:
                                 # Feature Extractor produced a window -> Run Detector
+                                print(f"[Router] Extracted Features from ch{ch_idx} ({sensor_type}). Running Detector...")
                                 detection_result = detector.detect(features)
+                                print(f"[Router] Detector Result: {detection_result}")
                                 
                                 if detection_result:
                                     # LOGIC FIX: 
