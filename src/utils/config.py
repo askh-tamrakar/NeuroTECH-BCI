@@ -114,6 +114,16 @@ class ConfigWatcher:
         with self._lock:
             return key in self._config_cache
 
+    def get_version(self) -> float:
+        """Returns last modified timestamp as a version indicator."""
+        # Check disk directly to ensure syncing across processes instantly
+        try:
+             if os.path.exists(self.config_path):
+                 return os.path.getmtime(self.config_path)
+        except:
+             pass
+        return self._last_modified or 0.0
+
 
 class ConfigWriter:
     """Write configurations to JSON files with validation."""
@@ -286,6 +296,34 @@ class ConfigManager:
     def save_feature_config(self, config: Dict[str, Any]) -> bool:
         """Save feature configuration."""
         return self.feature_writer.save(config, validate=True, backup=True)
+
+    # ============== ACTIVE MODELS ==============
+
+    def get_active_model(self, sensor: str) -> Optional[str]:
+        """Get the active model name for a specific sensor."""
+        active_models = self.sensor_config.get("active_models", {})
+        return active_models.get(sensor.upper())
+
+    def set_active_model(self, sensor: str, model_name: str) -> bool:
+        """Persist the active model name for a sensor."""
+        config = self.sensor_config.get_all()
+        if "active_models" not in config:
+            config["active_models"] = {}
+        
+        config["active_models"][sensor.upper()] = model_name
+        return self.save_sensor_config(config)
+
+    def get_config_version_hash(self) -> str:
+        """
+        Returns a combined string of timestamps for all major configs.
+        Used by standalone processes to detect if ANY config file changed.
+        """
+        versions = [
+            str(self.sensor_config.get_version()),
+            str(self.feature_config.get_version()),
+            str(self.filter_config.get_version())
+        ]
+        return "|".join(versions)
 
     # ============== DETECTION STATE ==============
 

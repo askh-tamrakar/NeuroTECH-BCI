@@ -27,10 +27,19 @@ def api_list_sessions(sensor_type):
 
 @session_bp.route('/api/sessions/<sensor_type>/<session_name>', methods=['GET'])
 def api_get_session_data(sensor_type, session_name):
-    """Get data rows for a specific session."""
+    """Get data rows for a specific session with optional pagination."""
     try:
-        data = db_manager.get_session_data(sensor_type, session_name)
+        # Pagement parameters
+        limit_arg = request.args.get('limit')
+        offset_arg = request.args.get('offset', 0)
+        
+        limit = int(limit_arg) if limit_arg is not None else None
+        offset = int(offset_arg)
+
+        data = db_manager.get_session_data(sensor_type, session_name, limit=limit, offset=offset)
         return jsonify(data)
+    except ValueError:
+        return jsonify({"error": "Invalid limit or offset"}), 400
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

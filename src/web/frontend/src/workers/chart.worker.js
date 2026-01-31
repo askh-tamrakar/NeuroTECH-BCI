@@ -185,7 +185,14 @@ function handleGetSamples(payload, idPromise) {
 // --- Rendering ---
 
 function loop(timestamp) {
-    draw();
+    try {
+        draw();
+    } catch (e) {
+        if (!self.__hasLoggedDrawError) {
+            console.error("Worker Draw Error (throttled):", e);
+            self.__hasLoggedDrawError = true;
+        }
+    }
     animationFrameId = requestAnimationFrame(loop);
 }
 
@@ -297,25 +304,29 @@ function draw() {
             if (win.label) {
                 ctx.save();
                 ctx.fillStyle = stroke;
-                ctx.font = 'bold 32px sans-serif';
                 ctx.textAlign = 'center';
-                ctx.textBaseline = 'bottom';
+                ctx.textBaseline = 'middle';
 
                 const centerX = px1 + wFunc / 2;
-                const bottomY = height - 10;
+                const centerY = yTop + hRegion / 2;
 
-                // Draw label at bottom center of the window
-                ctx.fillText(win.label, centerX, bottomY);
+                // Dynamic font size for long words
+                const fontSize = win.label.length > 10 ? 24 : 32;
+                ctx.font = `bold ${fontSize}px sans-serif`;
+
+                // Draw label at center of the window
+                ctx.fillText(win.label, centerX, centerY);
                 ctx.restore();
             }
         }
     });
 
+    // --- Icon Definitions Removed ---
+
+
     // Draw Signal with Neon Glow and Smoothing
     ctx.strokeStyle = config.lineColor;
     ctx.lineWidth = 3;
-    ctx.lineJoin = 'round';
-    ctx.lineCap = 'round';
 
     // Neon Glow
     ctx.shadowBlur = 8;

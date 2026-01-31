@@ -15,6 +15,8 @@ const Pill = ({
   as = 'a',
   pillWidth,
   pillHeight,
+  active,
+  activeHref,
   ...props
 }) => {
   const circleRef = useRef(null);

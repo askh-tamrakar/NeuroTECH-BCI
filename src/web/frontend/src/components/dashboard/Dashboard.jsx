@@ -7,7 +7,7 @@ import LiveDashboard from '../views/LiveDashboard'
 import DinoView from '../views/DinoView'
 import SSVEPView from '../views/SSVEPView'
 import RPSGame from '../views/RPSGame'
-import CalibrationView from '../views/CalibrationView'
+import DataCollectionView from '../views/DataCollectionView'
 import MLTrainingView from '../views/MLTrainingView'
 import SettingsView from '../views/SettingsView'
 
@@ -94,7 +94,7 @@ export default function Dashboard() {
     { label: 'SSVEP', onClick: () => setCurrentPage('ssvep'), href: '#ssvep' },
     { label: 'RPS', onClick: () => setCurrentPage('rps'), href: '#rps' },
     { label: 'M. L.', onClick: () => setCurrentPage('ml_training'), href: '#ml_training' },
-    { label: 'Calibration', onClick: () => setCurrentPage('calibration'), href: '#calibration' },
+    { label: 'Data Collection', onClick: () => setCurrentPage('data_collection'), href: '#data_collection' },
     { label: 'Settings', onClick: () => setCurrentPage('settings'), href: '#settings' },
     {
       label: 'Theme',
@@ -102,7 +102,7 @@ export default function Dashboard() {
       key: 'theme-dropdown',
       href: '#',
       menu: ({ close }) => (
-        <ScrollStack>
+        <ScrollStack style={{ '--scroll-stack-width': `${pillSize.width + 78}px` }}>
           {themes.map((t) => (
             <ScrollStackItem key={t.id}>
               <Pill
@@ -135,7 +135,7 @@ export default function Dashboard() {
           <div className="flex items-center gap-3">
             <div className="relative group cursor-pointer" onClick={logout} title="Click to Logout">
               <div className="absolute inset-0 bg-primary/20 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-              <video muted autoPlay loop playsInline preload="auto" aria-label="logo animation" className="w-16 h-16 relative z-10 rounded-lg border border-border bg-black object-cover">
+              <video muted autoPlay loop playsInline preload="auto" aria-label="logo animation" className="w-24 h-16 relative z-10 rounded-lg border border-border bg-black object-cover">
                 <source src="/Resources/brain_animation.mp4" type="video/mp4" />
               </video>
             </div>
@@ -213,7 +213,7 @@ export default function Dashboard() {
               {currentPage === 'ssvep' && <SSVEPView />}
               {/* {currentPage === 'test' && <TestView wsData={lastMessage} wsEvent={lastEvent} config={lastConfig} />} */}
               {currentPage === 'rps' && <RPSGame wsEvent={lastEvent} />}
-              {currentPage === 'calibration' && <CalibrationView wsData={lastMessage} wsEvent={lastEvent} config={lastConfig} />}
+              {currentPage === 'data_collection' && <DataCollectionView wsData={lastMessage} wsEvent={lastEvent} config={lastConfig} />}
               {currentPage === 'ml_training' && <MLTrainingView />}
               {currentPage === 'settings' && <SettingsView />}
 

@@ -29,6 +29,12 @@ def extract_eog_features(samples: list, sr: int = 512) -> dict:
     """Extract EOG blink features matching BlinkExtractor."""
     return BlinkExtractor.extract_features(samples, sr)
 
+from src.feature.extractors.eeg_extractor import EEGExtractor
+
+def extract_eeg_features(samples: list, sr: int = 512) -> dict:
+    """Extract EEG band power features."""
+    return EEGExtractor.extract_features(samples, sr)
+
 def create_channel_mapping(lsl_info) -> dict:
     """Create channel mapping from LSL stream info."""
     mapping = {}

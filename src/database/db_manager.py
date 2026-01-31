@@ -147,40 +147,43 @@ class DatabaseManager:
             print(f"[DB] Error dropping table {session_name}: {e}")
             return False
 
-    def get_session_data(self, sensor_type: str, session_name: str) -> List[Dict]:
-        """Fetch all rows from a specific session table."""
+    def get_session_data(self, sensor_type: str, session_name: str, limit: int = None, offset: int = 0) -> Dict:
+        """Fetch rows from a specific session table with optional pagination."""
         try:
             sensor = sensor_type.upper()
             
             # Validate table name strictly to prevent injection
-            # Although sanitize_table_name does some, ensure it matches expected pattern
             prefix = f"{sensor.lower()}_session_"
             if not session_name.startswith(prefix):
-                 # Try to see if it's the short name?
                  # Assume it's the full table name passed from frontend
-                 return []
+                 return {"rows": [], "total": 0}
             
             # Additional safety verify it exists in list?
             if session_name not in self.get_session_tables(sensor):
-                return []
+                return {"rows": [], "total": 0}
 
             conn = self.connect(sensor)
             conn.row_factory = sqlite3.Row # Access columns by name
             cursor = conn.cursor()
-            cursor.execute(f"SELECT * FROM {session_name}")
+
+            # Get total count first
+            cursor.execute(f"SELECT COUNT(*) FROM {session_name}")
+            total_count = cursor.fetchone()[0]
+
+            # Fetch paginated data
+            query = f"SELECT * FROM {session_name}"
+            params = []
+            
+            if limit is not None:
+                query += " LIMIT ? OFFSET ?"
+                params.extend([limit, offset])
+            
+            cursor.execute(query, params)
             rows = cursor.fetchall()
             
             results = []
             for row in rows:
                 r_dict = dict(row)
-                # Pack features into list/dict if needed for consistency with frontend expectations
-                # Frontend expects: { label: ..., features: [...] }
-                # But here we have raw columns.
-                # Let's verify what columns we have.
-                # EMG: rms, mav, zcr...
-                # EOG: amplitude, duration...
-                
-                # We can group features dynamically
                 item = {
                     "id": r_dict.get('id'),
                     "label": r_dict.get('label'),
@@ -188,29 +191,17 @@ class DatabaseManager:
                 }
                 
                 # Collect remaining columns as features for display
-                # Exclude metadata
                 excluded = {'id', 'label', 'session_id', 'timestamp', 'created_at'}
                 features = {k: v for k, v in r_dict.items() if k not in excluded}
                 
-                # Flatten features to array or keep object? 
-                # Frontend does: row.features.map... implying array OR object handling in table?
-                # Frontend code: `Array.isArray(row.features) ? ... : JSON.stringify(...)`
-                # Let's return features as object values for simplified display or just the object
-                # But for a cleaner table, detailed structure is better.
-                # Let's just put the feature dict in 'features' key.
-                item['features'] = features # Return dict with keys
-                
-                # Or better, list of objects or formatted string?
-                # Frontend truncates. List of floats is fine.
-                
+                item['features'] = features
                 results.append(item)
                 
             conn.close()
-            conn.close()
-            return results
+            return {"rows": results, "total": total_count}
         except Exception as e:
             print(f"[DB] Error fetching session data {session_name}: {e}")
-            return []
+            return {"rows": [], "total": 0}
 
     def delete_session_row(self, sensor_type: str, session_name: str, row_id: int) -> bool:
         """Delete a specific row from a session table."""

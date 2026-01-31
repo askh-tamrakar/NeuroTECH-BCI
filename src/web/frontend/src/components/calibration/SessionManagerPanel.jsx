@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import AnimatedList from '../ui/AnimatedList';
-import { Trash, ClipboardX, Trash2, FolderPlus, RefreshCw } from 'lucide-react';
+import { Trash, ClipboardX, Trash2, FolderPlus, RefreshCw, ChevronLeft, ChevronRight } from 'lucide-react';
 
 export default function SessionManagerPanel({
     activeSensor,
@@ -50,18 +50,24 @@ export default function SessionManagerPanel({
 
     // Calculate active session index for AnimatedList
     const activeSessionIndex = useMemo(() => {
-        if (!sessions || sessions.length === 0) return -1;
-        // Find exact match or partial if consistent
-        const idx = sessions.findIndex(s => s === currentSessionName || s.includes(currentSessionName));
-        return idx !== -1 ? idx : -1;
+        if (!sessions || sessions.length === 0 || !currentSessionName) return -1;
+
+        // 1. Exact match
+        let idx = sessions.findIndex(s => s === currentSessionName);
+        if (idx !== -1) return idx;
+
+        // 2. Suffix match
+        const suffix = `_session_${currentSessionName}`;
+        idx = sessions.findIndex(s => s.endsWith(suffix));
+        return idx;
     }, [sessions, currentSessionName]);
 
     // Handler for AnimatedList selection
     const handleSessionSelect = (sessionName, index) => {
-        // Extract clean name logic can be moved here if needed
-        // For now just pass the raw name or parse it as before
+        // Robust extraction: Split by '_session_' and take the last segment
+        // This handles cases where user put '_session_' in the name itself (though unlikely)
         const parts = sessionName.split('_session_');
-        const clean = parts.length > 1 ? parts[1] : sessionName;
+        const clean = parts.length > 1 ? parts[parts.length - 1] : sessionName;
         onSessionChange(clean);
     };
 
@@ -148,50 +154,135 @@ export default function SessionManagerPanel({
         fetchSessions();
     }, [activeSensor]);
 
-    // Helper to get full table name from the current short name or partial match
+    // Pagination State
+    const [offset, setOffset] = useState(0);
+    const [totalRows, setTotalRows] = useState(0);
+    const [hasMore, setHasMore] = useState(true);
+    const LIMIT = 20;
+
+    // Helper to get full table name from the current short name
     const fullCurrentSessionName = useMemo(() => {
-        if (!sessions || sessions.length === 0) return null;
-        return sessions.find(s => s === currentSessionName || s.includes(currentSessionName)) || null;
+        if (!sessions || sessions.length === 0 || !currentSessionName) return null;
+
+        // 1. Try exact match (unlikely if strictly short names are passed, but possible)
+        const exact = sessions.find(s => s === currentSessionName);
+        if (exact) return exact;
+
+        // 2. Strict suffix match: table name must END with `_session_{shortName}`
+        const suffix = `_session_${currentSessionName}`;
+        const strictMatch = sessions.find(s => s.endsWith(suffix));
+        if (strictMatch) return strictMatch;
+
+        // 3. Last result fallback (risky but better than generic includes)
+        return null;
     }, [sessions, currentSessionName]);
 
-    // Fetch session details when selection changes
+    // Reset pagination when session changes
     useEffect(() => {
-        const fetchSessionDetails = async () => {
-            if (!fullCurrentSessionName) {
-                setSelectedSessionRows([]);
-                return;
-            }
+        if (fullCurrentSessionName) {
+            setOffset(0);
+            setHasMore(true);
+            setSelectedSessionRows([]);
+            setTotalRows(0);
 
-            if (lastSessionRef.current !== fullCurrentSessionName || selectedSessionRows.length === 0) {
-                setRowsLoading(true);
-            }
+            // Trigger initial fetch
+            fetchSessionDetails(0, true);
+        } else {
+            setSelectedSessionRows([]);
+        }
+    }, [fullCurrentSessionName, refreshTrigger]);
 
-            lastSessionRef.current = fullCurrentSessionName;
+    // Fetch session details
+    const fetchSessionDetails = async (currentOffset = 0, isReset = false) => {
+        if (!fullCurrentSessionName) return;
 
-            try {
-                // Assuming GET returns the rows for the session table
-                const url = isTestMode
-                    ? `/api/prediction/sessions/${fullCurrentSessionName}`
-                    : `/api/sessions/${activeSensor}/${fullCurrentSessionName}`;
+        // Prevent duplicate calls if already loading (except reset)
+        if (rowsLoading && !isReset) return;
 
-                const res = await fetch(url);
-                if (res.ok) {
-                    const data = await res.json();
-                    setSelectedSessionRows(Array.isArray(data) ? data : (data.rows || []));
+        setRowsLoading(true);
+
+        try {
+            const url = isTestMode
+                ? `/api/prediction/sessions/${fullCurrentSessionName}`
+                : `/api/sessions/${activeSensor}/${fullCurrentSessionName}?limit=${LIMIT}&offset=${currentOffset}`;
+
+            const res = await fetch(url);
+            if (res.ok) {
+                const data = await res.json();
+
+                // Backend now returns { rows: [], total: N }
+                // Fallback for older backend structure if needed (though we updated it)
+                const newRows = Array.isArray(data) ? data : (data.rows || []);
+                const total = data.total !== undefined ? data.total : newRows.length;
+
+                setTotalRows(total);
+                // Strict Pagination: Always REPLACE rows
+                setSelectedSessionRows(newRows);
+
+                // Update hasMore based on total count
+                if (newRows.length < LIMIT || (currentOffset + newRows.length >= total)) {
+                    setHasMore(false);
                 } else {
-                    console.error("Failed to fetch session details");
-                    setSelectedSessionRows([]);
+                    setHasMore(true);
                 }
-            } catch (err) {
-                console.error("Error fetching session details:", err);
-                setSelectedSessionRows([]);
-            } finally {
-                setRowsLoading(false);
+            } else {
+                console.error("Failed to fetch session details");
+                if (isReset) setSelectedSessionRows([]);
             }
-        };
+        } catch (err) {
+            console.error("Error fetching session details:", err);
+            if (isReset) setSelectedSessionRows([]);
+        } finally {
+            setRowsLoading(false);
+        }
+    };
 
-        fetchSessionDetails();
-    }, [activeSensor, fullCurrentSessionName, refreshTrigger]);
+    // Pagination Handlers
+    const handleNextPage = () => {
+        if (!hasMore || rowsLoading) return;
+        const nextOffset = offset + LIMIT;
+        setOffset(nextOffset);
+        fetchSessionDetails(nextOffset, false);
+        // Reset scroll to top slightly to allow scrolling up again (or keep at bottom?)
+        // If we replace rows, the scroll height shrinks. We should probably reset to top.
+        if (tableContainerRef.current) tableContainerRef.current.scrollTop = 5;
+    };
+
+    const handlePrevPage = () => {
+        if (offset === 0 || rowsLoading) return;
+        const prevOffset = Math.max(0, offset - LIMIT);
+        setOffset(prevOffset);
+        fetchSessionDetails(prevOffset, false);
+        setHasMore(true);
+        // Reset scroll to bottom slightly to allow scrolling down again
+        // We need to wait for render... simplified for now:
+        // if (tableContainerRef.current) tableContainerRef.current.scrollTop = tableContainerRef.current.scrollHeight - 50;
+    };
+
+    const tableContainerRef = useRef(null);
+    const scrollTimeout = useRef(null);
+
+    // Scroll Listener for "Page Flip"
+    const handleScroll = (e) => {
+        if (rowsLoading) return;
+
+        const { scrollTop, scrollHeight, clientHeight } = e.target;
+
+        // Debounce
+        if (scrollTimeout.current) clearTimeout(scrollTimeout.current);
+
+        scrollTimeout.current = setTimeout(() => {
+            // Scroll Logic
+            // 1. Bottom Hit -> Next Page
+            if (scrollHeight - scrollTop - clientHeight < 5) {
+                if (hasMore) handleNextPage();
+            }
+            // 2. Top Hit -> Prev Page (only if we have previous pages)
+            else if (scrollTop < 5) {
+                if (offset > 0) handlePrevPage();
+            }
+        }, 100);
+    };
 
     const handleDeleteRow = async (rowId, e) => {
         e.stopPropagation();
@@ -231,17 +322,21 @@ export default function SessionManagerPanel({
                         {currentSessionName ? currentSessionName.replace(`${activeSensor.toLowerCase()}_session_`, '') : 'Select a Session'}
                     </span>
                     <span className="text-xs font-mono text-muted">
-                        {selectedSessionRows.length} samples
+                        Total Saved: {totalRows}
                     </span>
                 </div>
 
                 {/* Table Content */}
-                <div className="flex-grow overflow-auto no-scrollbar relative">
+                <div
+                    className="flex-grow overflow-auto no-scrollbar relative"
+                    ref={tableContainerRef}
+                    onScroll={handleScroll}
+                >
                     {rowsLoading ? (
-                        <div className="absolute inset-0 flex items-center justify-center text-muted text-xs animate-pulse">
+                        <div className="absolute inset-0 flex items-center justify-center text-muted text-xs animate-pulse bg-surface/50 z-20">
                             Loading data...
                         </div>
-                    ) : selectedSessionRows.length === 0 ? (
+                    ) : selectedSessionRows.length === 0 && !rowsLoading ? (
                         <div className="absolute inset-0 flex flex-col items-center justify-center text-muted text-xl opacity-50 gap-2">
                             <span className="text-6xl">📋</span>
                             <span >No data available</span>
@@ -320,6 +415,7 @@ export default function SessionManagerPanel({
                                         </td>
                                     </tr>
                                 ))}
+
                             </tbody>
                         </table>
                     )}

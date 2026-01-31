@@ -28,26 +28,37 @@ class RPSDetector:
         rps_cfg = config.get("features", {}).get("RPS", {})
         self.confidence_threshold = rps_cfg.get("confidence_threshold", 0.6)
         
-        self._load_model()
+        self.load_model()
         
-    def _load_model(self):
+    def load_model(self, model_name=None, verbose=True):
         try:
-            # Locate model paths relative to project root (assuming this file is in src/feature/detectors)
+            # If no model name provided, check config for current active model
+            if model_name is None:
+                from src.utils.config import config_manager
+                model_name = config_manager.get_active_model('EMG') or "emg_rf"
+
+            # Locate model paths relative to project root
             project_root = Path(__file__).resolve().parent.parent.parent.parent
-            models_dir = project_root / "data" / "models"
+            # UPDATED: Use EMG subfolder
+            models_dir = project_root / "data" / "models" / "EMG"
             
-            model_path = models_dir / "emg_rf.joblib"
-            scaler_path = models_dir / "emg_scaler.joblib"
+            clean_name = "".join([c for c in model_name if c.isalnum() or c in ('_', '-')])
+            
+            model_path = models_dir / f"{clean_name}.joblib"
+            scaler_path = models_dir / f"{clean_name}_scaler.joblib"
             
             if model_path.exists() and scaler_path.exists():
                 self.model = joblib.load(model_path)
                 self.scaler = joblib.load(scaler_path)
-                print(f"[RPSDetector] [OK] Loaded ML Model from {model_path}")
+                if verbose:
+                    print(f"\n{'='*50}\n[RPSDetector] 🔄 MODEL SWITCHED: {model_name}\n{'='*50}\n", flush=True)
             else:
-                print(f"[RPSDetector] [WARN] Model not found at {model_path}")
+                print(f"[RPSDetector] [WARN] Model {model_name} not found at {model_path}")
+                # Fallback to defaults? or keep previous?
+                pass
                 
         except Exception as e:
-            print(f"[RPSDetector] [ERROR] Error loading model: {e}")
+            print(f"[RPSDetector] [ERROR] Error loading model {model_name}: {e}")
         
     def predict_instant(self, features: dict) -> tuple[str, float]:
         """
@@ -154,4 +165,6 @@ class RPSDetector:
         self.config = config
         rps_cfg = config.get("features", {}).get("RPS", {})
         self.confidence_threshold = rps_cfg.get("confidence_threshold", 0.6)
-        self._load_model()
+        rps_cfg = config.get("features", {}).get("RPS", {})
+        self.confidence_threshold = rps_cfg.get("confidence_threshold", 0.6)
+        # self.load_model() # Don't auto reload on config update unless specified?

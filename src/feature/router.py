@@ -68,6 +68,9 @@ class FeatureRouter:
         self.sample_counter = 0
         self.detection_active = False # Start disabled/passive
         self.last_event_state = {} # Key: ch_idx_type -> event_name
+        self.last_event_time = {} # Key: ch_idx_type -> timestamp
+        self.last_config_vhash = config_manager.get_config_version_hash()
+
 
     def resolve_stream(self):
         if not LSL_AVAILABLE:
@@ -146,21 +149,28 @@ class FeatureRouter:
         self.running = True
         print("[FeatureRouter] [START] Loop started")
         
+        last_check_time = time.time()
+        
         while self.running:
             try:
-                # Pull chunk for better performance? For low latency events, sample by sample is okay or small chunks
-                # pull_sample blocks
-                sample, ts = self.inlet.pull_sample(timeout=1.0)
-                
-                if sample:
-                    # Check detection state (cached for performance?)
-                    # For now we check every time; file I/O on tmpfs/OS cache is fast enough for 512Hz?
-                    # Maybe throttle check to 5Hz (every ~100 samples) or just rely on OS.
-                    # Let's add simple throttling to be safe.
-                    self.sample_counter += 1
-                    if self.sample_counter % 50 == 0: # Check every ~0.1s
-                         self.detection_active = config_manager.get_detection_state()
+                # 1. Check for Configuration Changes (Model switch, thresh change, etc)
+                # Check every 0.5 seconds regardless of sample rate
+                if time.time() - last_check_time > 0.5:
+                    current_vhash = config_manager.get_config_version_hash()
+                    if current_vhash != self.last_config_vhash:
+                        print(f"\n{'*'*60}\n[FeatureRouter] 📁 Config changed — reloading pipeline...\n{'*'*60}\n", flush=True)
+                        self.config = load_config()
+                        self.configure_pipeline()
+                        self.last_config_vhash = current_vhash
+                    
+                    self.detection_active = config_manager.get_detection_state()
+                    last_check_time = time.time()
 
+                # 2. Pull data from inlet
+                # Use short timeout to allow loop to cycle back to config check
+                sample, ts = self.inlet.pull_sample(timeout=0.1)
+
+                if sample:
                     # Route to pipeline
                     for ch_idx, val in enumerate(sample):
                         if ch_idx in self.pipeline:
@@ -172,34 +182,68 @@ class FeatureRouter:
                                 detection_result = detector.detect(features)
                                 
                                 if detection_result:
+                                    # LOGIC FIX: 
+                                    # 1. We MUST emit "Rest" for RPS game to reset state
+                                    # 2. We MUST allow repeated gestures (e.g. Rock -> Rock)
+                                    
                                     # Determine event name
                                     if sensor_type == "EOG":
                                         event_name = detection_result # SingleBlink/DoubleBlink
                                     elif sensor_type == "EMG":
-                                        # Emit RPS events continuously (game logic handled by frontend)
                                         event_name = detection_result 
                                     elif sensor_type == "EEG":
                                         event_name = detection_result 
                                     else:
                                         event_name = "UNKNOWN_EVENT"
 
-                                    # De-duplication for continuous states (like Rest)
-                                    # Make a unique key for channel+event
+                                    # STRICT Validation to prevent blank logs
+                                    if not event_name:
+                                        continue
+                                    if not isinstance(event_name, str):
+                                        continue
+                                    if not event_name.strip():
+                                        continue
+                                    if event_name == "None": # String "None" check just in case
+                                        continue
+
+                                    # De-duplication Logic
                                     state_key = f"{ch_idx}_{sensor_type}"
                                     last_event = self.last_event_state.get(state_key)
+                                    last_ts = self.last_event_time.get(state_key, 0)
+                                    current_time = time.time()
 
-                                    # If it's a "state" type event (like Rest), dedup.
-                                    # Blinks are discrete events, so always emit.
-                                    is_discrete = sensor_type == "EOG" 
+                                    # For EMG/RPS: 
+                                    # We WANT to allow same gesture twice if it was a distinct release-and-perform action.
+                                    # The Detector (RPSDetector) is stateful: it only returns a value when a gesture FINISHES (or Rest).
+                                    # So every output from detector.detect() is a meaningful event.
+                                    # We should NOT dedup EMG events unless it's just spamming "Rest" repeatedly.
                                     
-                                    # User requested to log "Rest" always. 
-                                    # We allow "Rest" to duplicate, or we can just remove dedup for EMG?
-                                    # Let's specifically allow "Rest" to pass through.
-                                    if not is_discrete and event_name == last_event and event_name != "Rest":
-                                         # Skip duplicate log/emit (unless it's Rest)
-                                         continue
+                                    if sensor_type == "EMG":
+                                        # HEARTBEAT LOGIC FOR REST
+                                        # If it's "Rest", we normally dedup. 
+                                        # BUT, if the game missed the "Rest" signal (e.g. during cooldown), it gets stuck.
+                                        # So we emit "Rest" periodically (e.g. every 0.5s) even if it's a duplicate.
+                                        if event_name == "Rest" and last_event == "Rest":
+                                            if current_time - last_ts > 0.5:
+                                                # Allow heartbeat
+                                                pass 
+                                            else:
+                                                continue
+                                        # Otherwise (Gestures), always pass through, even if same as last
+                                        pass 
+                                    
+                                    elif sensor_type == "EOG":
+                                        # EOG detector emits discrete events only once per blink, so we can pass them.
+                                        # But just in case detector is noisy:
+                                        pass
+                                    
+                                    else:
+                                        # Default dedup for other types
+                                        if event_name == last_event:
+                                            continue
                                     
                                     self.last_event_state[state_key] = event_name
+                                    self.last_event_time[state_key] = current_time
 
                                     # emit event
                                     event_data = {

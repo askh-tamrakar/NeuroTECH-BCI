@@ -10,6 +10,7 @@ export const ScrollStackItem = ({ children, itemClassName = ' ' }) => (
 const ScrollStack = ({
     children,
     className = '',
+    style = {},
     itemDistance = 100,
     itemScale = 0,
     itemStackDistance = 0,
@@ -303,7 +304,7 @@ const ScrollStack = ({
     ]);
 
     return (
-        <div className={`scroll-stack-scroller ${className}`.trim()} ref={scrollerRef}>
+        <div className={`scroll-stack-scroller ${className}`.trim()} style={style} ref={scrollerRef}>
             <div className="scroll-stack-inner">
                 {children}
                 {/* Spacer so the last pin can release cleanly */}
@@ -318,14 +319,12 @@ ScrollStackItem.propTypes = {
     itemClassName: PropTypes.string
 };
 
-ScrollStackItem.defaultProps = {
-    children: null,
-    itemClassName: ' '
-};
+
 
 ScrollStack.propTypes = {
     children: PropTypes.node,
     className: PropTypes.string,
+    style: PropTypes.object,
     itemDistance: PropTypes.number,
     itemScale: PropTypes.number,
     itemStackDistance: PropTypes.number,
@@ -339,20 +338,6 @@ ScrollStack.propTypes = {
     onStackComplete: PropTypes.func
 };
 
-ScrollStack.defaultProps = {
-    children: null,
-    className: '',
-    itemDistance: 100,
-    itemScale: 0,
-    itemStackDistance: 0,
-    stackPosition: '0%',
-    scaleEndPosition: '0%',
-    baseScale: 1,
-    scaleDuration: 0,
-    rotationAmount: 0,
-    blurAmount: 0,
-    useWindowScroll: false,
-    onStackComplete: null
-};
+
 
 export default ScrollStack;

@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { BrainCircuit, Activity } from 'lucide-react';
+import CustomSelect from '../ui/CustomSelect';
 import '../../styles/views/RPSGame.css';
 
 const MOVES = ['ROCK', 'PAPER', 'SCISSORS'];
@@ -25,7 +27,12 @@ const RPSGame = ({ wsEvent }) => {
     // Mode: automatic via WS events, or manual via on-screen buttons
     const [manualMode, setManualMode] = useState(false);
     // Difficulty for computer move randomness: 'low' (repeats sometimes), 'moderate' (avoid repeats), 'high' (fully random)
+    // Difficulty for computer move randomness: 'low' (repeats sometimes), 'moderate' (avoid repeats), 'high' (fully random)
     const [difficulty, setDifficulty] = useState('moderate');
+
+    // Models
+    const [models, setModels] = useState([]);
+    const [selectedModel, setSelectedModel] = useState('');
 
     // Stats
     const [score, setScore] = useState({ player: 0, computer: 0 });
@@ -82,9 +89,50 @@ const RPSGame = ({ wsEvent }) => {
     // Connect on mount
     useEffect(() => {
         pickComputerMove();
+
+        // Fetch models
+        fetch('/api/models/emg')
+            .then(res => res.json())
+            .then(data => {
+                setModels(data);
+                if (data.length > 0) {
+                    const activeModel = data.find(m => m.active);
+                    if (activeModel) {
+                        setSelectedModel(activeModel.name);
+                    } else {
+                        // No active model found, auto-load the first one
+                        const first = data[0].name;
+                        setSelectedModel(first);
+                        handleModelChange({ target: { value: first } });
+                    }
+                }
+            })
+            .catch(err => console.error("Failed to load models:", err));
+
         // Ensure prediction is off on mount/unmount
         return () => togglePrediction(false);
     }, [pickComputerMove]);
+
+    const handleModelChange = async (e) => {
+        const name = e.target.value;
+        setSelectedModel(name);
+        // Load model on backend
+        try {
+            const res = await fetch('/api/models/emg/load', {
+                method: 'POST',
+                body: JSON.stringify({ model_name: name }),
+                headers: { 'Content-Type': 'application/json' }
+            });
+            if (!res.ok) {
+                const err = await res.json();
+                console.error("Failed to switch model:", err);
+            } else {
+                console.log("Model switched successfully to:", name);
+            }
+        } catch (err) {
+            console.error("Failed to switch model (network):", err);
+        }
+    };
 
     // Event Log State
     const [eventLogs, setEventLogs] = useState([]);
@@ -95,13 +143,19 @@ const RPSGame = ({ wsEvent }) => {
 
         const eventName = String(wsEvent.event || '').toUpperCase();
 
-        // Add to log (keep last 10)
-        setEventLogs(prev => [{
-            id: Date.now() + Math.random(),
-            time: new Date().toLocaleTimeString(),
-            name: eventName,
-            channel: wsEvent.channel
-        }, ...prev].slice(0, 10));
+        // 1. Filter out Blank/Empty events
+        if (!eventName || eventName.trim() === '' || eventName === 'UNKNOWN_EVENT') return;
+
+        // 2. Filter out "REST" from the visible log list (too spammy due to heartbeat)
+        // The game state UI already shows "Waiting..." which implies Rest.
+        if (eventName !== 'REST') {
+            setEventLogs(prev => [{
+                id: Date.now() + Math.random(),
+                time: new Date().toLocaleTimeString(),
+                name: eventName,
+                channel: wsEvent.channel
+            }, ...prev].slice(0, 10));
+        }
 
         // Ignore WS events when manual mode is active
         if (manualMode) return;
@@ -239,11 +293,30 @@ const RPSGame = ({ wsEvent }) => {
                         <button className={`mode-btn ${manualMode ? 'active' : ''}`} onClick={toggleManualMode} title="Toggle manual mode">
                             {manualMode ? 'Manual' : 'Auto'}
                         </button>
-                        <select className="difficulty-select" value={difficulty} onChange={(e) => setDifficulty(e.target.value)} title="Computer difficulty">
-                            <option value="low">Low</option>
-                            <option value="moderate">Moderate</option>
-                            <option value="high">High</option>
-                        </select>
+                        <div className="w-32">
+                            <CustomSelect
+                                value={difficulty}
+                                onChange={setDifficulty}
+                                options={[
+                                    { value: 'low', label: 'Low' },
+                                    { value: 'moderate', label: 'Moderate' },
+                                    { value: 'high', label: 'High' }
+                                ]}
+                                placeholder="Difficulty"
+                            />
+                        </div>
+                        <div className="flex items-center gap-2 bg-surface rounded px-2 py-1 border border-white/10 ml-2">
+                            <BrainCircuit size={16} className="text-primary" />
+                            <div className="w-40">
+                                <CustomSelect
+                                    value={selectedModel}
+                                    onChange={(val) => handleModelChange({ target: { value: val } })}
+                                    options={models.map(m => ({ value: m.name, label: m.name }))}
+                                    placeholder="Select Model"
+                                    className="border-none bg-transparent"
+                                />
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div className="scoreboard">
