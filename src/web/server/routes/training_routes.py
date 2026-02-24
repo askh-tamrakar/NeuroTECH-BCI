@@ -373,7 +373,13 @@ def api_save_window():
         
         table_name = db_manager.create_session_table(sensor, session_name)
         
-        label_map = {'Rest': 0, 'Rock': 1, 'Paper': 2, 'Scissors': 3, 'SingleBlink': 1, 'DoubleBlink': 2, 'Concentration': 1, 'Relaxation': 2}
+        label_map = {
+            'Rest': 0, 'Rock': 1, 'Paper': 2, 'Scissors': 3, 
+            'SingleBlink': 1, 'DoubleBlink': 2, 
+            'Concentration': 1, 'Relaxation': 2,
+            'Target 1': 1, 'Target 2': 2, 'Target 3': 3,
+            'Target 4': 4, 'Target 5': 5, 'Target 6': 6
+        }
         label_int = label_map.get(action, -1)
         if label_int == -1 and action.isdigit():
              label_int = int(action)
@@ -384,10 +390,7 @@ def api_save_window():
         elif sensor.upper() == 'EOG':
             db_manager.insert_eog_window(features, label_int, session_id=str(int(ts)), table_name=table_name)
         elif sensor.upper() == 'EEG':
-             # Use basic insert for now or create specific if needed.
-             # EMG table structure might handle generic float features if columns match, but better to have dedicated.
-             # Db Manager check needed? Assuming it works if we used `create_session_table`.
-             db_manager.insert_window(features, label_int, session_id=str(int(ts)), table_name=table_name)
+             db_manager.insert_eeg_window(features, label_int, session_id=str(int(ts)), table_name=table_name)
 
         # Update Config Logic (Auto-Calibration on fly)
         action_entry = sensor_features.setdefault(action, {})

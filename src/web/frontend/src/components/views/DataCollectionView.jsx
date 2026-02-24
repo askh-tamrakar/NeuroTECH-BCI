@@ -5,6 +5,7 @@ import ConfigPanel from '../calibration/ConfigPanel';
 import SessionManagerPanel from '../calibration/SessionManagerPanel';
 import TestPanel from '../calibration/TestPanel';
 import { CalibrationApi } from '../../services/calibrationApi';
+import CustomSelect from '../ui/CustomSelect';
 
 /**
  * DataCollectionView
@@ -205,7 +206,7 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
         // Set default label based on sensor
         if (sensor === 'EMG') setTargetLabel('Rock');
         else if (sensor === 'EOG') setTargetLabel('SingleBlink');
-        else if (sensor === 'EEG') setTargetLabel('Concentration');
+        else if (sensor === 'EEG') setTargetLabel('Target 1');
     };
 
     const startAutoWindowing = useCallback(() => {
@@ -227,7 +228,7 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                 const LABELS = {
                     'EMG': ['Rock', 'Paper', 'Scissors', 'Rest'],
                     'EOG': ['SingleBlink', 'DoubleBlink', 'Rest'],
-                    'EEG': ['Concentration', 'Relaxation', 'Rest']
+                    'EEG': ['Target 1', 'Target 2', 'Target 3', 'Target 4', 'Target 5', 'Target 6', 'Rest']
                 };
                 const options = LABELS[sensorForWindow] || ['Rest'];
                 labelForWindow = options[Math.floor(Math.random() * options.length)];
@@ -922,18 +923,16 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                             {/* Target Label */}
                             <div className="space-y-1">
                                 <span className="text-xs text-muted uppercase">Target Label</span>
-                                <div className="relative">
-                                    <select
-                                        value={targetLabel}
-                                        onChange={(e) => setTargetLabel(e.target.value)}
-                                        className="w-full appearance-none bg-bg border border-border rounded px-2 py-1.5 text-xs font-bold font-mono outline-none focus:border-primary transition-colors pr-6"
-                                    >
-                                        {activeSensor === 'EMG' && ['Rock', 'Paper', 'Scissors', 'Rest'].map(l => <option key={l} value={l}>{l}</option>)}
-                                        {activeSensor === 'EOG' && ['SingleBlink', 'DoubleBlink', 'Rest'].map(l => <option key={l} value={l}>{l}</option>)}
-                                        {activeSensor === 'EEG' && ['Concentration', 'Relaxation', 'Rest'].map(l => <option key={l} value={l}>{l}</option>)}
-                                    </select>
-                                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-muted pointer-events-none text-[10px]">▼</span>
-                                </div>
+                                <CustomSelect
+                                    value={targetLabel}
+                                    onChange={setTargetLabel}
+                                    options={
+                                        activeSensor === 'EMG' ? ['Rock', 'Paper', 'Scissors', 'Rest'] :
+                                            activeSensor === 'EOG' ? ['SingleBlink', 'DoubleBlink', 'Rest'] :
+                                                activeSensor === 'EEG' ? ['Target 1', 'Target 2', 'Target 3', 'Target 4', 'Target 5', 'Target 6', 'Rest'] :
+                                                    []
+                                    }
+                                />
                             </div>
 
                             {/* Action Button */}

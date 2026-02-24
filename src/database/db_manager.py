@@ -42,6 +42,12 @@ class DatabaseManager:
         conn.commit()
         conn.close()
 
+        # EEG
+        conn = self.connect('EEG')
+        self._create_eeg_table(conn.cursor(), "eeg_windows")
+        conn.commit()
+        conn.close()
+
     def _create_emg_table(self, cursor, table_name):
         cursor.execute(f'''
             CREATE TABLE IF NOT EXISTS {table_name} (
@@ -87,6 +93,32 @@ class DatabaseManager:
         ''')
         cursor.execute(f'CREATE INDEX IF NOT EXISTS idx_{table_name}_label ON {table_name}(label)')
 
+    def _create_eeg_table(self, cursor, table_name):
+        cursor.execute(f'''
+            CREATE TABLE IF NOT EXISTS {table_name} (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                bp_delta REAL NOT NULL,
+                bp_theta REAL NOT NULL,
+                bp_alpha REAL NOT NULL,
+                bp_beta REAL NOT NULL,
+                bp_gamma REAL NOT NULL,
+                rel_delta REAL NOT NULL,
+                rel_theta REAL NOT NULL,
+                rel_alpha REAL NOT NULL,
+                rel_beta REAL NOT NULL,
+                rel_gamma REAL NOT NULL,
+                mean REAL NOT NULL,
+                std REAL NOT NULL,
+                max REAL NOT NULL,
+                min REAL NOT NULL,
+                label INTEGER NOT NULL,
+                session_id TEXT,
+                timestamp REAL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        cursor.execute(f'CREATE INDEX IF NOT EXISTS idx_{table_name}_label ON {table_name}(label)')
+
     def sanitize_table_name(self, name: str) -> str:
         safe = re.sub(r'[^a-zA-Z0-9]', '_', name)
         return safe.strip('_')
@@ -105,6 +137,8 @@ class DatabaseManager:
             self._create_emg_table(cursor, table_name)
         elif sensor == "EOG":
             self._create_eog_table(cursor, table_name)
+        elif sensor == "EEG":
+            self._create_eeg_table(cursor, table_name)
             
         conn.commit()
         conn.close()
@@ -320,5 +354,46 @@ class DatabaseManager:
             conn.close()
             return counts
         except: return {"0": 0, "1": 0, "2": 0}
+
+    # --- EEG Methods ---
+    def insert_eeg_window(self, features: Dict[str, float], label: int, session_id: str = None, table_name: str = "eeg_windows") -> bool:
+        try:
+            conn = self.connect('EEG')
+            cursor = conn.cursor()
+            cursor.execute(f'''
+                INSERT INTO {table_name} (
+                    bp_delta, bp_theta, bp_alpha, bp_beta, bp_gamma,
+                    rel_delta, rel_theta, rel_alpha, rel_beta, rel_gamma,
+                    mean, std, max, min,
+                    label, session_id, timestamp
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                features.get('bp_delta', 0), features.get('bp_theta', 0),
+                features.get('bp_alpha', 0), features.get('bp_beta', 0),
+                features.get('bp_gamma', 0), features.get('rel_delta', 0),
+                features.get('rel_theta', 0), features.get('rel_alpha', 0),
+                features.get('rel_beta', 0), features.get('rel_gamma', 0),
+                features.get('mean', 0), features.get('std', 0),
+                features.get('max', 0), features.get('min', 0),
+                label, session_id, features.get('timestamp', 0)
+            ))
+            conn.commit()
+            conn.close()
+            return True
+        except Exception as e:
+            print(f"[DB] EEG Insert Error: {e}")
+            return False
+
+    def get_eeg_counts(self, table_name: str = "eeg_windows") -> Dict[str, int]:
+        try:
+            conn = self.connect('EEG')
+            cursor = conn.cursor()
+            cursor.execute(f'SELECT label, COUNT(*) FROM {table_name} GROUP BY label')
+            rows = cursor.fetchall()
+            counts = {"0": 0, "1": 0, "2": 0, "3": 0, "4": 0, "5": 0, "6": 0}
+            for l, c in rows: counts[str(l)] = c
+            conn.close()
+            return counts
+        except: return {"0": 0, "1": 0, "2": 0, "3": 0, "4": 0, "5": 0, "6": 0}
 
 db_manager = DatabaseManager()

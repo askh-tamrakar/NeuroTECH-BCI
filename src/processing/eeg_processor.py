@@ -24,6 +24,11 @@ class EEGFilterProcessor:
         self.zi_notch = lfilter_zi(self.b_notch, self.a_notch) * 0.0
         self.zi_band = lfilter_zi(self.b_band, self.a_band) * 0.0
 
+        # Running stats for normalization
+        self.run_mean = 0.0
+        self.run_var = 1.0
+        self.alpha = 0.01  # Adaptation rate for running stats
+
     def _load_params(self):
         # 1. Global EEG Config
         eeg_base = self.config.get("filters", {}).get("EEG", {})
@@ -39,12 +44,12 @@ class EEGFilterProcessor:
 
         notch_cfg = next((f for f in eeg_filters if f.get("type") == "notch"), {"freq": 50.0, "Q": 30})
         band_cfg = next((f for f in eeg_filters if f.get("type") == "bandpass"),
-                        {"low": 0.5, "high": 45.0, "order": 4})
+                        {"low": 5.0, "high": 40.0, "order": 4})
 
         self.notch_freq = float(notch_cfg.get("freq", 50.0))
         self.notch_q = float(notch_cfg.get("Q", 30.0))
-        self.bp_low = float(band_cfg.get("low", 0.5))
-        self.bp_high = float(band_cfg.get("high", 45.0))
+        self.bp_low = float(band_cfg.get("low", 5.0))
+        self.bp_high = float(band_cfg.get("high", 40.0))
         self.bp_order = int(band_cfg.get("order", 4))
 
     def _design_filters(self):
@@ -74,10 +79,22 @@ class EEGFilterProcessor:
             self.zi_band = lfilter_zi(self.b_band, self.a_band) * 0.0
 
     def process_sample(self, val: float) -> float:
-        """Process a single sample value: Notch -> Bandpass."""
-        # 1. Notch
+        """Process a single sample value: Notch -> Bandpass -> Normalization."""
+        # 1. Notch Filter (Remove electrical hum)
         notch_out, self.zi_notch = lfilter(self.b_notch, self.a_notch, [val], zi=self.zi_notch)
-        # 2. Bandpass
-        band_out, self.zi_band = lfilter(self.b_band, self.a_band, notch_out, zi=self.zi_band)
-        return float(band_out[0])
 
+        # 2. Bandpass Filter (5-40Hz to remove DC offset and high-frequency noise)
+        band_out, self.zi_band = lfilter(self.b_band, self.a_band, notch_out, zi=self.zi_band)
+        filtered_val = float(band_out[0])
+
+        # 3. Normalization (Running Z-score to keep amplitude consistent)
+        self.run_mean = (1 - self.alpha) * self.run_mean + self.alpha * filtered_val
+        self.run_var = (1 - self.alpha) * self.run_var + self.alpha * ((filtered_val - self.run_mean) ** 2)
+
+        # Avoid division by zero
+        std_dev = np.sqrt(self.run_var) if self.run_var > 1e-6 else 1.0
+        
+        # Scale amplitude
+        normalized_val = (filtered_val - self.run_mean) / std_dev
+        
+        return float(normalized_val)
