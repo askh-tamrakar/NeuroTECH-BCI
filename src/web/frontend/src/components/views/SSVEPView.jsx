@@ -253,20 +253,30 @@ export default function SSVEPView() {
             {/* --- Grid Layout --- */}
             <div className="flex-grow grid grid-cols-3 grid-rows-2 gap-8 p-12 relative z-10 w-full max-h-[90vh] mx-auto">
                 {configs.map((cfg, idx) => {
+                    // Map Targets to Different Arrow Types (Hollow)
+                    let icon = '❖';
+                    if (cfg.label.includes('1')) icon = '⇧';      // Target 1: UP
+                    else if (cfg.label.includes('2')) icon = '⇩'; // Target 2: DOWN
+                    else if (cfg.label.includes('3')) icon = '⇦'; // Target 3: LEFT
+                    else if (cfg.label.includes('4')) icon = '⇨'; // Target 4: RIGHT
+                    else if (cfg.label.includes('5')) icon = '⇖';
+                    else if (cfg.label.includes('6')) icon = '⇗';
+
                     return (
                         <div key={cfg.id} className="flex flex-col items-center justify-center p-4 relative group">
                             {/* The LED Tile */}
                             <div
                                 ref={el => ledRefs.current[idx] = el}
-                                className="w-48 h-48 md:w-64 md:h-64 rounded-xl transition-none"
+                                className="w-48 h-48 md:w-64 md:h-64 rounded-xl transition-none relative overflow-hidden flex items-center justify-center"
                                 style={{
                                     backgroundColor: 'rgb(40, 40, 40)', // Initial static color
                                     boxShadow: 'none'
                                 }}
                             >
-                                {/* Center Fixation Cross (Always visible for focus) */}
-                                <div className="w-full h-full flex items-center justify-center">
-                                    <span className="font-bold text-4xl opacity-50" style={{ color: '#000000' }}>+</span>
+                                {/* New Executed Effect: Inner Glow/Border Ring & Thicker Hollow Arrows */}
+                                <div className="absolute inset-4 rounded-lg border-2 border-white/5 pointer-events-none"></div>
+                                <div className="w-full h-full flex items-center justify-center z-10">
+                                    <span className="font-bold text-7xl opacity-80 mix-blend-difference" style={{ color: '#222', textShadow: '0 0 10px rgba(255,255,255,0.2)' }}>{icon}</span>
                                 </div>
                             </div>
 
