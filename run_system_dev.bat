@@ -1,4 +1,4 @@
 @echo off
 echo Starting BCI System in DEV mode...
-python pipeline.py --dev
+python pipeline.py --d
 pause

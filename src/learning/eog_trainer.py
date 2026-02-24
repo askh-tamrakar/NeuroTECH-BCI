@@ -23,7 +23,7 @@ from src.learning.tree_utils import tree_to_json
 from src.database.db_manager import db_manager
 
 # Paths
-MODELS_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "models" / "EOG"
+MODELS_DIR = Path(__file__).resolve().parent.parent.parent / "frontend" / "public" / "data" / "EOG" / "models"
 MODELS_DIR.mkdir(parents=True, exist_ok=True)
 
 # Global State for Active Model

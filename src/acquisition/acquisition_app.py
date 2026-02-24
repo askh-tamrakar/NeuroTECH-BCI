@@ -71,7 +71,7 @@ class AcquisitionApp:
         # Paths
         # Resolve project root relative to this file: src/acquisition -> src -> root
         project_root = Path(__file__).resolve().parent.parent.parent
-        self.save_path = project_root / "data" / "raw" / "session"
+        self.save_path = project_root / "frontend" / "public" / "data" / "EMG" / "raw" / "session"
         self.config_path = project_root / "config" / "sensor_config.json"
         
         # Serial reader & parser

@@ -115,14 +115,10 @@ class ConfigWatcher:
             return key in self._config_cache
 
     def get_version(self) -> float:
-        """Returns last modified timestamp as a version indicator."""
-        # Check disk directly to ensure syncing across processes instantly
-        try:
-             if os.path.exists(self.config_path):
-                 return os.path.getmtime(self.config_path)
-        except:
-             pass
-        return self._last_modified or 0.0
+        """Returns last modified timestamp as a version indicator.
+        Always returns the version of the currently loaded cache."""
+        with self._lock:
+            return self._last_modified or 0.0
 
 
 class ConfigWriter:

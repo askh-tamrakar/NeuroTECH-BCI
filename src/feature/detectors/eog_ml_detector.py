@@ -39,7 +39,7 @@ class EOGMLDetector:
             # Locate model paths relative to project root
             # This file is in src/feature/detectors
             project_root = Path(__file__).resolve().parent.parent.parent.parent
-            models_dir = project_root / "data" / "models" / "EOG"
+            models_dir = project_root / "frontend" / "public" / "data" / "EOG" / "models"
             
             clean_name = "".join([c for c in model_name if c.isalnum() or c in ('_', '-')])
             

@@ -1,0 +1,14 @@
+{
+  "metadata": {
+    "sensorType": "EMG",
+    "channels": [
+      0,
+      1
+    ],
+    "samplingRate": 512,
+    "startTime": 1769791839112,
+    "endTime": 1769791840119,
+    "duration": 0
+  },
+  "data": []
+}

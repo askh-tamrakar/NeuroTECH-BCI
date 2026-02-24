@@ -38,7 +38,7 @@ from src.learning.tree_utils import tree_to_json
 from src.database.db_manager import db_manager
 
 # Paths
-MODELS_ROOT = Path(__file__).resolve().parent.parent.parent / "data" / "models"
+MODELS_ROOT = Path(__file__).resolve().parent.parent.parent / "frontend" / "public" / "data"
 
 # Global State for Active Models (per sensor)
 ACTIVE_MODELS = {
@@ -72,7 +72,7 @@ def get_feature_cols(sensor):
 def get_model_paths(sensor, model_name):
     """Returns dict of paths for a given model name."""
     clean_name = "".join([c for c in model_name if c.isalnum() or c in ('_', '-')])
-    sensor_dir = MODELS_ROOT / sensor.upper()
+    sensor_dir = MODELS_ROOT / sensor.upper() / "models"
     sensor_dir.mkdir(parents=True, exist_ok=True)
     
     base = sensor_dir / clean_name
@@ -255,7 +255,7 @@ def list_saved_models(sensor='EMG'):
     """Returns a list of available models for a sensor."""
     models = []
     sensor = sensor.upper()
-    sensor_dir = MODELS_ROOT / sensor
+    sensor_dir = MODELS_ROOT / sensor / "models"
     
     if not sensor_dir.exists():
         return []

@@ -3,9 +3,9 @@ from pathlib import Path
 
 # Paths
 PROJECT_ROOT = Path("i:/Neuroscience/Brain-To-Brain-Telepathic-Communication-System")
-DATA_DIR = PROJECT_ROOT / "data" / "processed"
-EMG_DB = DATA_DIR / "EMG" / "emg_data.db"
-EOG_DB = DATA_DIR / "EOG" / "eog_data.db"
+BASE_DATA_DIR = PROJECT_ROOT / "frontend" / "public" / "data"
+EMG_DB = BASE_DATA_DIR / "EMG" / "processed" / "emg_data.db"
+EOG_DB = BASE_DATA_DIR / "EOG" / "processed" / "eog_data.db"
 
 def check_db(db_path, sensor_name):
     print(f"--- Checking {sensor_name} DB ---")

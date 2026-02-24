@@ -3,7 +3,7 @@ import os
 from pathlib import Path
 
 # Mimic model_trainer.py path logic
-MODELS_ROOT = Path(__file__).resolve().parent.parent.parent / "data" / "models"
+MODELS_ROOT = Path(__file__).resolve().parent.parent.parent / "frontend" / "public" / "data" / "EMG" / "models"
 
 print(f"Calculated MODELS_ROOT: {MODELS_ROOT}")
 print(f"Exists? {MODELS_ROOT.exists()}")

@@ -29,7 +29,7 @@ COMPONENTS = [
     },
     {
         "name": "Web Server",
-        "module": "src.web.web_server",
+        "module": "src.server.web_server",
         "color": "\033[93m",  # Yellow
         "ready_pattern": None  # Web server is the last step
     }
@@ -89,7 +89,7 @@ def main():
     print("=" * 60)
     print()
 
-    frontend_dir = Path("src/web/frontend").resolve()
+    frontend_dir = Path("frontend").resolve()
     python_exe = sys.executable
 
     # --- 1. BUILD PHASE (Optional) ---

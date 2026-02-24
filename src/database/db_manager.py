@@ -7,12 +7,12 @@ from typing import Dict, Optional, List
 class DatabaseManager:
     def __init__(self):
         project_root = Path(__file__).resolve().parent.parent.parent
-        data_dir = project_root / "data" / "processed"
+        base_data_dir = project_root / "frontend" / "public" / "data"
         
         self.db_paths = {
-            'EMG': data_dir / "EMG" / "emg_data.db",
-            'EOG': data_dir / "EOG" / "eog_data.db",
-            'EEG': data_dir / "EEG" / "eeg_data.db"
+            'EMG': base_data_dir / "EMG" / "processed" / "emg_data.db",
+            'EOG': base_data_dir / "EOG" / "processed" / "eog_data.db",
+            'EEG': base_data_dir / "EEG" / "processed" / "eeg_data.db"
         }
         
         # Ensure directories exist

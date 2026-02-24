@@ -40,7 +40,7 @@ class RPSDetector:
             # Locate model paths relative to project root
             project_root = Path(__file__).resolve().parent.parent.parent.parent
             # UPDATED: Use EMG subfolder
-            models_dir = project_root / "data" / "models" / "EMG"
+            models_dir = project_root / "frontend" / "public" / "data" / "EMG" / "models"
             
             clean_name = "".join([c for c in model_name if c.isalnum() or c in ('_', '-')])
             

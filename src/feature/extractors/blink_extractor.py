@@ -111,8 +111,8 @@ class BlinkExtractor:
         peak_count = len(peaks)
         
         # Statistical features
-        kurt = float(stats.kurtosis(data))
-        skew = float(stats.skew(data))
+        kurt = float(np.nan_to_num(stats.kurtosis(data)))
+        skew = float(np.nan_to_num(stats.skew(data)))
         
         features = {
             "amplitude": float(peak_amp),

@@ -32,7 +32,7 @@ class CalibrationManager:
     
     def __init__(self):
         self.project_root = Path(__file__).resolve().parent.parent.parent
-        self.data_dir = self.project_root / "data" / "processed" / "windows"
+        self.data_dir = self.project_root / "frontend" / "public" / "data"
     
     def _sanitize_features(self, features: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -66,28 +66,6 @@ class CalibrationManager:
             raw_features = BlinkExtractor.extract_features(samples, sr)
         elif sensor == "EMG":
             raw_features = RPSExtractor.extract_features(samples, sr)
-        elif sensor == "EEG":
-            # Basic spectral power extraction for EEG (Alpha/Beta/Theta)
-            try:
-                # Simple placeholder logic until dedicated extractor is available
-                data = np.array(samples)
-                if len(data) < sr: 
-                    raw_features = {"status": "insufficient_data"}
-                else:
-                    # Simple Variance/Amplitude check
-                    amp_max = np.max(np.abs(data))
-                    std_dev = np.std(data)
-                    
-                    # Mock spectral bands (Real impl requires FFT)
-                    # For calibration, we might just track amplitude or variance for "Target vs Rest"
-                    raw_features = {
-                        "amplitude": float(amp_max),
-                        "std_dev": float(std_dev),
-                        "alpha_power": float(np.random.uniform(0.5, 5.0)) # Mock
-                    }
-            except Exception as e:
-                logger.error(f"EEG extraction error: {e}")
-                raw_features = {}
         else:
             # Default fallback
             raw_features = RPSExtractor.extract_features(samples, sr)
@@ -154,7 +132,8 @@ class CalibrationManager:
             raise ValueError("Missing sensor or action")
 
         # 1. Create directories
-        out_dir = self.data_dir / sensor / action
+        sensor_upper = str(sensor).upper()
+        out_dir = self.data_dir / sensor_upper / "processed" / "windows" / action
         out_dir.mkdir(parents=True, exist_ok=True)
         
         ts = time.time()
