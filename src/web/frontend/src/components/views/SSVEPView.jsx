@@ -26,6 +26,10 @@ export default function SSVEPView() {
     const [brightness, setBrightness] = useState(1.0);
     const [globalRunning, setGlobalRunning] = useState(false);
 
+    const updateFreq = (id, value) => {
+        setConfigs(prev => prev.map(cfg => cfg.id === id ? { ...cfg, freq: value } : cfg));
+    };
+
     // VSync / Refresh Rate State
     const [refreshRate, setRefreshRate] = useState(60);
 
@@ -148,12 +152,11 @@ export default function SSVEPView() {
             if (isFlickering) {
                 let isOn = false;
 
-                // --- Frame Counting (Monitor Locked) ---
-                // Always use frame counting for best phase stability in SSVEP
-                // Calculate period in frames. e.g. 60Hz / 10Hz = 6 frames period.
-                const period = Math.max(2, Math.round(refreshRate / cfg.freq));
-                // 50% duty cycle
-                isOn = (frameCountRef.current % period) < (period / 2);
+                // --- Time-based Flicker (Monitor Independent) ---
+                const hz = Number(cfg.freq) || 1; // Prevent division by zero
+                const periodMs = 1000 / hz;
+                // 50% duty cycle based on elapsed time
+                isOn = (elapsed % periodMs) < (periodMs / 2);
 
                 // Scientific Color Standards
                 // ON: Near-White (245, 245, 245) scaled by brightness
@@ -250,9 +253,6 @@ export default function SSVEPView() {
             {/* --- Grid Layout --- */}
             <div className="flex-grow grid grid-cols-3 grid-rows-2 gap-8 p-12 relative z-10 w-full max-h-[90vh] mx-auto">
                 {configs.map((cfg, idx) => {
-                    // Calculate effective frequency (Frame Locked)
-                    const effectiveFreq = (refreshRate / Math.max(2, Math.round(refreshRate / cfg.freq))).toFixed(1);
-
                     return (
                         <div key={cfg.id} className="flex flex-col items-center justify-center p-4 relative group">
                             {/* The LED Tile */}
@@ -289,11 +289,6 @@ export default function SSVEPView() {
                                         />
                                         <span className="text-xs" style={{ color: 'var(--muted)' }}>Hz</span>
                                     </div>
-                                    {Math.abs(effectiveFreq - cfg.freq) > 0.1 && (
-                                        <span className="text-[10px] text-yellow-500">
-                                            Act: {effectiveFreq}Hz
-                                        </span>
-                                    )}
                                 </div>
                             )}
                         </div>
