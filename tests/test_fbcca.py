@@ -13,14 +13,20 @@ def generate_sine(f, duration, sr):
     return np.sin(2 * np.pi * f * t)
 
 def test_fbcca():
+    print("=== Testing EEGFrequencyDetector (FBCCA SSVEP) ===")
+    
     sr = 512
+    # Matching the new frontend SSVEP defaults
+    target_freqs = [8.0, 10.0, 12.0, 15.0, 18.0, 20.0]
     config = {
         "sampling_rate": sr,
         "features": {
             "EEG": {
-                "target_freqs": [9.0, 10.0, 11.0, 12.0, 13.0, 15.0],
+                "window_len_sec": 1.0,
+                "target_freqs": target_freqs,
+                "num_harmonics": 3,
                 "rest_threshold": 0.35,
-                "debounce_ms": 0
+                "debounce_ms": 0 # Disable debounce for testing
             }
         }
     }

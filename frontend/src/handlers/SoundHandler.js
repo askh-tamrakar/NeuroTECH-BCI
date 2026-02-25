@@ -60,6 +60,40 @@ class SoundHandler {
         this.playTone(800, 'triangle', 0.05, 0.05);
     }
 
+    playSuccess() {
+        if (!this.enabled || !this.initialized) {
+            this.init();
+            if (!this.initialized) return;
+        }
+        this.resume();
+
+        const now = this.ctx.currentTime;
+
+        // Note 1 (Lower pitch)
+        const osc1 = this.ctx.createOscillator();
+        const gain1 = this.ctx.createGain();
+        osc1.type = 'sine';
+        osc1.frequency.setValueAtTime(400, now);
+        gain1.gain.setValueAtTime(0.2, now);
+        gain1.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+        osc1.connect(gain1);
+        gain1.connect(this.masterGain);
+        osc1.start(now);
+        osc1.stop(now + 0.1);
+
+        // Note 2 (Higher pitch, delayed)
+        const osc2 = this.ctx.createOscillator();
+        const gain2 = this.ctx.createGain();
+        osc2.type = 'sine';
+        osc2.frequency.setValueAtTime(600, now + 0.1);
+        gain2.gain.setValueAtTime(0.2, now + 0.1);
+        gain2.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+        osc2.connect(gain2);
+        gain2.connect(this.masterGain);
+        osc2.start(now + 0.1);
+        osc2.stop(now + 0.3);
+    }
+
     playToggle(isOn) {
         if (!this.enabled || !this.initialized) return;
         this.resume();

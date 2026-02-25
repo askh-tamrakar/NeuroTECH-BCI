@@ -182,9 +182,9 @@ class FeatureRouter:
                             
                             if features:
                                 # Feature Extractor produced a window -> Run Detector
-                                print(f"[Router] Extracted Features from ch{ch_idx} ({sensor_type}). Running Detector...")
+                                # print(f"[Router] Extracted Features from ch{ch_idx} ({sensor_type}). Running Detector...")
                                 detection_result = detector.detect(features)
-                                print(f"[Router] Detector Result: {detection_result}")
+                                # print(f"[Router] Detector Result: {detection_result}")
                                 
                                 if detection_result:
                                     # LOGIC FIX: 
