@@ -202,10 +202,12 @@ void setup() {
 void runChaserAnimation() {
   static unsigned long lastUpdate = 0;
   static int currentLedIdx = 0;
+
   const int ledPins[] = {LED_RED_1, LED_RED_2, LED_YELLOW_1, LED_YELLOW_2, LED_GREEN_1, LED_GREEN_2};
+
   const int numLeds = 6;
   
-  if (millis() - lastUpdate > 100) { // Speed: 100ms
+  if (millis() - lastUpdate > 300) { // Speed: 300ms
     lastUpdate = millis();
     
     // Turn off all

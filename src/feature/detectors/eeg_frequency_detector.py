@@ -19,7 +19,7 @@ class EEGFrequencyDetector:
         # SSVEP Settings
         self.sampling_rate = self.config.get("sampling_rate", 512)
         # Default 6 targets if not specified
-        self.target_freqs = eeg_config.get("target_freqs", [9.0, 10.0, 11.0, 12.0, 13.0, 15.0])
+        self.target_freqs = eeg_config.get("target_freqs", [8.0, 10.0, 12.0, 15.0, 18.0, 20.0])
         self.window_len_sec = eeg_config.get("window_len_sec", 1.0)
         self.num_harmonics = eeg_config.get("num_harmonics", 3)
         self.rest_threshold = eeg_config.get("rest_threshold", 0.35)

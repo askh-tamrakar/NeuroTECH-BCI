@@ -48,6 +48,10 @@ export default function SSVEPView({ wsData, wsEvent }) {
         let detectedFreq = 0;
         if (wsEvent.frequency) {
             detectedFreq = wsEvent.frequency;
+        } else if (typeof wsEvent.event === 'string' && wsEvent.event.startsWith('TARGET_')) {
+            // Parse FBCCA event (e.g., 'TARGET_10_0HZ' -> 10.0)
+            const numStr = wsEvent.event.replace('TARGET_', '').replace('HZ', '').replace('_', '.');
+            detectedFreq = parseFloat(numStr);
         } else if (wsEvent.event && !isNaN(parseFloat(wsEvent.event))) {
             detectedFreq = parseFloat(wsEvent.event);
         } else if (wsEvent.features && wsEvent.features.peak_freq) {

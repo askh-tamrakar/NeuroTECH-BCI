@@ -1,6 +1,6 @@
 {
   "active_models": {
-    "EMG": "new",
+    "EMG": "session",
     "EOG": "neurobench"
   },
   "baud": 230400,
@@ -30,18 +30,6 @@
   },
   "features": {
     "EEG": {
-      "target_freqs": [
-        9.0,
-        10.0,
-        11.0,
-        12.0,
-        13.0,
-        15.0
-      ],
-      "rest_threshold": 0.35,
-      "debounce_ms": 500,
-      "window_len_sec": 1.0,
-      "num_harmonics": 3,
       "Concentration": {
         "bp_alpha": [
           0.0032752312997608585,

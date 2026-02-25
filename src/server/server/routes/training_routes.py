@@ -9,7 +9,7 @@ from src.server.server.lsl_service import extract_emg_features, extract_emg_feat
 # Note: original code routed `extract_features_for_sensor` to specific functions.
 # We need to reimplement that routing or import it.
 # EOG features are also needed.
-from src.server.server.lsl_service import extract_eog_features, extract_eeg_features
+from src.server.server.lsl_service import extract_eog_features
 from scipy import stats as scipy_stats
 
 # Imports for ML logic
@@ -193,7 +193,9 @@ def api_list_models_generic(sensor):
             return api_list_models()
         elif sensor.upper() == 'EOG':
             return api_list_eog_models()
-        except Exception as e:
+        else:
+            return jsonify({"error": f"Unknown sensor type {sensor}"}), 400
+    except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 
