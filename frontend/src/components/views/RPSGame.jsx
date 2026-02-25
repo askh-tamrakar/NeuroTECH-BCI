@@ -137,18 +137,19 @@ const RPSGame = ({ wsEvent }) => {
     // Event Log State
     const [eventLogs, setEventLogs] = useState([]);
 
-    // Handle Event via Prop (only if NOT in manual mode)
+    // -------------------------------------------------------------
+    // EVENT LOGGING (runs ONLY when wsEvent changes to prevent double logs)
+    // -------------------------------------------------------------
     useEffect(() => {
         if (!wsEvent) return;
 
         const eventName = String(wsEvent.event || '').toUpperCase();
 
-        // 1. Filter out Blank/Empty events
         if (!eventName || eventName.trim() === '' || eventName === 'UNKNOWN_EVENT') return;
 
-        // 2. Filter out "REST" from the visible log list (too spammy due to heartbeat)
-        // The game state UI already shows "Waiting..." which implies Rest.
-        if (eventName !== 'REST') {
+        // ONLY log events from the RPS detector (ROCK, PAPER, SCISSORS).
+        if (eventName !== 'REST' && MOVES.includes(eventName)) {
+            // Append to the top
             setEventLogs(prev => [{
                 id: Date.now() + Math.random(),
                 time: new Date().toLocaleTimeString(),
@@ -156,9 +157,15 @@ const RPSGame = ({ wsEvent }) => {
                 channel: wsEvent.channel
             }, ...prev].slice(0, 10));
         }
+    }, [wsEvent]);
 
-        // Ignore WS events when manual mode is active
-        if (manualMode) return;
+    // -------------------------------------------------------------
+    // GAME LOGIC (Handle Event via Prop only if NOT in manual mode)
+    // -------------------------------------------------------------
+    useEffect(() => {
+        if (!wsEvent || manualMode) return;
+
+        const eventName = String(wsEvent.event || '').toUpperCase();
 
         // Check for Auto-Restart Logic (Waiting for Rest)
         if (gameState === 'waiting_for_rest') {
@@ -169,8 +176,7 @@ const RPSGame = ({ wsEvent }) => {
         }
 
         // Check if we are in waiting state
-        if (gameState !== 'waiting' || processingRef.current) return;
-
+        if (gameState !== 'waiting' || processingRef.current || !eventName || eventName.trim() === '') return;
 
         // Filter for RPS events
         if (MOVES.includes(eventName)) {
@@ -286,10 +292,20 @@ const RPSGame = ({ wsEvent }) => {
 
     return (
         <div className="rps-container">
-            <div style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                    <div className="rps-title">NEURO RPS</div>
-                    <div className="top-controls">
+            <div className="rps-main">
+                {/* Header Container */}
+                <div className="w-full flex flex-col mb-12 gap-4">
+                    {/* Top Row: Title & Scoreboard */}
+                    <div className="flex items-center gap-8">
+                        <div className="rps-title" style={{ marginBottom: 0 }}>NEURO RPS</div>
+                        <div className="scoreboard">
+                            <div>Player: <strong>{score.player}</strong></div>
+                            <div>Computer: <strong>{score.computer}</strong></div>
+                        </div>
+                    </div>
+
+                    {/* Bottom Row: Controls */}
+                    <div className="top-controls flex flex-wrap" style={{ marginLeft: 0 }}>
                         <button className={`mode-btn ${manualMode ? 'active' : ''}`} onClick={toggleManualMode} title="Toggle manual mode">
                             {manualMode ? 'Manual' : 'Auto'}
                         </button>
@@ -319,72 +335,79 @@ const RPSGame = ({ wsEvent }) => {
                         </div>
                     </div>
                 </div>
-                <div className="scoreboard">
-                    <div>Player: <strong>{score.player}</strong></div>
-                    <div>Computer: <strong>{score.computer}</strong></div>
-                </div>
-            </div>
 
-            <div className="status-text" style={{ minHeight: '60px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                {gameState === 'idle' && (
-                    <button
-                        onClick={handlePlay}
-                        className="px-8 py-2 bg-primary text-primary-contrast rounded-xl font-bold text-lg shadow-lg hover:scale-105 transition-transform animate-in zoom-in duration-300"
-                    >
-                        PLAY
-                    </button>
-                )}
-                {gameState === 'waiting' && !manualMode && <span className="pulse">Waiting for Player Gesture...</span>}
-                {gameState === 'waiting_for_rest' && !manualMode && <span className="animate-pulse text-yellow-400">Release Gesture...</span>}
-                {gameState === 'waiting' && manualMode && <span className="pulse">Manual Mode: press <strong>R</strong>/<strong>P</strong>/<strong>S</strong></span>}
-                {gameState !== 'waiting' && gameState !== 'waiting_for_rest' && gameState !== 'idle' && <span>Result Received</span>}
-            </div>
-
-
-
-            <div className="cards-row">
-                {renderCard('player', playerMove, !!playerMove)}
-
-                <div className="vs-badge">VS</div>
-
-                {/* Computer hidden until revealed */}
-                {renderCard('computer', computerMove, gameState !== 'waiting')}
-            </div>
-
-            {gameState !== 'waiting' && result && (
-                <div className="result-overlay">
-                    <div className={`result-text ${result.toLowerCase()}`}>
-                        {result === 'TIE' ? "IT'S A TIE" : `YOU ${result}!`}
-                    </div>
-                    <div style={{ marginTop: '1rem', color: '#888' }}>
-                        Resetting in {countdown}...
-                    </div>
-                </div>
-            )}
-
-            {/* Event Log Panel */}
-            <div className="mt-8 w-full max-w-2xl bg-surface/50 border border-white/5 rounded-lg p-4 backdrop-blur-sm">
-                <div className="text-xs font-bold text-muted uppercase tracking-wider mb-2 flex justify-between items-center">
-                    <span>Event Log</span>
-                    <span className="text-[10px] opacity-60">Last 10 events</span>
-                </div>
-                <div className="space-y-1 font-mono text-xs max-h-[150px] overflow-y-auto">
-                    {eventLogs.length === 0 ? (
-                        <div className="text-muted/50 italic py-2 text-center">No events received yet...</div>
+                <div className="status-text" style={{ minHeight: '60px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1.5rem' }}>
+                    {gameState === 'idle' ? (
+                        <button
+                            onClick={handlePlay}
+                            className="px-8 py-2 bg-primary text-primary-contrast rounded-xl font-bold text-lg shadow-lg hover:scale-105 transition-transform animate-in zoom-in duration-300"
+                        >
+                            PLAY
+                        </button>
                     ) : (
-                        eventLogs.map((log) => (
-                            <div key={log.id} className="flex gap-3 py-1 border-b border-white/5 last:border-0 hover:bg-white/5 px-2 rounded">
-                                <span className="text-muted">{log.time}</span>
-                                <span className={`font-bold ${log.name === 'ROCK' ? 'text-amber-400' :
-                                    log.name === 'PAPER' ? 'text-blue-400' :
-                                        log.name === 'SCISSORS' ? 'text-pink-400' : 'text-text'
-                                    }`}>
-                                    {log.name}
-                                </span>
-                                <span className="text-muted ml-auto text-[10px]">{log.channel}</span>
-                            </div>
-                        ))
+                        <button
+                            onClick={() => {
+                                setGameState('idle');
+                                togglePrediction(false);
+                            }}
+                            className="px-6 py-2 bg-red-600/90 hover:bg-red-500 text-white rounded-xl font-bold text-lg shadow-lg hover:scale-105 transition-transform animate-in zoom-in duration-300"
+                        >
+                            STOP
+                        </button>
                     )}
+
+                    {gameState === 'waiting' && !manualMode && <span className="pulse">Waiting for Player Gesture...</span>}
+                    {gameState === 'waiting_for_rest' && !manualMode && <span className="animate-pulse text-yellow-400">Release Gesture...</span>}
+                    {gameState === 'waiting' && manualMode && <span className="pulse">Manual Mode: press <strong>R</strong>/<strong>P</strong>/<strong>S</strong></span>}
+                    {gameState !== 'waiting' && gameState !== 'waiting_for_rest' && gameState !== 'idle' && <span>Result Received</span>}
+                </div>
+
+                <div className="cards-row">
+                    {renderCard('player', playerMove, !!playerMove)}
+
+                    <div className="vs-badge">VS</div>
+
+                    {/* Computer hidden until revealed */}
+                    {renderCard('computer', computerMove, gameState !== 'waiting')}
+                </div>
+
+                {gameState !== 'waiting' && result && (
+                    <div className="result-overlay">
+                        <div className={`result-text ${result.toLowerCase()}`}>
+                            {result === 'TIE' ? "IT'S A TIE" : `YOU ${result}!`}
+                        </div>
+                        <div style={{ marginTop: '1rem', color: '#888' }}>
+                            Resetting in {countdown}...
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            <div className="rps-sidebar mt-4">
+                {/* Event Log Panel */}
+                <div className="w-full max-h-[70vh] flex flex-col bg-surface/80 border border-white/10 rounded-2xl p-6 backdrop-blur-md shadow-2xl">
+                    <div className="text-sm font-bold text-muted uppercase tracking-wider mb-4 flex justify-between items-center pb-3 border-b border-white/10 flex-shrink-0">
+                        <span>Event Log</span>
+                        <span className="text-[11px] opacity-60">Last 10 events</span>
+                    </div>
+                    <div className="space-y-2 font-mono text-sm overflow-y-auto flex-1 pr-2 custom-scrollbar">
+                        {eventLogs.length === 0 ? (
+                            <div className="text-muted/50 italic py-4 text-center">No events received yet...</div>
+                        ) : (
+                            eventLogs.map((log) => (
+                                <div key={log.id} className="flex gap-4 py-2 border-b border-white/5 last:border-0 hover:bg-white/5 px-3 rounded text-base">
+                                    <span className="text-muted">{log.time}</span>
+                                    <span className={`font-bold ${log.name === 'ROCK' ? 'text-amber-400' :
+                                        log.name === 'PAPER' ? 'text-blue-400' :
+                                            log.name === 'SCISSORS' ? 'text-pink-400' : 'text-text'
+                                        }`}>
+                                        {log.name}
+                                    </span>
+                                    <span className="text-muted ml-auto text-xs">{log.channel}</span>
+                                </div>
+                            ))
+                        )}
+                    </div>
                 </div>
             </div>
 

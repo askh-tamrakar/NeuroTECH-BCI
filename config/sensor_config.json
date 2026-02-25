@@ -1,6 +1,6 @@
 {
   "active_models": {
-    "EMG": "session",
+    "EMG": "luci",
     "EOG": "neurobench"
   },
   "baud": 230400,
@@ -87,7 +87,19 @@
           0.20953389125435823,
           0.31319788888879446
         ]
-      }
+      },
+      "debounce_ms": 500,
+      "num_harmonics": 3,
+      "rest_threshold": 0.35,
+      "target_freqs": [
+        9,
+        10,
+        11,
+        12,
+        13,
+        15
+      ],
+      "window_len_sec": 1
     },
     "EMG": {
       "Paper": {
@@ -310,7 +322,7 @@
           5137.023691308857
         ],
         "wamp": [
-          157,
+          143,
           750
         ],
         "wl": [

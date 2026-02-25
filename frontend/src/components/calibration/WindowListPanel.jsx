@@ -92,7 +92,6 @@ export default function WindowListPanel({
                         <span>Saved: <span className="text-emerald-400">{stats.saved}</span></span>
                     </div>
                     <div className="flex items-center gap-2">
-                        <div className="text-xs text-muted font-mono">{progress.toFixed(0)}%</div>
                         <button
                             onClick={onDeleteAll}
                             className="p-1 hover:bg-red-500/10 text-muted hover:text-red-500 rounded transition all"

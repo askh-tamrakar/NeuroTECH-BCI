@@ -181,6 +181,91 @@ class DatabaseManager:
             print(f"[DB] Error dropping table {session_name}: {e}")
             return False
 
+    def rename_session_table(self, sensor_type: str, old_session_name: str, new_session_name: str) -> bool:
+        """Rename a session table."""
+        try:
+            sensor = sensor_type.upper()
+            safe_new_suffix = self.sanitize_table_name(new_session_name)
+            if not safe_new_suffix: 
+                return False
+            
+            prefix = f"{sensor.lower()}_session_"
+            
+            if old_session_name.startswith(prefix):
+                 old_table_name = old_session_name
+            else:
+                 safe_old_suffix = self.sanitize_table_name(old_session_name)
+                 if not safe_old_suffix: safe_old_suffix = "default"
+                 old_table_name = f"{prefix}{safe_old_suffix}"
+            
+            new_table_name = f"{prefix}{safe_new_suffix}"
+            
+            conn = self.connect(sensor)
+            cursor = conn.cursor()
+            cursor.execute(f"ALTER TABLE {old_table_name} RENAME TO {new_table_name}")
+            conn.commit()
+            conn.close()
+            print(f"[DB] Renamed table: {old_table_name} to {new_table_name}")
+            return True
+        except Exception as e:
+            print(f"[DB] Error renaming table {old_session_name} to {new_session_name}: {e}")
+            return False
+
+    def merge_session_tables(self, sensor_type: str, source_session: str, target_session: str) -> bool:
+        """Merge source session into target session, then delete source."""
+        return self.merge_multiple_sessions(sensor_type, [source_session], target_session)
+
+    def merge_multiple_sessions(self, sensor_type: str, source_sessions: List[str], target_session: str) -> bool:
+        """Merge multiple source sessions into a new target session, then delete sources."""
+        try:
+            if not source_sessions:
+                return False
+
+            sensor = sensor_type.upper()
+            prefix = f"{sensor.lower()}_session_"
+            
+            # Clean target name
+            target_clean = target_session.replace(prefix, "") if target_session.startswith(prefix) else target_session
+            target_table = f"{prefix}{self.sanitize_table_name(target_clean)}"
+            
+            tables = self.get_session_tables(sensor)
+            
+            # Resolve source tables
+            source_tables = []
+            for src in source_sessions:
+                src_table = src if src.startswith(prefix) else f"{prefix}{self.sanitize_table_name(src)}"
+                if src_table in tables and src_table != target_table:
+                    source_tables.append(src_table)
+            
+            if not source_tables:
+                return False
+                
+            if target_table not in tables:
+                self.create_session_table(sensor_type, target_clean)
+            
+            conn = self.connect(sensor)
+            cursor = conn.cursor()
+            
+            for source_table in source_tables:
+                # Fetch column names from source to ensure we only insert matching columns
+                cursor.execute(f"PRAGMA table_info({source_table})")
+                columns = [col[1] for col in cursor.fetchall() if col[1] != 'id'] # exclude id to let it auto-increment
+                if not columns:
+                    continue # Empty or invalid table
+                cols_str = ", ".join(columns)
+                
+                cursor.execute(f"INSERT INTO {target_table} ({cols_str}) SELECT {cols_str} FROM {source_table}")
+            
+            conn.commit()
+            conn.close()
+            print(f"[DB] Merged tables: {source_tables} into {target_table} (Sources preserved)")
+            return True
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            print(f"[DB] Error merging multiple tables {source_sessions} into {target_session}: {e}")
+            return False
+
     def get_session_data(self, sensor_type: str, session_name: str, limit: int = None, offset: int = 0) -> Dict:
         """Fetch rows from a specific session table with optional pagination."""
         try:

@@ -75,6 +75,40 @@ def api_delete_session_row(sensor_type, session_name, row_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@session_bp.route('/api/sessions/<sensor_type>/<session_name>/rename', methods=['POST'])
+def api_rename_session(sensor_type, session_name):
+    """Rename a session."""
+    data = request.get_json()
+    new_name = data.get('new_name')
+    if not new_name:
+        return jsonify({"error": "new_name is required"}), 400
+        
+    try:
+        if db_manager.rename_session_table(sensor_type, session_name, new_name):
+            return jsonify({"status": "renamed", "new_name": new_name})
+        else:
+            return jsonify({"error": "Failed to rename session"}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@session_bp.route('/api/sessions/<sensor_type>/merge_multiple', methods=['POST'])
+def api_merge_multiple_sessions(sensor_type):
+    """Merge multiple sessions into a new session."""
+    data = request.get_json()
+    source_sessions = data.get('source_sessions', [])
+    target_session = data.get('target_session')
+    
+    if not source_sessions or not target_session:
+        return jsonify({"error": "source_sessions (list) and target_session are required"}), 400
+        
+    try:
+        if db_manager.merge_multiple_sessions(sensor_type, source_sessions, target_session):
+            return jsonify({"status": "merged", "sources": source_sessions, "target": target_session})
+        else:
+            return jsonify({"error": "Failed to merge sessions"}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 # --- EMG ENDPOINTS ---
 
 @session_bp.route('/api/emg/start', methods=['POST'])

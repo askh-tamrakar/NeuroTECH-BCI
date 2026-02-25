@@ -139,8 +139,6 @@ class RPSDetector:
                     counts = Counter(self.candidates)
                     most_common = counts.most_common(1)[0][0] # (Label, Count)
                     
-                    # print(f"[RPS] Gesture Finished. Candidates: {counts}. Final: {most_common}")
-                    
                     self.collecting_candidates = False
                     self.candidates = []
                     return most_common
@@ -163,8 +161,6 @@ class RPSDetector:
 
     def update_config(self, config: dict):
         self.config = config
-        rps_cfg = config.get("features", {}).get("RPS", {})
-        self.confidence_threshold = rps_cfg.get("confidence_threshold", 0.6)
         rps_cfg = config.get("features", {}).get("RPS", {})
         self.confidence_threshold = rps_cfg.get("confidence_threshold", 0.6)
         # self.load_model() # Don't auto reload on config update unless specified?

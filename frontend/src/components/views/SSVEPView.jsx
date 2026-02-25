@@ -116,7 +116,7 @@ export default function SSVEPView({ wsData, wsEvent }) {
     };
 
     return (
-        <div className="w-full h-full flex bg-black overflow-hidden relative">
+        <div className="w-full flex bg-black overflow-hidden relative h-[calc(100vh-129px)]">
             {/* Main Stimulus View */}
             <div className={`flex-grow flex flex-col items-center justify-center relative transition-all duration-300 ${showSidebar ? 'pr-0' : 'pr-0'}`}>
                 <SSVEPStimulus
@@ -170,10 +170,10 @@ export default function SSVEPView({ wsData, wsEvent }) {
                     </div>
 
                     {/* Config Settings */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 shrink-0 bg-bg/30 p-3 rounded-xl border border-border/50">
-                        <div className="space-y-2">
-                            <div className="flex items-center justify-between text-[10px] font-bold text-muted uppercase tracking-widest">
-                                <span className="flex items-center gap-1"><Sun size={12} /> Brightness</span>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 shrink-0 bg-bg/30 p-2 rounded-xl border border-border/50">
+                        <div className="space-y-1">
+                            <div className="flex items-center justify-between text-sm font-bold text-muted uppercase tracking-widest">
+                                <span className="flex items-center gap-1"><Sun size={16} /> Brightness</span>
                                 <span className="text-primary">{Math.round(brightness * 100)}%</span>
                             </div>
                             <input
@@ -187,38 +187,38 @@ export default function SSVEPView({ wsData, wsEvent }) {
                             />
                         </div>
                         <div className="flex items-center justify-between">
-                            <label className="text-[10px] font-bold text-muted uppercase tracking-widest flex items-center gap-1">
-                                <Monitor size={12} /> Refresh Rate
+                            <label className="text-sm font-bold text-muted uppercase tracking-widest flex items-center gap-1">
+                                <Monitor size={16} /> Refresh Rate
                             </label>
                             <div className="flex items-center gap-1">
                                 <input
                                     type="number"
                                     value={refreshRate}
                                     onChange={(e) => setRefreshRate(parseInt(e.target.value) || 60)}
-                                    className="w-12 bg-bg border border-border rounded px-1 py-0.5 text-center font-bold text-primary focus:border-primary/50 outline-none"
+                                    className="w-14 bg-bg border border-border rounded px-1 py-0.5 text-center font-bold text-primary focus:border-primary/50 outline-none text-base"
                                 />
-                                <span className="text-[10px] text-muted">FPS</span>
+                                <span className="text-sm text-muted">FPS</span>
                             </div>
                         </div>
                     </div>
 
                     {/* Real-time Frequency Card - Condensed */}
-                    <div className="bg-bg/50 border border-primary/20 rounded-xl p-3 flex items-center justify-between shrink-0">
+                    <div className="bg-bg/50 border border-primary/20 rounded-xl p-2 px-3 flex items-center justify-between shrink-0">
                         <div className="flex flex-col">
-                            <span className="text-[10px] font-bold text-muted uppercase tracking-widest flex items-center gap-1 mb-1">
-                                <Activity size={12} className="text-primary" /> Signal
+                            <span className="text-sm font-bold text-muted uppercase tracking-widest flex items-center gap-1 mb-1">
+                                <Activity size={16} className="text-primary" /> Signal
                             </span>
                             <div className="flex items-baseline gap-1">
-                                <span className="text-xl font-black text-primary tabular-nums">
+                                <span className="text-3xl font-black text-primary tabular-nums">
                                     {realTimeFreq ? realTimeFreq.toFixed(2) : '0.00'}
                                 </span>
-                                <span className="text-xs font-bold text-muted">Hz</span>
+                                <span className="text-base font-bold text-muted">Hz</span>
                             </div>
                         </div>
                         <div className="w-1/2 flex flex-col items-end gap-1">
                             <div className="flex items-center gap-1">
-                                <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-                                <span className="text-[8px] text-primary/70">LIVE</span>
+                                <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+                                <span className="text-xs font-bold text-primary/70">LIVE</span>
                             </div>
                             <div className="w-full mt-2 h-1 bg-bg rounded-full overflow-hidden">
                                 <div
@@ -230,29 +230,29 @@ export default function SSVEPView({ wsData, wsEvent }) {
                     </div>
 
                     {/* Debug Event Log - CHANGED from h-[100px] to flex-grow with flex-basis min height */}
-                    <div className="flex flex-col flex-1 min-h-[150px] border border-border/50 rounded-xl bg-bg/20 p-2 shrink-0">
+                    <div className="flex flex-col flex-none h-[110px] border border-border/50 rounded-xl bg-bg/20 p-2 shrink-0">
                         <div className="flex items-center justify-between mb-1 pb-1 border-b border-border/30 shrink-0">
-                            <h4 className="text-[10px] font-bold text-muted uppercase tracking-widest flex items-center gap-1">
-                                <History size={12} /> System Activity
+                            <h4 className="text-sm font-bold text-muted uppercase tracking-widest flex items-center gap-1">
+                                <History size={16} /> System Activity
                             </h4>
                             <button
                                 onClick={() => setLogs([])}
                                 className="p-1 hover:bg-red-500/10 hover:text-red-500 rounded text-muted transition-colors"
                                 title="Clear Logs"
                             >
-                                <Trash2 size={12} />
+                                <Trash2 size={16} />
                             </button>
                         </div>
 
-                        <div className="flex-grow overflow-y-auto space-y-1 pr-1 scrollbar-thin scrollbar-thumb-primary/20 hover:scrollbar-thumb-primary/40">
+                        <div className="flex-grow overflow-y-auto space-y-1 pr-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']">
                             {logs.length === 0 ? (
-                                <div className="text-[10px] text-muted italic text-center py-2">No activity...</div>
+                                <div className="text-sm text-muted italic text-center py-1">No activity...</div>
                             ) : (
                                 logs.slice().reverse().map((log) => (
-                                    <div key={log.id} className="text-[10px] border-b border-border/10 pb-0.5 flex items-start gap-1 group">
+                                    <div key={log.id} className="text-sm border-b border-border/10 pb-1 flex items-start gap-1 group">
                                         <span className="text-muted/50 tabular-nums shrink-0">{log.time}</span>
                                         <div className="flex-grow flex items-center gap-1">
-                                            {log.type === 'DETECTION' && <Zap size={10} className="text-yellow-500 shrink-0" />}
+                                            {log.type === 'DETECTION' && <Zap size={14} className="text-yellow-500 shrink-0" />}
                                             <span className={log.type === 'DETECTION' ? 'text-primary font-bold' : 'text-text/70'}>
                                                 {log.message}
                                             </span>
@@ -267,30 +267,30 @@ export default function SSVEPView({ wsData, wsEvent }) {
                     <div className="grid grid-cols-2 gap-2 shrink-0">
                         <button
                             onClick={globalRunning ? stopFlicker : startFlicker}
-                            className={`w-full py-2 rounded-xl text-xs font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-2 border-2 ${globalRunning
+                            className={`w-full py-2.5 rounded-xl text-base font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-2 border-2 ${globalRunning
                                 ? 'bg-red-500/10 border-red-500/50 text-red-500 hover:bg-red-500/20'
                                 : 'bg-green-500/10 border-green-500/50 text-green-500 hover:bg-green-500/20 shadow-glow'
                                 }`}
                         >
-                            {globalRunning ? <><Square size={14} /> Stop</> : <><Play size={14} /> Start</>}
+                            {globalRunning ? <><Square size={18} /> Stop</> : <><Play size={18} /> Start</>}
                         </button>
 
                         {!globalRunning && (
                             <button
                                 onClick={runProtocol}
-                                className="w-full py-2 bg-primary/10 border-2 border-primary/50 text-primary rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-primary/20 transition-all flex items-center justify-center gap-2"
+                                className="w-full py-2.5 bg-primary/10 border-2 border-primary/50 text-primary rounded-xl text-base font-bold uppercase tracking-widest hover:bg-primary/20 transition-all flex items-center justify-center gap-2"
                             >
-                                <Zap size={14} /> Protocol
+                                <Zap size={18} /> Protocol
                             </button>
                         )}
                     </div>
 
                     {/* Target Settings - DECREASED HEIGHT, fixed size instead of flex-grow */}
-                    <div className="flex flex-col h-[180px] shrink-0 overflow-hidden border border-border/50 rounded-xl bg-bg/10">
+                    <div className="flex flex-col flex-1 min-h-[0] overflow-hidden border border-border/50 rounded-xl bg-bg/10">
                         <div className="p-2 border-b border-border/50 bg-bg/30 shrink-0">
-                            <h4 className="text-[10px] font-bold text-muted uppercase tracking-widest">Targets</h4>
+                            <h4 className="text-sm font-bold text-muted uppercase tracking-widest">Targets</h4>
                         </div>
-                        <div className="flex flex-col flex-grow overflow-y-auto p-2 gap-2 scrollbar-thin scrollbar-thumb-primary/20">
+                        <div className="flex flex-col flex-grow overflow-y-auto p-2 gap-2 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']">
                             {configs.map((cfg) => (
                                 <div key={cfg.id} className={`p-3 rounded-xl border transition-all space-y-2 shrink-0 ${cfg.enabled ? 'bg-bg/50 border-border' : 'bg-bg/20 border-border/30 grayscale opacity-60'}`}>
                                     <div className="flex items-center justify-between">
@@ -300,10 +300,10 @@ export default function SSVEPView({ wsData, wsEvent }) {
                                                 className={`p-1.5 rounded-lg transition-all shrink-0 ${cfg.enabled ? 'bg-primary/20 text-primary border border-primary/30' : 'bg-bg border border-border text-muted hover:border-primary/50'}`}
                                                 title={cfg.enabled ? "Disable Target" : "Enable Target"}
                                             >
-                                                <Power size={12} />
+                                                <Power size={16} />
                                             </button>
                                             <input
-                                                className="bg-transparent font-bold text-sm outline-none focus:text-primary transition-colors w-full"
+                                                className="bg-transparent font-bold text-lg outline-none focus:text-primary transition-colors w-full"
                                                 value={cfg.label}
                                                 onChange={(e) => updateConfig(cfg.id, { label: e.target.value })}
                                             />
@@ -313,18 +313,18 @@ export default function SSVEPView({ wsData, wsEvent }) {
                                                 type="number"
                                                 value={cfg.freq}
                                                 onChange={(e) => updateConfig(cfg.id, { freq: parseFloat(e.target.value) || 0 })}
-                                                className="w-14 bg-bg border border-border rounded px-2 py-0.5 text-center text-primary font-bold focus:border-primary/50 outline-none"
+                                                className="w-16 bg-bg border border-border rounded px-2 py-0.5 text-center text-primary font-bold focus:border-primary/50 outline-none text-base"
                                             />
-                                            <span className="text-[10px] text-muted">Hz</span>
+                                            <span className="text-sm text-muted">Hz</span>
                                         </div>
                                     </div>
 
                                     {/* Mapping Selection */}
                                     <div className="grid grid-cols-2 gap-2">
                                         <div className="space-y-1">
-                                            <label className="text-[10px] uppercase text-muted flex items-center gap-1"><Keyboard size={10} /> Key</label>
+                                            <label className="text-xs uppercase text-muted flex items-center gap-1"><Keyboard size={14} /> Key</label>
                                             <select
-                                                className="w-full bg-bg border border-border rounded px-1 py-1 text-[10px] outline-none focus:border-primary/50"
+                                                className="w-full bg-bg border border-border rounded px-2 py-1 text-sm font-medium outline-none focus:border-primary/50"
                                                 value={cfg.mappedKey || 'None'}
                                                 onChange={(e) => updateConfig(cfg.id, { mappedKey: e.target.value })}
                                             >
@@ -333,9 +333,9 @@ export default function SSVEPView({ wsData, wsEvent }) {
                                             </select>
                                         </div>
                                         <div className="space-y-1">
-                                            <label className="text-[10px] uppercase text-muted flex items-center gap-1"><MousePointer2 size={10} /> Mouse</label>
+                                            <label className="text-xs uppercase text-muted flex items-center gap-1"><MousePointer2 size={14} /> Mouse</label>
                                             <select
-                                                className="w-full bg-bg border border-border rounded px-1 py-1 text-[10px] outline-none focus:border-primary/50"
+                                                className="w-full bg-bg border border-border rounded px-2 py-1 text-sm font-medium outline-none focus:border-primary/50"
                                                 value={cfg.mappedMouse || 'None'}
                                                 onChange={(e) => updateConfig(cfg.id, { mappedMouse: e.target.value })}
                                             >

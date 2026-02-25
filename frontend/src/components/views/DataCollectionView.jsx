@@ -15,7 +15,7 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
     // Top-level states
     const [activeSensor, setActiveSensor] = useState('EMG'); // 'EMG' | 'EOG' | 'EEG'
     const [activeChannelIndex, setActiveChannelIndex] = useState(0); // Explicitly selected channel index
-    const [mode, setMode] = useState('realtime'); // 'realtime' | 'recording' | 'collection'
+    const [mode, setMode] = useState('collection'); // 'collection' | 'test'
     const [config, setConfig] = useState(initialConfig || {});
     const [isCalibrating, setIsCalibrating] = useState(false);
     const [runInProgress, setRunInProgress] = useState(false);
@@ -206,6 +206,12 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
         // Set default label based on sensor
         if (sensor === 'EMG') setTargetLabel('Rock');
         else if (sensor === 'EOG') setTargetLabel('SingleBlink');
+
+        if (sensor === 'EEG' && mode !== 'test') {
+            setMode('test');
+        } else if (sensor !== 'EEG' && mode === 'recording') {
+            setMode('collection');
+        }
     };
 
     const startAutoWindowing = useCallback(() => {
@@ -219,7 +225,7 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
             // Determine Label (Fixed for Calibration, Random for Test)
             const sensorForWindow = activeSensorRef.current;
             let labelForWindow = targetLabelRef.current;
-            const currentMode = mode === 'realtime' ? 'realtime' : (mode === 'test' ? 'test' : 'realtime');
+            const currentMode = mode === 'collection' ? 'collection' : (mode === 'test' ? 'test' : 'collection');
             console.log(`[AutoWindow] Creation tick. Mode: ${currentMode}, Sensor: ${sensorForWindow}`);
 
             // Random Label Logic for Test Mode
@@ -358,7 +364,7 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
         CalibrationApi.startCalibration(activeSensor, mode, targetLabel, windowDuration, sessionName)
             .catch(e => console.error("Start Calib API failed", e));
 
-        if (mode === 'realtime' || mode === 'test') {
+        if (mode === 'collection' || mode === 'test') {
             console.log('[handleStart] Triggering auto-windowing...');
             startAutoWindowing();
         }
@@ -709,7 +715,7 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
 
     // Update chart data from WS or Mock (Buffered and sent to Worker)
     useEffect(() => {
-        if ((mode === 'realtime' || mode === 'test') && wsData) {
+        if ((mode === 'collection' || mode === 'test') && wsData) {
             const payload = wsData.raw || wsData;
 
             let samples = [];
@@ -875,8 +881,8 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                                     </button>
                                 ))}
                             </div>
-                            <div className="grid grid-cols-3 gap-1">
-                                {['realtime', 'recording', 'test'].map(m => (
+                            <div className={`grid gap-1 ${activeSensor === 'EEG' ? 'grid-cols-1' : 'grid-cols-2'}`}>
+                                {(activeSensor === 'EEG' ? ['test'] : ['collection', 'test']).map(m => (
                                     <button
                                         key={m}
                                         onClick={() => setMode(m)}
@@ -1028,7 +1034,7 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
             <div className="h-[50%] flex-none min-h-0 px-2 pb-2 pt-0 grid grid-cols-1 lg:grid-cols-12 gap-2">
                 {/* Session Panel */}
                 <div className="lg:col-span-9 h-full min-h-0 overflow-hidden shadow-sm">
-                    {(mode === 'realtime' || mode === 'test') ? (
+                    {(mode === 'collection' || mode === 'test') ? (
                         <SessionManagerPanel
                             activeSensor={activeSensor}
                             currentSessionName={sessionName}
