@@ -1,19 +1,10 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Settings, Play, Square, Activity, MousePointer2, Keyboard, Sun, Monitor, Power, Zap, Trash2, History } from 'lucide-react';
+import SSVEPStimulus from './ssvep/SSVEPStimulus';
 import { soundHandler } from '../../handlers/SoundHandler';
 
 const COMMON_KEYS = ['W', 'A', 'S', 'D', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'Enter', 'Escape'];
 const MOUSE_ACTIONS = ['Left Click', 'Right Click', 'Double Click'];
-
-const COLORS = {
-    ON: (alpha) => `rgba(245, 245, 245, ${alpha})`,
-    OFF: 'rgb(5, 5, 5)',
-    CUE: 'rgb(245, 245, 245)',
-    DIM: 'rgb(40, 40, 40)',
-    BLACK: 'rgb(0, 0, 0)',
-    BORDER: '#333333',
-    TARGET_BORDER: '#ffffff'
-};
 
 export default function SSVEPView({ wsData, wsEvent }) {
     // --- Configuration State ---
@@ -40,9 +31,6 @@ export default function SSVEPView({ wsData, wsEvent }) {
     const [protocolState, setProtocolState] = useState('IDLE');
     const [currentTrialIdx, setCurrentTrialIdx] = useState(0);
     const [trials, setTrials] = useState([]);
-
-    const canvasRef = useRef(null);
-    const containerRef = useRef(null);
 
     const addLog = useCallback((message, type = 'INFO') => {
         const time = new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -90,190 +78,8 @@ export default function SSVEPView({ wsData, wsEvent }) {
         }
     }, [wsEvent, configs, addLog]);
 
-
-    // --- High Performance Web Rendering Loop (Replaces WebWorker) ---
-
-    const latestState = useRef({ configs, brightness, refreshRate, globalRunning, protocolMode, trials });
-
-    useEffect(() => {
-        latestState.current = { configs, brightness, refreshRate, globalRunning, protocolMode, trials };
-    }, [configs, brightness, refreshRate, globalRunning, protocolMode, trials]);
-
-    const animationState = useRef({
-        protocolState: 'IDLE',
-        currentTrialIdx: -1,
-        lastStateChange: 0,
-        startTime: 0,
-        frameCount: 0,
-    });
-
-    useEffect(() => {
-        const handleResize = () => {
-            if (canvasRef.current && containerRef.current) {
-                canvasRef.current.width = containerRef.current.clientWidth;
-                canvasRef.current.height = containerRef.current.clientHeight;
-            }
-        };
-        const resizeObserver = new ResizeObserver(handleResize);
-        if (containerRef.current) {
-            resizeObserver.observe(containerRef.current);
-            handleResize();
-        }
-        return () => resizeObserver.disconnect();
-    }, []);
-
-    useEffect(() => {
-        let reqId;
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-        const ctx = canvas.getContext('2d', { alpha: false });
-
-        const updateProtocolState = (now, ls, as) => {
-            if (!ls.protocolMode) return;
-
-            const stateElapsed = now - as.lastStateChange;
-            const DURATIONS = { CUE: 2000, STIM: 5000, REST: 2000 };
-
-            if (as.protocolState === 'REST' && stateElapsed > DURATIONS.REST) {
-                as.protocolState = 'CUE';
-                as.lastStateChange = now;
-                setProtocolState('CUE');
-                addLog(`Protocol State: CUE`);
-            } else if (as.protocolState === 'CUE' && stateElapsed > DURATIONS.CUE) {
-                as.protocolState = 'STIM';
-                as.lastStateChange = now;
-                setProtocolState('STIM');
-                addLog(`Protocol State: STIM`);
-            } else if (as.protocolState === 'STIM' && stateElapsed > DURATIONS.STIM) {
-                if (as.currentTrialIdx < ls.trials.length - 1) {
-                    as.currentTrialIdx++;
-                    as.protocolState = 'REST';
-                    as.lastStateChange = now;
-                    setCurrentTrialIdx(as.currentTrialIdx);
-                    setProtocolState('REST');
-                    addLog(`Protocol State: REST (Trial ${as.currentTrialIdx + 1})`);
-                } else {
-                    setProtocolMode(false);
-                    setGlobalRunning(false);
-                    as.protocolState = 'IDLE';
-                    setProtocolState('IDLE');
-                    addLog('Protocol finished');
-                }
-            }
-        };
-
-        const render = (elapsed, now) => {
-            const ls = latestState.current;
-            const as = animationState.current;
-            const w = canvas.width;
-            const h = canvas.height;
-            const padding = 40;
-            const cols = 3;
-            const rows = 2;
-            const gridW = (w - (cols + 1) * padding) / cols;
-            const gridH = (h - (rows + 1) * padding) / rows;
-
-            if (ls.globalRunning) {
-                as.frameCount++;
-                updateProtocolState(now, ls, as);
-            }
-
-            const isFlickering = ls.globalRunning && ((!ls.protocolMode) || (ls.protocolMode && as.protocolState === 'STIM'));
-
-            // Clear background
-            ctx.fillStyle = '#000000';
-            ctx.fillRect(0, 0, w, h);
-
-            ls.configs.forEach((cfg, idx) => {
-                const col = idx % cols;
-                const row = Math.floor(idx / cols);
-                const x = padding + col * (gridW + padding);
-                const y = padding + row * (gridH + padding);
-
-                let isOn = false;
-                if (isFlickering && cfg.enabled) {
-                    const hz = Number(cfg.freq) || 1;
-                    const periodMs = 1000 / hz;
-                    isOn = (elapsed % periodMs) < (periodMs / 2);
-
-                    ctx.fillStyle = isOn ? COLORS.ON(ls.brightness) : COLORS.OFF;
-                    ctx.fillRect(x, y, gridW, gridH);
-                } else {
-                    if (ls.protocolMode && as.protocolState === 'CUE') {
-                        const isTarget = ls.trials[as.currentTrialIdx] === cfg.id;
-                        ctx.fillStyle = isTarget ? COLORS.CUE : COLORS.DIM;
-                        ctx.fillRect(x, y, gridW, gridH);
-
-                        if (isTarget) {
-                            ctx.strokeStyle = COLORS.TARGET_BORDER;
-                            ctx.lineWidth = 4;
-                            ctx.strokeRect(x, y, gridW, gridH);
-                        }
-                    } else {
-                        // Regular dimmed state when not flickering or not protocol mode
-                        ctx.fillStyle = COLORS.DIM;
-                        ctx.fillRect(x, y, gridW, gridH);
-                    }
-                }
-
-                // Draw centered Key Display
-                ctx.fillStyle = '#000000';
-
-                // Use white text if the block is DIM (so it's easily readable)
-                if (!isFlickering && (!ls.protocolMode || as.protocolState !== 'CUE')) {
-                    ctx.fillStyle = '#ffffff';
-                } else if (ls.protocolMode && as.protocolState === 'CUE' && ls.trials[as.currentTrialIdx] !== cfg.id) {
-                    ctx.fillStyle = '#ffffff'; // non target is dim
-                }
-
-                ctx.font = 'bold 40px Arial';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                const displayKey = cfg.mappedKey && cfg.mappedKey !== 'None' ? cfg.mappedKey : '+';
-                ctx.fillText(displayKey, x + gridW / 2, y + gridH / 2);
-
-                // Draw Target Label (e.g. "Target 1") in top left corner of the block
-                ctx.font = 'bold 12px Arial';
-                ctx.textAlign = 'left';
-                ctx.textBaseline = 'top';
-                ctx.fillStyle = (isFlickering && isOn) ? '#000000' : '#888888';
-                ctx.fillText(cfg.label, x + 10, y + 10);
-            });
-
-            // Photodiode Marker (Bottom Left)
-            const pdSize = 64;
-            if (isFlickering) {
-                const isWhite = as.frameCount % 2 === 0;
-                ctx.fillStyle = isWhite ? '#ffffff' : '#000000';
-            } else {
-                ctx.fillStyle = '#000000';
-            }
-            ctx.fillRect(0, h - pdSize, pdSize, pdSize);
-        };
-
-        const loop = (time) => {
-            if (animationState.current.startTime === 0) {
-                animationState.current.startTime = time;
-            }
-            // Add slight timing buffer
-            const elapsed = time - animationState.current.startTime;
-
-            render(elapsed, time);
-            reqId = requestAnimationFrame(loop);
-        };
-
-        reqId = requestAnimationFrame(loop);
-
-        return () => {
-            cancelAnimationFrame(reqId);
-        };
-    }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-
     // --- Controls ---
     const startFlicker = () => {
-        animationState.current.startTime = 0; // reset on next frame
-        animationState.current.frameCount = 0;
         setProtocolMode(false);
         setGlobalRunning(true);
         addLog('Manual simulation started');
@@ -300,28 +106,47 @@ export default function SSVEPView({ wsData, wsEvent }) {
 
         setTrials(newTrials);
         setCurrentTrialIdx(0);
-
-        animationState.current.protocolState = 'REST';
-        animationState.current.currentTrialIdx = 0;
-        animationState.current.lastStateChange = performance.now();
-        animationState.current.startTime = 0;
-        animationState.current.frameCount = 0;
-
         setProtocolMode(true);
         setGlobalRunning(true);
-        setProtocolState('REST');
         addLog(`Protocol started (${newTrials.length} trials)`);
     };
 
     return (
         <div className="w-full h-full flex bg-black overflow-hidden relative">
-            {/* Main Stimulus View (Integrated Canvas) */}
-            <div ref={containerRef} className={`flex-grow flex flex-col items-center justify-center relative transition-all duration-300`}>
-                <canvas
-                    ref={canvasRef}
-                    className="w-full h-full block"
-                    style={{ imageRendering: 'pixelated' }}
+            {/* Main Stimulus View */}
+            <div className={`flex-grow flex flex-col items-center justify-center relative transition-all duration-300 ${showSidebar ? 'pr-0' : 'pr-0'}`}>
+                <SSVEPStimulus
+                    configs={configs}
+                    brightness={brightness}
+                    refreshRate={refreshRate}
+                    running={globalRunning}
+                    protocolMode={protocolMode}
+                    trials={trials}
+                    onProtocolUpdate={(state, idx) => {
+                        setProtocolState(state);
+                        if (idx !== undefined) setCurrentTrialIdx(idx);
+                        addLog(`Protocol State: ${state} ${idx !== undefined ? `(Trial ${idx + 1})` : ''}`);
+                    }}
+                    onProtocolFinished={() => {
+                        setGlobalRunning(false);
+                        setProtocolMode(false);
+                        addLog('Protocol finished');
+                    }}
                 />
+
+                {/* Grid Overlay for Labeling */}
+                {!globalRunning && !protocolMode && (
+                    <div className="absolute inset-0 grid grid-cols-3 grid-rows-2 gap-[40px] p-[40px] pointer-events-none opacity-20">
+                        {configs.map(cfg => (
+                            <div key={cfg.id} className="border border-white/50 rounded-xl flex flex-col items-center justify-center relative shadow-lg bg-black/40">
+                                <span className="text-[10px] font-bold text-white/50 absolute top-2 left-3">{cfg.label}</span>
+                                <span className="text-4xl font-bold text-white drop-shadow-md">
+                                    {cfg.mappedKey !== 'None' ? cfg.mappedKey : '-'}
+                                </span>
+                            </div>
+                        ))}
+                    </div>
+                )}
             </div>
 
             {/* Right Sidebar Container */}
@@ -400,7 +225,7 @@ export default function SSVEPView({ wsData, wsEvent }) {
                         </div>
                     </div>
 
-                    {/* Debug Event Log - flex-grow with flex-basis min height */}
+                    {/* Debug Event Log - CHANGED from h-[100px] to flex-grow with flex-basis min height */}
                     <div className="flex flex-col flex-1 min-h-[150px] border border-border/50 rounded-xl bg-bg/20 p-2 shrink-0">
                         <div className="flex items-center justify-between mb-1 pb-1 border-b border-border/30 shrink-0">
                             <h4 className="text-[10px] font-bold text-muted uppercase tracking-widest flex items-center gap-1">
@@ -456,7 +281,7 @@ export default function SSVEPView({ wsData, wsEvent }) {
                         )}
                     </div>
 
-                    {/* Target Settings */}
+                    {/* Target Settings - DECREASED HEIGHT, fixed size instead of flex-grow */}
                     <div className="flex flex-col h-[180px] shrink-0 overflow-hidden border border-border/50 rounded-xl bg-bg/10">
                         <div className="p-2 border-b border-border/50 bg-bg/30 shrink-0">
                             <h4 className="text-[10px] font-bold text-muted uppercase tracking-widest">Targets</h4>
