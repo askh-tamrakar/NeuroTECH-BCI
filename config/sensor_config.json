@@ -1,7 +1,7 @@
 {
   "active_models": {
-    "EMG": "luci",
-    "EOG": "neurobench"
+    "EMG": "rps",
+    "EOG": "lucifer-100"
   },
   "baud": 230400,
   "binary": true,
@@ -12,7 +12,7 @@
     },
     "ch1": {
       "enabled": true,
-      "sensor": "EEG"
+      "sensor": "EOG"
     },
     "ch2": {
       "enabled": true,
@@ -437,7 +437,8 @@
           -0.8075266234270593,
           2.0984973495078325
         ]
-      }
+      },
+      "detection_method": "Threshold"
     }
   },
   "num_channels": 4,

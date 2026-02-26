@@ -1,1 +1,0 @@
-{"sensor": "EMG", "n_estimators": 65, "max_depth": 10, "test_size": 0.15, "table_name": "emg_session_lucifer_2200", "created_at": "2026-02-25T21:03:34.833226", "accuracy": 0.8757575757575757}

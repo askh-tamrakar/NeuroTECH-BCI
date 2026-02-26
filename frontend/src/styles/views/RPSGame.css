@@ -3,12 +3,14 @@
   display: flex;
   flex-direction: row;
   align-items: flex-start;
-  justify-content: space-between;
+  justify-content: center;
   gap: 2rem;
   padding: 2rem;
   color: var(--text);
   position: relative;
   width: 100%;
+  flex: 1;
+  height: 100%;
 }
 
 .rps-main {
@@ -16,13 +18,18 @@
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   width: 100%;
   position: relative;
+  height: 100%;
 }
 
 .rps-sidebar {
   width: 380px;
-  flex-shrink: 0;
+  position: absolute;
+  right: 2rem;
+  top: 2rem;
+  z-index: 50;
 }
 
 .rps-title {

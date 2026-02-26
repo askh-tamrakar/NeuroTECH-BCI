@@ -38,7 +38,7 @@ export function useWebSocket(url = 'http://localhost:1972') {
       socketRef.current = io(endpoint, {
         reconnection: false, // User requested manual retry only
         timeout: 3000,       // Fail after 3 seconds
-        transports: ['websocket', 'polling']
+        transports: ['websocket']
       })
 
       setupSocketListeners()

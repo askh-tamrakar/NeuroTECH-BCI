@@ -19,6 +19,7 @@ export default function DinoView({ wsData, wsEvent, isPaused }) {
     )
     const [eyeState, setEyeState] = useState('open') // open, blink, double-blink
     const [showSettings, setShowSettings] = useState(false)
+    const [models, setModels] = useState([]) // EOG Models
 
     // Game settings (easy mode default)
     const DEFAULT_SETTINGS = {
@@ -38,6 +39,8 @@ export default function DinoView({ wsData, wsEvent, isPaused }) {
         JUMP_DISTANCE: 300,
         ENABLE_MANUAL_CONTROLS: true,
         CONTROL_CHANNEL: 'any',
+        DETECTION_METHOD: 'Threshold', // Or 'ML'
+        ACTIVE_MODEL: '',
         OBSTACLE_BONUS_FACTOR: 0.015,
 
         // Visual Customization
@@ -181,7 +184,119 @@ export default function DinoView({ wsData, wsEvent, isPaused }) {
 
     useEffect(() => {
         settingsRef.current = settings
-    }, [settings])
+
+        // When method changes to ML, ensure a model is selected
+        if (settings.DETECTION_METHOD === 'ML' && !settings.ACTIVE_MODEL && models.length > 0) {
+            handleSettingChange('ACTIVE_MODEL', models.find(m => m.active)?.name || models[0].name)
+        }
+
+    }, [settings, models])
+
+    // Load available EOG models
+    useEffect(() => {
+        fetch('/api/models/eog')
+            .then(res => res.json())
+            .then(data => {
+                setModels(data);
+                if (data.length > 0 && !settings.ACTIVE_MODEL) {
+                    const activeModel = data.find(m => m.active);
+                    if (activeModel) {
+                        handleSettingChange('ACTIVE_MODEL', activeModel.name);
+                    }
+                }
+            })
+            .catch(err => console.error("Failed to load EOG models:", err));
+    }, []);
+
+    // Push Config to Backend when Detection Method or Model changes
+    useEffect(() => {
+        // We only care if they changed METHOD or MODEL
+        const updateBackendConfig = async () => {
+            try {
+                const res = await fetch('/api/config');
+                if (!res.ok) return;
+                const config = await res.json();
+
+                // Deep copy to avoid mutating state directly
+                const newConfig = JSON.parse(JSON.stringify(config));
+
+                if (!newConfig.features) newConfig.features = {};
+                if (!newConfig.features.EOG) newConfig.features.EOG = {};
+
+                let changed = false;
+                if (newConfig.features.EOG.detection_method !== settings.DETECTION_METHOD) {
+                    newConfig.features.EOG.detection_method = settings.DETECTION_METHOD;
+                    changed = true;
+                }
+
+                if (settings.DETECTION_METHOD === 'ML' && settings.ACTIVE_MODEL) {
+                    if (!newConfig.active_models) newConfig.active_models = {};
+                    if (newConfig.active_models.EOG !== settings.ACTIVE_MODEL) {
+                        newConfig.active_models.EOG = settings.ACTIVE_MODEL;
+                        changed = true;
+                    }
+                }
+
+                if (changed) {
+                    await fetch('/api/config', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(newConfig)
+                    });
+                    console.log("[Dino] Backend feature config updated:", {
+                        method: settings.DETECTION_METHOD,
+                        model: settings.ACTIVE_MODEL
+                    });
+                }
+
+            } catch (err) {
+                console.error("Failed to update backend config:", err);
+            }
+        };
+
+        updateBackendConfig();
+    }, [settings.DETECTION_METHOD, settings.ACTIVE_MODEL]);
+
+    // Auto Select Smart Channel
+    const [availableChannels, setAvailableChannels] = useState([
+        { label: 'Any Channel', value: 'any' },
+        { label: 'Channel 0', value: 'ch0' },
+        { label: 'Channel 1', value: 'ch1' }
+    ]);
+
+    useEffect(() => {
+        fetch('/api/config')
+            .then(res => res.json())
+            .then(config => {
+                const mapping = config.channel_mapping || {};
+                const eogChannels = [];
+                // Check all possible hardware channels
+                ['ch0', 'ch1', 'ch2', 'ch3'].forEach(ch => {
+                    if (mapping[ch] && mapping[ch].sensor === 'EOG' && mapping[ch].enabled) {
+                        eogChannels.push(ch);
+                    }
+                });
+
+                if (eogChannels.length === 0) {
+                    setAvailableChannels([{ label: 'No EOG Sensor Mapped', value: 'none' }]);
+                    handleSettingChange('CONTROL_CHANNEL', 'none');
+                } else if (eogChannels.length === 1) {
+                    setAvailableChannels([{ label: `Channel ${eogChannels[0].replace('ch', '')}`, value: eogChannels[0] }]);
+                    handleSettingChange('CONTROL_CHANNEL', eogChannels[0]);
+                } else {
+                    const options = [{ label: 'Select Channel...', value: 'any' }];
+                    eogChannels.forEach(ch => {
+                        options.push({ label: `Channel ${ch.replace('ch', '')}`, value: ch });
+                    });
+                    setAvailableChannels(options);
+
+                    if (settingsRef.current.CONTROL_CHANNEL !== 'any' && !eogChannels.includes(settingsRef.current.CONTROL_CHANNEL)) {
+                        handleSettingChange('CONTROL_CHANNEL', 'any');
+                    }
+                }
+            })
+            .catch(err => console.error("Error fetching config for channels", err));
+    }, []);
 
     // Handle EOG blink detection
     const handleEOGBlink = (source = 'blink') => {
@@ -688,8 +803,8 @@ export default function DinoView({ wsData, wsEvent, isPaused }) {
                                         </div>
                                         <div className="stat-block stat-block-end mb-1">
                                             <span className="stat-label flex items-center gap-1"><Radio size={24} /> Sensor</span>
-                                            <div className={`stat-value-sensor ${wsData ? 'text-green-500' : 'text-red-500'}`}>
-                                                {wsData ? 'Connected' : 'Disconnected'}
+                                            <div className={`stat-value-sensor ${(wsData && settings.CONTROL_CHANNEL !== 'none') ? 'text-green-500' : 'text-red-500'}`}>
+                                                {(wsData && settings.CONTROL_CHANNEL !== 'none') ? 'Connected' : 'Disconnected'}
                                             </div>
                                         </div>
                                     </div>
@@ -733,22 +848,35 @@ export default function DinoView({ wsData, wsEvent, isPaused }) {
 
                         <div className="mt-4 pt-3 border-t border-border space-y-3">
                             <SettingSelect
-                                label="Control Channel"
-                                value={settings.CONTROL_CHANNEL}
+                                label="Method"
+                                value={settings.DETECTION_METHOD}
                                 options={[
-                                    { label: 'Any Channel', value: 'any' },
-                                    { label: 'Channel 0', value: 'ch0' },
-                                    { label: 'Channel 1', value: 'ch1' },
-                                    { label: 'Channel 2', value: 'ch2' },
-                                    { label: 'Channel 3', value: 'ch3' },
+                                    { label: 'ML', value: 'ML' },
+                                    { label: 'Threshold', value: 'Threshold' }
                                 ]}
+                                onChange={(v) => handleSettingChange('DETECTION_METHOD', v)}
+                            />
+
+                            {settings.DETECTION_METHOD === 'ML' && models.length > 0 && (
+                                <SettingSelect
+                                    label="Model"
+                                    value={settings.ACTIVE_MODEL || ''}
+                                    options={models.map(m => ({ label: m.name, value: m.name }))}
+                                    onChange={(v) => handleSettingChange('ACTIVE_MODEL', v)}
+                                />
+                            )}
+
+                            <SettingSelect
+                                label="Channel"
+                                value={settings.CONTROL_CHANNEL}
+                                options={availableChannels}
                                 onChange={(v) => handleSettingChange('CONTROL_CHANNEL', v)}
                             />
 
                             <div className="flex justify-between items-center text-xs">
                                 <span className="text-muted font-medium uppercase tracking-wider flex items-center gap-1"><Signal size={12} /> Input Status</span>
-                                <span className={`font-bold ${wsData ? 'text-green-500' : 'text-red-500'}`}>
-                                    {wsData ? 'ACTIVE' : 'OFFLINE'}
+                                <span className={`font-bold ${settings.CONTROL_CHANNEL === 'none' ? 'text-red-500' : (wsData ? 'text-green-500' : 'text-red-500')}`}>
+                                    {settings.CONTROL_CHANNEL === 'none' ? 'INACTIVE' : (wsData ? 'ACTIVE' : 'OFFLINE')}
                                 </span>
                             </div>
                         </div>

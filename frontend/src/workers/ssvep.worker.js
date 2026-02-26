@@ -194,12 +194,12 @@ function render(elapsed) {
         ctx.textAlign = 'center';
 
         // Draw mapped key (large)
-        ctx.font = 'bold 50px Inter, sans-serif';
+        ctx.font = 'bold 50px sans-serif';
         ctx.textBaseline = 'middle';
         ctx.fillText(keyText, x + gridW / 2, y + gridH / 2 + 10);
 
         // Draw label (small, top)
-        ctx.font = 'bold 16px Inter, sans-serif';
+        ctx.font = 'bold 16px sans-serif';
         ctx.textBaseline = 'top';
         ctx.globalAlpha = 0.5;
         ctx.fillText(labelText, x + gridW / 2, y + 20);

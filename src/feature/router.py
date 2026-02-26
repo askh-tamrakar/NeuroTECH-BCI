@@ -131,11 +131,15 @@ class FeatureRouter:
                 sensor = info.get("sensor", "UNKNOWN")
                 
                 if sensor == "EOG":
-                    print(f" [{i}] -> EOG Blink Pipeline (Extractor + Detector)")
+                    eog_method = self.config.get("features", {}).get("EOG", {}).get("detection_method", "Threshold")
+                    print(f" [{i}] -> EOG Blink Pipeline (Extractor + {eog_method} Detector)")
                     extractor = BlinkExtractor(i, self.config, self.sr)
-                    # Use ML Detector if available, logic inside EOGMLDetector handles fallback?
-                    # Or check detection state? EOGMLDetector handles model loading.
-                    detector = EOGMLDetector(self.config)
+                    
+                    if eog_method == "ML":
+                        detector = EOGMLDetector(self.config)
+                    else:
+                        detector = BlinkDetector(self.config)
+                        
                     self.pipeline[i] = (extractor, detector, "EOG")
                 elif sensor == "EMG":
                     print(f" [{i}] -> EMG RPS Pipeline (Extractor + Detector)")
