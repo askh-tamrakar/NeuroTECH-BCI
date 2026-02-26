@@ -3,15 +3,25 @@ import WorkerTimeSeriesChart from '../charts/WorkerTimeSeriesChart';
 import WindowListPanel from '../calibration/WindowListPanel';
 import ConfigPanel from '../calibration/ConfigPanel';
 import SessionManagerPanel from '../calibration/SessionManagerPanel';
-import TestPanel from '../calibration/TestPanel';
 import { CalibrationApi } from '../../services/calibrationApi';
 import CustomSelect from '../ui/CustomSelect';
+import { useSettings } from '../../contexts/SettingsContext';
+import { useTheme } from '../../contexts/ThemeContext';
+import { Activity, Radio, Zap, Target, Square, Play, Palette, Brain, ChartSpline } from 'lucide-react';
+
+const DEFAULT_PALETTE = [
+    '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6',
+    '#06b6d4', '#f97316', '#06d6a0'
+];
 
 /**
  * DataCollectionView
  * The main container for the BCI data collection experience.
  */
 export default function DataCollectionView({ wsData, wsEvent, config: initialConfig }) {
+    const { settings, updateSettings } = useSettings();
+    const { currentTheme } = useTheme();
+
     // Top-level states
     const [activeSensor, setActiveSensor] = useState('EMG'); // 'EMG' | 'EOG' | 'EEG'
     const [activeChannelIndex, setActiveChannelIndex] = useState(0); // Explicitly selected channel index
@@ -41,7 +51,7 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
         return `Session_${now.getDate()}_${now.getHours()}${now.getMinutes()}`;
     });
     const [appendMode, setAppendMode] = useState(false);
-    const [autoLimit, setAutoLimit] = useState(30);
+    const [autoLimit, setAutoLimit] = useState(settings?.collectionState?.autoLimit || 30);
 
     const [dataLastUpdated, setDataLastUpdated] = useState(0);
 
@@ -55,6 +65,7 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
     const targetLabelRef = useRef(targetLabel);
     const markedWindowsRef = useRef(markedWindows);
     const readyWindowsRef = useRef(readyWindows);
+    const sessionInputRef = useRef(null); // Ref for focusing session name input
 
     // Keep refs in sync
     // useEffect(() => { chartDataRef.current = chartData; }, [chartData]);
@@ -77,7 +88,8 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                 index: parseInt(key.replace('ch', ''), 10),
                 label: val.label || val.name || key
             }))
-            .sort((a, b) => a.index - b.index);
+            .sort((a, b) => a.index - b.index)
+            .slice(0, 2); // Limit to 2 channels (CH0, CH1)
     }, [activeSensor, config]);
 
     // Auto-select first matching channel when sensor changes
@@ -172,8 +184,9 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
 
 
     // Zoom state (Y-axis) similar to LiveView
-    const [zoom, setZoom] = useState(1);
+    const [zoom, setZoom] = useState(settings?.collectionState?.zoom || 1);
     const [manualYRange, setManualYRange] = useState("");
+    const [customLineColor, setCustomLineColor] = useState(null); // New state for line color
     const BASE_AMPLITUDE = 1500;
 
     const currentYDomain = React.useMemo(() => {
@@ -186,9 +199,9 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
 
     // Refs for real-time windowing
     const windowIntervalRef = useRef(null);
-    const [windowDuration, setWindowDuration] = useState(1500); // ms
+    const [windowDuration, setWindowDuration] = useState(settings?.collectionState?.windowDuration || 1500); // ms
     const GAP_DURATION = 500; // ms
-    const [timeWindow, setTimeWindow] = useState(5000); // visible sweep window length for calibration plot
+    const [timeWindow, setTimeWindow] = useState(settings?.collectionState?.timeWindow || 5000); // visible sweep window length for calibration plot
     const MAX_WINDOWS = autoCalibrate ? 50 : 2000;
 
     // Additional Refs for windowing logic (Defined here to avoid TDZ)
@@ -197,6 +210,16 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
 
     useEffect(() => { timeWindowRef.current = timeWindow; }, [timeWindow]);
     useEffect(() => { windowDurationRef.current = windowDuration; }, [windowDuration]);
+
+    // Persist collection state changes
+    useEffect(() => {
+        updateSettings('collectionState', {
+            zoom,
+            timeWindow,
+            windowDuration,
+            autoLimit
+        });
+    }, [zoom, timeWindow, windowDuration, autoLimit, updateSettings]);
 
     // Handlers
     const handleSensorChange = (sensor) => {
@@ -439,7 +462,7 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
     /**
      * Saves all 'collected' (Green) windows from readyWindows to the database.
      */
-    const handleAppendSamples = async () => {
+    const handleAppendSamples = useCallback(async () => {
         // Use Ref to get current snapshot of ready windows
         const toAppend = readyWindowsRef.current;
 
@@ -512,7 +535,7 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
         } finally {
             setRunInProgress(false);
         }
-    };
+    }, [mode, activeSensor, sessionName]);
 
     const deleteWindow = (id) => {
         setMarkedWindows(prev => prev.filter(w => w.id !== id));
@@ -808,42 +831,112 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
     // Keyboard Controls
     useEffect(() => {
         const handleKeyDown = (e) => {
-            // Ignore if typing in an input
-            if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
+            // Ignore if typing in an input (except for AltRight/AltGr)
+            const isTyping = e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA';
 
-            switch (e.key.toLowerCase()) {
-                case 's':
-                    if (isCalibrating) handleStopCalibration();
-                    else handleStartCalibration();
-                    break;
-                case 'a':
-                    setAutoCalibrate(prev => !prev);
-                    break;
-                case 'arrowup':
-                    e.preventDefault();
-                    setAutoLimit(prev => Math.min(prev + 5, 2000)); // Cap at 2000
-                    break;
-                case 'arrowdown':
-                    e.preventDefault();
-                    setAutoLimit(prev => Math.max(prev - 5, 5)); // Floor at 5
-                    break;
-                default:
-                    break;
+            const code = e.code;
+            const km = settings?.keymap?.collection || {};
+
+            // Special case: AltRight/AltGr to focus session name
+            if (code === 'AltRight' || code === km.newSession) {
+                e.preventDefault();
+                if (sessionInputRef.current) {
+                    sessionInputRef.current.focus();
+                    sessionInputRef.current.select();
+                }
+                return;
+            }
+
+            // Safe bypass for structural hotkeys even if typing
+            const isStructuralKey = code.startsWith('Arrow') || code.startsWith('Numpad') || code.startsWith('F') || code === 'ControlRight';
+            const matchesHotkey = Object.values(km).includes(code);
+
+            if (isTyping && !(isStructuralKey && matchesHotkey)) return;
+
+            if (code === km.startStop) {
+                e.preventDefault();
+                if (isCalibrating) handleStopCalibration();
+                else handleStartCalibration();
+            } else if (code === km.toggleAuto) {
+                e.preventDefault();
+                setAutoCalibrate(prev => !prev);
+            } else if (code === km.changeTarget) {
+                e.preventDefault();
+                setTargetLabel(prev => {
+                    const options = activeSensor === 'EMG' ? ['Rock', 'Paper', 'Scissors', 'Rest'] :
+                        activeSensor === 'EOG' ? ['SingleBlink', 'DoubleBlink', 'Rest'] :
+                            activeSensor === 'EEG' ? ['Target 1', 'Target 2', 'Target 3', 'Target 4', 'Target 5', 'Target 6', 'Rest'] : [];
+                    if (!options.length) return prev;
+                    const idx = options.indexOf(prev);
+                    return options[(idx + 1) % options.length];
+                });
+            } else if (code === km.deleteLatest) {
+                e.preventDefault();
+                if (readyWindowsRef.current.length > 0) {
+                    const lastReady = readyWindowsRef.current[readyWindowsRef.current.length - 1];
+                    deleteWindow(lastReady.id);
+                }
+            } else if (code === km.deleteAll) {
+                e.preventDefault();
+                handleClearAllWindows();
+            } else if (code === km.appendSample) {
+                e.preventDefault();
+                handleAppendSamples();
+            } else if (code === km.toggleTimeWindow) {
+                e.preventDefault();
+                setTimeWindow(prev => {
+                    const options = [3000, 5000, 8000, 10000, 15000, 20000];
+                    const idx = options.indexOf(prev);
+                    return options[(idx + 1) % options.length];
+                });
+            } else if (code === km.toggleZoom) {
+                e.preventDefault();
+                setZoom(prev => {
+                    const options = [1, 2, 5, 10, 25];
+                    const idx = options.indexOf(prev);
+                    return options[(idx + 1) % options.length];
+                });
+                setManualYRange("");
+            } else if (code === km.limitIncr5) {
+                e.preventDefault();
+                setAutoLimit(prev => Math.min(200, prev + 5));
+            } else if (code === km.limitDecr5) {
+                e.preventDefault();
+                setAutoLimit(prev => Math.max(1, prev - 5));
+            } else if (code === km.limitIncr1) {
+                e.preventDefault();
+                setAutoLimit(prev => Math.min(200, prev + 1));
+            } else if (code === km.limitDecr1) {
+                e.preventDefault();
+                setAutoLimit(prev => Math.max(1, prev - 1));
+            } else if (code === km.toggleWinDuration) {
+                e.preventDefault();
+                setWindowDuration(prev => {
+                    const options = [500, 1000, 1500, 2000];
+                    const idx = options.indexOf(prev);
+                    return options[(idx + 1) % options.length];
+                });
             }
         };
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [isCalibrating, handleStartCalibration, handleStopCalibration]);
+    }, [isCalibrating, handleStartCalibration, handleStopCalibration, settings?.keymap?.collection, activeSensor, handleAppendSamples]);
+
+
 
     // Memoize chart config to prevent spurious worker updates
-    const chartConfig = React.useMemo(() => ({
-        yMin: currentYDomain[0],
-        yMax: currentYDomain[1],
-        lineColor: activeSensor === 'EMG' ? '#3b82f6' : (activeSensor === 'EOG' ? '#10b981' : '#f59e0b'),
-        bgColor: 'transparent',
-        gridColor: '#444'
-    }), [currentYDomain, activeSensor]);
+    const chartConfig = React.useMemo(() => {
+        const themeColor = currentTheme?.colors?.['--primary'] || '#E3A500';
+        return {
+            yMin: currentYDomain[0],
+            yMax: currentYDomain[1],
+            lineColor: customLineColor || (activeSensor === 'EMG' ? '#3b82f6' : (activeSensor === 'EOG' ? '#10b981' : '#f59e0b')),
+            bgColor: 'transparent',
+            gridColor: '#444',
+            themeColor: themeColor // Pass theme color to worker
+        };
+    }, [currentYDomain, activeSensor, customLineColor, currentTheme]);
 
     return (
         <div className="flex flex-col h-[calc(100dvh-120px)] bg-bg text-text animate-in fade-in duration-500 overflow-hidden">
@@ -853,28 +946,37 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                 {/* SIDEBAR CARD */}
                 <div className="w-[260px] flex-none flex flex-col bg-surface border-border border-2 rounded-xl shadow-sm overflow-hidden">
                     {/* Sidebar Header */}
-                    <div className="p-3 border-b border-border flex items-center gap-2 bg-surface/50">
-                        <div className="p-1.5 bg-primary/10 rounded-lg border border-primary/20 shrink-0">
-                            <span className="text-lg">🎯</span>
+                    <div className="p-2 border-b border-border flex items-center gap-2 bg-surface/50">
+                        <div>
+                            <Brain size={30} className="text-primary" />
                         </div>
                         <div>
-                            <h2 className="text-sm font-bold tracking-tight leading-tight">Data Collection</h2>
-                            <p className="text-xs text-muted font-mono uppercase tracking-widest">Controls</p>
+                            <h2 className="text-xl font-bold tracking-tight leading-tight">Data Collection</h2>
+                            <p className="text-base text-muted font-mono uppercase tracking-widest">Controls</p>
                         </div>
                     </div>
 
                     {/* Sidebar Scrollable Content */}
-                    <div className="flex-grow overflow-y-auto p-3 space-y-4 custom-scrollbar">
+                    <div className="flex-grow overflow-y-auto p-3 space-y-4 no-scrollbar">
 
                         {/* 1. SENSOR & MODE */}
                         <div className="space-y-2">
-                            <label className="text-xs font-bold text-muted uppercase tracking-wider block">Sensor & Mode</label>
-                            <div className="flex bg-bg p-1 rounded-lg border border-border">
-                                {['EMG', 'EOG', 'EEG'].map(s => (
+                            <label className="text-xs font-bold text-muted uppercase tracking-wider flex items-center gap-1.5"><Activity size={14} /> Sensor & Mode</label>
+                            <div className="flex bg-bg p-1 rounded-lg border border-border overflow-x-auto no-scrollbar">
+                                {React.useMemo(() => {
+                                    const configuredSensors = new Set();
+                                    if (config?.channel_mapping) {
+                                        Object.values(config.channel_mapping).forEach(val => {
+                                            if (val.sensor) configuredSensors.add(val.sensor);
+                                            else if (val.type) configuredSensors.add(val.type);
+                                        });
+                                    }
+                                    return configuredSensors.size > 0 ? Array.from(configuredSensors) : ['EMG', 'EOG', 'EEG'];
+                                }, [config]).map(s => (
                                     <button
                                         key={s}
                                         onClick={() => handleSensorChange(s)}
-                                        className={`flex-1 py-1 rounded font-bold text-xs transition-all ${activeSensor === s ? 'bg-primary text-primary-contrast shadow-sm' : 'text-muted hover:text-text'
+                                        className={`flex-1 min-w-[60px] py-1 rounded font-bold text-xs transition-all ${activeSensor === s ? 'bg-primary text-primary-contrast shadow-sm' : 'text-muted hover:text-text'
                                             }`}
                                     >
                                         {s}
@@ -900,8 +1002,8 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                         {/* 2. CHANNELS (If Multi) */}
                         {matchingChannels.length > 1 && (
                             <div className="space-y-2 animate-in slide-in-from-left-2 duration-300">
-                                <label className="text-xs font-bold text-muted uppercase tracking-wider block">Active Channel</label>
-                                <div className="flex flex-wrap gap-2">
+                                <label className="text-xs font-bold text-muted uppercase tracking-wider flex items-center gap-1.5"><Radio size={14} /> Active Channel</label>
+                                <div className="flex flex-wrap gap-2 overflow-hidden">
                                     {matchingChannels.map(ch => (
                                         <button
                                             key={ch.id}
@@ -922,11 +1024,11 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
 
                         {/* 3. COLLECTION CONTROLS */}
                         <div className="space-y-3">
-                            <label className="text-xs font-bold text-muted uppercase tracking-wider block">Data Collection</label>
+                            <label className="text-xs font-bold text-muted uppercase tracking-wider flex items-center gap-1.5"><Zap size={14} /> Data Collection</label>
 
                             {/* Target Label */}
                             <div className="space-y-1">
-                                <span className="text-xs text-muted uppercase">Target Label</span>
+                                <span className="text-xs text-muted uppercase flex items-center gap-1"><Target size={12} /> Target Label</span>
                                 <CustomSelect
                                     value={targetLabel}
                                     onChange={setTargetLabel}
@@ -942,12 +1044,12 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                             {/* Action Button */}
                             <button
                                 onClick={isCalibrating ? handleStopCalibration : handleStartCalibration}
-                                className={`w-full py-3 rounded-lg font-black text-sm uppercase tracking-widest transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0 ${isCalibrating
+                                className={`w-full py-3 rounded-lg font-black text-sm uppercase tracking-widest transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0 flex items-center justify-center gap-2 ${isCalibrating
                                     ? 'bg-red-500 text-white hover:bg-red-600 shadow-red-500/20'
                                     : 'bg-primary text-primary-contrast hover:opacity-90 shadow-primary/25'
                                     }`}
                             >
-                                {isCalibrating ? 'STOP' : 'START COLLECTION'}
+                                {isCalibrating ? <><Square size={16} fill="currentColor" /> STOP</> : <><Play size={16} fill="currentColor" /> START COLLECTION</>}
                             </button>
                         </div>
                     </div>
@@ -1012,6 +1114,25 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                                     ))}
                                 </select>
                             </div>
+
+                            <div className="w-[1px] h-3 bg-border shrink-0"></div>
+
+                            {/* Color Picker */}
+                            <div className="flex items-center gap-2 shrink-0 relative">
+                                <button
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        const currentColor = customLineColor || chartConfig.lineColor;
+                                        const currentIndex = DEFAULT_PALETTE.indexOf(currentColor);
+                                        const nextIndex = (currentIndex + 1) % DEFAULT_PALETTE.length;
+                                        setCustomLineColor(DEFAULT_PALETTE[nextIndex === -1 ? 0 : nextIndex]);
+                                    }}
+                                    className="p-1 hover:bg-muted/10 rounded-full transition-colors cursor-pointer group flex items-center"
+                                    title="Click to Cycle Color"
+                                >
+                                    <ChartSpline size={24} strokeWidth={3} style={{ color: customLineColor || chartConfig.lineColor }} className="group-hover:scale-110 transition-transform" />
+                                </button>
+                            </div>
                         </div>
                     </div>
 
@@ -1041,6 +1162,7 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                             onSessionChange={setSessionName}
                             refreshTrigger={dataLastUpdated}
                             isTestMode={mode === 'test'}
+                            inputRef={sessionInputRef}
                         />
                     ) : (
                         <ConfigPanel config={config} sensor={activeSensor} onSave={setConfig} />

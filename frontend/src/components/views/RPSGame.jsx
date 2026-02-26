@@ -136,12 +136,19 @@ const RPSGame = ({ wsEvent }) => {
 
     // Event Log State
     const [eventLogs, setEventLogs] = useState([]);
+    const [currentPrediction, setCurrentPrediction] = useState('REST');
 
     // -------------------------------------------------------------
     // EVENT LOGGING (runs ONLY when wsEvent changes to prevent double logs)
     // -------------------------------------------------------------
     useEffect(() => {
         if (!wsEvent) return;
+
+        // Track real-time gesture state for UI feedback
+        if (wsEvent.type === 'emg_prediction') {
+            setCurrentPrediction(String(wsEvent.label || '').toUpperCase());
+            return; // Don't treat raw predictions as game events
+        }
 
         const eventName = String(wsEvent.event || '').toUpperCase();
 
@@ -362,7 +369,13 @@ const RPSGame = ({ wsEvent }) => {
                             </button>
                         )}
 
-                        {gameState === 'waiting' && !manualMode && <span className="pulse">Waiting for Player Gesture...</span>}
+                        {gameState === 'waiting' && !manualMode && (
+                            <span className="pulse">
+                                {currentPrediction === 'REST' || currentPrediction === 'UNKNOWN'
+                                    ? "Waiting for Player Gesture..."
+                                    : "Recording Gesture..."}
+                            </span>
+                        )}
                         {gameState === 'waiting_for_rest' && !manualMode && <span className="animate-pulse text-yellow-400">Release Gesture...</span>}
                         {gameState === 'waiting' && manualMode && <span className="pulse">Manual Mode: press <strong>R</strong>/<strong>P</strong>/<strong>S</strong></span>}
                         {gameState !== 'waiting' && gameState !== 'waiting_for_rest' && gameState !== 'idle' && <span>Result Received</span>}

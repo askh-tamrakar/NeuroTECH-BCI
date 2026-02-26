@@ -82,5 +82,11 @@
     "password": "sdfadfs",
     "type": "login",
     "timestamp": 1772096957825
+  },
+  {
+    "email": "user@example.com",
+    "password": "password123",
+    "type": "login",
+    "timestamp": 1772114847955
   }
 ]

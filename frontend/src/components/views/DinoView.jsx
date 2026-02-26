@@ -830,7 +830,7 @@ export default function DinoView({ wsData, wsEvent, isPaused }) {
                 <div className="game-sidebar pr-1.5">
                     <div className="shrink-0" style={{ height: '85px' }} />
                     {/* Camera Panel */}
-                    <CameraPanel />
+                    <CameraPanel initialCameraOn={false} />
 
                     {/* Eye Controls Panel */}
                     <div className="card bg-surface border border-border shadow-card rounded-2xl p-4 " style={{ flexShrink: 0 }}>

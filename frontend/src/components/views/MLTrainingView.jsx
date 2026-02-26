@@ -167,6 +167,13 @@ const HyperparametersCard = ({ params, onChange }) => (
                 </div>
                 <input type="range" min="0.1" max="0.9" step="0.05" name="test_size" value={params.test_size} onChange={onChange} className="w-full accent-[var(--primary)]" />
             </div>
+            <div>
+                <div className="flex justify-between mb-1">
+                    <span className="text-xs text-[var(--text)]">Pruning (Min Impurity Decr)</span>
+                    <span className="text-xs font-mono text-[var(--primary)]">{params.min_impurity_decrease}</span>
+                </div>
+                <input type="range" min="0" max="0.2" step="0.005" name="min_impurity_decrease" value={params.min_impurity_decrease} onChange={onChange} className="w-full accent-[var(--primary)]" />
+            </div>
         </div>
     </div>
 );
@@ -427,8 +434,8 @@ export default function MLTrainingView() {
 
     // Params per sensor
     const [params, setParams] = useState({
-        EMG: { n_estimators: 100, max_depth: 8, test_size: 0.2 },
-        EOG: { n_estimators: 50, max_depth: 5, test_size: 0.2 }
+        EMG: { n_estimators: 100, max_depth: 8, test_size: 0.2, min_impurity_decrease: 0.0 },
+        EOG: { n_estimators: 50, max_depth: 5, test_size: 0.2, min_impurity_decrease: 0.0 }
     });
 
     const activeResult = results[activeTab];
@@ -549,7 +556,7 @@ export default function MLTrainingView() {
             ...prev,
             [activeTab]: {
                 ...prev[activeTab],
-                [name]: name === 'test_size' ? parseFloat(value) : parseInt(value)
+                [name]: (name === 'test_size' || name === 'min_impurity_decrease') ? parseFloat(value) : parseInt(value)
             }
         }));
     };

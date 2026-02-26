@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 
 const SettingsContext = createContext(null);
 
@@ -64,6 +64,30 @@ const DEFAULT_SETTINGS = {
             test_size: 0.2,
             selectedChannel: 0,
         }
+    },
+    keymap: {
+        collection: {
+            startStop: 'Enter',
+            changeTarget: 'ShiftLeft',
+            deleteLatest: 'ControlRight',
+            deleteAll: 'Space',
+            toggleAuto: 'Numpad1',
+            toggleZoom: 'Numpad2',
+            toggleTimeWindow: 'Numpad0',
+            appendSample: 'NumpadEnter',
+            limitIncr5: 'ArrowUp',
+            limitDecr5: 'ArrowDown',
+            limitIncr1: 'ArrowRight',
+            limitDecr1: 'ArrowLeft',
+            newSession: 'AltRight',
+            toggleWinDuration: 'NumpadDecimal'
+        }
+    },
+    collectionState: {
+        zoom: 1,
+        timeWindow: 3000, // 3s
+        windowDuration: 1500,
+        autoLimit: 30
     }
 };
 
@@ -88,7 +112,7 @@ export function SettingsProvider({ children }) {
     }, [settings]);
 
     // Update a specific setting section
-    const updateSettings = (section, newValues) => {
+    const updateSettings = useCallback((section, newValues) => {
         setSettings(prev => ({
             ...prev,
             [section]: {
@@ -96,10 +120,10 @@ export function SettingsProvider({ children }) {
                 ...newValues
             }
         }));
-    };
+    }, []);
 
     // Deep update helper (for nested objects like dino.visuals)
-    const updateDeepSettings = (path, value) => {
+    const updateDeepSettings = useCallback((path, value) => {
         setSettings(prev => {
             const next = { ...prev };
             const keys = path.split('.');
@@ -111,10 +135,10 @@ export function SettingsProvider({ children }) {
             current[keys[keys.length - 1]] = value;
             return next;
         });
-    };
+    }, []);
 
     // Reset a section or all to defaults
-    const resetSettings = (section = null) => {
+    const resetSettings = useCallback((section = null) => {
         if (section) {
             setSettings(prev => ({
                 ...prev,
@@ -123,15 +147,17 @@ export function SettingsProvider({ children }) {
         } else {
             setSettings(DEFAULT_SETTINGS);
         }
-    };
+    }, []);
+
+    const contextValue = useMemo(() => ({
+        settings,
+        updateSettings,
+        updateDeepSettings,
+        resetSettings
+    }), [settings, updateSettings, updateDeepSettings, resetSettings]);
 
     return (
-        <SettingsContext.Provider value={{
-            settings,
-            updateSettings,
-            updateDeepSettings,
-            resetSettings
-        }}>
+        <SettingsContext.Provider value={contextValue}>
             {children}
         </SettingsContext.Provider>
     );

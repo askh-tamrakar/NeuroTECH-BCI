@@ -39,6 +39,11 @@ def create_app():
     # Init SocketIO
     socketio.init_app(app)
     
+    @socketio.on('ping')
+    def handle_ping():
+        from flask_socketio import emit
+        emit('pong')
+    
     # Encoding fix
     try:
         if hasattr(sys.stdout, 'reconfigure'):

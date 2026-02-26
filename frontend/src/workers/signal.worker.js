@@ -336,7 +336,7 @@ function draw() {
     };
 
     // Find the split index
-    let splitIndex = points.length;
+    let splitIndex = 0;
     for (let i = points.length - 1; i >= 0; i--) {
         if (points[i].time < cycleStartTs) {
             splitIndex = i + 1;

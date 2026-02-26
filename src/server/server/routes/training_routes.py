@@ -42,23 +42,24 @@ def api_train_emg():
         params = request.get_json() or {}
         target_table = params.get('table_name', 'emg_windows')
         
-        # Bypass DB check if ALL
-        if target_table != 'ALL':
-            try:
-                conn = db_manager.connect('EMG')
-                cursor = conn.cursor()
-                cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (target_table,))
-                if not cursor.fetchone():
-                     return jsonify({"error": f"Table {target_table} not found"}), 404
-                     
-                n = conn.execute(f"SELECT COUNT(*) FROM {target_table}").fetchone()[0]
-                conn.close()
-                
-                print(f"[Training] Train Request on {target_table}. Contains {n} samples.")
-                if n == 0:
-                    return jsonify({"error": "Database is empty (0 samples). Please Record Data and hit Stop."}), 400
-            except Exception as e:
-                print(f"[Training] DB Check failed: {e}")
+        if target_table == 'ALL':
+            target_table = 'emg_windows'
+
+        try:
+            conn = db_manager.connect('EMG')
+            cursor = conn.cursor()
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (target_table,))
+            if not cursor.fetchone():
+                 return jsonify({"error": f"Table {target_table} not found"}), 404
+                 
+            n = conn.execute(f"SELECT COUNT(*) FROM {target_table}").fetchone()[0]
+            conn.close()
+            
+            print(f"[Training] Train Request on {target_table}. Contains {n} samples.")
+            if n == 0:
+                return jsonify({"error": "Database is empty (0 samples). Please Record Data and hit Stop."}), 400
+        except Exception as e:
+            print(f"[Training] DB Check failed: {e}")
 
         n_est = int(params.get('n_estimators', 100))
         max_d = params.get('max_depth')
@@ -66,10 +67,18 @@ def api_train_emg():
         else: max_d = int(max_d)
         
         test_size = float(params.get('test_size', 0.2))
+        min_impurity_decrease = float(params.get('min_impurity_decrease', 0.0))
         
         model_name = params.get('model_name', 'emg_rf')
         
-        result = train_emg_model(n_estimators=n_est, max_depth=max_d, test_size=test_size, table_name=target_table, model_name=model_name)
+        result = train_emg_model(
+            n_estimators=n_est, 
+            max_depth=max_d, 
+            min_impurity_decrease=min_impurity_decrease,
+            test_size=test_size, 
+            table_name=target_table, 
+            model_name=model_name
+        )
         if "error" in result:
              return jsonify(result), 400
         return jsonify(result)
@@ -83,14 +92,23 @@ def api_train_eog():
         n_est = int(params.get('n_estimators', 100))
         max_d = params.get('max_depth')
         table_name = params.get('table_name') # Extract session table name
+        if table_name == 'ALL': table_name = 'eog_windows'
         model_name = params.get('model_name', 'eog_rf')
 
         if max_d == 'None' or max_d is None: max_d = None
         else: max_d = int(max_d)
         
         test_size = float(params.get('test_size', 0.2))
+        min_impurity_decrease = float(params.get('min_impurity_decrease', 0.0))
         
-        result = train_eog_model(n_estimators=n_est, max_depth=max_d, test_size=test_size, table_name=table_name, model_name=model_name)
+        result = train_eog_model(
+            n_estimators=n_est, 
+            max_depth=max_d, 
+            min_impurity_decrease=min_impurity_decrease,
+            test_size=test_size, 
+            table_name=table_name, 
+            model_name=model_name
+        )
         if "error" in result:
              return jsonify(result), 400
         return jsonify(result)
@@ -360,8 +378,14 @@ def api_save_window():
         
         if sensor.upper() == 'EMG':
             db_manager.insert_window(features, label_int, session_id=str(int(ts)), table_name=table_name)
+            # Also insert into the global evaluation table (skip if merged session)
+            if "merge" not in table_name.lower():
+                db_manager.insert_window(features, label_int, session_id=str(int(ts)), table_name="emg_windows")
         elif sensor.upper() == 'EOG':
             db_manager.insert_eog_window(features, label_int, session_id=str(int(ts)), table_name=table_name)
+            # Also insert into the global evaluation table (skip if merged session)
+            if "merge" not in table_name.lower():
+                db_manager.insert_eog_window(features, label_int, session_id=str(int(ts)), table_name="eog_windows")
 
         # Update Config Logic (Auto-Calibration on fly)
         action_entry = sensor_features.setdefault(action, {})

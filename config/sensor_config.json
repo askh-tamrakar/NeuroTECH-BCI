@@ -12,15 +12,15 @@
     },
     "ch1": {
       "enabled": true,
-      "sensor": "EEG"
+      "sensor": "EOG"
     },
     "ch2": {
-      "enabled": true,
-      "sensor": "EMG"
+      "sensor": "",
+      "enabled": true
     },
     "ch3": {
-      "enabled": true,
-      "sensor": "EMG"
+      "sensor": "",
+      "enabled": true
     }
   },
   "display": {
@@ -438,7 +438,7 @@
           2.0984973495078325
         ]
       },
-      "detection_method": "ML"
+      "detection_method": "Threshold"
     }
   },
   "num_channels": 4,

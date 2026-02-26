@@ -2,13 +2,12 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 // Imports
 import { Camera, CameraOff, SwitchCamera, ZoomIn } from 'lucide-react';
 import '../../styles/ui/CameraPanel.css';
-
-const CameraPanel = () => {
+const CameraPanel = ({ initialCameraOn = true }) => {
     const videoRef = useRef(null);
     const [error, setError] = useState(null);
     const [devices, setDevices] = useState([]);
     const [currentDeviceIndex, setCurrentDeviceIndex] = useState(0);
-    const [isCameraOn, setIsCameraOn] = useState(true);
+    const [isCameraOn, setIsCameraOn] = useState(initialCameraOn);
     const [zoom, setZoom] = useState(1);
 
     // Enumerate devices on mount

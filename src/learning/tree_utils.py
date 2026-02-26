@@ -33,7 +33,7 @@ def tree_to_json(tree, feature_names):
                 "attributes": {
                     "samples": int(tree_.n_node_samples[node]),
                     "gini": float(tree_.impurity[node]),
-                    "value": [int(v) for v in value]
+                    "value": [round(float(v), 2) for v in value]
                 }
             }
         # Internal node

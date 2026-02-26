@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import AnimatedList from '../ui/AnimatedList';
-import { Trash, ClipboardX, Trash2, FolderPlus, RefreshCw, ChevronLeft, ChevronRight, Edit2, GitMerge, Check, X } from 'lucide-react';
+import { Trash, ClipboardX, Trash2, FolderPlus, RefreshCw, ChevronLeft, ChevronRight, Edit2, GitMerge, Check, X, ArchiveX } from 'lucide-react';
 
 export default function SessionManagerPanel({
     activeSensor,
     currentSessionName,
     onSessionChange,
     refreshTrigger = 0,
-    isTestMode = false // New Prop
+    isTestMode = false,
+    inputRef // Ref for focusing from parent
 }) {
     const SENSOR_LABEL_MAP = {
         'EMG': { 0: 'Rest', 1: 'Rock', 2: 'Paper', 3: 'Scissors' },
@@ -476,9 +477,9 @@ export default function SessionManagerPanel({
                             Loading data...
                         </div>
                     ) : selectedSessionRows.length === 0 && !rowsLoading ? (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center text-muted text-xl opacity-50 gap-2">
-                            <span className="text-6xl">📋</span>
-                            <span >No data available</span>
+                        <div className="absolute inset-0 flex flex-col items-center justify-center text-muted opacity-50 gap-2">
+                            <ClipboardX size={60} strokeWidth={1.5} />
+                            <span className="text-2xl">No data available</span>
                         </div>
                     ) : (
                         <table className="w-full text-left border-collapse">
@@ -554,11 +555,19 @@ export default function SessionManagerPanel({
                     {!isTestMode && !mergeMode && (
                         <div className="flex gap-1">
                             <input
+                                ref={inputRef}
                                 className="w-full bg-bg border border-border rounded px-2 py-1 text-xs text-text focus:border-primary outline-none font-mono"
                                 placeholder="New Session..."
                                 value={newSessionInput}
                                 onChange={e => setNewSessionInput(e.target.value)}
-                                onKeyDown={e => e.key === 'Enter' && handleCreate()}
+                                onKeyDown={e => {
+                                    if (e.key === 'Enter') {
+                                        handleCreate();
+                                        e.target.blur();
+                                    } else if (e.key === 'Escape') {
+                                        e.target.blur();
+                                    }
+                                }}
                             />
                             <button
                                 onClick={handleCreate}
@@ -603,13 +612,22 @@ export default function SessionManagerPanel({
                 </div>
 
                 <div className="flex-grow overflow-hidden relative p-0 bg-surface/30">
-                    {sessions.length === 0 ? (
-                        <div className="text-center text-muted text-base italic py-4">No saved sessions</div>
+                    {loading ? (
+                        <div className="flex flex-col items-center justify-center h-full text-muted space-y-2 pb-10">
+                            <RefreshCw size={40} className="animate-spin opacity-40" />
+                            <span className="text-sm">Fetching sessions...</span>
+                        </div>
+                    ) : sessions.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center h-full text-muted opacity-60 space-y-2 pb-10">
+                            <ArchiveX size={50} strokeWidth={1.5} />
+                            <span className="text-xl italic">No saved sessions</span>
+                        </div>
                     ) : (
                         <AnimatedList
                             items={sessions}
                             selectedIndex={activeSessionIndex}
                             onItemSelect={handleSessionSelect}
+                            enableArrowNavigation={false}
                             className="h-full"
                             itemClassName="text-xs font-mono py-1 px-2 mb-0.5"
                             renderItem={(sessionName, index, isSelected) => {
@@ -657,7 +675,10 @@ export default function SessionManagerPanel({
                                 }
 
                                 return (
-                                    <div onClick={() => handleSessionSelect(sessionName, index)} className={`flex justify-between items-center pr-2 py-0.5 rounded-md cursor-pointer transition-all group ${isSelected
+                                    <div onClick={() => {
+                                        handleSessionSelect(sessionName, index);
+                                        if (inputRef && inputRef.current) inputRef.current.blur();
+                                    }} className={`flex justify-between items-center pr-2 py-0.5 rounded-md cursor-pointer transition-all group ${isSelected
                                         ? 'bg-primary/10 border border-primary/20 text-primary'
                                         : 'hover:bg-white/5 border border-transparent text-muted hover:text-text'
                                         }`}>

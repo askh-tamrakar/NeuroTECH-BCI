@@ -106,22 +106,11 @@ function handleCalcSelection(payload) {
     // x_ms is relative time in window [0, timeWindow] ? No.
     // Let's reverse properly:
 
-    const pxToTime = (px) => {
-        // x_px to relative time (0 to timeWindow)
-        // x_rel_ms = (px / width) * timeWindow
-        // but 0 is LEFT edge (past), width is RIGHT edge (future).
-        // My draw logic: x=0 is 'now - center', x=width is 'now + center'.
-        // wait, draw logic:
-        /*
-            const age = now - p.time;
-            const x_ms = centerTimeOffset - age; 
-            const x_px = timeToPx(x_ms);
-            
-            x_px = 0 when x_ms = 0 => age = centerTimeOffset => p.time = now - center
-            x_px = width when x_ms = timeWindow => age = center - timeWindow = -center => p.time = now + center
-        */
+    const leftMargin = 50;
+    const drawWidth = width - leftMargin;
 
-        const x_rel_ms = (px / width) * timeWindow; // 0 to 5000
+    const pxToTime = (px) => {
+        const x_rel_ms = ((px - leftMargin) / drawWidth) * timeWindow; // 0 to timeWindow
         const age = centerTimeOffset - x_rel_ms;
         return now - age;
     };
@@ -222,7 +211,9 @@ function draw() {
     const timeWindow = config.timeWindow;
     const centerTimeOffset = timeWindow / 2;
 
-    const timeToPx = (t_rel_ms) => (t_rel_ms / timeWindow) * width;
+    const leftMargin = 45;
+    const drawWidth = width - leftMargin;
+    const timeToPx = (t_rel_ms) => leftMargin + (t_rel_ms / timeWindow) * drawWidth;
 
     const yMin = config.yMin;
     const yMax = config.yMax;
@@ -236,7 +227,13 @@ function draw() {
     };
 
     // Draw Grid (Background)
-    drawGrid(now, timeWindow, centerTimeOffset);
+    drawGrid(now, timeWindow, centerTimeOffset, leftMargin, padY, availH);
+
+    // Context save and clip to prevent drawing over left margin
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(leftMargin, 0, drawWidth, height);
+    ctx.clip();
 
     // Draw Windows (Behind Signal)
     windows.forEach(win => {
@@ -329,7 +326,7 @@ function draw() {
     ctx.lineWidth = 3;
 
     // Neon Glow
-    ctx.shadowBlur = 8;
+    ctx.shadowBlur = 6;
     ctx.shadowColor = config.lineColor;
 
     ctx.beginPath();
@@ -390,13 +387,15 @@ function draw() {
     // Draw Cursor (Center)
     const centerPx = timeToPx(centerTimeOffset);
 
-    // 1. Vertical Line
+    // 1. Vertical Line (0 x-axis line bold dash)
     ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 1;
+    ctx.lineWidth = 2; // Bold
+    ctx.setLineDash([8, 8]); // Dash
     ctx.beginPath();
     ctx.moveTo(centerPx, 0);
     ctx.lineTo(centerPx, height);
     ctx.stroke();
+    ctx.setLineDash([]); // Reset line dash
 
     // 2. Current Value Dot
     if (points.length > 0) {
@@ -410,23 +409,9 @@ function draw() {
         ctx.arc(centerPx, y_px, 4, 0, Math.PI * 2);
         ctx.fill();
         ctx.shadowBlur = 0; // Reset
-
-        // Future dashed line
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
-        ctx.setLineDash([4, 4]);
-        ctx.beginPath();
-        ctx.moveTo(centerPx, valToPy(0)); // Center line? Or current val?
-        // User asked for "horizontal line on the point y = 0" usually means baseline?
-        // Let's stick to standard centerline if zero-centered, or just continue the trend?
-        // Let's draw a faint baseline at 0 if visible
-        const zeroY = valToPy(0);
-        if (zeroY >= 0 && zeroY <= height) {
-            ctx.moveTo(0, zeroY);
-            ctx.lineTo(width, zeroY);
-        }
-        ctx.stroke();
-        ctx.setLineDash([]);
     }
+
+    ctx.restore(); // Restore clip
 
     // Scanner
     if (scannerX !== null && scannerValue !== null) {
@@ -437,20 +422,65 @@ function draw() {
     }
 }
 
-function drawGrid(now, timeWindow, centerTimeOffset) {
-    const timeToPx = (t_rel_ms) => (t_rel_ms / timeWindow) * width;
+function drawGrid(now, timeWindow, centerTimeOffset, leftMargin, padY, availH) {
+    // We get leftMargin from parameters, fallback if undefined (like empty grid)
+    leftMargin = leftMargin;
+    const drawWidth = width - leftMargin;
+    const timeToPx = (t_rel_ms) => leftMargin + (t_rel_ms / timeWindow) * drawWidth;
 
-    ctx.strokeStyle = config.gridColor || '#333';
+    ctx.globalpha = 0.3;
     ctx.lineWidth = 1;
-    ctx.font = '10px monospace';
-    ctx.fillStyle = config.textColor || '#888';
+    ctx.font = '13px monospace'; // increased font
+    ctx.fillStyle = config.themeColor || '#888';
+
+    // Horizontal (Value) - Y-Axis Labels
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+
+    const yMin = config.yMin;
+    const yMax = config.yMax;
+    const yRange = yMax - yMin || 1;
+
+    for (let i = 0; i <= 5; i++) {
+        const norm = i / 5;
+        const val = yMin + norm * yRange;
+        // If padY/availH not passed, recalculate
+        const currentPadY = padY !== undefined ? padY : height * 0.1;
+        const currentAvailH = availH !== undefined ? availH : height - 2 * currentPadY;
+        const y = height - (currentPadY + norm * currentAvailH);
+
+        // Draw text label
+        ctx.fillText(Math.round(val), leftMargin - 10, y);
+
+        // Draw horizontal grid lines (Y-axis lines) with dashed theme color
+        ctx.strokeStyle = config.themeColor || config.gridColor || '#333';
+        ctx.setLineDash([3, 3]);
+        ctx.beginPath();
+        ctx.moveTo(leftMargin, y);
+        ctx.lineTo(width, y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+    }
+
+    // Draw horizontal axis (X-axis) at y=0, starting after labels 
+    const currentPadY = padY !== undefined ? padY : height * 0.1;
+    const currentAvailH = availH !== undefined ? availH : height - 2 * currentPadY;
+    const zeroY = height - (currentPadY + ((0 - yMin) / yRange) * currentAvailH);
+    if (zeroY >= currentPadY && zeroY <= height - currentPadY) {
+        ctx.strokeStyle = config.themeColor;
+        ctx.setLineDash([8, 5]);
+        ctx.beginPath();
+        ctx.moveTo(leftMargin, zeroY);
+        ctx.lineTo(width, zeroY);
+        ctx.stroke();
+        ctx.setLineDash([]);
+    }
+
+    // Vertical (Time)Grid - Only Draw Labels
+    ctx.fillStyle = config.themeColor || '#888';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
 
-    ctx.beginPath();
-
-    // Vertical (Time)Grid
-    // Align to nearest second of ABSOLUTE time logic
     const startSec = Math.floor((now - centerTimeOffset) / 1000);
     const endSec = Math.floor((now + centerTimeOffset) / 1000);
 
@@ -460,36 +490,13 @@ function drawGrid(now, timeWindow, centerTimeOffset) {
         const x_ms = centerTimeOffset - age;
         const x_px = timeToPx(x_ms);
 
-        // Draw Line
-        ctx.moveTo(x_px, 0);
-        ctx.lineTo(x_px, height);
+        if (x_px < leftMargin) continue;
 
-        // Draw Label
-        // Format relative to center?
+        // Draw Label Only
         const diff = (t_abs - now) / 1000;
         const label = diff > 0 ? `+${diff.toFixed(0)}s` : `${diff.toFixed(0)}s`;
 
         ctx.fillText(label, x_px, height - 12);
     }
-
-    // Horizontal (Value)
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'bottom';
-
-    const yMin = config.yMin;
-    const yMax = config.yMax;
-    const yRange = yMax - yMin || 1;
-
-    for (let i = 0; i <= 5; i++) {
-        const norm = i / 5;
-        const val = yMin + norm * yRange;
-        const y = height - (height * 0.1 + norm * (height * 0.8)); // Match valToPy logic roughly
-
-        ctx.moveTo(0, y);
-        ctx.lineTo(width, y);
-
-        ctx.fillText(Math.round(val), 2, y - 2);
-    }
-    ctx.stroke();
 }
 

@@ -213,7 +213,7 @@ export default function Dashboard() {
               {currentPage === 'rps' && <RPSGame wsEvent={lastEvent} />}
               {currentPage === 'data_collection' && <DataCollectionView wsData={lastMessage} wsEvent={lastEvent} config={lastConfig} />}
               {currentPage === 'ml_training' && <MLTrainingView />}
-              {currentPage === 'settings' && <SettingsView />}
+              {currentPage === 'settings' && <SettingsView latency={latency} />}
 
               {showSpacers && <div className="h-[35px] shrink-0" />}
             </>

@@ -187,6 +187,9 @@ def api_emg_stop():
                 # Save to DB (Specific Table)
                 if db_manager.insert_window(feats, label_int, session_id, table_name=target_table):
                     saved_count += 1
+                    # Also append to global table if not a merged session
+                    if "merge" not in target_table.lower():
+                        db_manager.insert_window(feats, label_int, session_id, table_name="emg_windows")
                     
         print(f"[Session_Routes] 💾 Saved {saved_count} EMG windows to {target_table}")
         
@@ -296,6 +299,9 @@ def api_eog_stop():
                 
                 if db_manager.insert_eog_window(feats, label_int, session_id, table_name=target_table):
                     saved_count += 1
+                    # Also append to global table if not a merged session
+                    if "merge" not in target_table.lower():
+                        db_manager.insert_eog_window(feats, label_int, session_id, table_name="eog_windows")
 
         print(f"[Session_Routes] 💾 Saved {saved_count} EOG windows to {target_table}")
         state.session.reset_recording_state()

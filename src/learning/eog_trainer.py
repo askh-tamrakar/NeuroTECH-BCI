@@ -54,7 +54,7 @@ EOG_FEATURES = [
     'asymmetry', 'peak_count', 'kurtosis', 'skewness'
 ]
 
-def train_eog_model(n_estimators=100, max_depth=None, test_size=0.2, table_name="eog_windows", model_name="eog_rf"):
+def train_eog_model(n_estimators=100, max_depth=None, min_impurity_decrease=0.0, test_size=0.2, table_name="eog_windows", model_name="eog_rf"):
     """
     Trains a Random Forest classifier on EOG data from the database.
     """
@@ -63,7 +63,7 @@ def train_eog_model(n_estimators=100, max_depth=None, test_size=0.2, table_name=
     # Load data from DB
     try:
         if not table_name: table_name = "eog_windows"
-        if table_name == "undefined" or table_name == "null": table_name = "eog_windows"
+        if table_name == "undefined" or table_name == "null" or table_name == "ALL": table_name = "eog_windows"
 
         # Check if table exists first
         cursor = conn.cursor()
@@ -103,7 +103,12 @@ def train_eog_model(n_estimators=100, max_depth=None, test_size=0.2, table_name=
     X_test_scaled = scaler.transform(X_test)
 
     # Train Random Forest
-    rf = RandomForestClassifier(n_estimators=n_estimators, max_depth=max_depth, random_state=42)
+    rf = RandomForestClassifier(
+        n_estimators=n_estimators, 
+        max_depth=max_depth, 
+        min_impurity_decrease=min_impurity_decrease,
+        random_state=42
+    )
     rf.fit(X_train_scaled, y_train)
 
     # Evaluate
@@ -125,6 +130,7 @@ def train_eog_model(n_estimators=100, max_depth=None, test_size=0.2, table_name=
         json.dump({
             "n_estimators": n_estimators,
             "max_depth": max_depth,
+            "min_impurity_decrease": min_impurity_decrease,
             "test_size": test_size,
             "table_name": table_name,
             "created_at": pd.Timestamp.now().isoformat(),
@@ -205,7 +211,7 @@ def evaluate_saved_eog_model(table_name="eog_windows", model_name=None):
         "hyperparameters": hyperparameters
     }
 
-    if not table_name:
+    if not table_name or table_name == "ALL":
         table_name = "eog_windows"
 
     conn = db_manager.connect('EOG')

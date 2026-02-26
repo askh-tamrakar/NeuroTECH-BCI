@@ -82,74 +82,39 @@ def get_model_paths(sensor, model_name):
         "meta": sensor_dir / f"{clean_name}_meta.json"
     }
 
-def train_model(sensor, n_estimators=100, max_depth=None, test_size=0.2, table_name=None, model_name=None):
+def train_model(sensor, n_estimators=100, max_depth=None, min_impurity_decrease=0.0, test_size=0.2, table_name=None, model_name=None):
     """
     Generic training function for any sensor.
     """
     sensor = sensor.upper()
 
-    # Logic to load data (Single Table or ALL)
+    if table_name == 'ALL':
+        print(f"[{sensor}] Training on ALL available data (global table)...")
+        table_name = f"{sensor.lower()}_windows"
+
+    if not table_name:
+        table_name = f"{sensor.lower()}_windows"
+    if not model_name:
+        model_name = f"{sensor.lower()}_rf"
+
+    conn = db_manager.connect(sensor)
     df = pd.DataFrame()
     
-    if table_name == 'ALL':
-        # Load ALL data from all sessions + default
-        print(f"[{sensor}] Training on ALL available data...")
-        tables = db_manager.get_session_tables(sensor)
-        default_table = f"{sensor.lower()}_windows"
-        if default_table not in tables:
-            tables.append(default_table)
-            
-        dfs = []
-        conn = db_manager.connect(sensor) # Single connection reusable?
-        try:
-            for t in tables:
-                try:
-                    # Verify existence to be safe
-                    cursor = conn.cursor()
-                    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (t,))
-                    if cursor.fetchone():
-                        sub = pd.read_sql_query(f"SELECT * FROM {t}", conn)
-                        dfs.append(sub)
-                except Exception as e:
-                     print(f"[{sensor}] Warning skipping table {t}: {e}")
-        finally:
+    # Load data from DB
+    try:
+        # Basic validation
+        cursor = conn.cursor()
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table_name,))
+        if not cursor.fetchone():
             conn.close()
-            
-        if dfs:
-            df = pd.concat(dfs, ignore_index=True)
-            # FORCE LABEL TO INT (Fix for 'Unknown label type: unknown')
-            if 'label' in df.columns:
-                df = df.dropna(subset=['label'])
-                df['label'] = df['label'].astype(int)
-            print(f"[{sensor}] Aggregated {len(df)} samples from {len(tables)} tables.")
-        else:
-            return {"error": "No data found in any tables."}
+            return {"error": f"Table {table_name} not found"}
 
-    else:
-        # Single Table Logic
-        if not table_name:
-            table_name = f"{sensor.lower()}_windows"
-        if not model_name:
-            model_name = f"{sensor.lower()}_rf"
-
-        conn = db_manager.connect(sensor)
-        
-        # Load data from DB
-        try:
-            # Basic validation
-            # Check if table exists first to avoid confusing pandas errors
-            cursor = conn.cursor()
-            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table_name,))
-            if not cursor.fetchone():
-                conn.close()
-                return {"error": f"Table {table_name} not found"}
-
-            df = pd.read_sql_query(f"SELECT * FROM {table_name}", conn)
-        except Exception as e:
-            conn.close()
-            return {"error": f"Database read error from {table_name}: {str(e)}"}
-        
+        df = pd.read_sql_query(f"SELECT * FROM {table_name}", conn)
+    except Exception as e:
         conn.close()
+        return {"error": f"Database read error from {table_name}: {str(e)}"}
+    
+    conn.close()
 
 
     if df.empty:
@@ -189,7 +154,12 @@ def train_model(sensor, n_estimators=100, max_depth=None, test_size=0.2, table_n
     X_test_scaled = scaler.transform(X_test)
 
     # Train Random Forest
-    rf = RandomForestClassifier(n_estimators=n_estimators, max_depth=max_depth, random_state=42)
+    rf = RandomForestClassifier(
+        n_estimators=n_estimators, 
+        max_depth=max_depth, 
+        min_impurity_decrease=min_impurity_decrease,
+        random_state=42
+    )
     rf.fit(X_train_scaled, y_train)
 
     # Evaluate
@@ -213,6 +183,7 @@ def train_model(sensor, n_estimators=100, max_depth=None, test_size=0.2, table_n
             "sensor": sensor,
             "n_estimators": n_estimators,
             "max_depth": max_depth,
+            "min_impurity_decrease": min_impurity_decrease,
             "test_size": test_size,
             "table_name": table_name,
             "created_at": datetime.now().isoformat(),
@@ -241,14 +212,14 @@ def train_model(sensor, n_estimators=100, max_depth=None, test_size=0.2, table_n
     }
 
 # Wrappers for backward compatibility / specific use cases
-def train_emg_model(n_estimators=100, max_depth=None, test_size=0.2, table_name="emg_windows", model_name="emg_rf"):
-    return train_model('EMG', n_estimators, max_depth, test_size, table_name, model_name)
+def train_emg_model(n_estimators=100, max_depth=None, min_impurity_decrease=0.0, test_size=0.2, table_name="emg_windows", model_name="emg_rf"):
+    return train_model('EMG', n_estimators, max_depth, min_impurity_decrease, test_size, table_name, model_name)
 
-def train_eog_model(n_estimators=100, max_depth=None, test_size=0.2, table_name="eog_windows", model_name="eog_rf"):
-    return train_model('EOG', n_estimators, max_depth, test_size, table_name, model_name)
+def train_eog_model(n_estimators=100, max_depth=None, min_impurity_decrease=0.0, test_size=0.2, table_name="eog_windows", model_name="eog_rf"):
+    return train_model('EOG', n_estimators, max_depth, min_impurity_decrease, test_size, table_name, model_name)
 
-def train_eeg_model(n_estimators=100, max_depth=None, test_size=0.2, table_name="eeg_windows", model_name="eeg_rf"):
-    return train_model('EEG', n_estimators, max_depth, test_size, table_name, model_name)
+def train_eeg_model(n_estimators=100, max_depth=None, min_impurity_decrease=0.0, test_size=0.2, table_name="eeg_windows", model_name="eeg_rf"):
+    return train_model('EEG', n_estimators, max_depth, min_impurity_decrease, test_size, table_name, model_name)
 
 
 def list_saved_models(sensor='EMG'):

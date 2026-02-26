@@ -38,14 +38,17 @@ function AppContent() {
 import CursorHandler from './components/ui/CursorHandler';
 
 import { ThemeProvider } from './contexts/ThemeContext'
+import { SettingsProvider } from './contexts/SettingsContext'
 
 export default function App() {
   return (
     <ThemeProvider>
-      <CursorHandler />
-      <AuthProvider>
-        <AppContent />
-      </AuthProvider>
+      <SettingsProvider>
+        <CursorHandler />
+        <AuthProvider>
+          <AppContent />
+        </AuthProvider>
+      </SettingsProvider>
     </ThemeProvider>
   )
 }

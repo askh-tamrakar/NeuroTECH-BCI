@@ -22,7 +22,10 @@ export default function LiveView({ wsData, wsEvent, config, isPaused }) {
   }, [channelMapping, numChannels])
 
   // Channel Configuration State (Zoom & Range)
-  const [channelConfig, setChannelConfig] = useState({})
+  const [channelConfig, setChannelConfig] = useState(() => {
+    const saved = localStorage.getItem('liveViewChannelConfig')
+    return saved ? JSON.parse(saved) : {}
+  })
 
   // Refs for direct worker communication
   const chartRefs = useRef({});
@@ -154,6 +157,12 @@ export default function LiveView({ wsData, wsEvent, config, isPaused }) {
       return changed ? next : prev
     })
   }, [activeChannels, defaultTimeWindowMs])
+
+  useEffect(() => {
+    if (Object.keys(channelConfig).length > 0) {
+      localStorage.setItem('liveViewChannelConfig', JSON.stringify(channelConfig))
+    }
+  }, [channelConfig])
 
   const updateChannelConfig = (chIdx, key, value) => {
     setChannelConfig(prev => ({
