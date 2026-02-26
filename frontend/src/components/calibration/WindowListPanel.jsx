@@ -114,90 +114,86 @@ export default function WindowListPanel({
             </div>
 
             {/* Window list - scrollable */}
-            <div className="flex-grow min-h-0 flex flex-col justify-center overflow-hidden relative pt-2">
+            <div className="flex-grow min-h-0 flex flex-col overflow-y-auto relative pt-2 no-scrollbar px-2 space-y-2 pb-4">
                 {windows.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-40 text-muted text-xl italic opacity-50 space-y-2">
                         <span className="text-2xl">📉</span>
                         <span>No windows collected yet</span>
                     </div>
                 ) : (
-                    <AnimatedList
-                        items={windows.slice().reverse()}
-                        className="h-full"
-                        itemClassName="px-2 bg-transparent border-0"
-                        onItemSelect={(win) => onHighlight?.(win)}
-                        renderItem={(win, index, isSelected) => (
-                            <div
-                                className={`py-1 px-2 flex flex-col gap-0 rounded-lg border transition-all cursor-pointer group hover:translate-x-1 ${(win.status === 'recording' || win.status === 'pending')
-                                    ? 'bg-yellow-500/5 border-yellow-500/50 hover:border-yellow-500' // Yellow (Pending)
-                                    : (win.status === 'collected')
-                                        ? 'bg-blue-500/5 border-blue-500/50 hover:border-blue-500' // Blue (Ready)
-                                        : (win.status === 'saved' || win.status === 'correct')
-                                            ? 'bg-emerald-500/5 border-emerald-500/50 hover:border-emerald-500' // Green (Saved)
-                                            : (win.status === 'error' || win.status === 'incorrect')
-                                                ? 'bg-red-500/5 border-red-500/50 hover:border-red-500' // Red (Error)
-                                                : 'bg-black/5 border-gray-600 hover:border-black' // Black (Unknown)
-                                    }`}
-                            >
-                                <div className="flex justify-between items-center">
-                                    <div className="flex flex-col gap-2">
-                                        {/* Class Indicator */}
-                                        <span className="font-bold text-sm text-text uppercase">{win.label}</span>
+                    windows.slice().reverse().map((win, index) => (
+                        <div
+                            key={win.id || index}
+                            onClick={() => onHighlight?.(win)}
+                            className={`py-1 px-2 flex flex-col gap-0 rounded-lg border transition-all cursor-pointer group hover:translate-x-1 ${(win.status === 'recording' || win.status === 'pending')
+                                ? 'bg-yellow-500/5 border-yellow-500/50 hover:border-yellow-500' // Yellow (Pending)
+                                : (win.status === 'collected')
+                                    ? 'bg-blue-500/5 border-blue-500/50 hover:border-blue-500' // Blue (Ready)
+                                    : (win.status === 'saved' || win.status === 'correct')
+                                        ? 'bg-emerald-500/5 border-emerald-500/50 hover:border-emerald-500' // Green (Saved)
+                                        : (win.status === 'error' || win.status === 'incorrect')
+                                            ? 'bg-red-500/5 border-red-500/50 hover:border-red-500' // Red (Error)
+                                            : 'bg-black/5 border-gray-600 hover:border-black' // Black (Unknown)
+                                }`}
+                        >
+                            <div className="flex justify-between items-center">
+                                <div className="flex flex-col gap-2">
+                                    {/* Class Indicator */}
+                                    <span className="font-bold text-sm text-text uppercase">{win.label}</span>
 
-                                        {/* Status Indicator */}
-                                        <div className="flex items-center gap-1">
-                                            <span className={`w-1.5 h-1.5 rounded-full ${(win.status === 'recording' || win.status === 'pending') ? 'bg-yellow-500' :
-                                                (win.status === 'collected') ? 'bg-blue-500' :
-                                                    (win.status === 'saved' || win.status === 'correct') ? 'bg-emerald-500' :
-                                                        (win.status === 'error' || win.status === 'incorrect') ? 'bg-red-500' :
-                                                            'bg-gray-600'
-                                                }`}></span>
-                                            <span className={`text-xs uppercase ${(win.status === 'recording' || win.status === 'pending') ? 'text-yellow-500' :
-                                                (win.status === 'collected') ? 'text-blue-500' :
-                                                    (win.status === 'saved' || win.status === 'correct') ? 'text-emerald-500' :
-                                                        (win.status === 'error' || win.status === 'incorrect') ? 'text-red-500' :
-                                                            'text-muted'
-                                                }`}>
-                                                {(win.status === 'recording' || win.status === 'pending') ? 'Recording' :
-                                                    (win.status === 'collected') ? 'Ready' :
-                                                        (win.status === 'saved') ? 'Saved' :
-                                                            (win.status === 'correct') ? 'Correct' :
-                                                                (win.status === 'incorrect') ? 'Incorrect' :
-                                                                    'Error'}
-                                            </span>
-                                        </div>
-                                    </div>
-
-                                    <div className="flex flex-col gap-2 content-center">
-                                        {/* Graph */}
-                                        <div className="w-24 h-8 flex items-center">
-                                            <Sparkline data={win.samples} color={
-                                                (win.status === 'recording' || win.status === 'pending') ? '#eab308' :
-                                                    (win.status === 'collected') ? '#3b82f6' :
-                                                        (win.status === 'saved' || win.status === 'correct') ? '#10b981' :
-                                                            (win.status === 'error' || win.status === 'incorrect') ? '#ef4444' :
-                                                                '#6b7280'
-                                            } />
-                                        </div>
-                                        <span className="text-xs text-muted font-mono">
-                                            {(win.endTime - win.startTime).toFixed(0)}ms
+                                    {/* Status Indicator */}
+                                    <div className="flex items-center gap-1">
+                                        <span className={`w-1.5 h-1.5 rounded-full ${(win.status === 'recording' || win.status === 'pending') ? 'bg-yellow-500' :
+                                            (win.status === 'collected') ? 'bg-blue-500' :
+                                                (win.status === 'saved' || win.status === 'correct') ? 'bg-emerald-500' :
+                                                    (win.status === 'error' || win.status === 'incorrect') ? 'bg-red-500' :
+                                                        'bg-gray-600'
+                                            }`}></span>
+                                        <span className={`text-xs uppercase ${(win.status === 'recording' || win.status === 'pending') ? 'text-yellow-500' :
+                                            (win.status === 'collected') ? 'text-blue-500' :
+                                                (win.status === 'saved' || win.status === 'correct') ? 'text-emerald-500' :
+                                                    (win.status === 'error' || win.status === 'incorrect') ? 'text-red-500' :
+                                                        'text-muted'
+                                            }`}>
+                                            {(win.status === 'recording' || win.status === 'pending') ? 'Recording' :
+                                                (win.status === 'collected') ? 'Ready' :
+                                                    (win.status === 'saved') ? 'Saved' :
+                                                        (win.status === 'correct') ? 'Correct' :
+                                                            (win.status === 'incorrect') ? 'Incorrect' :
+                                                                'Error'}
                                         </span>
                                     </div>
+                                </div>
 
-                                    <div className="flex gap-1 opacity-100">
-                                        {/* Trash */}
-                                        <button
-                                            onClick={(e) => { e.stopPropagation(); onDelete?.(win.id); }}
-                                            className="p-1 hover:bg-red-500/10 rounded text-red-400 text-xs transition-colors"
-                                            title="Delete window"
-                                        >
-                                            <Trash2 size={16} />
-                                        </button>
+                                <div className="flex flex-col gap-2 content-center">
+                                    {/* Graph */}
+                                    <div className="w-24 h-8 flex items-center">
+                                        <Sparkline data={win.samples} color={
+                                            (win.status === 'recording' || win.status === 'pending') ? '#eab308' :
+                                                (win.status === 'collected') ? '#3b82f6' :
+                                                    (win.status === 'saved' || win.status === 'correct') ? '#10b981' :
+                                                        (win.status === 'error' || win.status === 'incorrect') ? '#ef4444' :
+                                                            '#6b7280'
+                                        } />
                                     </div>
+                                    <span className="text-xs text-muted font-mono">
+                                        {(win.endTime - win.startTime).toFixed(0)}ms
+                                    </span>
+                                </div>
+
+                                <div className="flex gap-1 opacity-100">
+                                    {/* Trash */}
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); onDelete?.(win.id); }}
+                                        className="p-1 hover:bg-red-500/10 rounded text-red-400 text-xs transition-colors"
+                                        title="Delete window"
+                                    >
+                                        <Trash2 size={16} />
+                                    </button>
                                 </div>
                             </div>
-                        )}
-                    />
+                        </div>
+                    ))
                 )}
             </div>
 

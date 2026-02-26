@@ -21,6 +21,7 @@ let config = {
     historyColor: '#3b82f64D',
     showGrid: true,
     channels: 1,
+    themeAxisColor: '#aaaaaa' // New config default
 };
 
 let markedWindows = [];
@@ -242,16 +243,6 @@ function draw() {
         }
     }
 
-    // Now safe to draw grid with final yMin / yMax
-    if (config.showGrid) {
-        drawGrid(yMin, yMax);
-    }
-
-    if (points.length === 0) return;
-
-    // Reporting stats independently of rendering rate
-    checkStats(nowSys);
-
     const yRange = yMax - yMin || 1;
     const paddingY = height * 0.1;
     const availH = height - 2 * paddingY;
@@ -261,14 +252,48 @@ function draw() {
         return height - (paddingY + norm * availH);
     };
 
+    // Calculate padding for Y-axis labels dynamically
+    ctx.font = '10px sans-serif';
+    const textW1 = ctx.measureText(yMax.toFixed(0)).width;
+    const textW2 = ctx.measureText(yMin.toFixed(0)).width;
+    const pL = 10 + Math.max(textW1, textW2) + 12; // margin + max text width + gap
+    const plW = width - pL;
+
+    // Now safe to draw grid with final yMin / yMax
+    if (config.showGrid) {
+        drawGrid(yMin, yMax, valToPy, pL);
+    }
+
+    // Zero/Center Reference Line (X-axis)
+    ctx.strokeStyle = config.themeAxisColor || '#aaaaaa';
+    ctx.globalAlpha = 0.8;
+    ctx.lineWidth = 2; // bit bolder
+    ctx.setLineDash([5, 5]); // dashed
+    ctx.beginPath();
+    const zeroY = valToPy(0);
+    ctx.moveTo(pL, zeroY);
+    ctx.lineTo(width, zeroY);
+    ctx.stroke();
+    // Reset defaults
+    ctx.setLineDash([]);
+    ctx.lineWidth = 1;
+    ctx.globalAlpha = 1.0;
+
+    if (points.length === 0) return;
+
+    // Reporting stats independently of rendering rate
+    checkStats(nowSys);
+
+
+
     const scannerPos = latestTs % timeWindow;
-    const scannerPx = (scannerPos / timeWindow) * width;
+    const scannerPx = pL + (scannerPos / timeWindow) * plW;
     const cycleStartTs = latestTs - scannerPos;
 
     // Split into HISTORY (left of scanner) and ACTIVE (right of scanner)
 
     // Center logic X:
-    const timeToPx = (t_abs) => ((t_abs % timeWindow) / timeWindow) * width;
+    const timeToPx = (t_abs) => pL + ((t_abs % timeWindow) / timeWindow) * plW;
 
     // Find active points and history points
     // History points: time > rangeStart AND time < cycleStartTs
@@ -357,12 +382,12 @@ function draw() {
             // To be precise we should only draw if the window is within rangeStart to latestTs
             // but for simplicity we'll just check if it's recent
             if (latestTs - win.endTime < timeWindow * 1.5) {
-                const px1 = (xOrig1 / timeWindow) * width;
-                const px2 = (xOrig2 / timeWindow) * width;
+                const px1 = pL + (xOrig1 / timeWindow) * plW;
+                const px2 = pL + (xOrig2 / timeWindow) * plW;
 
                 let wFunc = px2 - px1;
                 // handle wrap around slightly
-                if (wFunc < 0) wFunc += width;
+                if (wFunc < 0) wFunc += plW;
 
                 ctx.fillStyle = getWindowColor(win.status, win.isMissedActual);
                 ctx.fillRect(px1, 0, wFunc, height);
@@ -388,7 +413,7 @@ function draw() {
     if (annotations.length > 0) {
         annotations.forEach(ann => {
             if (latestTs - ann.x < timeWindow * 1.5) {
-                const px = ((ann.x % timeWindow) / timeWindow) * width;
+                const px = pL + ((ann.x % timeWindow) / timeWindow) * plW;
                 const annY = ann.y !== undefined ? ann.y : (points.length > 0 ? points[points.length - 1].value : 0);
                 const py = valToPy(annY);
 
@@ -412,17 +437,7 @@ function draw() {
         });
     }
 
-    // Zero/Center Reference Line
-    ctx.strokeStyle = '#aaaaaa';
-    ctx.globalAlpha = 0.5;
-    ctx.setLineDash([3, 3]);
-    ctx.beginPath();
-    const zeroY = valToPy(0);
-    ctx.moveTo(0, zeroY);
-    ctx.lineTo(width, zeroY);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.globalAlpha = 1.0;
+    // Zero/Center Reference Line has been moved before drawing signal
 
     // Scanner Line and Pointer
     ctx.strokeStyle = config.color; // var(--accent)
@@ -453,8 +468,8 @@ function draw() {
     ctx.globalAlpha = 1.0;
 }
 
-function drawGrid(yMin, yMax) {
-    ctx.strokeStyle = '#aaaaaa'; // Matches Recharts' muted gray roughly
+function drawGrid(yMin, yMax, valToPy, pL) {
+    ctx.strokeStyle = config.themeAxisColor || '#aaaaaa';
     ctx.globalAlpha = 0.3;
     ctx.lineWidth = 1;
     ctx.setLineDash([3, 3]);
@@ -465,34 +480,27 @@ function drawGrid(yMin, yMax) {
     const availH = height - 2 * paddingY;
 
     ctx.beginPath();
+    ctx.font = '10px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+
     for (let i = 0; i < tickCount; i++) {
         const norm = i / (tickCount - 1);
         const y = paddingY + norm * availH;
-        ctx.moveTo(0, y);
-        ctx.lineTo(width, y);
 
         // Y-axis label
         const val = yMax - norm * (yMax - yMin);
-        ctx.fillStyle = '#9ca3af'; // var(--muted)
-        ctx.font = '10px sans-serif';
-        ctx.textAlign = 'left';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(val.toFixed(0), 10, y - 8);
-    }
-    ctx.stroke();
+        const textStr = val.toFixed(0);
 
-    // X-axis (simplified: ~5 ticks)
-    ctx.beginPath();
-    ctx.strokeStyle = '#aaaaaa';
-    ctx.globalAlpha = 0.3;
-    const xTickCount = 5;
-    for (let i = 0; i <= xTickCount; i++) {
-        const x = (i / xTickCount) * width;
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, height);
+        ctx.moveTo(pL, y);
+        ctx.lineTo(width, y);
+
+        ctx.fillStyle = config.themeAxisColor || '#9ca3af';
+        ctx.globalAlpha = 0.8;
+        ctx.fillText(textStr, 10, y);
+        ctx.globalAlpha = 0.3;
     }
     ctx.stroke();
-    ctx.globalAlpha = 1.0;
 
     ctx.setLineDash([]);
     ctx.globalAlpha = 1.0;

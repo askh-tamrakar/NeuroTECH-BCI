@@ -55,6 +55,14 @@ export default function LiveView({ wsData, wsEvent, config, isPaused }) {
     let basePayload = null
     try {
       basePayload = wsData.raw ?? (typeof wsData === 'string' ? JSON.parse(wsData) : wsData)
+
+      // DEBUG: Log the first few payloads to see data shape in browser console
+      if (!window._debugBatchCt) window._debugBatchCt = 0;
+      if (window._debugBatchCt < 10) {
+        console.log('[LiveView DEBUG] Received basePayload:', basePayload);
+        window._debugBatchCt++;
+      }
+
     } catch (e) {
       console.warn('[LiveView] Failed to parse wsData:', e)
       return
@@ -62,7 +70,7 @@ export default function LiveView({ wsData, wsEvent, config, isPaused }) {
 
     if (!basePayload) return
 
-    const samples = basePayload._batch || (basePayload.channels ? [basePayload] : [])
+    const samples = basePayload._batch || basePayload.samples || (basePayload.channels ? [basePayload] : [])
     if (samples.length === 0) return
 
     const sampleIntervalMs = Math.round(1000 / (samplingRate || 250))
@@ -100,7 +108,8 @@ export default function LiveView({ wsData, wsEvent, config, isPaused }) {
       }
 
       Object.entries(payload.channels).forEach(([chIdx, chData]) => {
-        const chNum = parseInt(chIdx)
+        const chNum = parseInt(chIdx.replace('ch', ''))
+        if (isNaN(chNum)) return
         const chKey = `ch${chNum}`
         const chConfig = channelMapping[chKey]
 

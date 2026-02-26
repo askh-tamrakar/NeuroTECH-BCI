@@ -244,6 +244,53 @@ export default function SessionManagerPanel({
     const [hasMore, setHasMore] = useState(true);
     const LIMIT = 20;
 
+    // Track scroll direction for appending vs prepending
+    const [fetchDirection, setFetchDirection] = useState('down'); // 'down' or 'up'
+
+    const memoizedRows = useMemo(() => {
+        return selectedSessionRows.map((row, idx) => {
+            return (
+                <tr key={`${row.id || idx}-${row.timestamp}`} className="border-b border-border hover:bg-border transition-colors group">
+                    <td className="px-3 py-1.5 text-primary">{row.absoluteIndex !== undefined ? row.absoluteIndex + 1 : idx + 1 + offset}</td>
+                    {/* Assuming row has 'label' or 'class' and 'features' */}
+                    <td className="px-3 py-1.5 font-bold text-text">
+                        {getLabelName(activeSensor, row.label !== undefined ? row.label : (row.class !== undefined ? row.class : 'Unknown'))}
+                    </td>
+                    {isTestMode && (
+                        <td className={`px-3 py-1.5 font-bold ${row.class === row.label ? 'text-emerald-500' : 'text-red-500'}`}>
+                            {row.predicted_label || row.class || '-'}
+                        </td>
+                    )}
+
+                    {/* Dynamic Feature Cells */}
+                    {row.features && !Array.isArray(row.features) ? (
+                        Object.keys(selectedSessionRows[0].features).map(key => (
+                            <td key={key} className="px-3 py-1.5 text-muted font-mono">
+                                {(typeof row.features[key] === 'number') ? row.features[key].toFixed(2) : row.features[key]}
+                            </td>
+                        ))
+                    ) : (
+                        <td className="px-3 py-1.5 text-muted truncate max-w-[200px]" title={JSON.stringify(row.features)}>
+                            {Array.isArray(row.features)
+                                ? row.features.map(f => f.toFixed(2)).join(', ')
+                                : JSON.stringify(row.features)}
+                        </td>
+                    )}
+
+                    <td className="pr-1 py-1 text-xs text-left font-bold text-primary uppercase border-b border-border w-10  opacity-0 group-hover:opacity-100 transition-opacity ">
+                        <button
+                            title="Clear Rows"
+                            onClick={(e) => handleDeleteRow(row.id, e)}
+                            className="p-0.5 hover:bg-red-500/20 text-muted hover:text-red-500 rounded transition-colors"
+                        >
+                            <ClipboardX size={20} />
+                        </button>
+                    </td>
+                </tr>
+            );
+        });
+    }, [selectedSessionRows, activeSensor, isTestMode]);
+
     // Helper to get full table name from the current short name
     const fullCurrentSessionName = useMemo(() => {
         if (!sessions || sessions.length === 0 || !currentSessionName) return null;
@@ -277,7 +324,7 @@ export default function SessionManagerPanel({
     }, [fullCurrentSessionName, refreshTrigger]);
 
     // Fetch session details
-    const fetchSessionDetails = async (currentOffset = 0, isReset = false) => {
+    const fetchSessionDetails = async (currentOffset = 0, isReset = false, direction = 'down') => {
         if (!fullCurrentSessionName) return;
 
         // Prevent duplicate calls if already loading (except reset)
@@ -294,17 +341,34 @@ export default function SessionManagerPanel({
             if (res.ok) {
                 const data = await res.json();
 
-                // Backend now returns { rows: [], total: N }
-                // Fallback for older backend structure if needed (though we updated it)
                 const newRows = Array.isArray(data) ? data : (data.rows || []);
                 const total = data.total !== undefined ? data.total : newRows.length;
 
+                // Annotate rows with their absolute position in DB to fix numbering
+                const annotatedRows = newRows.map((r, i) => ({ ...r, absoluteIndex: currentOffset + i }));
+
                 setTotalRows(total);
-                // Strict Pagination: Always REPLACE rows
-                setSelectedSessionRows(newRows);
+
+                if (isReset) {
+                    setSelectedSessionRows(annotatedRows);
+                } else {
+                    setSelectedSessionRows(prev => {
+                        // Append or prepend based on direction
+                        if (direction === 'down') {
+                            // Don't add duplicates (strict ID/timestamp check)
+                            const existingIds = new Set(prev.map(p => p.id || p.timestamp));
+                            const uniqueNewRows = annotatedRows.filter(r => !existingIds.has(r.id || r.timestamp));
+                            return [...prev, ...uniqueNewRows];
+                        } else {
+                            const existingIds = new Set(prev.map(p => p.id || p.timestamp));
+                            const uniqueNewRows = annotatedRows.filter(r => !existingIds.has(r.id || r.timestamp));
+                            return [...uniqueNewRows, ...prev];
+                        }
+                    });
+                }
 
                 // Update hasMore based on total count
-                if (newRows.length < LIMIT || (currentOffset + newRows.length >= total)) {
+                if (annotatedRows.length < LIMIT || (currentOffset + annotatedRows.length >= total)) {
                     setHasMore(false);
                 } else {
                     setHasMore(true);
@@ -326,46 +390,37 @@ export default function SessionManagerPanel({
         if (!hasMore || rowsLoading) return;
         const nextOffset = offset + LIMIT;
         setOffset(nextOffset);
-        fetchSessionDetails(nextOffset, false);
-        // Reset scroll to top slightly to allow scrolling up again (or keep at bottom?)
-        // If we replace rows, the scroll height shrinks. We should probably reset to top.
-        if (tableContainerRef.current) tableContainerRef.current.scrollTop = 5;
+        setFetchDirection('down');
+        fetchSessionDetails(nextOffset, false, 'down');
     };
 
     const handlePrevPage = () => {
         if (offset === 0 || rowsLoading) return;
         const prevOffset = Math.max(0, offset - LIMIT);
         setOffset(prevOffset);
-        fetchSessionDetails(prevOffset, false);
+        setFetchDirection('up');
+        fetchSessionDetails(prevOffset, false, 'up');
         setHasMore(true);
-        // Reset scroll to bottom slightly to allow scrolling down again
-        // We need to wait for render... simplified for now:
-        // if (tableContainerRef.current) tableContainerRef.current.scrollTop = tableContainerRef.current.scrollHeight - 50;
     };
 
     const tableContainerRef = useRef(null);
     const scrollTimeout = useRef(null);
 
-    // Scroll Listener for "Page Flip"
     const handleScroll = (e) => {
-        if (rowsLoading) return;
-
-        const { scrollTop, scrollHeight, clientHeight } = e.target;
-
-        // Debounce
         if (scrollTimeout.current) clearTimeout(scrollTimeout.current);
 
         scrollTimeout.current = setTimeout(() => {
-            // Scroll Logic
-            // 1. Bottom Hit -> Next Page
-            if (scrollHeight - scrollTop - clientHeight < 5) {
-                if (hasMore) handleNextPage();
+            const { scrollTop, scrollHeight, clientHeight } = e.target;
+
+            // Reached bottom
+            if (scrollHeight - scrollTop <= clientHeight + 50) {
+                handleNextPage();
             }
-            // 2. Top Hit -> Prev Page (only if we have previous pages)
-            else if (scrollTop < 5) {
-                if (offset > 0) handlePrevPage();
-            }
-        }, 100);
+            // Reached top 
+            // else if (scrollTop === 0) {
+            //     handlePrevPage();
+            // }
+        }, 150);
     };
 
     const handleDeleteRow = async (rowId, e) => {
@@ -460,46 +515,7 @@ export default function SessionManagerPanel({
                                 </tr>
                             </thead>
                             <tbody className="text-xs font-mono">
-                                {selectedSessionRows.map((row, idx) => (
-                                    <tr key={idx} className="border-b border-border hover:bg-border transition-colors group">
-                                        <td className="px-3 py-1.5 text-primary">{idx + 1}</td>
-                                        {/* Assuming row has 'label' or 'class' and 'features' */}
-                                        <td className="px-3 py-1.5 font-bold text-text">
-                                            {getLabelName(activeSensor, row.label !== undefined ? row.label : (row.class !== undefined ? row.class : 'Unknown'))}
-                                        </td>
-                                        {isTestMode && (
-                                            <td className={`px-3 py-1.5 font-bold ${row.class === row.label ? 'text-emerald-500' : 'text-red-500'}`}>
-                                                {row.predicted_label || row.class || '-'}
-                                            </td>
-                                        )}
-
-                                        {/* Dynamic Feature Cells */}
-                                        {row.features && !Array.isArray(row.features) ? (
-                                            Object.keys(selectedSessionRows[0].features).map(key => (
-                                                <td key={key} className="px-3 py-1.5 text-muted font-mono">
-                                                    {(typeof row.features[key] === 'number') ? row.features[key].toFixed(2) : row.features[key]}
-                                                </td>
-                                            ))
-                                        ) : (
-                                            <td className="px-3 py-1.5 text-muted truncate max-w-[200px]" title={JSON.stringify(row.features)}>
-                                                {Array.isArray(row.features)
-                                                    ? row.features.map(f => f.toFixed(2)).join(', ')
-                                                    : JSON.stringify(row.features)}
-                                            </td>
-                                        )}
-
-                                        <td className="pr-1 py-1 text-xs text-left font-bold text-primary uppercase border-b border-border w-10  opacity-0 group-hover:opacity-100 transition-opacity ">
-                                            <button
-                                                title="Clear Rows"
-                                                onClick={(e) => handleDeleteRow(row.id, e)}
-                                                className="p-0.5 hover:bg-red-500/20 text-muted hover:text-red-500 rounded transition-colors"
-                                            >
-                                                <ClipboardX size={20} />
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))}
-
+                                {memoizedRows}
                             </tbody>
                         </table>
                     )}

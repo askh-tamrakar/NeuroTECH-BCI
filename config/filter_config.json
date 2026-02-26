@@ -2,9 +2,9 @@
   "filters": {
     "EEG": {
       "bandpass_enabled": true,
-      "bandpass_high": 30,
-      "bandpass_low": 4,
-      "cutoff": 4.1,
+      "bandpass_high": 0,
+      "bandpass_low": 0,
+      "cutoff": 1.1,
       "filters": [
         {
           "Q": 30,

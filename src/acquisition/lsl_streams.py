@@ -14,7 +14,7 @@ try:
 except Exception:
     pylsl = None
     LSL_AVAILABLE = False
-    print("⚠️  pylsl not available - LSL streams will be disabled. Install with `pip install pylsl`.")
+    print("[WARNING] pylsl not available - LSL streams will be disabled. Install with `pip install pylsl`.")
 
 
 class LSLStreamer:

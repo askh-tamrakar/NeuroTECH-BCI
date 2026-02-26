@@ -1,12 +1,13 @@
 """
-EEG filter processor (Passive - Single Channel)
+EEG filter processor (Passive)
 
-- Applies configurable notch filter (default 50 Hz) and bandpass (default 0.5-45 Hz)
+- Applies configurable high-pass filter (default 1 Hz, order 4)
+- Optionally applies Notch (default 50 Hz) and Bandpass
 - Designed to be instantiated per-channel by filter_router.py
 """
 
 import numpy as np
-from scipy.signal import iirnotch, butter, lfilter, lfilter_zi
+from scipy.signal import butter, lfilter, lfilter_zi
 
 class EEGFilterProcessor:
     def __init__(self, config: dict, sr: int = 512, channel_key: str = None):
@@ -14,87 +15,103 @@ class EEGFilterProcessor:
         self.sr = int(sr)
         self.channel_key = channel_key
         
-        # Load params
         self._load_params()
-        
-        # Initial design
         self._design_filters()
         
-        # Initialize state (0.0)
-        self.zi_notch = lfilter_zi(self.b_notch, self.a_notch) * 0.0
-        self.zi_band = lfilter_zi(self.b_band, self.a_band) * 0.0
-
-        # Running stats for normalization
-        self.run_mean = 0.0
-        self.run_var = 1.0
-        self.alpha = 0.01  # Adaptation rate for running stats
+        # Initialize state
+        self.zi_hp = lfilter_zi(self.b_hp, self.a_hp) * 0.0
+        self.zi_notch = lfilter_zi(self.b_notch, self.a_notch) * 0.0 if (self.notch_enabled and getattr(self, 'a_notch', None) is not None) else None
+        self.zi_bp = lfilter_zi(self.b_bp, self.a_bp) * 0.0 if (self.bp_enabled and getattr(self, 'a_bp', None) is not None) else None
 
     def _load_params(self):
-        # 1. Global EEG Config
-        eeg_base = self.config.get("filters", {}).get("EEG", {})
-        eeg_filters = eeg_base.get("filters", [])
+        # 1. Default Global Config
+        eeg_cfg = self.config.get("filters", {}).get("EEG", {})
         
-        # 2. Channel Override?
-        # Note: EEG config is complex (list of filters), so deep merging is harder.
-        # Simple strategy: If `filters.<channel_key>.filters` exists, use that instead.
+        # 2. Channel Specific Override?
         if self.channel_key:
             ch_cfg = self.config.get("filters", {}).get(self.channel_key, {})
-            if "filters" in ch_cfg:
-                eeg_filters = ch_cfg["filters"]
+            # Merge simple keys
+            eeg_cfg = {**eeg_cfg, **ch_cfg}
 
-        notch_cfg = next((f for f in eeg_filters if f.get("type") == "notch"), {"freq": 50.0, "Q": 30})
-        band_cfg = next((f for f in eeg_filters if f.get("type") == "bandpass"),
-                        {"low": 5.0, "high": 40.0, "order": 4})
+        # High Pass (Standard EEG)
+        self.hp_cutoff = float(eeg_cfg.get("cutoff", 1.0))
+        self.hp_order = int(eeg_cfg.get("order", 4))
+        
+        # Notch (Noise Filtering)
+        self.notch_enabled = eeg_cfg.get("notch_enabled", False)
+        self.notch_freq = float(eeg_cfg.get("notch_freq", 50.0))
+        self.notch_q = float(eeg_cfg.get("notch_q", 30.0))
 
-        self.notch_freq = float(notch_cfg.get("freq", 50.0))
-        self.notch_q = float(notch_cfg.get("Q", 30.0))
-        self.bp_low = float(band_cfg.get("low", 5.0))
-        self.bp_high = float(band_cfg.get("high", 40.0))
-        self.bp_order = int(band_cfg.get("order", 4))
+        # Bandpass
+        self.bp_enabled = eeg_cfg.get("bandpass_enabled", False)
+        self.bp_low = float(eeg_cfg.get("bandpass_low", 1.0))
+        self.bp_high = float(eeg_cfg.get("bandpass_high", 100.0))
+        self.bp_order = int(eeg_cfg.get("order", 4)) # Keep same order as HP if separate order is missing
 
     def _design_filters(self):
-        # Notch
-        self.b_notch, self.a_notch = iirnotch(self.notch_freq, self.notch_q, fs=self.sr)
-        # Bandpass
         nyq = self.sr / 2.0
-        low = self.bp_low / nyq
-        high = self.bp_high / nyq
-        self.b_band, self.a_band = butter(self.bp_order, [low, high], btype="band")
+        
+        # 1. High Pass
+        wn_hp = self.hp_cutoff / nyq
+        self.b_hp, self.a_hp = butter(self.hp_order, wn_hp, btype="high", analog=False)
+
+        # 2. Notch
+        if self.notch_enabled and self.notch_freq > 0:
+            from scipy.signal import iirnotch
+            self.b_notch, self.a_notch = iirnotch(self.notch_freq, self.notch_q, fs=self.sr)
+        else:
+             self.b_notch, self.a_notch = None, None
+
+        # 3. Bandpass
+        if self.bp_enabled:
+            low = self.bp_low / nyq
+            high = self.bp_high / nyq
+            if low <= 0 or high >= 1:
+                # Fallback if invalid
+                self.b_bp, self.a_bp = [1.0], [1.0] 
+            else:
+                self.b_bp, self.a_bp = butter(self.bp_order, [low, high], btype="bandpass", analog=False)
 
     def update_config(self, config: dict, sr: int):
         """Update filter parameters if config changed."""
-        old_params = (self.notch_freq, self.notch_q, self.bp_low, self.bp_high, self.bp_order, self.sr)
+        old_state = (self.hp_cutoff, self.notch_enabled, self.notch_freq, self.bp_enabled, self.bp_low, self.bp_high)
         
         self.config = config
         self.sr = int(sr)
         self._load_params()
         
-        new_params = (self.notch_freq, self.notch_q, self.bp_low, self.bp_high, self.bp_order, self.sr)
+        new_state = (self.hp_cutoff, self.notch_enabled, self.notch_freq, self.bp_enabled, self.bp_low, self.bp_high)
         
-        if old_params != new_params:
-            print(f"[EEG] Config changed -> redesigning filters")
+        if old_state != new_state:
+            print(f"[EEG] Config changed ({self.channel_key}) -> HP:{self.hp_cutoff} Notch:{self.notch_enabled}({self.notch_freq}Hz) BP:{self.bp_enabled}({self.bp_low}-{self.bp_high}Hz)")
             self._design_filters()
-            # Reset state
-            self.zi_notch = lfilter_zi(self.b_notch, self.a_notch) * 0.0
-            self.zi_band = lfilter_zi(self.b_band, self.a_band) * 0.0
+            
+            # Reset states
+            try:
+                self.zi_hp = lfilter_zi(self.b_hp, self.a_hp) * 0.0
+                self.zi_notch = lfilter_zi(self.b_notch, self.a_notch) * 0.0 if (self.notch_enabled and getattr(self, 'a_notch', None) is not None) else None
+                self.zi_bp = lfilter_zi(self.b_bp, self.a_bp) * 0.0 if (self.bp_enabled and getattr(self, 'a_bp', None) is not None) else None
+            except Exception as e:
+                print(f"[EEG] ⚠️ Filter state reset error: {e}")
+                # Fallback to zeros (no steady state init)
+                self.zi_hp = np.zeros(max(len(self.a_hp), len(self.b_hp)) - 1)
+                if self.notch_enabled: self.zi_notch = np.zeros(max(len(self.a_notch), len(self.b_notch)) - 1)
+                if self.bp_enabled: self.zi_bp = np.zeros(max(len(self.a_bp), len(self.b_bp)) - 1)
 
     def process_sample(self, val: float) -> float:
-        """Process a single sample value: Notch -> Bandpass -> Normalization."""
-        # 1. Notch Filter (Remove electrical hum)
-        notch_out, self.zi_notch = lfilter(self.b_notch, self.a_notch, [val], zi=self.zi_notch)
+        """Process a single sample value: High Pass -> Notch -> Bandpass."""
+        # 1. High Pass
+        out, self.zi_hp = lfilter(self.b_hp, self.a_hp, [val], zi=self.zi_hp)
+        out = out[0]
 
-        # 2. Bandpass Filter (5-40Hz to remove DC offset and high-frequency noise)
-        band_out, self.zi_band = lfilter(self.b_band, self.a_band, notch_out, zi=self.zi_band)
-        filtered_val = float(band_out[0])
+        # 2. Notch Filter (Remove electrical hum)
+        if self.notch_enabled and self.zi_notch is not None:
+            filtered, self.zi_notch = lfilter(self.b_notch, self.a_notch, [out], zi=self.zi_notch)
+            out = filtered[0]
 
-        # 3. Normalization (Running Z-score to keep amplitude consistent)
-        self.run_mean = (1 - self.alpha) * self.run_mean + self.alpha * filtered_val
-        self.run_var = (1 - self.alpha) * self.run_var + self.alpha * ((filtered_val - self.run_mean) ** 2)
+        # 3. Bandpass Filter
+        if self.bp_enabled and self.zi_bp is not None:
+            filtered, self.zi_bp = lfilter(self.b_bp, self.a_bp, [out], zi=self.zi_bp)
+            out = filtered[0]
 
-        # Avoid division by zero
-        std_dev = np.sqrt(self.run_var) if self.run_var > 1e-6 else 1.0
-        
-        # Scale amplitude
-        normalized_val = (filtered_val - self.run_mean) / std_dev
-        
-        return float(normalized_val)
+        return float(out)

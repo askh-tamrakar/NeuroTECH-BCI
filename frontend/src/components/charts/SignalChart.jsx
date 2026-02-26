@@ -2,6 +2,7 @@
 import React, { useEffect, useRef, useImperativeHandle, forwardRef, useState } from 'react'
 import { ChartSpline, ZoomIn, ArrowUpDown, ArrowDown, ArrowUp, Sigma, Clock, Minus, Plus, Activity } from 'lucide-react'
 import ElasticSlider from '../ui/ElasticSlider'
+import { useTheme } from '../../contexts/ThemeContext'
 import '../../styles/live/SignalChart.css'
 
 const DEFAULT_PALETTE = [
@@ -33,6 +34,7 @@ const SignalChart = forwardRef(({
   const isTransferred = useRef(false)
 
   const [stats, setStats] = useState({ min: 0, max: 0, mean: 0 })
+  const { currentTheme } = useTheme() || {};
 
   // Initialize Worker
   useEffect(() => {
@@ -61,6 +63,7 @@ const SignalChart = forwardRef(({
               config: {
                 timeWindowMs,
                 color,
+                themeAxisColor: getComputedStyle(document.documentElement).getPropertyValue('--muted').trim() || '#aaaaaa',
                 zoom: currentZoom,
                 manualRange: currentManual,
                 showGrid
@@ -118,13 +121,14 @@ const SignalChart = forwardRef(({
         payload: {
           timeWindowMs,
           color,
+          themeAxisColor: getComputedStyle(document.documentElement).getPropertyValue('--muted').trim() || '#aaaaaa',
           zoom: currentZoom,
           manualRange: currentManual,
           showGrid
         }
       });
     }
-  }, [timeWindowMs, color, currentZoom, currentManual, showGrid]);
+  }, [timeWindowMs, color, currentZoom, currentManual, showGrid, currentTheme]);
 
   // Sync Annotations
   useEffect(() => {

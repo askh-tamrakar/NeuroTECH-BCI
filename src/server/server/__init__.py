@@ -7,7 +7,6 @@ from src.server.server.session_manager import SessionManager
 from src.server.server.lsl_service import resolve_lsl_stream, resolve_event_stream, broadcast_data, broadcast_events
 from src.server.server.config_manager import load_config
 from src.feature.detectors.rps_detector import RPSDetector
-import threading
 import sys
 
 # Import blueprints
@@ -85,8 +84,6 @@ def start_background_threads():
         resolve_lsl_stream()
         resolve_event_stream()
         
-        t1 = threading.Thread(target=broadcast_data, args=(socketio,), daemon=True)
-        t1.start()
+        t1 = socketio.start_background_task(target=broadcast_data, socketio=socketio)
         
-        t2 = threading.Thread(target=broadcast_events, args=(socketio,), daemon=True)
-        t2.start()
+        t2 = socketio.start_background_task(target=broadcast_events, socketio=socketio)

@@ -142,7 +142,7 @@ def broadcast_events(socketio):
         if state.event_inlet is None:
             # Try to reconnect occasionally
             if not resolve_event_stream():
-                time.sleep(2.0)
+                socketio.sleep(2.0)
                 continue
 
         try:
@@ -154,16 +154,20 @@ def broadcast_events(socketio):
                 try:
                     event_data = json.loads(raw_event)
                     event_name = event_data.get("event", "UNKNOWN")
-                    print(f"[Web Server] [LSLService] ⚡ Event Received: {event_name}")
+                    # print(f"[Web Server] [LSLService] ⚡ Event Received: {event_name}") # Keeping it standard
+                    print(f"[LSLService] ⚡ Event Received: {event_name}", flush=True)
                     socketio.emit('bio_event', event_data)
                 except json.JSONDecodeError:
                     print(f"[LSLService] ⚠️  Failed to parse event JSON: {raw_event}")
+            
+            # Explicitly yield thread control
+            socketio.sleep(0.01)
 
         except Exception as e:
              if "timeout" not in str(e).lower():
-                 print(f"[LSLService] ⚠️  Event Loop Error: {e}")
+                 print(f"[LSLService] ⚠️  Event Loop Error: {e}", flush=True)
                  state.event_inlet = None
-             time.sleep(0.01)
+             socketio.sleep(0.01)
 
 def broadcast_data(socketio):
     """Broadcast stream data to all connected clients."""
@@ -179,7 +183,7 @@ def broadcast_data(socketio):
             if resolve_lsl_stream():
                 print("[LSLService] ✅ Reconnected to LSL stream within broadcast loop")
             else:
-                time.sleep(2.0) # Wait before retry
+                socketio.sleep(2.0) # Wait before retry
                 continue
 
         try:
@@ -262,9 +266,13 @@ def broadcast_data(socketio):
                     last_batch_time = now
 
                     if state.sample_count % 2560 == 0:
-                         print(f"[LSLService] ✅ {state.sample_count} samples broadcast")
+                         pass # Suppress overly verbose 2560 samples broads log to make events visible
+                         # print(f"[LSLService] ✅ {state.sample_count} samples broadcast")
+            
+            # Explicit thread yield
+            socketio.sleep(0.001)
 
         except Exception as e:
             if "timeout" not in str(e).lower():
-                print(f"[LSLService] ⚠️  Error broadcasting: {e}")
-            time.sleep(0.01)
+                print(f"[LSLService] ⚠️  Error broadcasting: {e}", flush=True)
+            socketio.sleep(0.001)
