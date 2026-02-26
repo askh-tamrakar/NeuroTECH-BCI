@@ -116,7 +116,7 @@ class StreamManagerApp:
         self.status_label.pack(pady=10)
         
         # Auto-Start Server for Pipeline Compatibility
-        self.root.after(500, self.start_server)
+        self.start_server()
         
         self.connection_var = tk.StringVar(value="No Client Connected")
         ttk.Label(status_frame, textvariable=self.connection_var).pack(pady=5)

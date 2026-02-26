@@ -36,9 +36,9 @@ export function useWebSocket(url = 'http://localhost:1972') {
     try {
       // Connect directly using the imported 'io' function
       socketRef.current = io(endpoint, {
-        reconnection: false, // User requested manual retry only
-        timeout: 3000,       // Fail after 3 seconds
-        transports: ['websocket']
+        reconnection: true,
+        timeout: 10000,
+        transports: ['websocket', 'polling']
       })
 
       setupSocketListeners()

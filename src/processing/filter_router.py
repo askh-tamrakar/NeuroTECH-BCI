@@ -282,15 +282,21 @@ class FilterRouter:
         self.stream_socket = None
         self.stream_connected = False
         
-        try:
-            self.stream_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.stream_socket.connect(('localhost', 6001))
-            self.stream_connected = True
-            print(f"[Router] ✅ Connected to Stream Manager (Processed)")
-        except Exception as e:
-            print(f"[Router] ⚠️ Could not connect to Stream Manager: {e}")
-
-            time.sleep(0.2)  # Small delay to let LSL unregister from network
+        # Retry connection loop to avoid startup race conditions
+        max_retries = 5
+        for attempt in range(max_retries):
+            try:
+                self.stream_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                self.stream_socket.connect(('localhost', 6001))
+                self.stream_connected = True
+                print(f"[Router] ✅ Connected to Stream Manager (Processed)")
+                break
+            except Exception as e:
+                print(f"[Router] ⚠️ Could not connect to Stream Manager (Attempt {attempt+1}/{max_retries}): {e}")
+                time.sleep(1.0)
+                
+        if not self.stream_connected:
+             print("[Router] ❌ Failed to connect to Stream Manager after multiple retries. Data will be dropped.")
         
         mapping_cfg = self.config.get("channel_mapping", {})
         num_channels = len(self.raw_index_map)
