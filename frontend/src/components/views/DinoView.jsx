@@ -6,11 +6,11 @@ import Counter from '../ui/Counter'
 import {
     ScanEye, SlidersHorizontal, ArrowUp, Pause, Play, Trash2, Wifi, WifiOff, Save, Skull, Trophy, Keyboard, Eye,
     Gamepad2, Globe, Sparkles, Atom, Ruler, Settings, RotateCcw, ScrollText, Timer, Weight, MoveVertical,
-    MoveHorizontal, Maximize, ArrowDownToLine, Grid, Sun, Moon, Cloud, Star, TreePine, Leaf, PlayCircle, Hand,
-    Layers, Zap, Clock, ChevronDown, Activity, Hash, Target, Radio, Signal, Circle
+    MoveHorizontal, Maximize, ArrowDownToLine, Grid, Sun, Moon, Cloud, Star, TreePine, Leaf, Hand,
+    Layers, Zap, Clock, ChevronDown, Activity, Target, Radio, Signal, Circle
 } from 'lucide-react'
 
-export default function DinoView({ wsData, wsEvent, isPaused }) {
+export default function DinoView({ isConnected, wsEvent, isPaused }) {
     // Game state
     const [gameState, setGameState] = useState('ready') // ready, playing, paused, gameOver
     const [score, setScore] = useState(0)
@@ -298,20 +298,6 @@ export default function DinoView({ wsData, wsEvent, isPaused }) {
             .catch(err => console.error("Error fetching config for channels", err));
     }, []);
 
-    // Handle EOG blink detection
-    const handleEOGBlink = (source = 'blink') => {
-        const now = Date.now()
-        const timeSinceLastPress = now - blinkPressTimeRef.current
-
-        if (timeSinceLastPress < 400 && timeSinceLastPress > 75) {
-            handleDoublePress(source)
-        } else {
-            handleSinglePress(source)
-        }
-
-        blinkPressTimeRef.current = now
-    }
-
     // WebSocket Event Listener (Blinks)
     useEffect(() => {
         if (!wsEvent) return;
@@ -323,23 +309,22 @@ export default function DinoView({ wsData, wsEvent, isPaused }) {
             return
         }
 
-        if (wsEvent.event === 'BLINK' || wsEvent.event === 'SingleBlink') {
-            console.log("🦖 Dino: Blink Event Received via Logic Pipeline!");
-            handleEOGBlink('blink');
+        if (wsEvent.event === 'SingleBlink') {
+            console.log("🦖 Dino: Single Blink Event Received!");
+            handleSinglePress('blink');
         } else if (wsEvent.event === 'DoubleBlink') {
-            console.log("🦖 Dino: Double Blink Event Received via Logic Pipeline!");
+            console.log("🦖 Dino: Double Blink Event Received!");
             handleDoublePress('blink');
         }
     }, [wsEvent]);
 
-    // Track Connection Status Logging
     useEffect(() => {
-        if (wsData) {
+        if (isConnected) {
             logEvent("Sensor Connected", 'connection')
         } else {
             logEvent("Sensor Disconnected", 'disconnect')
         }
-    }, [!!wsData]) // Only trigger on boolean flip
+    }, [isConnected]) // Only trigger on boolean flip
 
     // --- Worker Bridge ---
     const workerRef = useRef(null)
@@ -683,13 +668,16 @@ export default function DinoView({ wsData, wsEvent, isPaused }) {
         setSettings(prev => {
             const newValue = typeof value === 'string' ? value : (typeof value === 'boolean' ? value : parseFloat(value));
 
-            // Log specific setting changes to event log
+            // Log specific setting changes to event log and console
             if (key === 'DETECTION_METHOD' && prev.DETECTION_METHOD !== newValue) {
                 logEvent(`[Setup] Method: ${newValue}`, 'settings');
+                console.log(`[Dino] Detection Method changed to: ${newValue}`);
             } else if (key === 'ACTIVE_MODEL' && prev.ACTIVE_MODEL !== newValue) {
                 logEvent(`[Setup] Model: ${newValue}`, 'settings');
+                console.log(`[Dino] Active Model changed to: ${newValue}`);
             } else if (key === 'CONTROL_CHANNEL' && prev.CONTROL_CHANNEL !== newValue) {
                 logEvent(`[Setup] Channel: ${newValue}`, 'settings');
+                console.log(`[Dino] Control Channel changed to: ${newValue}`);
             }
 
             return {
@@ -736,7 +724,7 @@ export default function DinoView({ wsData, wsEvent, isPaused }) {
                     <div className="game-card">
                         <div className="game-header">
                             <h2 className="game-title">
-                                <span className={`status-eye ${wsData ? 'connected' : 'disconnected'}`}><ScanEye size={32} /></span>
+                                <span className={`status-eye ${isConnected ? 'connected' : 'disconnected'}`}><ScanEye size={32} /></span>
                                 EOG Dino Game
                             </h2>
                             <button
@@ -819,8 +807,8 @@ export default function DinoView({ wsData, wsEvent, isPaused }) {
                                         </div>
                                         <div className="stat-block stat-block-end mb-1">
                                             <span className="stat-label flex items-center gap-1"><Radio size={24} /> Sensor</span>
-                                            <div className={`stat-value-sensor ${(wsData && settings.CONTROL_CHANNEL !== 'none') ? 'text-green-500' : 'text-red-500'}`}>
-                                                {(wsData && settings.CONTROL_CHANNEL !== 'none') ? 'Connected' : 'Disconnected'}
+                                            <div className={`stat-value-sensor ${(isConnected && settings.CONTROL_CHANNEL !== 'none') ? 'text-green-500' : 'text-red-500'}`}>
+                                                {(isConnected && settings.CONTROL_CHANNEL !== 'none') ? 'Connected' : 'Disconnected'}
                                             </div>
                                         </div>
                                     </div>
@@ -891,8 +879,8 @@ export default function DinoView({ wsData, wsEvent, isPaused }) {
 
                             <div className="flex justify-between items-center text-xs">
                                 <span className="text-muted font-medium uppercase tracking-wider flex items-center gap-1"><Signal size={12} /> Input Status</span>
-                                <span className={`font-bold ${settings.CONTROL_CHANNEL === 'none' ? 'text-red-500' : (wsData ? 'text-green-500' : 'text-red-500')}`}>
-                                    {settings.CONTROL_CHANNEL === 'none' ? 'INACTIVE' : (wsData ? 'ACTIVE' : 'OFFLINE')}
+                                <span className={`font-bold ${settings.CONTROL_CHANNEL === 'none' ? 'text-red-500' : (isConnected ? 'text-green-500' : 'text-red-500')}`}>
+                                    {settings.CONTROL_CHANNEL === 'none' ? 'INACTIVE' : (isConnected ? 'ACTIVE' : 'OFFLINE')}
                                 </span>
                             </div>
                         </div>

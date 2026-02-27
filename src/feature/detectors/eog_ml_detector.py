@@ -117,14 +117,10 @@ class EOGMLDetector:
         Receive features from Extractor (already means a blink-like event happened).
         Classify it.
         """
-        if not self.model:
-            # Fallback: specific detector logic was replaced, but Extractor is robust.
-            # If Extractor found a blink and we have no model to classify it, 
-            # assume it's a simple blink so the user sees *some* output.
-            return "SingleBlink"
 
         # The Extractor only emits when a potential blink is detected.
         # So we just classify it.
+        print("detecting by ML ")
         return self.predict_class(features)
 
     def update_config(self, config: dict):

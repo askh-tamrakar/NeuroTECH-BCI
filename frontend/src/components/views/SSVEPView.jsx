@@ -6,7 +6,7 @@ import { soundHandler } from '../../handlers/SoundHandler';
 const COMMON_KEYS = ['W', 'A', 'S', 'D', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'Enter', 'Escape'];
 const MOUSE_ACTIONS = ['Left Click', 'Right Click', 'Double Click'];
 
-export default function SSVEPView({ wsData, wsEvent }) {
+export default function SSVEPView({ isConnected, wsEvent }) {
     // --- Configuration State ---
     const [configs, setConfigs] = useState([
         { id: 0, freq: 8, label: 'Target 1', mappedKey: 'W', mappedMouse: 'None', enabled: true },

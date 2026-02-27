@@ -8,6 +8,7 @@ from src.server.server.state import state
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 CONFIG_PATH = PROJECT_ROOT / "config" / "sensor_config.json"
 FILTER_CONFIG_PATH = PROJECT_ROOT / "config" / "filter_config.json"
+FEATURE_CONFIG_PATH = PROJECT_ROOT / "config" / "feature_config.json"
 DEFAULT_SR = 512
 
 def load_config() -> dict:
@@ -101,10 +102,19 @@ def save_config(config: dict) -> bool:
                 json.dump(filter_payload, f, indent=2)
             print(f"[ConfigManager] 💾 Filters saved to {FILTER_CONFIG_PATH}")
 
-        # 2. Save Sensor/Display Config to sensor_config.json (exclude filters)
+        # 2. Save Features to feature_config.json
+        if 'features' in config:
+            feature_payload = config['features']
+            with open(FEATURE_CONFIG_PATH, 'w') as f:
+                json.dump(feature_payload, f, indent=2)
+            print(f"[ConfigManager] 💾 Features saved to {FEATURE_CONFIG_PATH}")
+
+        # 3. Save Sensor/Display Config to sensor_config.json (exclude modular sections)
         sensor_payload = config.copy()
         if 'filters' in sensor_payload:
             del sensor_payload['filters']
+        if 'features' in sensor_payload:
+            del sensor_payload['features']
         
         with open(CONFIG_PATH, 'w') as f:
             json.dump(sensor_payload, f, indent=2)
