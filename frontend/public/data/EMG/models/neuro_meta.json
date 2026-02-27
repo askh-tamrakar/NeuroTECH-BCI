@@ -1,0 +1,1 @@
+{"sensor": "EMG", "n_estimators": 100, "max_depth": 8, "min_impurity_decrease": 0.0, "test_size": 0.2, "table_name": "emg_session_Neurobench", "created_at": "2026-02-27T15:23:48.980282", "accuracy": 0.991869918699187}

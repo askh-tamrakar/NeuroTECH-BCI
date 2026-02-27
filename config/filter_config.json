@@ -24,9 +24,9 @@
       "bandpass_enabled": true,
       "bandpass_high": 250,
       "bandpass_low": 70,
-      "cutoff": 20.1,
+      "cutoff": 70.1,
       "notch_enabled": true,
-      "notch_freq": 0,
+      "notch_freq": 60,
       "order": 4,
       "type": "high_pass"
     },

@@ -69,16 +69,18 @@ class BlinkExtractor:
             # If window exceeds max duration, stop collecting
             if len(self.candidate_window) > (self.max_duration_ms / 1000.0) * self.sr:
                 features = self._extract_features(self.candidate_window)
+                print(f"[Extractor] Window timed out (Max Duration: {self.max_duration_ms}ms). Features: {features}")
                 self.is_collecting = False
                 self.candidate_window = []
                 return features
             
             # If it returns below threshold/4, call it an event
             if abs(zero_centered) < self.amp_threshold / 4 and len(self.candidate_window) > (self.min_duration_ms / 1000.0) * self.sr:
+                win_len = len(self.candidate_window)
                 features = self._extract_features(self.candidate_window)
                 self.is_collecting = False
                 self.candidate_window = []
-                print(f"[Extractor] Window finished: {len(self.candidate_window)} samples. Features: {features}")
+                print(f"[Extractor] Window finished: {win_len} samples. Features: {features}")
                 return features
                 
         return None

@@ -43,7 +43,8 @@ class RPSExtractor:
         if not window or len(window) == 0:
             return {}
 
-        data = np.array(window)
+        # 0. Robustness: Convert to numpy and handle NaN/Inf in raw data
+        data = np.nan_to_num(np.array(window), nan=0.0, posinf=0.0, neginf=0.0)
         
         # 1. RMS (Root Mean Square)
         rms = np.sqrt(np.mean(data**2))
@@ -69,12 +70,18 @@ class RPSExtractor:
         
         # 8. Entropy (Approximate entropy via histogram)
         try:
-            hist, _ = np.histogram(data, bins=10, density=True)
-            # Remove zeros to avoid log(0)
-            hist = hist[hist > 0]
-            entropy = -np.sum(hist * np.log2(hist))
+            # BUG FIX: If all data points are same, range is 0. 
+            # np.histogram with density=True will have divide-by-zero or inf density.
+            # We add a tiny jitter to force a valid distribution or handle it.
+            if rng == 0:
+                entropy = 0.0
+            else:
+                hist, _ = np.histogram(data, bins=10, density=True)
+                # Remove zeros to avoid log(0)
+                hist = hist[hist > 0]
+                entropy = -np.sum(hist * np.log2(hist))
         except:
-            entropy = 0
+            entropy = 0.0
         
         # 9. Energy
         energy = np.sum(data**2)
@@ -89,28 +96,37 @@ class RPSExtractor:
         ssc = np.sum(((diff[:-1] * diff[1:]) < 0))
 
         # 13. WAMP (Willison Amplitude)
-        # Count changes exceeding threshold. 
-        # Lowering to 0.0001 (100uV) assuming data is in Volts or small float range.
         wamp_threshold = 0.0001
         wamp = np.sum(np.abs(diff) > wamp_threshold)
         
-        features = {
-            "rms": float(rms),
-            "mav": float(mav),
-            "var": float(var),
-            "wl": float(wl),
-            "peak": float(peak),
-            "range": float(rng),
-            "iemg": float(iemg),
-            "entropy": float(entropy),
-            "energy": float(energy),
-            "kurtosis": float(np.nan_to_num(kurt)),
-            "skewness": float(np.nan_to_num(skew)),
-            "ssc": float(ssc),
-            "wamp": float(wamp),
+        # GLOBAL ROBUSTNESS: 
+        # Ensure all values are finite and fit in float32 for sklearn.
+        # We use a large finite number for inf/NaN.
+        raw_features = {
+            "rms": rms,
+            "mav": mav,
+            "var": var,
+            "wl": wl,
+            "peak": peak,
+            "range": rng,
+            "iemg": iemg,
+            "entropy": entropy,
+            "energy": energy,
+            "kurtosis": kurt,
+            "skewness": skew,
+            "ssc": ssc,
+            "wamp": wamp,
         }
         
-        return features
+        cleaned_features = {}
+        for k, v in raw_features.items():
+            # Convert to float, handle NaN/Inf, clip to a sane large range
+            val = np.nan_to_num(v, nan=0.0, posinf=1e6, neginf=-1e6)
+            # sklearn's float32 goes up to ~3.4e38, but 1e6 is very safe for these features
+            # except IEMG/Energy which might be larger, but still safe.
+            cleaned_features[k] = float(val)
+
+        return cleaned_features
 
     def _extract_features(self, window):
         """

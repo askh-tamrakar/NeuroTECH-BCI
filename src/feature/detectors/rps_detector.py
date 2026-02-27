@@ -81,11 +81,20 @@ class RPSDetector:
                    val = features['rng']
                 row.append(val)
             
-            # 2. Scale
+            # 2. VALIDATION (Robustness)
+            # Check for NaN/Inf/None before passing to sklearn
+            if any(v is None or not np.isfinite(v) for v in row):
+                # Only log once or rarely to avoid spamming
+                if not hasattr(self, '_last_err_time') or time.time() - self._last_err_time > 5.0:
+                    print(f"[RPSDetector] [WARN] Invalid feature values detected: {row}")
+                    self._last_err_time = time.time()
+                return "Rest", 0.0
+            
+            # 3. Scale
             X = pd.DataFrame([row], columns=feature_cols)
             X_scaled = self.scaler.transform(X)
             
-            # 3. Predict PROBABILITY
+            # 4. Predict PROBABILITY
             probs = self.model.predict_proba(X_scaled)[0]
             pred_idx = np.argmax(probs)
             confidence = probs[pred_idx]
@@ -104,7 +113,10 @@ class RPSDetector:
             return pred_label_str, confidence
 
         except Exception as e:
-            print(f"[RPSDetector] Prediction Error: {e}")
+            # Only log every 5s
+            if not hasattr(self, '_last_err_time') or time.time() - self._last_err_time > 5.0:
+                print(f"[RPSDetector] Prediction Error: {e}")
+                self._last_err_time = time.time()
             return "Error", 0.0
 
     def detect(self, features: dict) -> str | None:

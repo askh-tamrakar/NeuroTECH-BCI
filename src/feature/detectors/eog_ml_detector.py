@@ -50,16 +50,20 @@ class EOGMLDetector:
                 self.model = joblib.load(model_path)
                 self.scaler = joblib.load(scaler_path)
                 if verbose:
-                    print(f"\n{'='*50}\n[EOGMLDetector] 🔄 MODEL SWITCHED: {model_name}\n{'='*50}\n", flush=True)
+                    print(f"\n{'='*50}\n[EOGMLDetector] ✅ MODEL LOADED SUCCESSFULLY: {model_name}\n{'='*50}\n", flush=True)
             else:
                 if verbose:
-                    print(f"[EOGMLDetector] [WARN] Model {model_name} not found at {model_path}. Using fallback/nothing.")
+                    missing = []
+                    if not model_path.exists(): missing.append(f"Model ({model_path.name})")
+                    if not scaler_path.exists(): missing.append(f"Scaler ({scaler_path.name})")
+                    print(f"[EOGMLDetector] ❌ [ERROR] Model files missing for {model_name}: {', '.join(missing)}")
+                    print(f"               Searched in: {models_dir}")
                 # We can choose to keep previous model or set to None
                 # self.model = None 
                 pass
                 
         except Exception as e:
-            print(f"[EOGMLDetector] [ERROR] Error loading model {model_name}: {e}")
+            print(f"[EOGMLDetector] ❌ [FATAL] Error loading model {model_name}: {e}")
         
     def predict_class(self, features: dict) -> str | None:
         """

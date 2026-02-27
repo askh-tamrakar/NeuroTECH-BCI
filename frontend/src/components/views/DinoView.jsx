@@ -325,7 +325,10 @@ export default function DinoView({ wsData, wsEvent, isPaused }) {
 
         if (wsEvent.event === 'BLINK' || wsEvent.event === 'SingleBlink') {
             console.log("🦖 Dino: Blink Event Received via Logic Pipeline!");
-            handleEOGBlink();
+            handleEOGBlink('blink');
+        } else if (wsEvent.event === 'DoubleBlink') {
+            console.log("🦖 Dino: Double Blink Event Received via Logic Pipeline!");
+            handleDoublePress('blink');
         }
     }, [wsEvent]);
 
@@ -677,10 +680,23 @@ export default function DinoView({ wsData, wsEvent, isPaused }) {
     }
 
     const handleSettingChange = (key, value) => {
-        setSettings(prev => ({
-            ...prev,
-            [key]: typeof value === 'string' ? value : (typeof value === 'boolean' ? value : parseFloat(value))
-        }))
+        setSettings(prev => {
+            const newValue = typeof value === 'string' ? value : (typeof value === 'boolean' ? value : parseFloat(value));
+
+            // Log specific setting changes to event log
+            if (key === 'DETECTION_METHOD' && prev.DETECTION_METHOD !== newValue) {
+                logEvent(`[Setup] Method: ${newValue}`, 'settings');
+            } else if (key === 'ACTIVE_MODEL' && prev.ACTIVE_MODEL !== newValue) {
+                logEvent(`[Setup] Model: ${newValue}`, 'settings');
+            } else if (key === 'CONTROL_CHANNEL' && prev.CONTROL_CHANNEL !== newValue) {
+                logEvent(`[Setup] Channel: ${newValue}`, 'settings');
+            }
+
+            return {
+                ...prev,
+                [key]: newValue
+            };
+        });
     }
 
     const handleSaveSettings = () => {
