@@ -15,12 +15,12 @@
       "sensor": "EOG"
     },
     "ch2": {
-      "sensor": "",
-      "enabled": true
+      "enabled": true,
+      "sensor": ""
     },
     "ch3": {
-      "sensor": "",
-      "enabled": true
+      "enabled": true,
+      "sensor": ""
     }
   },
   "display": {

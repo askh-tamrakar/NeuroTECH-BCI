@@ -675,9 +675,13 @@ class AcquisitionApp:
             # Port 6000 is for RAW data as defined in stream_manager.py
             self.stream_socket.connect(('localhost', 6000))
             self.stream_connected = True
+            if getattr(self, '_stream_error_logged', False):
+                self._stream_error_logged = False
             print("[App] ✅ Connected to Stream Manager (Raw)")
         except Exception as e:
-            print(f"[App] ⚠️ Could not connect to Stream Manager: {e}")
+            if not getattr(self, '_stream_error_logged', False):
+                print(f"[App] ⚠️ Could not connect to Stream Manager: {e}")
+                self._stream_error_logged = True
             self.stream_connected = False
             self.stream_socket = None
 
