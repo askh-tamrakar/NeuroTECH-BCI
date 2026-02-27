@@ -119,11 +119,12 @@ class RPSDetector:
                 self._last_err_time = time.time()
             return "Error", 0.0
 
-    def detect(self, features: dict) -> str | None:
+    def detect(self, features: dict) -> tuple[str, str | None]:
         """
         Stateful detection logic:
         - If Rest -> Resolve any pending candidates.
         - If Gesture -> Add to candidates.
+        Returns: (InstantLabel, ConfirmedLabel or None)
         """
         label, confidence = self.predict_instant(features)
         
@@ -137,37 +138,29 @@ class RPSDetector:
             if not self.collecting_candidates:
                 self.collecting_candidates = True
                 self.candidates = []
-                # print(f"[RPS] Starting gesture candidate collection... ({label})")
             
             self.candidates.append(label)
-            return None # Don't emit yet
+            return label, None # Don't emit confirmed move yet, but return instant label
             
         elif is_rest:
             if self.collecting_candidates:
                 # End of a gesture, resolve it!
                 if self.candidates:
-                    # Logic: Most frequent label
-                    # Could also weigh by confidence if we stored it, but Mode is usually robust enough
                     counts = Counter(self.candidates)
-                    most_common = counts.most_common(1)[0][0] # (Label, Count)
+                    most_common = counts.most_common(1)[0][0]
                     
                     self.collecting_candidates = False
                     self.candidates = []
-                    return most_common
+                    # Return (InstantLabel, ConfirmedLabel)
+                    return label, most_common
                 else:
                     self.collecting_candidates = False
-                    return "Rest"
+                    return label, "Rest"
             else:
-                # Already resting, ensure system knows
-                return "Rest"
+                return label, "Rest"
                 
         else:
-            # Low confidence or Unknown
-            # If we are collecting, maybe tolerate a few dropped frames? 
-            # For now, treat as noise/continue current state or ignore.
-            # If we treat as "Rest", we might chop gestures too aggressively.
-            # If we ignore, we rely on the next strong frame.
-            return None
+            return label, None
             
         return None
 

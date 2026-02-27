@@ -186,88 +186,71 @@ class FeatureRouter:
                             
                             if features:
                                 # Feature Extractor produced a window -> Run Detector
-                                # print(f"[Router] Extracted Features from ch{ch_idx} ({sensor_type}). Running Detector...")
                                 detection_result = detector.detect(features)
-                                # print(f"[Router] Detector Result: {detection_result}")
                                 
-                                if detection_result:
-                                    # LOGIC FIX: 
-                                    # 1. We MUST emit "Rest" for RPS game to reset state
-                                    # 2. We MUST allow repeated gestures (e.g. Rock -> Rock)
+                                # Process based on sensor type
+                                if sensor_type == "EMG":
+                                    instant_label, confirmed_label = detection_result
                                     
-                                    # Determine event name
-                                    if sensor_type == "EOG":
-                                        event_name = detection_result # SingleBlink/DoubleBlink
-                                    elif sensor_type == "EMG":
-                                        event_name = detection_result 
-                                    elif sensor_type == "EEG":
-                                        event_name = detection_result 
-                                    else:
-                                        event_name = "UNKNOWN_EVENT"
-
-                                    # STRICT Validation to prevent blank logs
-                                    if not event_name:
-                                        continue
-                                    if not isinstance(event_name, str):
-                                        continue
-                                    if not event_name.strip():
-                                        continue
-                                    if event_name == "None": # String "None" check just in case
-                                        continue
-
-                                    # De-duplication Logic
-                                    state_key = f"{ch_idx}_{sensor_type}"
-                                    last_event = self.last_event_state.get(state_key)
-                                    last_ts = self.last_event_time.get(state_key, 0)
-                                    current_time = time.time()
-
-                                    # For EMG/RPS: 
-                                    # We WANT to allow same gesture twice if it was a distinct release-and-perform action.
-                                    # The Detector (RPSDetector) is stateful: it only returns a value when a gesture FINISHES (or Rest).
-                                    # So every output from detector.detect() is a meaningful event.
-                                    # We should NOT dedup EMG events unless it's just spamming "Rest" repeatedly.
+                                    # 1. Emit Real-time Prediction (Instant Feedback)
+                                    # We emit this every frame for the UI
+                                    self._emit_event("emg_prediction", ch_idx, sensor_type, features, ts, extra_data={"label": instant_label})
                                     
-                                    if sensor_type == "EMG":
-                                        # HEARTBEAT LOGIC FOR REST
-                                        # If it's "Rest", we normally dedup. 
-                                        # BUT, if the game missed the "Rest" signal (e.g. during cooldown), it gets stuck.
-                                        # So we emit "Rest" periodically (e.g. every 0.5s) even if it's a duplicate.
-                                        if event_name == "Rest" and last_event == "Rest":
-                                            if current_time - last_ts > 0.5:
-                                                # Allow heartbeat
-                                                pass 
-                                            else:
-                                                continue
-                                        # Otherwise (Gestures), always pass through, even if same as last
-                                        pass 
-                                    
-                                    elif sensor_type == "EOG":
-                                        # EOG detector emits discrete events only once per blink, so we can pass them.
-                                        # But just in case detector is noisy:
-                                        pass
-                                    
-                                    else:
-                                        # Default dedup for other types
-                                        if event_name == last_event:
-                                            continue
-                                    
-                                    self.last_event_state[state_key] = event_name
-                                    self.last_event_time[state_key] = current_time
-
-                                    # emit event
-                                    event_data = {
-                                        "event": event_name,
-                                        "channel": f"ch{ch_idx}",
-                                        "timestamp": ts,
-                                        "features": features
-                                    }
-                                    formatted_event = json.dumps(event_data)
-                                    print(f"[Feature Router] [EVENT] {event_name} created")
-                                    self.outlet.push_sample([formatted_event])
+                                    # 2. Emit Confirmed Gesture (Game Move)
+                                    if confirmed_label:
+                                        self._emit_event(confirmed_label, ch_idx, sensor_type, features, ts)
+                                        
+                                elif sensor_type == "EOG":
+                                    if isinstance(detection_result, str) and detection_result:
+                                        self._emit_event(detection_result, ch_idx, sensor_type, features, ts)
+                                elif sensor_type == "EEG":
+                                    if detection_result:
+                                        self._emit_event(detection_result, ch_idx, sensor_type, features, ts)
 
             except Exception as e:
                 print(f"[FeatureRouter] [WARNING] Error: {e}")
                 time.sleep(0.1)
+
+    def _emit_event(self, event_name: str, ch_idx: int, sensor_type: str, features: dict, ts: float, extra_data: dict = None):
+        """Helper to validate, de-duplicate, and emit events."""
+        if not event_name or not isinstance(event_name, str) or not event_name.strip():
+            return
+
+        state_key = f"{ch_idx}_{sensor_type}"
+        last_event = self.last_event_state.get(state_key)
+        last_ts = self.last_event_time.get(state_key, 0)
+        current_time = time.time()
+
+        # De-duplication Logic
+        if sensor_type == "EMG":
+            if event_name == "Rest" and last_event == "Rest":
+                if current_time - last_ts < 0.5:
+                    return
+            if event_name == "emg_prediction":
+                pass
+        elif sensor_type == "EOG":
+            pass
+        else:
+            if event_name == last_event:
+                return
+
+        self.last_event_state[state_key] = event_name
+        self.last_event_time[state_key] = current_time
+
+        # Emit event
+        event_data = {
+            "event": event_name,
+            "channel": f"ch{ch_idx}",
+            "timestamp": ts,
+            "features": features
+        }
+        if extra_data:
+            event_data.update(extra_data)
+            
+        formatted_event = json.dumps(event_data)
+        if event_name != "emg_prediction":
+            print(f"[Feature Router] [EVENT] {event_name}")
+        self.outlet.push_sample([formatted_event])
 
 if __name__ == "__main__":
     router = FeatureRouter()

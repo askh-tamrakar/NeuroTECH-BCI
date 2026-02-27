@@ -124,12 +124,24 @@ export default function SettingsView({ latency = 0 }) {
       e.preventDefault();
 
       let keyCode = e.code;
+
+      // Fallback if code is missing (rare but happens on some browsers/os)
+      if (!keyCode) {
+        if (e.key === 'Shift' && e.location === 2) keyCode = 'ShiftRight';
+        else if (e.key === 'Shift' && e.location === 1) keyCode = 'ShiftLeft';
+        else if (e.key === 'Control' && e.location === 2) keyCode = 'ControlRight';
+        else if (e.key === 'Control' && e.location === 1) keyCode = 'ControlLeft';
+        else if (e.key === 'Alt' && e.location === 2) keyCode = 'AltRight';
+        else if (e.key === 'Alt' && e.location === 1) keyCode = 'AltLeft';
+        else keyCode = e.key;
+      }
+
       if (e.key === 'AltGraph') keyCode = 'AltRight';
 
       // Delay to handle AltGr sending ControlLeft first on Windows
-      if (keyCode === 'ControlLeft') {
+      if (keyCode === 'ControlLeft' && e.key !== 'Control') {
         timeout = setTimeout(() => {
-          updateDeepSettings(`keymap.collection.${listeningKeyFor}`, keyCode);
+          updateDeepSettings(`keymap.collection.${listeningKeyFor}`, 'ControlLeft');
           setListeningKeyFor(null);
         }, 100);
         return;

@@ -87,7 +87,8 @@ const DEFAULT_SETTINGS = {
         zoom: 1,
         timeWindow: 3000, // 3s
         windowDuration: 1500,
-        autoLimit: 30
+        autoLimit: 30,
+        autoCalibrate: false
     }
 };
 

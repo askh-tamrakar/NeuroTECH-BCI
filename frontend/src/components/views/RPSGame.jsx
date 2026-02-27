@@ -144,19 +144,17 @@ const RPSGame = ({ wsEvent }) => {
     useEffect(() => {
         if (!wsEvent) return;
 
-        // Track real-time gesture state for UI feedback
-        if (wsEvent.type === 'emg_prediction') {
-            setCurrentPrediction(String(wsEvent.label || '').toUpperCase());
-            return; // Don't treat raw predictions as game events
+        // Unified Real-time prediction handling
+        if (wsEvent.event === 'emg_prediction') {
+            setCurrentPrediction(String(wsEvent.label || 'REST').toUpperCase());
+            return;
         }
 
         const eventName = String(wsEvent.event || '').toUpperCase();
-
         if (!eventName || eventName.trim() === '' || eventName === 'UNKNOWN_EVENT') return;
 
-        // ONLY log events from the RPS detector (ROCK, PAPER, SCISSORS).
+        // Log game-critical events (moves)
         if (eventName !== 'REST' && MOVES.includes(eventName)) {
-            // Append to the top
             setEventLogs(prev => [{
                 id: Date.now() + Math.random(),
                 time: new Date().toLocaleTimeString(),

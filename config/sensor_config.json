@@ -1,6 +1,6 @@
 {
   "active_models": {
-    "EMG": "rps2",
+    "EMG": "anjali",
     "EOG": "Dino-ML"
   },
   "channel_mapping": {
