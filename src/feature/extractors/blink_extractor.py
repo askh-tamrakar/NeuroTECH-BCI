@@ -21,7 +21,11 @@ class BlinkExtractor:
         # User collected data shows ~1000uV blinks, so 300 threshold is reasonable
         self.amp_threshold = eog_cfg.get("amp_threshold", 300.0) 
         self.min_duration_ms = eog_cfg.get("min_duration_ms", 50.0)
-        self.max_duration_ms = eog_cfg.get("max_duration_ms", 800.0)
+        self.max_duration_ms = eog_cfg.get("max_duration_ms", 900.0) 
+        
+        # Hang-time / Grace period to prevent premature window closure
+        self.grace_period_ms = 25.0
+        self.silence_samples_count = 0
         
         # Buffer for signal (approx 1 second of data)
         self.buffer_size = sr 
@@ -29,7 +33,7 @@ class BlinkExtractor:
         
         # Baseline estimation (rolling mean)
         self.baseline = 0.0
-        self.alpha = 0.01 # Smoothing factor for baseline
+        self.alpha = 0.001 # Reduced from 0.01 to prevent baseline "following" the blink
         
         # State tracking
         self.is_collecting = False
@@ -66,19 +70,37 @@ class BlinkExtractor:
         else:
             self.candidate_window.append(zero_centered)
             
-            # If window exceeds max duration, stop collecting
-            if len(self.candidate_window) > (self.max_duration_ms / 1000.0) * self.sr:
-                features = self._extract_features(self.candidate_window)
-                self.is_collecting = False
-                self.candidate_window = []
-                return features
+            # Transition to closing:
+            # Instead of closing immediately when below threshold, wait for grace period
+            if abs(zero_centered) < self.amp_threshold / 4:
+                self.silence_samples_count += 1
+            else:
+                self.silence_samples_count = 0 # Reset if signal spikes again
+                
+            # If silence exceeds grace period OR window exceeds max duration, close it
+            grace_samples = (self.grace_period_ms / 1000.0) * self.sr
+            max_samples = (self.max_duration_ms / 1000.0) * self.sr
             
-            # If it returns below threshold/4, call it an event
-            if abs(zero_centered) < self.amp_threshold / 4 and len(self.candidate_window) > (self.min_duration_ms / 1000.0) * self.sr:
-                features = self._extract_features(self.candidate_window)
+            is_timeout = len(self.candidate_window) >= max_samples
+            is_grace_over = self.silence_samples_count >= grace_samples
+            
+            if (is_grace_over or is_timeout) and len(self.candidate_window) > (self.min_duration_ms / 1000.0) * self.sr:
+                # Trim trailing silence to keep duration/features accurate
+                if is_grace_over:
+                    trim_idx = int(len(self.candidate_window) - self.silence_samples_count)
+                    trimmed_window = self.candidate_window[:max(1, trim_idx)]
+                else:
+                    trimmed_window = self.candidate_window
+                    
+                win_len = len(trimmed_window)
+                features = self._extract_features(trimmed_window)
+                
                 self.is_collecting = False
                 self.candidate_window = []
-                print(f"[Extractor] Window finished: {len(self.candidate_window)} samples. Features: {features}")
+                self.silence_samples_count = 0
+                
+                status = "timed out" if is_timeout else "finished"
+                print(f"[Extractor] Window {status}: {win_len} samples. Peaks: {features.get('peak_count')}")
                 return features
                 
         return None
@@ -105,9 +127,18 @@ class BlinkExtractor:
         asymmetry = rise_time_ms / (fall_time_ms + 1e-6)
         
         # New Feature: Peak Counting (for Double Blink Detection)
-        # Find peaks > 50% of max amplitude to ignore noise
+        # Fix: Only count peaks with the same polarity as the main peak
+        # to avoid miscounting biphasic rebounds as double blinks.
         from scipy.signal import find_peaks
-        peaks, _ = find_peaks(abs_data, height=peak_amp * 0.5, distance=sr * 0.05) # 50ms distance
+        peak_amp_raw = data[peak_idx]
+        detect_data = data if peak_amp_raw > 0 else -data
+        
+        peak_amp_raw = data[peak_idx]
+        detect_data = data if peak_amp_raw > 0 else -data
+        
+        # Hybrid prominence: 40% of peak (robust) but at least 150uV to ignore overshoot/noise
+        prom_threshold = max(150.0, abs(peak_amp_raw) * 0.3)
+        peaks, _ = find_peaks(detect_data, prominence=prom_threshold, distance=sr * 0.1)
         peak_count = len(peaks)
         
         # Statistical features
@@ -167,22 +198,17 @@ class BlinkExtractor:
              # Just return standard features on full window (this is a Rest sample)
              return BlinkExtractor.extract_features(data_centered, sr)
              
-        # 4. Crop around peak
-        # Walk backwards
-        start_idx = 0
-        threshold_low = peak_amp * 0.1 # Cut at 10% of peak (heuristic)
+        # 4. Find crop boundaries by looking for the first and last "active" samples
+        # active = above 10% of main peak
+        threshold_low = peak_amp * 0.1
+        active_indices = np.where(abs_data > threshold_low)[0]
         
-        for i in range(peak_idx, -1, -1):
-            if abs_data[i] < threshold_low:
-                start_idx = i
-                break
-                
-        # Walk forwards
-        end_idx = len(data) - 1
-        for i in range(peak_idx, len(data)):
-            if abs_data[i] < threshold_low:
-                end_idx = i
-                break
+        if len(active_indices) > 0:
+            start_idx = max(0, active_indices[0] - 50) # Buffer 50 samples
+            end_idx = min(len(data) - 1, active_indices[-1] + 50) # Buffer 50 samples
+        else:
+            start_idx = 0
+            end_idx = len(data) - 1
                 
         # 5. Extract features on CROP
         # Ensure crop is at least minimal length (e.g. 10 samples)

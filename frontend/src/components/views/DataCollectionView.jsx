@@ -30,7 +30,7 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
     const [isCalibrating, setIsCalibrating] = useState(false);
     const [runInProgress, setRunInProgress] = useState(false);
     const [windowProgress, setWindowProgress] = useState({});
-    const [autoCalibrate, setAutoCalibrate] = useState(false); // Auto-calibration toggle
+    const [autoCalibrate, setAutoCalibrate] = useState(settings?.collectionState?.autoCalibrate || false); // Auto-calibration toggle
 
     // Data states
     // Data states (chartData removed for Worker optimization)
@@ -217,9 +217,10 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
             zoom,
             timeWindow,
             windowDuration,
-            autoLimit
+            autoLimit,
+            autoCalibrate
         });
-    }, [zoom, timeWindow, windowDuration, autoLimit, updateSettings]);
+    }, [zoom, timeWindow, windowDuration, autoLimit, autoCalibrate, updateSettings]);
 
     // Handlers
     const handleSensorChange = (sensor) => {

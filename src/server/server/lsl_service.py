@@ -154,8 +154,6 @@ def broadcast_events(socketio):
                 try:
                     event_data = json.loads(raw_event)
                     event_name = event_data.get("event", "UNKNOWN")
-                    # print(f"[Web Server] [LSLService] ⚡ Event Received: {event_name}") # Keeping it standard
-                    print(f"[LSLService] ⚡ Event Received: {event_name}", flush=True)
                     socketio.emit('bio_event', event_data)
                 except json.JSONDecodeError:
                     print(f"[LSLService] ⚠️  Failed to parse event JSON: {raw_event}")
@@ -225,28 +223,6 @@ def broadcast_data(socketio):
                              state.session.add_sample('EMG', emg_vals if len(emg_vals) > 1 else emg_vals[0])
                          elif state.session.recording_type == 'EOG' and eog_vals:
                              state.session.add_sample('EOG', eog_vals if len(eog_vals) > 1 else eog_vals[0])
-
-                    if state.session.prediction_active.get('EMG', False):
-                        if state.rps_detector and emg_vals:
-                            val = emg_vals[0] if len(emg_vals) > 0 else 0
-                            state.emg_buffer.append(val)
-                            
-                            now = time.time()
-                            if len(state.emg_buffer) == 512 and (now - state.last_pred_time > 0.1):
-                                window_data = list(state.emg_buffer)
-                                feats = extract_emg_features(window_data, state.sr)
-                                feats['timestamp'] = now
-                                
-                                result = state.rps_detector.detect(feats)
-                                
-                                socketio.emit('emg_prediction', {
-                                    "label": result,
-                                    "confidence": 1.0 if result else 0.0,
-                                    "timestamp": now
-                                })
-                                
-                                state.last_pred_time = now
-
 
                 now = time.time()
                 if now - last_batch_time >= BATCH_INTERVAL and len(batch_buffer) > 0:

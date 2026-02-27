@@ -21,3 +21,4 @@ htmlcov/
 *.bak
 data/processed/windows
 DIY-Muscle-BioAmp-Shield-main/
+*.txt
