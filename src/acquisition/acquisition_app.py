@@ -98,6 +98,7 @@ class AcquisitionApp:
         # Stream Manager Connection
         self.stream_socket = None
         self.stream_connected = False
+        self.command_thread = None
 
 
         # Processed Data Stream State
@@ -675,6 +676,11 @@ class AcquisitionApp:
             # Port 6000 is for RAW data as defined in stream_manager.py
             self.stream_socket.connect(('localhost', 6000))
             self.stream_connected = True
+            
+            # Start Command Listener Thread
+            self.command_thread = threading.Thread(target=self._command_listener_loop, daemon=True)
+            self.command_thread.start()
+            
             if getattr(self, '_stream_error_logged', False):
                 self._stream_error_logged = False
             print("[App] ✅ Connected to Stream Manager (Raw)")
@@ -684,6 +690,28 @@ class AcquisitionApp:
                 self._stream_error_logged = True
             self.stream_connected = False
             self.stream_socket = None
+
+    def _command_listener_loop(self):
+        """Listen for incoming commands from StreamManager relay"""
+        while self.stream_connected and self.stream_socket:
+            try:
+                data = self.stream_socket.recv(1024)
+                if not data:
+                    break
+                
+                # Forward to Serial
+                if self.serial_reader and self.is_connected:
+                    try:
+                        # Assuming data is command strings (e.g. "DEG 110\n")
+                        self.serial_reader.send_command(data.decode().strip())
+                        print(f"[App] Forwarded to Serial: {data.decode().strip()}")
+                    except Exception as e:
+                        print(f"[App] Forward Error: {e}")
+            except Exception as e:
+                if self.stream_connected:
+                    print(f"[App] Command Listener Error: {e}")
+                break
+        print("[App] Command listener stopped")
 
         
     def disconnect_device(self):

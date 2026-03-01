@@ -30,7 +30,7 @@ class StreamManagerApp:
         self.server_socket_proc = None
         self.server_socket_events = None
         
-        self.raw_clients = []
+        self.raw_clients = [] # List of (conn, addr)
         self.client_socket = None
         self.packet_count = 0
         
@@ -229,7 +229,7 @@ class StreamManagerApp:
                         # Spin off a thread for EACH client to avoid blocking
                         t = threading.Thread(target=self._handle_client, args=(conn, addr), daemon=True)
                         t.start()
-                        self.raw_clients.append(addr)
+                        self.raw_clients.append((conn, addr))
                         self.connection_var.set(f"Connected (Raw): {len(self.raw_clients)} clients")
                         
                     elif name == "Processed":
@@ -237,10 +237,13 @@ class StreamManagerApp:
                         t = threading.Thread(target=self._handle_processed_client, args=(conn, addr), daemon=True)
                         t.start()
                         
+                    elif name == "Events":
+                        self.log(f"Events Source connected from {addr} (Relay Mode)")
+                        t = threading.Thread(target=self._handle_relay_client, args=(conn, addr), daemon=True)
+                        t.start()
+                    
                     else:
-                        # For Events, just accept and hold (threaded to avoid block)
                         self.log(f"{name} Client connected from {addr}")
-                        pass 
                     
                 except socket.timeout:
                     continue
@@ -331,8 +334,8 @@ class StreamManagerApp:
             self.log(f"Client connection error ({addr}): {e}")
         finally:
             conn.close()
-            if addr in self.raw_clients:
-                self.raw_clients.remove(addr)
+            # Remove from list
+            self.raw_clients = [c for c in self.raw_clients if c[1] != addr]
             self.root.after_idle(lambda: self.connection_var.set(f"Connected (Raw): {len(self.raw_clients)} clients"))
             self.log(f"Raw Client disconnected: {addr}")
 
@@ -376,6 +379,30 @@ class StreamManagerApp:
         finally:
             conn.close()
             self.log(f"Processed Source disconnected: {addr}")
+
+    def _handle_relay_client(self, conn, addr):
+        """
+        Relays incoming data from Port 6002 to all Port 6000 clients (phones).
+        """
+        try:
+            while self.is_running:
+                data = conn.recv(1024)
+                if not data:
+                    break
+                
+                # Relay to all raw clients
+                if self.raw_clients:
+                    for r_conn, r_addr in self.raw_clients:
+                        try:
+                            r_conn.sendall(data)
+                        except:
+                            pass
+                            
+        except Exception as e:
+            self.log(f"Relay Handler Error: {e}")
+        finally:
+            conn.close()
+            self.log(f"Relay Source disconnected: {addr}")
 
 def main():
     root = tk.Tk()

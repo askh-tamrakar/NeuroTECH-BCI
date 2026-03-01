@@ -1,7 +1,7 @@
 {
   "active_models": {
     "EMG": "anjali",
-    "EOG": "Dino-ML"
+    "EOG": "dino-ml"
   },
   "channel_mapping": {
     "ch0": {

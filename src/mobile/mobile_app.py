@@ -110,7 +110,7 @@ class MobileSerialReader:
 # TCP STREAMER
 # -----------------------------------------------------------------------------
 class TCPStreamer:
-    def __init__(self, ip, port=5000):
+    def __init__(self, ip, port=6000, receive_callback=None):
         self.ip = ip
         self.port = port
         self.sock = None
@@ -118,6 +118,7 @@ class TCPStreamer:
         self.queue = queue.Queue(maxsize=5000)
         self.running = False
         self.bytes_sent = 0
+        self.receive_callback = receive_callback
         
     def connect(self):
         try:
@@ -127,6 +128,7 @@ class TCPStreamer:
             self.is_connected = True
             self.running = True
             threading.Thread(target=self._send_loop, daemon=True).start()
+            threading.Thread(target=self._recv_loop, daemon=True).start()
             return True
         except Exception as e:
             print(f"TCP Connect Error: {e}")
@@ -172,13 +174,31 @@ class TCPStreamer:
                         batch.clear()
                         
                 except queue.Empty:
-                    pass # Keep alive check?
+                    pass 
                     
             except Exception as e:
                 print(f"TCP Send Error: {e}")
                 self.is_connected = False
                 self.running = False
                 break
+
+    def _recv_loop(self):
+        """Listen for incoming commands from the desktop."""
+        while self.running:
+            try:
+                data = self.sock.recv(1024)
+                if not data:
+                    break
+                
+                if self.receive_callback:
+                    self.receive_callback(data)
+                    
+            except Exception as e:
+                if self.running:
+                    print(f"TCP Recv Error: {e}")
+                break
+        self.is_connected = False
+        self.running = False
 
 # -----------------------------------------------------------------------------
 # MAIN APP
@@ -298,7 +318,7 @@ class MobileApp:
             # Connect
             ip = self.ip_var.get()
             try:
-                self.tcp = TCPStreamer(ip)
+                self.tcp = TCPStreamer(ip, receive_callback=self._handle_tcp_command)
                 if self.tcp.connect():
                     self.btn_net.config(text="Disconnect Net")
                     self.lbl_status.config(text="Network OK", foreground="green")
@@ -324,6 +344,16 @@ class MobileApp:
             self.btn_stream.config(text="START STREAMING")
             if self.serial and self.serial.ser:
                 self.serial.ser.write(b"STOP\n")
+
+    def _handle_tcp_command(self, data):
+        """Forward incoming TCP data to Serial."""
+        if self.serial and self.serial.ser and self.serial.ser.is_open:
+            try:
+                # Assuming data is command strings (e.g. "DEG 110\n")
+                self.serial.ser.write(data)
+                print(f"Forwarded to Serial: {data}")
+            except Exception as e:
+                print(f"Forward Error: {e}")
 
     def _update_stats_loop(self):
         if self.tcp:

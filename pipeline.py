@@ -82,10 +82,22 @@ def main():
     parser = argparse.ArgumentParser(description="Brain-To-Brain System Orchestrator")
     parser.add_argument("-b", "--build", action="store_true", help="Build frontend before starting")
     parser.add_argument("-d", "--dev", action="store_true", help="Run in development mode (starts Vite dev server)")
+    parser.add_argument("-s", "--servo", action="store_true", help="Enable Servo Actuator component")
     args = parser.parse_args()
 
+    # Dynamic component addition
+    active_components = list(COMPONENTS)
+    if args.servo:
+        active_components.append({
+            "name": "Servo Actuator",
+            "module": "src.actuation.servo_controller",
+            "args": ["--ip", "127.0.0.1", "--port", "6002"],
+            "color": "\033[91m",  # Red
+            "ready_pattern": "Connected to StreamManager Relay via TCP."
+        })
+
     print("  Brain-To-Brain System Orchestrator (Pipeline)")
-    print("  Sequential Launch: Filter -> Feature -> Web Server")
+    print("  Sequential Launch: Filter -> Feature -> [Servo] -> Web Server")
     print("=" * 60)
     print()
 
@@ -148,15 +160,19 @@ def main():
 
     # --- 3. START BACKEND COMPONENTS ---
     # Start processes sequentially
-    for component in COMPONENTS:
+    for component in active_components:
         name = component["name"]
         print(f"[System] Launching {name}...")
         
         ready_event = threading.Event()
         ready_events[name] = ready_event
 
+        cmd = [python_exe, "-u", "-m", component["module"]]
+        if "args" in component:
+            cmd.extend(component["args"])
+
         proc = subprocess.Popen(
-            [python_exe, "-u", "-m", component["module"]],
+            cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             cwd=str(Path(__file__).parent)
