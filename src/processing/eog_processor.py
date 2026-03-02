@@ -17,9 +17,9 @@ class EOGFilterProcessor:
         self._load_params()
         self._design_filters()
         
-        self.zi_lp = lfilter_zi(self.b_lp, self.a_lp) * 0.0
-        self.zi_notch = lfilter_zi(self.b_notch, self.a_notch) * 0.0 if self.notch_enabled else None
-        self.zi_bp = lfilter_zi(self.b_bp, self.a_bp) * 0.0 if self.bp_enabled else None
+        self.zi_lp = lfilter_zi(self.b_lp, self.a_lp) * 0.0 if (self.a_lp is not None and len(self.a_lp) > 1) else None
+        self.zi_notch = lfilter_zi(self.b_notch, self.a_notch) * 0.0 if (self.notch_enabled and self.a_notch is not None and len(self.a_notch) > 1) else None
+        self.zi_bp = lfilter_zi(self.b_bp, self.a_bp) * 0.0 if (self.bp_enabled and self.a_bp is not None and len(self.a_bp) > 1) else None
 
     def _load_params(self):
         # 1. Default Global Config
@@ -80,9 +80,9 @@ class EOGFilterProcessor:
             print(f"[EOG] Config changed -> Redesign filters")
             self._design_filters()
             # Reset state
-            self.zi_lp = lfilter_zi(self.b_lp, self.a_lp) * 0.0
-            self.zi_notch = lfilter_zi(self.b_notch, self.a_notch) * 0.0 if self.notch_enabled else None
-            self.zi_bp = lfilter_zi(self.b_bp, self.a_bp) * 0.0 if self.bp_enabled else None
+            self.zi_lp = lfilter_zi(self.b_lp, self.a_lp) * 0.0 if (self.a_lp is not None and len(self.a_lp) > 1) else None
+            self.zi_notch = lfilter_zi(self.b_notch, self.a_notch) * 0.0 if (self.notch_enabled and self.a_notch is not None and len(self.a_notch) > 1) else None
+            self.zi_bp = lfilter_zi(self.b_bp, self.a_bp) * 0.0 if (self.bp_enabled and self.a_bp is not None and len(self.a_bp) > 1) else None
 
     def process_sample(self, val: float) -> float:
         """Process a single sample value."""

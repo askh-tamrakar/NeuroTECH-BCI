@@ -27,19 +27,36 @@ def api_list_sessions(sensor_type):
 
 @session_bp.route('/api/sessions/<sensor_type>/<session_name>', methods=['GET'])
 def api_get_session_data(sensor_type, session_name):
-    """Get data rows for a specific session with optional pagination."""
+    """Get data rows for a specific session with optional pagination, sorting, and filtering."""
     try:
-        # Pagement parameters
+        # Pagination parameters
         limit_arg = request.args.get('limit')
         offset_arg = request.args.get('offset', 0)
         
+        # Sorting and filtering parameters
+        sort_by = request.args.get('sortBy', 'id')
+        order = request.args.get('order', 'ASC')
+        label_filter = request.args.get('label')
+        row_from = request.args.get('from')
+        row_to = request.args.get('to')
+        
         limit = int(limit_arg) if limit_arg is not None else None
         offset = int(offset_arg)
+        
+        # Convert filters to appropriate types if provided
+        l_filter = int(label_filter) if label_filter is not None and label_filter != '' else None
+        r_from = int(row_from) if row_from is not None and row_from != '' else None
+        r_to = int(row_to) if row_to is not None and row_to != '' else None
 
-        data = db_manager.get_session_data(sensor_type, session_name, limit=limit, offset=offset)
+        data = db_manager.get_session_data(
+            sensor_type, session_name, 
+            limit=limit, offset=offset,
+            sort_by=sort_by, order=order,
+            label_filter=l_filter, row_from=r_from, row_to=r_to
+        )
         return jsonify(data)
     except ValueError:
-        return jsonify({"error": "Invalid limit or offset"}), 400
+        return jsonify({"error": "Invalid numeric parameters"}), 400
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -55,6 +72,23 @@ def api_delete_session(sensor_type, session_name):
             return jsonify({"status": "deleted", "session": session_name})
         else:
             return jsonify({"error": "Failed to delete"}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@session_bp.route('/api/sessions/<sensor_type>/<session_name>/clear', methods=['DELETE'])
+def api_clear_session(sensor_type, session_name):
+    """Clear all rows from a session without deleting the table."""
+    try:
+        from src.server.server.state import state
+        # If it's the active session, clear in-memory state too
+        if getattr(state.session, 'current_table_name', None) == session_name:
+            state.session.clear_data(sensor_type.upper())
+            
+        result = db_manager.clear_table(sensor_type, session_name)
+        if result.get("status") == "success":
+            return jsonify({"status": "cleared", "session": session_name})
+        else:
+            return jsonify({"error": result.get("error", "Failed to clear")}), 500
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

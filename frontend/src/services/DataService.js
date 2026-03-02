@@ -9,12 +9,12 @@ export const DataService = {
      * @param {Object} payload - The session data.
      * @returns {Promise<Object>} The server response.
      */
-    async saveSession(filename, payload) {
+    async saveSession(filename, payload, sensorType = 'recordings') {
         try {
             const response = await fetch('/api/record', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ filename, payload })
+                body: JSON.stringify({ filename, payload, sensor_type: sensorType })
             });
 
             if (!response.ok) {

@@ -11,7 +11,31 @@ let height = 0;
 // points: { time: number, value: number, future: number|undef }[]
 let points = [];
 const MAX_POINTS = 50000; // Keep enough history
+let channelIndex = -1; // To be set via INIT or SET_CONFIG
 
+const broadcast = new BroadcastChannel('bci-data-stream');
+broadcast.onmessage = (e) => {
+    if (e.data.type === 'DATA_BATCH' && channelIndex !== -1) {
+        const samples = e.data.samples;
+        const newPoints = [];
+
+        samples.forEach(s => {
+            if (s.channels) {
+                const chObj = s.channels[channelIndex] || s.channels[`ch${channelIndex}`] || s.channels[String(channelIndex)];
+                let val = 0;
+                if (chObj !== undefined) {
+                    if (typeof chObj === 'number') val = chObj;
+                    else val = chObj.value ?? 0;
+                }
+                newPoints.push({ time: s.timestamp, value: val });
+            }
+        });
+
+        if (newPoints.length > 0) {
+            addData(newPoints);
+        }
+    }
+};
 // Visual State
 let windows = []; // { id, start, end, type }
 let config = {
@@ -46,6 +70,7 @@ self.onmessage = function (e) {
     switch (type) {
         case 'INIT':
             init(payload);
+            if (payload.channelIndex !== undefined) channelIndex = payload.channelIndex;
             break;
         case 'RESIZE':
             width = payload.width;
@@ -65,6 +90,7 @@ self.onmessage = function (e) {
             break;
         case 'SET_CONFIG':
             config = { ...config, ...payload };
+            if (payload.channelIndex !== undefined) channelIndex = payload.channelIndex;
             requestRender();
             break;
         case 'SET_SCANNER':
@@ -202,7 +228,7 @@ function draw() {
 
     if (points.length === 0) {
         // Draw placeholder grid
-        drawGrid(Date.now(), config.timeWindow, config.timeWindow / 2);
+        drawGrid(Date.now(), config.timeWindow, config.timeWindow / 2, 45);
         return;
     }
 
@@ -269,19 +295,19 @@ function draw() {
             let stroke = 'rgba(255, 255, 255, 0.2)';
 
             if (win.status === 'collected') {
-                fill = 'rgba(16, 185, 129, 0.15)'; // Green-500
+                fill = 'rgba(16, 185, 129, 0.25)'; // Green-500
                 stroke = '#10b981';
             } else if (win.status === 'pending') {
-                fill = 'rgba(245, 158, 11, 0.15)'; // Amber-500
+                fill = 'rgba(245, 158, 11, 0.25)'; // Amber-500
                 stroke = '#f59e0b';
             } else if (win.status === 'recording') {
-                fill = 'rgba(59, 130, 246, 0.15)'; // Blue-500
+                fill = 'rgba(59, 130, 246, 0.25)'; // Blue-500
                 stroke = '#3b82f6';
             } else if (win.status === 'saved') {
-                fill = 'rgba(124, 58, 237, 0.15)'; // Violet-600
+                fill = 'rgba(124, 58, 237, 0.25)'; // Violet-600
                 stroke = '#7c3aed';
             } else if (win.status === 'error') {
-                fill = 'rgba(156, 163, 175, 0.15)'; // Gray-400
+                fill = 'rgba(156, 163, 175, 0.25)'; // Gray-400
                 stroke = '#9ca3af';
             }
 
@@ -294,24 +320,23 @@ function draw() {
             ctx.fillRect(px1, yTop, wFunc, hRegion);
 
             ctx.strokeStyle = stroke;
-            ctx.lineWidth = 1;
+            ctx.lineWidth = 2; // Thicker border
             ctx.strokeRect(px1, yTop, wFunc, hRegion);
 
             // Label
             if (win.label) {
                 ctx.save();
-                ctx.fillStyle = stroke;
+                ctx.fillStyle = '#ffffff'; // Always use white for high contrast on dark windows
+                ctx.globalAlpha = 0.9;
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
 
                 const centerX = px1 + wFunc / 2;
                 const centerY = yTop + hRegion / 2;
 
-                // Dynamic font size for long words
-                const fontSize = win.label.length > 10 ? 24 : 32;
+                const fontSize = win.label.length > 10 ? 24 : 36; // Larger font
                 ctx.font = `bold ${fontSize}px sans-serif`;
 
-                // Draw label at center of the window
                 ctx.fillText(win.label, centerX, centerY);
                 ctx.restore();
             }
@@ -323,10 +348,10 @@ function draw() {
 
     // Draw Signal with Neon Glow and Smoothing
     ctx.strokeStyle = config.lineColor;
-    ctx.lineWidth = 3;
+    ctx.lineWidth = 3.5; // Reduced from 4
 
-    // Neon Glow
-    ctx.shadowBlur = 6;
+    // Neon Glow - Stronger
+    ctx.shadowBlur = 12;
     ctx.shadowColor = config.lineColor;
 
     ctx.beginPath();
@@ -428,7 +453,7 @@ function drawGrid(now, timeWindow, centerTimeOffset, leftMargin, padY, availH) {
     const drawWidth = width - leftMargin;
     const timeToPx = (t_rel_ms) => leftMargin + (t_rel_ms / timeWindow) * drawWidth;
 
-    ctx.globalpha = 0.3;
+    ctx.globalAlpha = 0.3;
     ctx.lineWidth = 1;
     ctx.font = '13px monospace'; // increased font
     ctx.fillStyle = config.themeColor || '#888';
@@ -496,7 +521,11 @@ function drawGrid(now, timeWindow, centerTimeOffset, leftMargin, padY, availH) {
         const diff = (t_abs - now) / 1000;
         const label = diff > 0 ? `+${diff.toFixed(0)}s` : `${diff.toFixed(0)}s`;
 
+        ctx.globalAlpha = 0.8;
         ctx.fillText(label, x_px, height - 12);
+        ctx.globalAlpha = 0.3;
     }
+
+    ctx.globalAlpha = 1.0;
 }
 

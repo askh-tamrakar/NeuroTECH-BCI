@@ -207,11 +207,11 @@ export default function Dashboard() {
             <>
               {showSpacers && <div className="h-[94px] shrink-0" />}
 
-              {currentPage === 'live' && <LiveDashboard wsData={lastMessage} wsConfig={lastConfig} wsEvent={lastEvent} sendMessage={sendMessage} />}
+              {currentPage === 'live' && <LiveDashboard wsData={lastMessage} wsConfig={lastConfig} wsEvent={lastEvent} sendMessage={sendMessage} wsUrl={wsUrl} />}
               {currentPage === 'dino' && <DinoView isConnected={!!lastMessage} wsEvent={lastEvent} isPaused={false} />}
               {currentPage === 'ssvep' && <SSVEPView isConnected={!!lastMessage} wsEvent={lastEvent} />}
               {currentPage === 'rps' && <RPSGame wsEvent={lastEvent} />}
-              {currentPage === 'data_collection' && <DataCollectionView wsData={lastMessage} wsEvent={lastEvent} config={lastConfig} />}
+              {currentPage === 'data_collection' && <DataCollectionView wsData={lastMessage} wsEvent={lastEvent} config={lastConfig} wsUrl={wsUrl} />}
               {currentPage === 'ml_training' && <MLTrainingView />}
               {currentPage === 'settings' && <SettingsView latency={latency} />}
 

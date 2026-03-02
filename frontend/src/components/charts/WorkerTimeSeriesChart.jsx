@@ -6,6 +6,7 @@ const WorkerTimeSeriesChart = forwardRef(({
     timeWindow = 5000,
     activeSensor,
     activeChannelIndex,
+    channelIndex,
     onWindowSelect
 }, ref) => {
 
@@ -75,6 +76,7 @@ const WorkerTimeSeriesChart = forwardRef(({
                         height: containerRef.current.clientHeight,
                         config: {
                             timeWindow,
+                            channelIndex,
                             ...config
                         }
                     };
@@ -185,7 +187,7 @@ const WorkerTimeSeriesChart = forwardRef(({
         if (workerRef.current) {
             workerRef.current.postMessage({
                 type: 'SET_CONFIG',
-                payload: { timeWindow, ...config }
+                payload: { timeWindow, channelIndex, ...config }
             });
         }
     }, [config, timeWindow]);

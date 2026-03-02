@@ -309,19 +309,19 @@ class FilterRouter:
         print(f"[Router] 📍 Configuring pipeline for {num_channels} channels...")
         
         # ========== IMPROVED: Handle all mapping cases ==========
-        try:
-            for i in range(num_channels):
+        for i in range(num_channels):
+            try:
                 ch_key = f"ch{i}"
                 
                 # CASE 1: Channel in config
                 if ch_key in mapping_cfg:
                     cinfo = mapping_cfg[ch_key]
                     enabled = cinfo.get("enabled", True)
-                    sensor_type = cinfo.get("sensor", "UNKNOWN").upper()
+                    sensor_type = str(cinfo.get("sensor", "UNKNOWN")).upper()
                     
                     # CASE 2: Channel disabled
                     if not enabled:
-                        print(f" [{i}] → {sensor_type} (DISABLED - Pass-through)")
+                        print(f"[Router] [{i}] → {sensor_type} (DISABLED - Pass-through)")
                         self.channel_mapping[i] = {
                             "sensor": sensor_type,
                             "enabled": False,
@@ -342,24 +342,25 @@ class FilterRouter:
                     # Create processor instance for this channel
                     if sensor_type == "EMG":
                         self.channel_processors[i] = EMGFilterProcessor(self.config, self.sr, channel_key=ch_key)
-                        print(f" [{i}] → EMG (EMG Processor) | Key: {ch_key}")
+                        env_status = "ENABLED" if getattr(self.channel_processors[i], 'envelope_enabled', False) else "DISABLED"
+                        print(f"[Router] [{i}] → EMG (EMG Processor) | Key: {ch_key} | Enveloping: {env_status}")
                     
                     elif sensor_type == "EOG":
                         self.channel_processors[i] = EOGFilterProcessor(self.config, self.sr, channel_key=ch_key)
-                        print(f" [{i}] → EOG (EOG Processor) | Key: {ch_key}")
+                        print(f"[Router] [{i}] → EOG (EOG Processor) | Key: {ch_key}")
                     
                     elif sensor_type == "EEG":
                         self.channel_processors[i] = EEGFilterProcessor(self.config, self.sr, channel_key=ch_key)
-                        print(f" [{i}] → EEG (EEG Processor) | Key: {ch_key}")
+                        print(f"[Router] [{i}] → EEG (EEG Processor) | Key: {ch_key}")
                     
                     else:
                         # Unknown type - pass-through
                         self.channel_processors[i] = None
-                        print(f" [{i}] → {sensor_type} (Unknown - Pass-through)")
+                        print(f"[Router] [{i}] → {sensor_type} (Unknown - Pass-through)")
                 
                 # CASE 4: Channel NOT in config - Apply default
                 else:
-                    print(f" [{i}] → UNMAPPED (applying default: pass-through)")
+                    print(f"[Router] [{i}] → UNMAPPED (Pass-through)")
                     self.channel_mapping[i] = {
                         "sensor": "UNMAPPED",
                         "enabled": True,
@@ -367,9 +368,9 @@ class FilterRouter:
                         "processor": None
                     }
                     self.channel_processors[i] = None
-        except Exception as e:
-            print(f"[Router] [ERROR] Pipeline configuration error: {e}")
-            return
+            except Exception as e:
+                print(f"[Router] ❌ [ERROR] Failed to configure channel {i} ({ch_key}): {e}")
+                self.channel_processors[i] = None
         
         # ========== Create Unified LSL Outlet ==========
         

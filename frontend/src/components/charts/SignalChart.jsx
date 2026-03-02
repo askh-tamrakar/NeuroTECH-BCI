@@ -25,7 +25,8 @@ const SignalChart = forwardRef(({
   onRangeChange = null,
   onTimeWindowChange = null,
   onColorChange = null,
-  disabled = false
+  disabled = false,
+  channelIndex = -1
 }, ref) => {
 
   const containerRef = useRef(null)
@@ -66,7 +67,8 @@ const SignalChart = forwardRef(({
                 themeAxisColor: getComputedStyle(document.documentElement).getPropertyValue('--muted').trim() || '#aaaaaa',
                 zoom: currentZoom,
                 manualRange: currentManual,
-                showGrid
+                showGrid,
+                channelIndex
               }
             }
           }, [offscreen]);
@@ -124,7 +126,8 @@ const SignalChart = forwardRef(({
           themeAxisColor: getComputedStyle(document.documentElement).getPropertyValue('--muted').trim() || '#aaaaaa',
           zoom: currentZoom,
           manualRange: currentManual,
-          showGrid
+          showGrid,
+          channelIndex
         }
       });
     }
@@ -139,6 +142,13 @@ const SignalChart = forwardRef(({
       });
     }
   }, [annotations]);
+
+  // Handle Disabled State (Clear chart so it doesn't leave frozen data)
+  useEffect(() => {
+    if (disabled && workerRef.current) {
+      workerRef.current.postMessage({ type: 'CLEAR_DATA' });
+    }
+  }, [disabled]);
 
   // Sync Windows
   useEffect(() => {

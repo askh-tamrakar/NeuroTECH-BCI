@@ -19,9 +19,9 @@ class EEGFilterProcessor:
         self._design_filters()
         
         # Initialize state
-        self.zi_hp = lfilter_zi(self.b_hp, self.a_hp) * 0.0
-        self.zi_notch = lfilter_zi(self.b_notch, self.a_notch) * 0.0 if (self.notch_enabled and getattr(self, 'a_notch', None) is not None) else None
-        self.zi_bp = lfilter_zi(self.b_bp, self.a_bp) * 0.0 if (self.bp_enabled and getattr(self, 'a_bp', None) is not None) else None
+        self.zi_hp = lfilter_zi(self.b_hp, self.a_hp) * 0.0 if (self.a_hp is not None and len(self.a_hp) > 1) else None
+        self.zi_notch = lfilter_zi(self.b_notch, self.a_notch) * 0.0 if (self.notch_enabled and self.a_notch is not None and len(self.a_notch) > 1) else None
+        self.zi_bp = lfilter_zi(self.b_bp, self.a_bp) * 0.0 if (self.bp_enabled and self.a_bp is not None and len(self.a_bp) > 1) else None
 
     def _load_params(self):
         # 1. Default Global Config
@@ -88,9 +88,9 @@ class EEGFilterProcessor:
             
             # Reset states
             try:
-                self.zi_hp = lfilter_zi(self.b_hp, self.a_hp) * 0.0
-                self.zi_notch = lfilter_zi(self.b_notch, self.a_notch) * 0.0 if (self.notch_enabled and getattr(self, 'a_notch', None) is not None) else None
-                self.zi_bp = lfilter_zi(self.b_bp, self.a_bp) * 0.0 if (self.bp_enabled and getattr(self, 'a_bp', None) is not None) else None
+                self.zi_hp = lfilter_zi(self.b_hp, self.a_hp) * 0.0 if (self.a_hp is not None and len(self.a_hp) > 1) else None
+                self.zi_notch = lfilter_zi(self.b_notch, self.a_notch) * 0.0 if (self.notch_enabled and self.a_notch is not None and len(self.a_notch) > 1) else None
+                self.zi_bp = lfilter_zi(self.b_bp, self.a_bp) * 0.0 if (self.bp_enabled and self.a_bp is not None and len(self.a_bp) > 1) else None
             except Exception as e:
                 print(f"[EEG] ⚠️ Filter state reset error: {e}")
                 # Fallback to zeros (no steady state init)

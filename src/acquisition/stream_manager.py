@@ -15,6 +15,7 @@ if src_dir not in sys.path:
     sys.path.insert(0, src_dir)
 
 from src.acquisition.lsl_streams import LSLStreamer, LSL_AVAILABLE
+from src.utils.config import config_manager
 
 class StreamManagerApp:
     def __init__(self, root):
@@ -44,39 +45,41 @@ class StreamManagerApp:
         # Initialize LSL
         if LSL_AVAILABLE:
             try:
+                # Load Dynamic Mapping from Config
+                mapping = config_manager.get_channel_mapping()
+                num_channels = 2 # Hardcoded to 2 based on 8-byte packet protocol
+                
+                channel_types = []
+                channel_labels = []
+                
+                for i in range(num_channels):
+                    ch_info = mapping.get(f"ch{i}", {})
+                    sensor = ch_info.get("sensor", "UNKNOWN")
+                    channel_types.append(sensor)
+                    channel_labels.append(f"{sensor}_{i}")
+                
                 self.lsl_stream = LSLStreamer(
                     "BioSignals-Raw-uV",
-                    channel_types=["EMG", "EOG"],
-                    channel_labels=["EMG_0", "EOG_1"],
-                    channel_count=2,
+                    channel_types=channel_types,
+                    channel_labels=channel_labels,
+                    channel_count=num_channels,
                     nominal_srate=512
                 )
-                self.log("✅ LSL Stream 'BioSignals-Raw-uV' created.")
+                self.log(f"✅ LSL Stream 'BioSignals-Raw-uV' created ({', '.join(channel_labels)}).")
 
-                # Initialize Events Stream (Required for System Pipeline Readiness)
-                # FIX: Do NOT create the LSL stream here. FeatureRouter creates the REAL 'BioSignals-Events'.
-                # Creating it here causes a Duplicate Stream issue where Web Server connects to this empty one.
-                # import pylsl
-                # info = pylsl.StreamInfo('BioSignals-Events', 'Markers', 1, 0, 'string', 'BioSignals-Events-Ind')
-                # self.lsl_events = pylsl.StreamOutlet(info)
-                
                 # MAGIC STRING required by pipeline.py (Keep this!)
                 print(f"[{time.strftime('%H:%M:%S')}] [StreamManager] Created stream 'BioSignals-Events'")
                 self.log("✅ LSL Stream 'BioSignals-Events' (Placeholder) reported ready.")
 
-                # Initialize Processed Stream (Received via TCP 6001 from Filter Router)
-                # Note: We assume 2 channels for now as per default config.
-                # Ideally, this should remain dynamic, but LSL StreamInfo requires fixed channel count at init.
-                # If Filter Router changes channels, we might misalignment.
-                # For now, we stick to default 2 channels (EMG, EOG).
+                # Initialize Processed Stream
                 self.lsl_processed = LSLStreamer(
                     "BioSignals-Processed",
-                    channel_types=["EMG", "EOG"],
-                    channel_labels=["EMG_filt", "EOG_filt"],
-                    channel_count=2,
+                    channel_types=channel_types,
+                    channel_labels=[f"{label}_filt" for label in channel_labels],
+                    channel_count=num_channels,
                     nominal_srate=512
                 )
-                self.log("✅ LSL Stream 'BioSignals-Processed' created.")
+                self.log(f"✅ LSL Stream 'BioSignals-Processed' created.")
 
             except Exception as e:
                 self.log(f"❌ Error creating LSL stream: {e}")

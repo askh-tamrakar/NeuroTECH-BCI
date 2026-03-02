@@ -18,10 +18,10 @@ class EMGFilterProcessor:
         self._design_filters()
         
         # Initialize state
-        self.zi_hp = lfilter_zi(self.b_hp, self.a_hp) * 0.0
-        self.zi_notch = lfilter_zi(self.b_notch, self.a_notch) * 0.0 if (self.notch_enabled and getattr(self, 'a_notch', None) is not None) else None
-        self.zi_bp = lfilter_zi(self.b_bp, self.a_bp) * 0.0 if (self.bp_enabled and getattr(self, 'a_bp', None) is not None) else None
-        self.zi_env = lfilter_zi(self.b_env, self.a_env) * 0.0 if self.envelope_enabled else None
+        self.zi_hp = lfilter_zi(self.b_hp, self.a_hp) * 0.0 if (self.a_hp is not None and len(self.a_hp) > 1) else None
+        self.zi_notch = lfilter_zi(self.b_notch, self.a_notch) * 0.0 if (self.notch_enabled and self.a_notch is not None and len(self.a_notch) > 1) else None
+        self.zi_bp = lfilter_zi(self.b_bp, self.a_bp) * 0.0 if (self.bp_enabled and self.a_bp is not None and len(self.a_bp) > 1) else None
+        self.zi_env = lfilter_zi(self.b_env, self.a_env) * 0.0 if (self.envelope_enabled and self.a_env is not None and len(self.a_env) > 1) else None
 
     def _load_params(self):
         # 1. Default Global Config
@@ -87,7 +87,7 @@ class EMGFilterProcessor:
 
     def update_config(self, config: dict, sr: int):
         """Update filter parameters if config changed."""
-        old_state = (self.hp_cutoff, self.notch_enabled, self.notch_freq, self.bp_enabled, self.bp_low, self.bp_high)
+        old_state = (self.hp_cutoff, self.notch_enabled, self.notch_freq, self.bp_enabled, self.bp_low, self.bp_high, self.envelope_enabled, self.envelope_cutoff)
         
         self.config = config
         self.sr = int(sr)
@@ -101,10 +101,10 @@ class EMGFilterProcessor:
             
             # Reset states
             try:
-                self.zi_hp = lfilter_zi(self.b_hp, self.a_hp) * 0.0
-                self.zi_notch = lfilter_zi(self.b_notch, self.a_notch) * 0.0 if (self.notch_enabled and getattr(self, 'a_notch', None) is not None) else None
-                self.zi_bp = lfilter_zi(self.b_bp, self.a_bp) * 0.0 if (self.bp_enabled and getattr(self, 'a_bp', None) is not None) else None
-                self.zi_env = lfilter_zi(self.b_env, self.a_env) * 0.0 if self.envelope_enabled else None
+                self.zi_hp = lfilter_zi(self.b_hp, self.a_hp) * 0.0 if (self.a_hp is not None and len(self.a_hp) > 1) else None
+                self.zi_notch = lfilter_zi(self.b_notch, self.a_notch) * 0.0 if (self.notch_enabled and self.a_notch is not None and len(self.a_notch) > 1) else None
+                self.zi_bp = lfilter_zi(self.b_bp, self.a_bp) * 0.0 if (self.bp_enabled and self.a_bp is not None and len(self.a_bp) > 1) else None
+                self.zi_env = lfilter_zi(self.b_env, self.a_env) * 0.0 if (self.envelope_enabled and self.a_env is not None and len(self.a_env) > 1) else None
             except Exception as e:
                 print(f"[EMG] ⚠️ Filter state reset error: {e}")
                 # Fallback to zeros (no steady state init)
@@ -126,7 +126,6 @@ class EMGFilterProcessor:
             
         # 3. Bandpass
         if self.bp_enabled and self.zi_bp is not None:
-             filtered, self.zi_bp = lfilter(self.b_bp, self.a_bp, [out], zi=self.zi_bp)
              filtered, self.zi_bp = lfilter(self.b_bp, self.a_bp, [out], zi=self.zi_bp)
              out = filtered[0]
 

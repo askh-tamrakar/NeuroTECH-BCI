@@ -9,6 +9,32 @@ let height = 0;
 // Data Storage
 // points: { time: number, value: number }[]
 let points = [];
+const MAX_POINTS = 50000;
+let channelIndex = -1; // To be set via INIT or SET_CONFIG
+
+const broadcast = new BroadcastChannel('bci-data-stream');
+broadcast.onmessage = (e) => {
+    if (e.data.type === 'DATA_BATCH' && channelIndex !== -1) {
+        const samples = e.data.samples;
+        const newPoints = [];
+
+        samples.forEach(s => {
+            if (s.channels) {
+                const chObj = s.channels[channelIndex] || s.channels[`ch${channelIndex}`] || s.channels[String(channelIndex)];
+                let val = 0;
+                if (chObj !== undefined) {
+                    if (typeof chObj === 'number') val = chObj;
+                    else val = chObj.value ?? 0;
+                }
+                newPoints.push({ time: s.timestamp, value: val });
+            }
+        });
+
+        if (newPoints.length > 0) {
+            addData(newPoints);
+        }
+    }
+};
 
 // Visual State
 let config = {
@@ -43,6 +69,7 @@ self.onmessage = function (e) {
     switch (type) {
         case 'INIT':
             init(payload);
+            if (payload.channelIndex !== undefined) channelIndex = payload.channelIndex;
             break;
         case 'RESIZE':
             width = payload.width;
@@ -58,6 +85,7 @@ self.onmessage = function (e) {
             break;
         case 'SET_CONFIG':
             config = { ...config, ...payload };
+            if (payload.channelIndex !== undefined) channelIndex = payload.channelIndex;
 
             // Generate history color automatically if color changed
             if (payload.color && !payload.historyColor) {
@@ -318,16 +346,21 @@ function draw() {
 
         ctx.beginPath();
 
+        let lastPx = -1;
+
         for (let i = startIdx; i <= endIdx; i++) {
             const p = points[i];
             const px = timeToPx(p.time);
             const py = valToPy(p.value);
 
-            if (i === startIdx) {
+            // Break path if we jump across the boundary (wrap-around)
+            // or if it's the first point
+            if (i === startIdx || Math.abs(px - lastPx) > plW * 0.5) {
                 ctx.moveTo(px, py);
             } else {
                 ctx.lineTo(px, py);
             }
+            lastPx = px;
         }
         ctx.stroke();
 
@@ -352,22 +385,22 @@ function draw() {
         }
     }
 
-    // Draw History Line (faded, but highly visible and 2px thick)
+    // Draw History Line (faded, but highly visible)
     ctx.globalAlpha = 0.8;
-    drawSegment(startIndex, splitIndex - 1, config.historyColor, 2.0, false);
+    drawSegment(startIndex, splitIndex - 1, config.historyColor, 3, false);
     ctx.globalAlpha = 1.0;
 
-    // Draw Active Line (solid, thick, glowing)
-    drawSegment(splitIndex, points.length - 1, config.color, 3.0, true);
+    // Draw Active Line
+    drawSegment(splitIndex, points.length - 1, config.color, 3, true);
 
     // Reference Areas (Marked Windows)
     if (markedWindows.length > 0) {
         markedWindows.forEach(win => {
             const getWindowColor = (status, isMissed) => {
-                if (isMissed) return 'rgba(239, 68, 68, 0.2)'; // Red
-                if (status === 'correct') return 'rgba(16, 185, 129, 0.2)'; // Green
-                if (status === 'incorrect') return 'rgba(245, 158, 11, 0.2)'; // Orange
-                return 'rgba(156, 163, 175, 0.1)'; // Gray
+                if (isMissed) return 'rgba(239, 68, 68, 0.35)'; // Red
+                if (status === 'correct') return 'rgba(16, 185, 129, 0.35)'; // Green
+                if (status === 'incorrect') return 'rgba(245, 158, 11, 0.35)'; // Orange
+                return 'rgba(156, 163, 175, 0.25)'; // Gray
             };
             const getStrokeColor = (status, isMissed) => {
                 if (isMissed) return '#ef4444';
@@ -393,8 +426,8 @@ function draw() {
                 ctx.fillRect(px1, 0, wFunc, height);
 
                 ctx.strokeStyle = getStrokeColor(win.status, win.isMissedActual);
-                ctx.globalAlpha = 0.5;
-                ctx.lineWidth = 1;
+                ctx.globalAlpha = 0.8; // More opaque border
+                ctx.lineWidth = 2; // Thicker border
                 ctx.strokeRect(px1, 0, wFunc, height);
                 ctx.globalAlpha = 1.0;
 

@@ -77,6 +77,9 @@ export default defineConfig({
         ws: true,
       }
     },
+    watch: {
+      ignored: ['**/public/data/**']
+    },
     allowedHosts: ["squelchingly-thriftier-cecile.ngrok-free.dev"]
   }
 })

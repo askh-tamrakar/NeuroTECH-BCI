@@ -26,7 +26,10 @@ class DatabaseManager:
         sensor = sensor_type.upper()
         if sensor not in self.db_paths:
             raise ValueError(f"Unknown sensor type: {sensor}")
-        return sqlite3.connect(self.db_paths[sensor])
+        conn = sqlite3.connect(self.db_paths[sensor])
+        # Enable Write-Ahead Logging (WAL) for better concurrency
+        conn.execute("PRAGMA journal_mode=WAL;")
+        return conn
 
     def _init_dbs(self):
         """Initialize all databases."""
@@ -266,38 +269,67 @@ class DatabaseManager:
             print(f"[DB] Error merging multiple tables {source_sessions} into {target_session}: {e}")
             return False
 
-    def get_session_data(self, sensor_type: str, session_name: str, limit: int = None, offset: int = 0) -> Dict:
-        """Fetch rows from a specific session table with optional pagination."""
+    def get_session_data(self, sensor_type: str, session_name: str, limit: int = None, offset: int = 0, 
+                         sort_by: str = 'id', order: str = 'ASC', 
+                         label_filter: int = None, row_from: int = None, row_to: int = None) -> Dict:
+        """Fetch rows from a specific session table with optional pagination, sorting, and filtering."""
         try:
             sensor = sensor_type.upper()
             
             # Validate table name strictly to prevent injection
             prefix = f"{sensor.lower()}_session_"
             if not session_name.startswith(prefix):
-                 # Assume it's the full table name passed from frontend
                  return {"rows": [], "total": 0}
             
-            # Additional safety verify it exists in list?
             if session_name not in self.get_session_tables(sensor):
                 return {"rows": [], "total": 0}
 
             conn = self.connect(sensor)
-            conn.row_factory = sqlite3.Row # Access columns by name
+            conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
 
-            # Get total count first
+            # Build WHERE clause
+            where_clauses = []
+            params = []
+            if label_filter is not None:
+                where_clauses.append("label = ?")
+                params.append(label_filter)
+            if row_from is not None:
+                where_clauses.append("id >= ?")
+                params.append(row_from)
+            if row_to is not None:
+                where_clauses.append("id <= ?")
+                params.append(row_to)
+            
+            where_stmt = ""
+            if where_clauses:
+                where_stmt = " WHERE " + " AND ".join(where_clauses)
+
+            # Get total count with filters
+            cursor.execute(f"SELECT COUNT(*) FROM {session_name}{where_stmt}", params)
+            total_filtered = cursor.fetchone()[0]
+
+            # Get absolute total count
             cursor.execute(f"SELECT COUNT(*) FROM {session_name}")
-            total_count = cursor.fetchone()[0]
+            absolute_total = cursor.fetchone()[0]
 
             # Fetch paginated data
-            query = f"SELECT * FROM {session_name}"
-            params = []
+            # Validate sort_by
+            allowed_sort = {'id', 'label', 'timestamp', 'created_at'}
+            if sort_by not in allowed_sort:
+                sort_by = 'id'
+            
+            order = 'DESC' if order.upper() == 'DESC' else 'ASC'
+            
+            query = f"SELECT * FROM {session_name}{where_stmt} ORDER BY {sort_by} {order}"
             
             if limit is not None:
                 query += " LIMIT ? OFFSET ?"
-                params.extend([limit, offset])
+                fetch_params = params + [limit, offset]
+            else:
+                fetch_params = params
             
-            cursor.execute(query, params)
+            cursor.execute(query, fetch_params)
             rows = cursor.fetchall()
             
             results = []
@@ -317,10 +349,10 @@ class DatabaseManager:
                 results.append(item)
                 
             conn.close()
-            return {"rows": results, "total": total_count}
+            return {"rows": results, "total": total_filtered, "absolute_total": absolute_total}
         except Exception as e:
             print(f"[DB] Error fetching session data {session_name}: {e}")
-            return {"rows": [], "total": 0}
+            return {"rows": [], "total": 0, "absolute_total": 0}
 
     def delete_session_row(self, sensor_type: str, session_name: str, row_id: int) -> bool:
         """Delete a specific row from a session table."""

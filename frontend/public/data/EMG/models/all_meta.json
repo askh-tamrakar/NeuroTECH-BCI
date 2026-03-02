@@ -1,1 +1,1 @@
-{"sensor": "EMG", "n_estimators": 480, "max_depth": 12, "test_size": 0.1, "table_name": "emg_windows", "created_at": "2026-02-26T20:08:39.354402", "accuracy": 0.9404641775983855}
+{"sensor": "EMG", "n_estimators": 480, "max_depth": 12, "min_impurity_decrease": 0.0, "test_size": 0.15, "table_name": "emg_windows", "created_at": "2026-03-02T11:05:31.773715", "accuracy": 0.9351491569390402}

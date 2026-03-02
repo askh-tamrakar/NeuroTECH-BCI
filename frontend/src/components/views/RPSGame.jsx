@@ -1,20 +1,83 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { BrainCircuit, Activity } from 'lucide-react';
+import { BrainCircuit, Activity, ImageIcon } from 'lucide-react';
 import CustomSelect from '../ui/CustomSelect';
 import '../../styles/views/RPSGame.css';
 
 const MOVES = ['ROCK', 'PAPER', 'SCISSORS'];
 
 const ASSETS = {
-    ROCK: '/images/rock.png',
-    PAPER: '/images/paper.png',
-    SCISSORS: '/images/scissors.png',
+    set1: {
+        ROCK: '/images/rock.png',
+        PAPER: '/images/paper.png',
+        SCISSORS: '/images/scissors.png',
+    },
+    set2: {
+        ROCK: '/images/Rock_2.png',
+        PAPER: '/images/Paper_2.png',
+        SCISSORS: '/images/Scissor_2.png',
+    }
 };
 
 const WIN_CONDITIONS = {
     ROCK: 'SCISSORS',
     PAPER: 'ROCK',
     SCISSORS: 'PAPER',
+};
+
+const MoveImage = ({ move, assetType, type }) => {
+    const [hasError, setHasError] = useState(false);
+
+    useEffect(() => {
+        setHasError(false);
+    }, [move, assetType]);
+
+    if (assetType === 'emoji' || hasError) {
+        return (
+            <span className="pop" style={{ fontSize: '14rem', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%' }}>
+                {move === 'ROCK' ? '🪨' : move === 'PAPER' ? '📄' : '✂️'}
+            </span>
+        );
+    }
+
+    const currentSet = ASSETS[assetType] || ASSETS.set1;
+    const src = currentSet[move];
+
+    // Transformation logic
+    let transform = '';
+    if (assetType === 'set1' || assetType === 'image') {
+        transform = type === 'player' ? 'rotate(45deg)' : 'rotate(-45deg)';
+
+        // Specific flips requested by user
+        if (move === 'ROCK' && type === 'player') {
+            transform += ' scaleX(-1)';
+        } else if (move === 'PAPER' && type === 'computer') {
+            transform += ' scaleX(-1)';
+        } else if (move === 'SCISSORS' && type === 'computer') {
+            transform += ' scaleX(-1)';
+        }
+    } else if (assetType === 'set2') {
+        if (type === 'computer') {
+            transform = 'scaleX(-1)';
+        }
+    }
+
+    return (
+        <div className="pop" style={{ width: '300px', height: '300px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <img
+                src={src}
+                alt={move}
+                className="card-image"
+                style={{
+                    transform: transform,
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'contain',
+                    transition: 'transform 0.3s ease-out'
+                }}
+                onError={() => setHasError(true)}
+            />
+        </div>
+    );
 };
 
 const RPSGame = ({ wsEvent }) => {
@@ -26,7 +89,8 @@ const RPSGame = ({ wsEvent }) => {
     const [countdown, setCountdown] = useState(0);
     // Mode: automatic via WS events, or manual via on-screen buttons
     const [manualMode, setManualMode] = useState(false);
-    // Difficulty for computer move randomness: 'low' (repeats sometimes), 'moderate' (avoid repeats), 'high' (fully random)
+    // Visual asset mode
+    const [assetType, setAssetType] = useState('set1'); // 'set1', 'set2', 'emoji'
     // Difficulty for computer move randomness: 'low' (repeats sometimes), 'moderate' (avoid repeats), 'high' (fully random)
     const [difficulty, setDifficulty] = useState('moderate');
 
@@ -160,7 +224,7 @@ const RPSGame = ({ wsEvent }) => {
                 time: new Date().toLocaleTimeString(),
                 name: eventName,
                 channel: wsEvent.channel
-            }, ...prev].slice(0, 10));
+            }, ...prev].slice(0, 15));
         }
     }, [wsEvent]);
 
@@ -269,16 +333,7 @@ const RPSGame = ({ wsEvent }) => {
             <div className={boxClass}>
                 <div className="card-label">{type === 'player' ? 'YOU' : 'COMPUTER'}</div>
                 {revealed && move ? (
-                    <img
-                        src={ASSETS[move]}
-                        alt={move}
-                        className="card-image pop"
-                        onError={(e) => {
-                            e.target.onerror = null;
-                            e.target.style.display = 'none';
-                            e.target.parentNode.innerHTML += `<span style="font-size:4rem">${move === 'ROCK' ? '🪨' : move === 'PAPER' ? '📄' : '✂️'}</span>`
-                        }}
-                    />
+                    <MoveImage move={move} assetType={assetType} type={type} />
                 ) : (
                     <div className="card-placeholder">?</div>
                 )}
@@ -333,7 +388,29 @@ const RPSGame = ({ wsEvent }) => {
                             <button className={`mode-btn ${manualMode ? 'active' : ''}`} onClick={toggleManualMode} title="Toggle manual mode">
                                 {manualMode ? 'Manual' : 'Auto'}
                             </button>
+                            <button
+                                className="flex items-center justify-center p-2 rounded bg-white/5 border border-white/10 hover:bg-white/10 transition-colors ml-2"
+                                onClick={() => setAssetType(prev => prev === 'set1' ? 'set2' : prev === 'set2' ? 'emoji' : 'set1')}
+                                title="Toggle Asset Type"
+                            >
+                                <ImageIcon size={18} className="text-muted hover:text-white transition-colors" />
+                            </button>
                         </div>
+
+                        {gameState !== 'waiting' && result && (
+                            <div className="result-overlay-side animate-in slide-in-from-left duration-500">
+                                <div className={`result-text-side ${result.toLowerCase()}`}>
+                                    {result === 'TIE' ? (
+                                        <>IT'S A<br />TIE</>
+                                    ) : (
+                                        <>YOU<br />{result}!</>
+                                    )}
+                                </div>
+                                <div className="text-muted mt-2 font-mono tracking-widest text-lg">
+                                    RESETTING IN {countdown}...
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     {/* Center Scoreboard using margin auto and position absolute inside the flex container */}
@@ -346,8 +423,8 @@ const RPSGame = ({ wsEvent }) => {
                 </div>
 
                 <div className="rps-main">
-                    {/* Status Text positioned slightly above the cards using negative margin */}
-                    <div className="status-text mt-[-4rem]" style={{ minHeight: '60px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1.5rem' }}>
+                    {/* Status Text and Play Button shifted down */}
+                    <div className="status-text mt-8" style={{ minHeight: '60px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1.5rem' }}>
                         {gameState === 'idle' ? (
                             <button
                                 onClick={handlePlay}
@@ -388,43 +465,33 @@ const RPSGame = ({ wsEvent }) => {
                         {renderCard('computer', computerMove, gameState !== 'waiting')}
                     </div>
 
-                    {gameState !== 'waiting' && result && (
-                        <div className="result-overlay">
-                            <div className={`result-text ${result.toLowerCase()}`}>
-                                {result === 'TIE' ? "IT'S A TIE" : `YOU ${result}!`}
-                            </div>
-                            <div style={{ marginTop: '1rem', color: '#888' }}>
-                                Resetting in {countdown}...
-                            </div>
-                        </div>
-                    )}
                 </div>
+            </div>
 
-                <div className="rps-sidebar">
-                    {/* Event Log Panel */}
-                    <div className="w-full h-full flex flex-col bg-surface/80 border border-white/10 rounded-2xl p-6 backdrop-blur-md shadow-2xl">
-                        <div className="text-sm font-bold text-muted uppercase tracking-wider mb-4 flex justify-between items-center pb-3 border-b border-white/10 flex-shrink-0">
-                            <span>Event Log</span>
-                            <span className="text-[11px] opacity-60">Last 10 events</span>
-                        </div>
-                        <div className="space-y-2 font-mono text-sm overflow-y-auto flex-1 pr-2 custom-scrollbar">
-                            {eventLogs.length === 0 ? (
-                                <div className="text-muted/50 italic py-4 text-center">No events received yet...</div>
-                            ) : (
-                                eventLogs.map((log) => (
-                                    <div key={log.id} className="flex gap-4 py-2 border-b border-white/5 last:border-0 hover:bg-white/5 px-3 rounded text-base">
-                                        <span className="text-muted">{log.time}</span>
-                                        <span className={`font-bold ${log.name === 'ROCK' ? 'text-amber-400' :
-                                            log.name === 'PAPER' ? 'text-blue-400' :
-                                                log.name === 'SCISSORS' ? 'text-pink-400' : 'text-text'
-                                            }`}>
-                                            {log.name}
-                                        </span>
-                                        <span className="text-muted ml-auto text-xs">{log.channel}</span>
-                                    </div>
-                                ))
-                            )}
-                        </div>
+            <div className="rps-sidebar">
+                {/* Event Log Panel */}
+                <div className="w-full h-full flex flex-col bg-surface/80 border border-white/10 rounded-2xl p-6 backdrop-blur-md shadow-2xl">
+                    <div className="text-sm font-bold text-muted uppercase tracking-wider mb-4 flex justify-between items-center pb-3 border-b border-white/10 flex-shrink-0">
+                        <span>Event Log</span>
+                        <span className="text-[11px] opacity-60">Last 15 events</span>
+                    </div>
+                    <div className="space-y-2 font-mono text-sm overflow-y-auto flex-1 pr-2 custom-scrollbar">
+                        {eventLogs.length === 0 ? (
+                            <div className="text-muted/50 italic py-4 text-center">No events received yet...</div>
+                        ) : (
+                            eventLogs.map((log) => (
+                                <div key={log.id} className="flex gap-4 py-2 border-b border-white/5 last:border-0 hover:bg-white/5 px-3 rounded text-base">
+                                    <span className="text-muted">{log.time}</span>
+                                    <span className={`font-bold ${log.name === 'ROCK' ? 'text-amber-400' :
+                                        log.name === 'PAPER' ? 'text-blue-400' :
+                                            log.name === 'SCISSORS' ? 'text-pink-400' : 'text-text'
+                                        }`}>
+                                        {log.name}
+                                    </span>
+                                    <span className="text-muted ml-auto text-xs">{log.channel}</span>
+                                </div>
+                            ))
+                        )}
                     </div>
                 </div>
             </div>

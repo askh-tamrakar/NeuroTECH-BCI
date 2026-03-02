@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import WorkerTimeSeriesChart from '../charts/WorkerTimeSeriesChart';
 import WindowListPanel from '../calibration/WindowListPanel';
 import ConfigPanel from '../calibration/ConfigPanel';
@@ -9,6 +9,10 @@ import { useSettings } from '../../contexts/SettingsContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { Activity, Radio, Zap, Target, Square, Play, Palette, Brain, ChartSpline } from 'lucide-react';
 
+// Workers
+import SessionWorker from '../../workers/session.worker.js?worker';
+import WindowWorker from '../../workers/window.worker.js?worker';
+
 const DEFAULT_PALETTE = [
     '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6',
     '#06b6d4', '#f97316', '#06d6a0'
@@ -18,7 +22,7 @@ const DEFAULT_PALETTE = [
  * DataCollectionView
  * The main container for the BCI data collection experience.
  */
-export default function DataCollectionView({ wsData, wsEvent, config: initialConfig }) {
+export default function DataCollectionView({ wsData, wsEvent, config: initialConfig, wsUrl }) {
     const { settings, updateSettings } = useSettings();
     const { currentTheme } = useTheme();
 
@@ -30,7 +34,6 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
     const [isCalibrating, setIsCalibrating] = useState(false);
     const [runInProgress, setRunInProgress] = useState(false);
     const [windowProgress, setWindowProgress] = useState({});
-    const [autoCalibrate, setAutoCalibrate] = useState(settings?.collectionState?.autoCalibrate || false); // Auto-calibration toggle
 
     // Data states
     // Data states (chartData removed for Worker optimization)
@@ -45,13 +48,30 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
 
     const [totalPredictedCount, setTotalPredictedCount] = useState(0);
 
-    // Session Management
+    // Worker Instances
+    const sessionWorkerRef = useRef(null);
+    const windowWorkerRef = useRef(null);
+    const dataWorkerRef = useRef(null);
+
+    // Session Management State (Managed by Worker)
+    const [sessions, setSessions] = useState([]);
+    const [isSessionLoading, setIsSessionLoading] = useState(false);
+    const [isTableLoading, setIsTableLoading] = useState(false);
+    const [isDetailsReset, setIsDetailsReset] = useState(true); // Track if current fetch is a reset
+    const [sessionRows, setSessionRows] = useState([]);
+    const [sessionTotalRows, setSessionTotalRows] = useState(0);
+    const [sessionAbsoluteTotalRows, setSessionAbsoluteTotalRows] = useState(0);
+    const [sessionHasMore, setSessionHasMore] = useState(true);
+
     const [sessionName, setSessionName] = useState(() => {
         const now = new Date();
         return `Session_${now.getDate()}_${now.getHours()}${now.getMinutes()}`;
     });
     const [appendMode, setAppendMode] = useState(false);
     const [autoLimit, setAutoLimit] = useState(settings?.collectionState?.autoLimit || 30);
+    const [autoCalibrate, setAutoCalibrate] = useState(settings?.collectionState?.autoCalibrate || false); // Auto-calibration toggle
+    const [windowDuration, setWindowDuration] = useState(settings?.collectionState?.windowDuration || 1500); // ms
+    const [timeWindow, setTimeWindow] = useState(settings?.collectionState?.timeWindow || 5000); // visible sweep window length for calibration plot
 
     const [dataLastUpdated, setDataLastUpdated] = useState(0);
 
@@ -65,6 +85,7 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
     const targetLabelRef = useRef(targetLabel);
     const markedWindowsRef = useRef(markedWindows);
     const readyWindowsRef = useRef(readyWindows);
+    const sessionNameRef = useRef(sessionName);
     const sessionInputRef = useRef(null); // Ref for focusing session name input
 
     // Keep refs in sync
@@ -77,6 +98,7 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
     useEffect(() => { readyWindowsRef.current = readyWindows; }, [readyWindows]);
     const autoLimitRef = useRef(autoLimit);
     useEffect(() => { autoLimitRef.current = autoLimit; }, [autoLimit]);
+    useEffect(() => { sessionNameRef.current = sessionName; }, [sessionName]);
 
     // Compute matching channels for the active sensor
     const matchingChannels = React.useMemo(() => {
@@ -109,12 +131,169 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
         }
     }, [activeSensor, matchingChannels, activeChannelIndex]);
 
+    const fullCurrentSessionName = React.useMemo(() => {
+        if (!sessionName) return null;
+        if (sessionName.includes("_session_")) return sessionName;
+        return `${activeSensor.toLowerCase()}_session_${sessionName}`;
+    }, [sessionName, activeSensor]);
+
+    const configuredSensors = React.useMemo(() => {
+        const sensors = new Set();
+        if (config?.channel_mapping) {
+            Object.values(config.channel_mapping).forEach(val => {
+                if (val.sensor) sensors.add(val.sensor);
+                else if (val.type) sensors.add(val.type);
+            });
+        }
+        return sensors.size > 0 ? Array.from(sensors) : ['EMG', 'EOG', 'EEG'];
+    }, [config]);
+
+    // Initialize DataWorker
+    useEffect(() => {
+        if (!wsUrl) return;
+
+        console.log('[DataCollectionView] Initializing DataWorker...');
+        const worker = new Worker(new URL('../../workers/data.worker.js', import.meta.url), { type: 'module' });
+        dataWorkerRef.current = worker;
+
+        worker.postMessage({ type: 'CONNECT', payload: { url: wsUrl } });
+
+        return () => {
+            console.log('[DataCollectionView] Terminating DataWorker...');
+            worker.terminate();
+        };
+    }, [wsUrl]);
+
+    // Initialize Workers (Session & Window)
+    useEffect(() => {
+        sessionWorkerRef.current = new SessionWorker();
+        windowWorkerRef.current = new WindowWorker();
+
+        sessionWorkerRef.current.onmessage = (e) => {
+            const { type, payload } = e.data;
+            switch (type) {
+                case 'SESSIONS_UPDATED':
+                    setSessions(payload);
+                    break;
+                case 'LOADING_STATUS':
+                    setIsSessionLoading(payload);
+                    break;
+                case 'DETAILS_LOADING_STATUS':
+                    setIsTableLoading(payload);
+                    break;
+                case 'SESSION_DETAILS_RESULT':
+                    const { data, isReset, direction, offset } = payload;
+                    const newRows = Array.isArray(data) ? data : (data.rows || []);
+                    const total = data.total !== undefined ? data.total : newRows.length;
+                    const absoluteTotal = data.absolute_total !== undefined ? data.absolute_total : total;
+                    const annotatedRows = newRows.map((r, i) => ({ ...r, absoluteIndex: offset + i }));
+
+                    setSessionTotalRows(total);
+                    setSessionAbsoluteTotalRows(absoluteTotal);
+                    setIsDetailsReset(isReset);
+                    if (isReset) {
+                        setSessionRows(annotatedRows);
+                    } else {
+                        setSessionRows(prev => direction === 'down' ? [...prev, ...annotatedRows] : [...annotatedRows, ...prev]);
+                    }
+                    setSessionHasMore(annotatedRows.length >= 20 && (offset + annotatedRows.length < total));
+                    break;
+                case 'SESSION_CREATED':
+                    setSessionName(payload.safeName);
+                    break;
+                case 'DELETE_SUCCESS':
+                    // Use Ref to get latest session name
+                    const currentName = sessionNameRef.current;
+                    if (payload === currentName || payload.includes(currentName)) {
+                        setSessionName('Default');
+                    }
+                    break;
+                case 'CLEAR_SUCCESS':
+                    const currentNameClear = sessionNameRef.current;
+                    if (payload === currentNameClear || payload.includes(currentNameClear)) {
+                        sessionWorkerRef.current?.postMessage({
+                            type: 'FETCH_DETAILS',
+                            payload: { fullName: payload, limit: 20, offset: 0, isReset: true }
+                        });
+                    }
+                    break;
+                case 'ROW_DELETE_SUCCESS':
+                    // OPTIMIZATION: Instead of full reload, filter locally
+                    const { rowId } = payload;
+                    setSessionRows(prev => prev.filter(r => r.id !== rowId));
+                    setSessionTotalRows(prev => Math.max(0, prev - 1));
+                    break;
+            }
+        };
+
+        windowWorkerRef.current.onmessage = async (e) => {
+            const { type, payload } = e.data;
+            switch (type) {
+                case 'WINDOWS_UPDATED':
+                    setMarkedWindows(payload);
+                    break;
+                case 'REQUEST_SAMPLES':
+                    const { id, start, end, delay } = payload;
+                    setTimeout(async () => {
+                        if (chartRef.current) {
+                            try {
+                                const samplesPoints = await chartRef.current.getSamples(start, end);
+                                if (samplesPoints && samplesPoints.length > 0) {
+                                    const samples = samplesPoints.map(p => p.value);
+                                    const timestamps = samplesPoints.map(p => p.time);
+                                    windowWorkerRef.current.postMessage({
+                                        type: 'WINDOW_COLLECTED',
+                                        payload: { id, startTime: start, endTime: end, samples, timestamps, status: 'collected' }
+                                    });
+                                }
+                            } catch (err) {
+                                console.error("Failed to get samples for worker window", err);
+                            }
+                        }
+                    }, delay);
+                    break;
+                case 'TRIGGER_AUTO_APPEND':
+                    handleAppendSamples();
+                    break;
+            }
+        };
+
+        // Initial Worker Config
+        sessionWorkerRef.current.postMessage({ type: 'INIT', payload: { sensor: activeSensor, isTestMode: mode === 'test' } });
+        windowWorkerRef.current.postMessage({
+            type: 'INIT',
+            payload: {
+                activeSensor,
+                activeChannelIndex,
+                targetLabel,
+                mode,
+                autoLimit,
+                autoCalibrate,
+                windowDuration,
+                timeWindow,
+                isCalibrating
+            }
+        });
+
+        return () => {
+            sessionWorkerRef.current?.terminate();
+            windowWorkerRef.current?.terminate();
+        };
+    }, []);
+
+    // Sync state to workers
+    useEffect(() => {
+        windowWorkerRef.current?.postMessage({
+            type: 'UPDATE_STATE',
+            payload: { activeSensor, activeChannelIndex, targetLabel, mode, autoLimit, autoCalibrate, windowDuration, timeWindow }
+        });
+    }, [activeSensor, activeChannelIndex, targetLabel, mode, autoLimit, autoCalibrate, windowDuration, timeWindow]);
+
     // Ensure config is loaded on mount
     useEffect(() => {
         const loadConfig = async () => {
             try {
                 const cfg = await CalibrationApi.fetchSensorConfig();
-                console.log('[DataCollectionView] Fetched config:', cfg);
                 setConfig(cfg);
             } catch (err) {
                 console.error('[DataCollectionView] Failed to load config:', err);
@@ -199,9 +378,7 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
 
     // Refs for real-time windowing
     const windowIntervalRef = useRef(null);
-    const [windowDuration, setWindowDuration] = useState(settings?.collectionState?.windowDuration || 1500); // ms
     const GAP_DURATION = 500; // ms
-    const [timeWindow, setTimeWindow] = useState(settings?.collectionState?.timeWindow || 5000); // visible sweep window length for calibration plot
     const MAX_WINDOWS = autoCalibrate ? 50 : 2000;
 
     // Additional Refs for windowing logic (Defined here to avoid TDZ)
@@ -225,178 +402,31 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
     // Handlers
     const handleSensorChange = (sensor) => {
         setActiveSensor(sensor);
-        setMarkedWindows([]);
-        setTotalPredictedCount(0);
-        // Set default label based on sensor
-        if (sensor === 'EMG') setTargetLabel('Rock');
-        else if (sensor === 'EOG') setTargetLabel('SingleBlink');
-
         if (sensor === 'EEG' && mode !== 'test') {
             setMode('test');
         } else if (sensor !== 'EEG' && mode === 'recording') {
             setMode('collection');
         }
+        sessionWorkerRef.current?.postMessage({ type: 'SET_SENSOR', payload: sensor });
     };
 
     const startAutoWindowing = useCallback(() => {
-        const createNextWindow = () => {
-            const currentTw = timeWindowRef.current;
-            const currentDur = windowDurationRef.current;
-
-            // Use latest signal timestamp tracked via WS
-            const latestTs = latestSignalTimeRef.current;
-
-            // Determine Label (Fixed for Calibration, Random for Test)
-            const sensorForWindow = activeSensorRef.current;
-            let labelForWindow = targetLabelRef.current;
-            const currentMode = mode === 'collection' ? 'collection' : (mode === 'test' ? 'test' : 'collection');
-            console.log(`[AutoWindow] Creation tick. Mode: ${currentMode}, Sensor: ${sensorForWindow}`);
-
-            // Random Label Logic for Test Mode
-            if (currentMode === 'test') {
-                const LABELS = {
-                    'EMG': ['Rock', 'Paper', 'Scissors', 'Rest'],
-                    'EOG': ['SingleBlink', 'DoubleBlink', 'Rest']
-                };
-                const options = LABELS[sensorForWindow] || ['Rest'];
-                labelForWindow = options[Math.floor(Math.random() * options.length)];
-            }
-
-            // Visual sync spawn
-            const delayToCenter = Math.round(currentTw / 2);
-            const start = latestTs + delayToCenter;
-            const end = start + currentDur;
-
-            const channelForWindow = activeChannelIndexRef.current;
-            const limit = autoLimitRef.current;
-
-            // Count pending/collected matching label
-            const currentList = markedWindowsRef.current || [];
-            const currentBatchCount = currentList.filter(w =>
-                w.label === labelForWindow &&
-                (w.status === 'pending' || w.status === 'collected')
-            ).length;
-
-            if (autoCalibrate && currentBatchCount >= limit) {
-                return;
-            }
-
-            try {
-                const newWindow = {
-                    id: Math.random().toString(36).substr(2, 9),
-                    sensor: sensorForWindow,
-                    mode: currentMode,
-                    startTime: start,
-                    endTime: end,
-                    label: labelForWindow,
-                    channel: channelForWindow,
-                    status: 'pending',
-                    samples: []
-                };
-
-                console.log("[AutoWind] pushing window", newWindow.id, newWindow.label);
-                setMarkedWindows(prev => [...prev, newWindow].slice(-MAX_WINDOWS));
-                setActiveWindow(newWindow);
-
-                const checkAndCollect = async () => {
-                    // Check if still valid
-                    if (!markedWindowsRef.current.find(w => w.id === newWindow.id)) return;
-
-                    // Sync check
-                    const latestDataTs = latestSignalTimeRef.current;
-                    const systemLag = Math.max(0, Date.now() - latestDataTs);
-
-                    const shiftedStart = start + systemLag;
-                    const shiftedEnd = end + systemLag;
-
-                    if (latestDataTs < shiftedEnd - 50) {
-                        // Wait slightly longer
-                        const now = Date.now();
-                        if (now > shiftedEnd + 5000) {
-                            console.warn("[AutoWindow] Timeout waiting for data");
-                            return; // Abort
-                        }
-                        setTimeout(checkAndCollect, 100);
-                        return;
-                    }
-
-                    try {
-                        // ASYNC FETCH FROM WORKER
-                        if (!chartRef.current) throw new Error("Chart not ready");
-
-                        const samplesPoints = await chartRef.current.getSamples(shiftedStart, shiftedEnd);
-
-                        if (!samplesPoints || samplesPoints.length === 0) {
-                            throw new Error("No data collected");
-                        }
-
-                        const samples = samplesPoints.map(p => p.value);
-                        const timestamps = samplesPoints.map(p => p.time);
-
-                        const collectedWindow = {
-                            ...newWindow,
-                            startTime: shiftedStart,
-                            endTime: shiftedEnd,
-                            samples,
-                            timestamps,
-                            status: 'collected',
-                            lagCorrection: systemLag
-                        };
-
-                        setReadyWindows(prev => {
-                            const next = [...prev, collectedWindow];
-                            setWindowProgress(prevProg => ({ ...prevProg, [newWindow.id]: { status: 'collected' } }));
-                            return next;
-                        });
-
-                        setMarkedWindows(prev => prev.map(w => w.id === newWindow.id ? collectedWindow : w));
-
-                    } catch (err) {
-                        console.error('Auto-collection error:', err);
-                        setWindowProgress(prev => ({ ...prev, [newWindow.id]: { status: 'error', message: String(err) } }));
-
-                        const errorWindow = { ...newWindow, status: 'error', error: String(err) };
-                        setBufferWindows(prev => [...prev, errorWindow]);
-                        setMarkedWindows(prev => prev.map(w => w.id === newWindow.id ? { ...w, status: 'error' } : w));
-
-                    } finally {
-                        setActiveWindow(null);
-                    }
-                };
-
-                // Initial wait
-                setTimeout(checkAndCollect, delayToCenter + currentDur + 100);
-            } catch (e) {
-                console.error("Critical error in createNextWindow", e);
-            }
-        };
-
-        try {
-            createNextWindow();
-        } catch (e) { console.error("Error creating window", e); }
-
-        windowIntervalRef.current = setInterval(() => {
-            try { createNextWindow(); } catch (e) { console.error("Interval Error", e); }
-        }, windowDuration + GAP_DURATION);
-    }, [windowDuration, GAP_DURATION, activeSensor, targetLabel, activeChannelIndex, autoLimit, autoCalibrate, mode]);
+        windowWorkerRef.current?.postMessage({ type: 'START_WINDOWING' });
+    }, []);
 
     const handleStartCalibration = useCallback(async () => {
-        console.log(`[handleStart] Requesting start. Active Mode: ${mode}`);
         setIsCalibrating(true);
-
-        // fire and forget / await
         CalibrationApi.startCalibration(activeSensor, mode, targetLabel, windowDuration, sessionName)
             .catch(e => console.error("Start Calib API failed", e));
 
         if (mode === 'collection' || mode === 'test') {
-            console.log('[handleStart] Triggering auto-windowing...');
             startAutoWindowing();
         }
     }, [activeSensor, mode, targetLabel, windowDuration, sessionName, startAutoWindowing]);
 
     const handleStopCalibration = useCallback(async () => {
         setIsCalibrating(false);
-        if (windowIntervalRef.current) clearInterval(windowIntervalRef.current);
+        windowWorkerRef.current?.postMessage({ type: 'STOP_WINDOWING' });
         await CalibrationApi.stopCalibration(activeSensor);
         setActiveWindow(null);
     }, [activeSensor]);
@@ -405,57 +435,33 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
 
 
     const handleManualWindowSelect = useCallback(async (start, end) => {
-        const newWindow = {
-            id: Math.random().toString(36).substr(2, 9),
-            sensor: activeSensor,
-            mode: 'recording',
-            startTime: start,
-            endTime: end,
-            label: targetLabel,
-            channel: activeChannelIndex,
-            status: 'recording',
-            samples: []
-        };
+        const id = Math.random().toString(36).substr(2, 9);
+        if (chartRef.current) {
+            try {
+                const samplesPoints = await chartRef.current.getSamples(start, end);
+                const samples = samplesPoints ? samplesPoints.map(p => p.value) : [];
+                const timestamps = samplesPoints ? samplesPoints.map(p => p.time) : [];
 
-        setMarkedWindows(prev => [...prev, newWindow].slice(-MAX_WINDOWS));
-        setActiveWindow(newWindow);
-
-        // Fetch Data immediately
-        try {
-            if (!chartRef.current) throw new Error("Chart not ready");
-
-            const samplesPoints = await chartRef.current.getSamples(start, end);
-
-            if (!samplesPoints || samplesPoints.length === 0) {
-                // Warn but maybe keep window?
-                console.warn("Manual selection has no data");
+                windowWorkerRef.current?.postMessage({
+                    type: 'WINDOW_COLLECTED',
+                    payload: {
+                        id,
+                        sensor: activeSensor,
+                        mode: 'recording',
+                        startTime: start,
+                        endTime: end,
+                        label: targetLabel,
+                        channel: activeChannelIndex,
+                        status: 'collected',
+                        samples,
+                        timestamps
+                    }
+                });
+            } catch (err) {
+                console.error("Manual selection error:", err);
             }
-
-            const samples = samplesPoints ? samplesPoints.map(p => p.value) : [];
-            const timestamps = samplesPoints ? samplesPoints.map(p => p.time) : [];
-
-            const collectedWindow = {
-                ...newWindow,
-                samples,
-                timestamps,
-                status: 'collected'
-            };
-
-            setReadyWindows(prev => [...prev, collectedWindow]);
-
-            setMarkedWindows(prev => {
-                const existing = prev.find(w => w.id === newWindow.id);
-                if (existing) {
-                    return prev.map(w => w.id === newWindow.id ? collectedWindow : w);
-                }
-                return [...prev, collectedWindow].slice(-MAX_WINDOWS);
-            });
-
-        } catch (err) {
-            console.error("Manual selection error:", err);
-            setMarkedWindows(prev => prev.filter(w => w.id !== newWindow.id));
         }
-    }, [activeSensor, activeChannelIndex, targetLabel, MAX_WINDOWS]);
+    }, [activeSensor, activeChannelIndex, targetLabel]);
 
 
 
@@ -464,31 +470,19 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
      * Saves all 'collected' (Green) windows from readyWindows to the database.
      */
     const handleAppendSamples = useCallback(async () => {
-        // Use Ref to get current snapshot of ready windows
-        const toAppend = readyWindowsRef.current;
-
+        const toAppend = markedWindows.filter(w => w.status === 'collected');
         if (!toAppend || toAppend.length === 0) return;
 
         setRunInProgress(true);
-
-        // Mark strictly the ready windows as saving? 
-        // Or just iterate them.
-
         try {
-            let savedCount = 0;
-
             for (const win of toAppend) {
                 try {
-                    // Check Mode (Calibration vs Test)
                     let resp;
                     if (mode === 'test') {
                         resp = await CalibrationApi.sendPredictionWindow(activeSensor, {
                             action: win.label,
                             samples: win.samples
                         });
-                        // Map prediction response to similar structure for internal state
-                        resp.features = resp.features;
-                        resp.predicted_label = resp.predicted_label;
                     } else {
                         resp = await CalibrationApi.sendWindow(activeSensor, {
                             action: win.label,
@@ -498,54 +492,33 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                         }, sessionName);
                     }
 
-                    // Success -> Create Saved version for Buffer
-                    const savedWindow = {
-                        ...win,
-                        status: (mode === 'test') ? (resp.match ? 'correct' : 'incorrect') : 'saved',
-                        features: resp.features,
-                        predictedLabel: resp.predicted_label
-                    };
-
-                    // Move to Buffer
-                    setBufferWindows(prev => [...prev, savedWindow]);
-                    savedCount++;
-
-                    // Update UI List to show SAVED (e.g. Red/Blue)
-                    setMarkedWindows(prev => prev.map(w => w.id === win.id ? {
-                        ...w,
-                        status: (mode === 'test') ? (resp.match ? 'correct' : 'incorrect') : 'saved',
-                        features: resp.features,
-                        predictedLabel: resp.predicted_label
-                    } : w));
+                    const status = (mode === 'test') ? (resp.match ? 'correct' : 'incorrect') : 'saved';
+                    windowWorkerRef.current?.postMessage({
+                        type: 'WINDOW_COLLECTED',
+                        payload: { ...win, status, features: resp.features, predictedLabel: resp.predicted_label }
+                    });
 
                 } catch (err) {
                     console.error("Error saving window:", win.id, err);
-                    // Error -> BLACK -> Buffer
-                    const errorWindow = { ...win, status: 'error', error: String(err) };
-                    setBufferWindows(prev => [...prev, errorWindow]);
+                    windowWorkerRef.current?.postMessage({
+                        type: 'WINDOW_COLLECTED',
+                        payload: { ...win, status: 'error' }
+                    });
                 }
             }
-
-            // Clear Ready List (all were processed into buffer, either as saved or error)
-            setReadyWindows([]);
-
-            if (savedCount > 0) {
-                setDataLastUpdated(Date.now()); // Trigger table refresh
-            }
-
+            setDataLastUpdated(Date.now());
+            sessionWorkerRef.current?.postMessage({ type: 'FETCH_SESSIONS', payload: { silent: true } }); // Refresh session list silently
         } finally {
             setRunInProgress(false);
         }
-    }, [mode, activeSensor, sessionName]);
+    }, [mode, activeSensor, sessionName, markedWindows]);
 
     const deleteWindow = (id) => {
-        setMarkedWindows(prev => prev.filter(w => w.id !== id));
-        setReadyWindows(prev => prev.filter(w => w.id !== id));
+        windowWorkerRef.current?.postMessage({ type: 'DELETE_WINDOW', payload: id });
     };
 
     const handleClearAllWindows = () => {
-        setMarkedWindows([]);
-        setReadyWindows([]);
+        windowWorkerRef.current?.postMessage({ type: 'CLEAR_ALL_WINDOWS' });
         setBufferWindows([]);
         setTotalPredictedCount(0);
     };
@@ -737,73 +710,27 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
     // Optimization: Flusing directly to Worker
     const incomingBufferRef = useRef([]);
 
-    // Update chart data from WS or Mock (Buffered and sent to Worker)
+    // Data Processing for Chart Plotting - REMOVED (Handled by DataWorker -> BroadcastChannel -> ChartWorker)
+    // Note: windowWorkerRef still needs timing updates, we can either pipe them from DataWorker or 
+    // keep a minimal listener here. Let's keep a minimal one for windowing logic.
+
     useEffect(() => {
-        if ((mode === 'collection' || mode === 'test') && wsData) {
-            const payload = wsData.raw || wsData;
+        if (!wsData) return;
+        const payload = wsData.raw || wsData;
+        const samples = payload._batch || payload.samples || (payload.channels ? [payload] : []);
+        if (samples.length === 0) return;
 
-            let samples = [];
-            if (payload._batch) {
-                samples = payload._batch;
-            } else if (payload.type === 'batch' && Array.isArray(payload.samples)) {
-                samples = payload.samples;
-            } else if (payload.channels) {
-                samples = [payload];
-            }
+        const lastSample = samples[samples.length - 1];
+        let incomingTs = Number(lastSample.timestamp);
+        if (!incomingTs || incomingTs < 1e9) incomingTs = Date.now();
 
-            if (samples.length === 0) return;
+        latestSignalTimeRef.current = incomingTs;
+        windowWorkerRef.current?.postMessage({ type: 'UPDATE_SIGNAL_TIME', payload: incomingTs });
+    }, [wsData]);
 
-            const samplingRate = config?.sampling_rate || 250;
-            const sampleIntervalMs = Math.round(1000 / samplingRate);
-            const channelIndex = activeChannelIndex;
 
-            samples.forEach((s) => {
-                let incomingTs = Number(s.timestamp);
-                if (!incomingTs || incomingTs < 1e9) incomingTs = Date.now();
+    // Flush to Worker loop (30fps) - REMOVED (Handled by DataWorker -> BroadcastChannel -> ChartWorker)
 
-                // Monotonic timestamp logic
-                if (!window.__calibLastTs) window.__calibLastTs = incomingTs;
-                if (incomingTs <= window.__calibLastTs) {
-                    incomingTs = window.__calibLastTs + sampleIntervalMs;
-                }
-                window.__calibLastTs = incomingTs;
-
-                // Robust channel extraction
-                if (s.channels) {
-                    let rawVal = undefined;
-                    if (s.channels[channelIndex] !== undefined) rawVal = s.channels[channelIndex];
-                    else if (s.channels[`ch${channelIndex}`] !== undefined) rawVal = s.channels[`ch${channelIndex}`];
-
-                    if (rawVal !== undefined) {
-                        const val = typeof rawVal === 'number' ? rawVal : (rawVal.value || 0);
-                        // PUSH TO LOCAL BUFFER
-                        incomingBufferRef.current.push({ time: incomingTs, value: val });
-                    }
-                }
-            });
-
-            // Update latest time reference immediately if we have data
-            if (incomingBufferRef.current.length > 0) {
-                latestSignalTimeRef.current = incomingBufferRef.current[incomingBufferRef.current.length - 1].time;
-            }
-        }
-    }, [wsData, mode, activeSensor, activeChannelIndex, config]);
-
-    // Flush to Worker loop (30fps)
-    useEffect(() => {
-        const intervalId = setInterval(() => {
-            if (incomingBufferRef.current.length === 0) return;
-
-            const newPoints = incomingBufferRef.current;
-            incomingBufferRef.current = []; // Clear ref immediately
-
-            // Send to Worker
-            if (chartRef.current) {
-                chartRef.current.addData(newPoints);
-            }
-        }, 16); // 60fps flush for smoother scrolling
-        return () => clearInterval(intervalId);
-    }, []);
 
     // Sync Windows to Worker
     useEffect(() => {
@@ -964,16 +891,7 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                         <div className="space-y-2">
                             <label className="text-xs font-bold text-muted uppercase tracking-wider flex items-center gap-1.5"><Activity size={14} /> Sensor & Mode</label>
                             <div className="flex bg-bg p-1 rounded-lg border border-border overflow-x-auto no-scrollbar">
-                                {React.useMemo(() => {
-                                    const configuredSensors = new Set();
-                                    if (config?.channel_mapping) {
-                                        Object.values(config.channel_mapping).forEach(val => {
-                                            if (val.sensor) configuredSensors.add(val.sensor);
-                                            else if (val.type) configuredSensors.add(val.type);
-                                        });
-                                    }
-                                    return configuredSensors.size > 0 ? Array.from(configuredSensors) : ['EMG', 'EOG', 'EEG'];
-                                }, [config]).map(s => (
+                                {configuredSensors.map(s => (
                                     <button
                                         key={s}
                                         onClick={() => handleSensorChange(s)}
@@ -1144,6 +1062,7 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                                 timeWindow={timeWindow}
                                 activeSensor={activeSensor}
                                 activeChannelIndex={activeChannelIndex}
+                                channelIndex={activeChannelIndex}
                                 config={chartConfig}
                                 onWindowSelect={handleManualWindowSelect}
                             />
@@ -1164,6 +1083,21 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                             refreshTrigger={dataLastUpdated}
                             isTestMode={mode === 'test'}
                             inputRef={sessionInputRef}
+                            sessions={sessions}
+                            isLoading={isSessionLoading}
+                            isTableLoading={isTableLoading}
+                            isResetMode={isDetailsReset}
+                            rows={sessionRows}
+                            totalRows={sessionTotalRows}
+                            absoluteTotalRows={sessionAbsoluteTotalRows}
+                            hasMore={sessionHasMore}
+                            onFetchDetails={(payload) => sessionWorkerRef.current?.postMessage({ type: 'FETCH_DETAILS', payload })}
+                            onDeleteSession={(name) => sessionWorkerRef.current?.postMessage({ type: 'DELETE_SESSION', payload: { name } })}
+                            onRenameSession={(oldName, newName) => sessionWorkerRef.current?.postMessage({ type: 'RENAME_SESSION', payload: { oldName, newName } })}
+                            onMergeSessions={(sourceSessions, targetName) => sessionWorkerRef.current?.postMessage({ type: 'MERGE_SESSIONS', payload: { sourceSessions, targetName } })}
+                            onDeleteRow={(rowId) => sessionWorkerRef.current?.postMessage({ type: 'DELETE_ROW', payload: { fullName: fullCurrentSessionName, rowId } })}
+                            onClearSession={(name) => sessionWorkerRef.current?.postMessage({ type: 'CLEAR_SESSION', payload: { name } })}
+                            onCreateSession={(name) => sessionWorkerRef.current?.postMessage({ type: 'CREATE_SESSION', payload: { name } })}
                         />
                     ) : (
                         <ConfigPanel config={config} sensor={activeSensor} onSave={setConfig} />
@@ -1191,3 +1125,4 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
         </div>
     );
 }
+

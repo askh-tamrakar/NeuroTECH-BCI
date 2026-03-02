@@ -12,6 +12,7 @@ from datetime import datetime
 from PySide6 import QtCore, QtWidgets, QtGui
 import pyqtgraph as pg
 import numpy as np
+import socket
 
 # Optional: serial backend
 try:
@@ -198,7 +199,7 @@ class SerialWriter(threading.Thread):
         self.sample_rate = sample_rate
         self.channels = channels
         self.data_queue = data_queue  # receives tuples (adc0, adc1, timestamp)
-        self._stop = threading.Event()
+        self._stop_event = threading.Event()
         self.binary = binary
         self.quiet = quiet
         self.counter = 0
@@ -217,12 +218,12 @@ class SerialWriter(threading.Thread):
             return False
 
     def stop(self):
-        self._stop.set()
+        self._stop_event.set()
 
     def run(self):
         opened = self.open_port()
         interval = 1.0 / float(self.sample_rate)
-        while not self._stop.is_set():
+        while not self._stop_event.is_set():
             try:
                 adc0, adc1, ts = self.data_queue.get(timeout=0.1) # Reduced timeout for faster stop check
             except queue.Empty:
@@ -256,6 +257,69 @@ class SerialWriter(threading.Thread):
                 pass
 
 # -------------------------
+# TCP writer thread
+# -------------------------
+class TCPWriter(threading.Thread):
+    def __init__(self, ip, port, sample_rate, data_queue, quiet=False):
+        super().__init__(daemon=True)
+        self.ip = ip
+        self.port = port
+        self.sample_rate = sample_rate
+        self.data_queue = data_queue
+        self._stop_event = threading.Event()
+        self.quiet = quiet
+        self.counter = 0
+        self.sock = None
+        self.is_connected = False
+
+    def connect(self):
+        try:
+            self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.sock.settimeout(5)
+            self.sock.connect((self.ip, self.port))
+            self.is_connected = True
+            return True
+        except Exception as e:
+            print(f"[TCPWriter] Failed to connect to {self.ip}:{self.port}: {e}")
+            self.is_connected = False
+            return False
+
+    def stop(self):
+        self._stop_event.set()
+
+    def run(self):
+        connected = self.connect()
+        while not self._stop_event.is_set():
+            try:
+                adc0, adc1, ts = self.data_queue.get(timeout=0.1)
+            except queue.Empty:
+                continue
+            
+            # Build packet (same as SerialWriter)
+            ctr = self.counter & 0xFF
+            ch0 = int(adc0) & 0xFFFF
+            ch1 = int(adc1) & 0xFFFF
+            packet = bytes([SYNC1, SYNC2, ctr,
+                            (ch0 >> 8) & 0xFF, ch0 & 0xFF,
+                            (ch1 >> 8) & 0xFF, ch1 & 0xFF,
+                            END_BYTE])
+            
+            if self.is_connected and self.sock:
+                try:
+                    self.sock.sendall(packet)
+                except Exception as e:
+                    print("[TCPWriter] send error:", e)
+                    self.is_connected = False
+            
+            self.counter += 1
+
+        if self.sock:
+            try:
+                self.sock.close()
+            except:
+                pass
+
+# -------------------------
 # GUI Application
 # -------------------------
 class MainWindow(QtWidgets.QMainWindow):
@@ -270,6 +334,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.sample_rate = self.config.get("sampling_rate", 512.0)
         self.baud = self.config.get("baud", 230400)
         self.port = self.config.get("serial_port", "")
+        self.connection_mode = self.config.get("connection_mode", "Serial") # "Serial" or "WiFi"
+        self.target_ip = self.config.get("target_ip", "10.235.2.237")
+        self.target_port = self.config.get("target_port", 6000)
         self.streaming = False
         self.binary = self.config.get("binary", True)
 
@@ -285,7 +352,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.sample_queue = queue.Queue(maxsize=4096)
         # Bounded queue for plotting to prevent UI freeze if main thread falls behind
         self.plot_queue = queue.Queue(maxsize=1024) 
-        self.serial_writer = None
+        self.stream_writer = None
         
         print(f"[{datetime.now()}] Building UI...")
         self._build_ui()
@@ -317,10 +384,13 @@ class MainWindow(QtWidgets.QMainWindow):
             "sampling_rate": 512.0,
             "baud": 230400,
             "serial_port": "",
+            "connection_mode": "Serial",
+            "target_ip": "10.235.2.237",
+            "target_port": 6000,
             "binary": True,
             "channel_mapping": {
-                "ch0": {"sensor": "EMG"},
-                "ch1": {"sensor": "EEG"}
+                "ch0": {"sensor": "EOG"},
+                "ch1": {"sensor": "EMG"}
             },
             "display": {
                 "manualZoom": False,
@@ -335,6 +405,9 @@ class MainWindow(QtWidgets.QMainWindow):
             self.config["sampling_rate"] = self.sample_rate
             self.config["baud"] = self.baud
             self.config["serial_port"] = self.port
+            self.config["connection_mode"] = self.mode_combo.currentText()
+            self.config["target_ip"] = self.ip_input.text().strip()
+            self.config["target_port"] = int(self.port_input.text().strip())
             self.config["binary"] = self.binary
             # channel mapping read from UI
             self.config["channel_mapping"] = {
@@ -407,17 +480,40 @@ class MainWindow(QtWidgets.QMainWindow):
         # Serial / Streaming controls
         left_layout.addWidget(QtWidgets.QLabel("<b>Streaming</b>"))
         form = QtWidgets.QFormLayout()
-        # port
+        
+        # Mode switch
+        self.mode_combo = QtWidgets.QComboBox()
+        self.mode_combo.addItems(["Serial", "WiFi"])
+        self.mode_combo.setCurrentText(self.connection_mode)
+        self.mode_combo.currentTextChanged.connect(self._on_mode_change)
+        form.addRow("Mode", self.mode_combo)
+
+        # Serial settings group
+        self.serial_group = QtWidgets.QWidget()
+        serial_form = QtWidgets.QFormLayout(self.serial_group)
+        serial_form.setContentsMargins(0,0,0,0)
         self.port_combo = QtWidgets.QComboBox()
-        form.addRow("COM Port", self.port_combo)
-        # baud
+        serial_form.addRow("COM Port", self.port_combo)
         self.baud_input = QtWidgets.QLineEdit(str(self.baud))
-        form.addRow("Baud", self.baud_input)
-        # sample rate
+        serial_form.addRow("Baud", self.baud_input)
+        form.addRow(self.serial_group)
+
+        # WiFi settings group
+        self.wifi_group = QtWidgets.QWidget()
+        wifi_form = QtWidgets.QFormLayout(self.wifi_group)
+        wifi_form.setContentsMargins(0,0,0,0)
+        self.ip_input = QtWidgets.QLineEdit(self.target_ip)
+        wifi_form.addRow("Target IP", self.ip_input)
+        self.port_input = QtWidgets.QLineEdit(str(self.target_port))
+        wifi_form.addRow("Target Port", self.port_input)
+        form.addRow(self.wifi_group)
+
+        # sample rate (common)
         self.rate_input = QtWidgets.QLineEdit(str(self.sample_rate))
         form.addRow("Sample rate (Hz)", self.rate_input)
         left_layout.addLayout(form)
 
+        # Initial visibility
         h = QtWidgets.QHBoxLayout()
         self.btn_refresh = QtWidgets.QPushButton("Refresh ports")
         self.btn_refresh.clicked.connect(self.update_port_list)
@@ -430,6 +526,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.btn_stop.clicked.connect(self.stop_stream)
         h.addWidget(self.btn_stop)
         left_layout.addLayout(h)
+
+        self._on_mode_change(self.connection_mode)
 
         # plotting options
         left_layout.addSpacing(10)
@@ -545,6 +643,12 @@ class MainWindow(QtWidgets.QMainWindow):
         self.log(f"SSVEP ch{ch} freq={freq}Hz {'ON' if checked else 'OFF'}")
         self.ch_gens[ch].toggle_ssvep(freq if checked else None, enabled=checked)
 
+    def _on_mode_change(self, mode):
+        is_serial = (mode == "Serial")
+        self.serial_group.setVisible(is_serial)
+        self.wifi_group.setVisible(not is_serial)
+        self.btn_refresh.setEnabled(is_serial)
+
     def update_port_list(self):
         self.port_combo.clear()
         ports = []
@@ -627,15 +731,24 @@ class MainWindow(QtWidgets.QMainWindow):
             g.set_rate(self.sample_rate)
             g.set_scale(1.0)
 
-        # prepare serial writer
+        # prepare writer
         self.sample_queue = queue.Queue(maxsize=8192)
-        self.serial_writer = SerialWriter(self.port, self.baud, self.sample_rate, channels=2,
-                                          data_queue=self.sample_queue, binary=self.binary, quiet=False)
-        self.serial_writer.start()
+        mode = self.mode_combo.currentText()
+        if mode == "Serial":
+            self.stream_writer = SerialWriter(self.port, self.baud, self.sample_rate, channels=2,
+                                              data_queue=self.sample_queue, binary=self.binary, quiet=False)
+            target_str = self.port if self.port else 'LOOPBACK'
+        else:
+            ip = self.ip_input.text().strip()
+            port = int(self.port_input.text().strip())
+            self.stream_writer = TCPWriter(ip, port, self.sample_rate, self.sample_queue)
+            target_str = f"WiFi ({ip}:{port})"
+
+        self.stream_writer.start()
         self.streaming = True
         self.btn_start.setEnabled(False)
         self.btn_stop.setEnabled(True)
-        self.log(f"Streaming started on {self.port if self.port else 'LOOPBACK'}")
+        self.log(f"Streaming started on {target_str}")
         # start pushing samples from generator loop (already running)
 
     def stop_stream(self):
@@ -647,11 +760,11 @@ class MainWindow(QtWidgets.QMainWindow):
             self.sample_queue.queue.clear()
             
         # 2. Stop writer
-        if self.serial_writer:
-            self.serial_writer.stop()
+        if self.stream_writer:
+            self.stream_writer.stop()
             # Join with timeout to avoid freezing UI if writer is stuck
-            self.serial_writer.join(timeout=0.5)
-            self.serial_writer = None
+            self.stream_writer.join(timeout=0.5)
+            self.stream_writer = None
             
         self.streaming = False
         self.btn_start.setEnabled(True)
@@ -685,16 +798,16 @@ class MainWindow(QtWidgets.QMainWindow):
             # push to plot buffers (scale back to -1..1 for plot)
             self._append_plot(v0, v1)
             
-            # enqueue for serial writer if streaming
-            if self.streaming and self.serial_writer:
+            # enqueue for writer if streaming
+            if self.streaming and self.stream_writer:
                 try:
                     self.sample_queue.put_nowait((a0, a1, time.time()))
                 except queue.Full:
                     # drop if writer is slow
                     pass
 
-            if frame % 100 == 0:
-                print(f"[{datetime.now()}] Gen loop frame {frame}")
+            # if frame % 100 == 0:
+            #     print(f"[{datetime.now()}] Gen loop frame {frame}")
             frame += 1
             # sleep until next sample
             next_target = origin + frame / max(1.0, self.sample_rate)
@@ -734,9 +847,9 @@ class MainWindow(QtWidgets.QMainWindow):
     def closeEvent(self, event):
         # stop threads
         self._gen_stop.set()
-        if self.serial_writer:
-            self.serial_writer.stop()
-            self.serial_writer.join(timeout=0.5)
+        if self.stream_writer:
+            self.stream_writer.stop()
+            self.stream_writer.join(timeout=0.5)
         event.accept()
 
 # -------------------------

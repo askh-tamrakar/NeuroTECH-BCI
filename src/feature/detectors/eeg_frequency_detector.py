@@ -19,7 +19,7 @@ class EEGFrequencyDetector:
         # SSVEP Settings
         self.sampling_rate = self.config.get("sampling_rate", 512)
         # Default 6 targets if not specified
-        self.target_freqs = eeg_config.get("target_freqs", [8.0, 10.0, 12.0, 15.0, 18.0, 20.0])
+        self.target_freqs = eeg_config.get("target_freqs", [6.0, 8.0, 10.0, 12.0, 15.0, 18.0, 20.0])
         self.window_len_sec = eeg_config.get("window_len_sec", 1.0)
         self.num_harmonics = eeg_config.get("num_harmonics", 3)
         self.rest_threshold = eeg_config.get("rest_threshold", 0.35)
@@ -37,8 +37,9 @@ class EEGFrequencyDetector:
         # Prep filters for sub-bands
         self.subband_filters = []
         for i in range(self.num_subbands):
-            # Typical FBCCA bands: [8*i, 88] Hz
-            low = max(0.5, 8.0 * (i + 1))
+            # Adjusted FBCCA bands to support 6Hz while maintaining separation
+            # Previous was 8*i+1 (8, 16, 24). New is 8*i+1 - 2.0 (6, 14, 22).
+            low = max(0.5, 8.0 * (i + 1) - 2.0)
             high = min(self.sampling_rate / 2 - 1, 88.0)
             b, a = butter(4, [low, high], btype='bandpass', fs=self.sampling_rate)
             self.subband_filters.append((b, a))

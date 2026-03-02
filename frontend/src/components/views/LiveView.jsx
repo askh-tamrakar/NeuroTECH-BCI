@@ -1,25 +1,17 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react'
 import SignalChart from '../charts/SignalChart'
 import { DataService } from '../../services/DataService'
-import { Radio, Square, Settings2, Wifi, Circle } from 'lucide-react'
+import { Radio, Square, Settings2, Wifi, Circle, Play, Pause, Save, Trash2, Check, X } from 'lucide-react'
 import '../../styles/live/LiveView.css'
 
-export default function LiveView({ wsData, wsEvent, config, isPaused }) {
+export default function LiveView({ wsData, wsEvent, config, isPaused, wsUrl }) {
   const defaultTimeWindowMs = config?.display?.timeWindowMs || 10000
   const samplingRate = config?.sampling_rate || 250
   const showGrid = config?.display?.showGrid ?? true
   const channelMapping = config?.channel_mapping || {}
   const numChannels = 2
 
-  const activeChannels = useMemo(() => {
-    const active = []
-    for (let i = 0; i < numChannels; i++) {
-      const key = `ch${i}`
-      const chConfig = channelMapping[key]
-      if (chConfig?.enabled !== false) active.push(i)
-    }
-    return active
-  }, [channelMapping, numChannels])
+
 
   // Channel Configuration State (Zoom & Range)
   const [channelConfig, setChannelConfig] = useState(() => {
@@ -32,116 +24,101 @@ export default function LiveView({ wsData, wsEvent, config, isPaused }) {
 
   // Recording State
   const [isRecording, setIsRecording] = useState(false)
+  const [isPausedRecording, setIsPausedRecording] = useState(false)
   const [recordingStartTime, setRecordingStartTime] = useState(null)
+  const [lastPauseTime, setLastPauseTime] = useState(null)
+  const [totalPausedDuration, setTotalPausedDuration] = useState(0)
   const [recordingTime, setRecordingTime] = useState(0)
   const [recordedData, setRecordedData] = useState([])
   const [recordingChannels, setRecordingChannels] = useState([0, 1])
   const [isSaving, setIsSaving] = useState(false)
+  const [isConfirmationPending, setIsConfirmationPending] = useState(false)
+  const [annotations, setAnnotations] = useState([])
+
+  // Channels are 0 and 1
+  const activeChannels = [0, 1];
+
+  // Data Worker Instance
+  const dataWorkerRef = useRef(null);
+
+  // Data Worker initialization - only re-connect if wsUrl changes
+  useEffect(() => {
+    if (!wsUrl) return;
+
+    console.log('[LiveView] Initializing DataWorker...');
+    const worker = new Worker(new URL('../../workers/data.worker.js', import.meta.url), { type: 'module' });
+    dataWorkerRef.current = worker;
+
+    worker.onmessage = (e) => {
+      const { type, payload } = e.data;
+      if (type === 'EVENT') {
+        if (payload.event === 'BLINK') {
+          const ts = payload.timestamp ? payload.timestamp * 1000 : Date.now();
+          setAnnotations(prev => [
+            ...prev,
+            { x: ts, label: 'BLINK', color: '#ef4444', channel: payload.channel }
+          ].slice(-20));
+        }
+      }
+    };
+
+    worker.postMessage({ type: 'CONNECT', payload: { url: wsUrl } });
+
+    return () => {
+      console.log('[LiveView] Terminating DataWorker...');
+      worker.terminate();
+    };
+  }, [wsUrl]);
+
+  // Recording Logic - separate effect that listens to the existing worker
+  useEffect(() => {
+    if (!dataWorkerRef.current || !isRecording || isPausedRecording) return;
+
+    const handleMessage = (e) => {
+      const { type, payload } = e.data;
+      if (type === 'UI_UPDATE' && !isPaused) {
+        const { lastSample } = payload;
+        if (lastSample && lastSample.channels) {
+          const recordPoint = { timestamp: lastSample.timestamp, channels: {} };
+          let hasData = false;
+          recordingChannels.forEach(chNum => {
+            const chObj = lastSample.channels[chNum] || lastSample.channels[`ch${chNum}`] || lastSample.channels[String(chNum)];
+            const val = typeof chObj === 'number' ? chObj : (chObj?.value);
+
+            if (val !== undefined) {
+              recordPoint.channels[`ch${chNum}`] = val;
+              hasData = true;
+            }
+          });
+          if (hasData) {
+            setRecordedData(prev => [...prev.slice(-10000), recordPoint]);
+          }
+        }
+      }
+    };
+
+    const worker = dataWorkerRef.current;
+    worker.addEventListener('message', handleMessage);
+    return () => worker.removeEventListener('message', handleMessage);
+  }, [isRecording, isPausedRecording, recordingChannels, isPaused]);
 
   // Update recording timer
   useEffect(() => {
     let interval = null
-    if (isRecording) {
+    if (isRecording && !isPausedRecording) {
       interval = setInterval(() => {
-        setRecordingTime(Math.floor((Date.now() - recordingStartTime) / 1000))
+        const now = Date.now()
+        const elapsed = now - recordingStartTime - totalPausedDuration
+        setRecordingTime(Math.floor(elapsed / 1000))
       }, 1000)
-    } else {
+    } else if (!isRecording && !isConfirmationPending) {
       setRecordingTime(0)
     }
     return () => clearInterval(interval)
-  }, [isRecording, recordingStartTime])
+  }, [isRecording, isPausedRecording, recordingStartTime, totalPausedDuration, isConfirmationPending])
 
-  // Process Websocket Data
-  useEffect(() => {
-    if (!wsData || isPaused) return
+  // Process Websocket Data - REMOVED (Handled by DataWorker -> BroadcastChannel -> SignalWorker)
 
-    let basePayload = null
-    try {
-      basePayload = wsData.raw ?? (typeof wsData === 'string' ? JSON.parse(wsData) : wsData)
-
-      // DEBUG: Log the first few payloads to see data shape in browser console
-      if (!window._debugBatchCt) window._debugBatchCt = 0;
-      if (window._debugBatchCt < 10) {
-        console.log('[LiveView DEBUG] Received basePayload:', basePayload);
-        window._debugBatchCt++;
-      }
-
-    } catch (e) {
-      console.warn('[LiveView] Failed to parse wsData:', e)
-      return
-    }
-
-    if (!basePayload) return
-
-    const samples = basePayload._batch || basePayload.samples || (basePayload.channels ? [basePayload] : [])
-    if (samples.length === 0) return
-
-    const sampleIntervalMs = Math.round(1000 / (samplingRate || 250))
-
-    const batchUpdates = { 0: [], 1: [], 2: [], 3: [] }
-    const recordingUpdates = []
-
-    samples.forEach(payload => {
-      if (!payload.channels) return
-
-      let incomingTs = Number(payload.timestamp)
-      if (!incomingTs || incomingTs < 1e9) incomingTs = Date.now()
-
-      if (!window.__lastTs) window.__lastTs = incomingTs
-      if (incomingTs <= window.__lastTs) {
-        incomingTs = window.__lastTs + sampleIntervalMs
-      }
-      window.__lastTs = incomingTs
-
-      if (isRecording) {
-        const recordPoint = { timestamp: incomingTs, channels: {} }
-        let hasData = false
-        recordingChannels.forEach(chNum => {
-          Object.entries(payload.channels).forEach(([chIdx, chData]) => {
-            if (parseInt(chIdx) === chNum) {
-              let val = 0
-              if (typeof chData === 'number') val = chData
-              else if (typeof chData === 'object') val = chData.value ?? chData.val ?? 0
-              recordPoint.channels[`ch${chNum}`] = val
-              hasData = true
-            }
-          })
-        })
-        if (hasData) recordingUpdates.push(recordPoint)
-      }
-
-      Object.entries(payload.channels).forEach(([chIdx, chData]) => {
-        const chNum = parseInt(chIdx.replace('ch', ''))
-        if (isNaN(chNum)) return
-        const chKey = `ch${chNum}`
-        const chConfig = channelMapping[chKey]
-
-        if (chConfig?.enabled === false) return
-
-        let value = 0
-        if (typeof chData === 'number') value = chData
-        else if (typeof chData === 'object') value = chData.value ?? chData.val ?? 0
-
-        if (!Number.isFinite(value)) return
-
-        if (batchUpdates[chNum]) {
-          batchUpdates[chNum].push({ time: incomingTs, value: Number(value) })
-        }
-      })
-    })
-
-    // Forward batches strictly to charts via Ref
-    activeChannels.forEach(chIdx => {
-      if (batchUpdates[chIdx] && batchUpdates[chIdx].length > 0) {
-        chartRefs.current[chIdx]?.addData(batchUpdates[chIdx])
-      }
-    })
-
-    if (recordingUpdates.length > 0) {
-      setRecordedData(prev => [...prev, ...recordingUpdates])
-    }
-
-  }, [wsData, isPaused, channelMapping, samplingRate, isRecording, recordingChannels, activeChannels])
 
   useEffect(() => {
     setChannelConfig(prev => {
@@ -171,27 +148,8 @@ export default function LiveView({ wsData, wsEvent, config, isPaused }) {
     }))
   }
 
-  // Handle Annotations (Blinks)
-  const [annotations, setAnnotations] = useState([])
 
-  useEffect(() => {
-    if (!wsEvent) return
-    if (wsEvent.event === 'BLINK') {
-      const ts = wsEvent.timestamp ? wsEvent.timestamp * 1000 : Date.now()
-      const chKey = wsEvent.channel
 
-      setAnnotations(prev => [
-        ...prev,
-        {
-          x: ts,
-          label: 'BLINK',
-          color: '#ef4444',
-          channel: chKey
-          // removing 'y' coordinate, worker will handle placing it dynamically
-        }
-      ].slice(-20))
-    }
-  }, [wsEvent])
 
   useEffect(() => {
     const now = Date.now()
@@ -202,49 +160,107 @@ export default function LiveView({ wsData, wsEvent, config, isPaused }) {
     return () => clearInterval(interval);
   }, [])
 
-  const toggleRecording = async () => {
-    if (!isRecording) {
-      setRecordedData([])
-      setRecordingStartTime(Date.now())
-      setIsRecording(true)
+  const startRecording = () => {
+    setRecordedData([])
+    setRecordingStartTime(Date.now())
+    setTotalPausedDuration(0)
+    setIsRecording(true)
+    setIsPausedRecording(false)
+    setIsConfirmationPending(false)
+  }
+
+  const togglePause = () => {
+    if (!isPausedRecording) {
+      setIsPausedRecording(true)
+      setLastPauseTime(Date.now())
     } else {
-      setIsRecording(false)
-      setIsSaving(true)
+      const pausedAt = lastPauseTime || Date.now()
+      setTotalPausedDuration(prev => prev + (Date.now() - pausedAt))
+      setIsPausedRecording(false)
+      setLastPauseTime(null)
+    }
+  }
 
-      try {
-        const now = new Date()
-        const day = String(now.getDate()).padStart(2, '0')
-        const month = String(now.getMonth() + 1).padStart(2, '0')
-        const year = now.getFullYear()
-        const hours = String(now.getHours()).padStart(2, '0')
-        const mins = String(now.getMinutes()).padStart(2, '0')
-        const secs = String(now.getSeconds()).padStart(2, '0')
+  const stopRecording = () => {
+    setIsRecording(false)
+    setIsPausedRecording(false)
+    setIsConfirmationPending(true)
+  }
 
-        const firstCh = recordingChannels[0]
-        const sensorType = channelMapping[`ch${firstCh}`]?.sensor || 'DATA'
-        const filename = `${sensorType}__${day}-${month}-${year}__${hours}-${mins}-${secs}.json`
+  const discardRecording = () => {
+    setRecordedData([])
+    setIsConfirmationPending(false)
+    setRecordingTime(0)
+  }
+
+  const saveRecording = async () => {
+    setIsSaving(true)
+    try {
+      const now = new Date()
+      const day = String(now.getDate()).padStart(2, '0')
+      const month = String(now.getMonth() + 1).padStart(2, '0')
+      const year = now.getFullYear()
+      const hours = String(now.getHours()).padStart(2, '0')
+      const mins = String(now.getMinutes()).padStart(2, '0')
+      const secs = String(now.getSeconds()).padStart(2, '0')
+
+      // Group recording channels by sensor type
+      const sensorsToRecord = {};
+      recordingChannels.forEach(chNum => {
+        const sensorType = channelMapping[`ch${chNum}`]?.sensor || 'DATA';
+        if (!sensorsToRecord[sensorType]) sensorsToRecord[sensorType] = [];
+        sensorsToRecord[sensorType].push(chNum);
+      });
+
+      const sensorTypes = Object.keys(sensorsToRecord);
+      if (sensorTypes.length === 0) {
+        setIsSaving(false);
+        setRecordedData([]);
+        setIsConfirmationPending(false);
+        return;
+      }
+
+      const savePromises = sensorTypes.map(async (sensorType) => {
+        const channelsForThisSensor = sensorsToRecord[sensorType];
+        const filename = `${sensorType}__${day}-${month}-${year}__${hours}-${mins}-${secs}.csv`
+
+        // Filter recordedData to only include channels for THIS sensor
+        const filteredData = recordedData.map(point => {
+          const filteredPoint = { timestamp: point.timestamp, channels: {} };
+          let hasDataForSensor = false;
+          channelsForThisSensor.forEach(chNum => {
+            if (point.channels[`ch${chNum}`] !== undefined) {
+              filteredPoint.channels[`ch${chNum}`] = point.channels[`ch${chNum}`];
+              hasDataForSensor = true;
+            }
+          });
+          return hasDataForSensor ? filteredPoint : null;
+        }).filter(Boolean);
+
+        if (filteredData.length === 0) return;
 
         const payload = {
           metadata: {
             sensorType,
-            channels: recordingChannels,
+            channels: channelsForThisSensor,
             samplingRate,
             startTime: recordingStartTime,
             endTime: Date.now(),
             duration: recordingTime
           },
-          data: recordedData
+          data: filteredData
         }
 
-        await DataService.saveSession(filename, payload)
-        alert(`Session saved successfully as ${filename}`)
-      } catch (err) {
-        console.error('Failed to save session:', err)
-        alert('Failed to save session. Check console for details.')
-      } finally {
-        setIsSaving(false)
-        setRecordedData([])
-      }
+        return DataService.saveSession(filename, payload, sensorType)
+      });
+
+      await Promise.all(savePromises);
+      setIsConfirmationPending(false);
+      setRecordedData([]);
+    } catch (err) {
+      console.error('Failed to save multi-sensor session:', err)
+    } finally {
+      setIsSaving(false)
     }
   }
 
@@ -252,18 +268,97 @@ export default function LiveView({ wsData, wsEvent, config, isPaused }) {
     <div className="live-view-container">
       <div className="h-[94px] shrink-0" />
       <div className="controls-container flex flex-row justify-between">
-        <div className="flex flex-row gap-2">
-          <div className="record-controls">
-            <button
-              onClick={toggleRecording}
-              disabled={isSaving || (activeChannels.length === 0 && !isRecording)}
-              className={`record-btn ${isRecording ? 'recording' : 'idle'}`}
-            >
-              {isRecording ? <Square size={16} fill="currentColor" /> : <Radio size={16} />}
-              {isRecording ? `STOP (${recordingTime}s)` : 'REC'}
-            </button>
-            {isSaving && <div className="saving-indicator">SAVING...</div>}
+        <div className="flex flex-row gap-4 items-center">
+          <div className="record-controls flex items-center gap-2">
+            {!isRecording && !isConfirmationPending && (
+              <button
+                onClick={startRecording}
+                disabled={isSaving || recordingChannels.length === 0}
+                className="record-btn idle"
+              >
+                <Radio size={16} />
+                <span>REC</span>
+              </button>
+            )}
+
+            {isRecording && (
+              <>
+                <button
+                  onClick={stopRecording}
+                  className="record-btn recording"
+                >
+                  <Square size={16} fill="currentColor" />
+                  <span>STOP ({recordingTime}s)</span>
+                </button>
+
+                <button
+                  onClick={togglePause}
+                  className={`record-btn ${isPausedRecording ? 'idle' : 'paused-btn'}`}
+                >
+                  {isPausedRecording ? <Play size={16} fill="currentColor" /> : <Pause size={16} fill="currentColor" />}
+                  <span>{isPausedRecording ? 'RESUME' : 'PAUSE'}</span>
+                </button>
+              </>
+            )}
+
+            {isConfirmationPending && (
+              <div className="confirm-group">
+                <span className="text-[10px] font-bold text-muted uppercase tracking-wider mr-2">Keep Session ({recordingTime}s)?</span>
+                <button
+                  onClick={saveRecording}
+                  disabled={isSaving}
+                  className="save-btn"
+                >
+                  <Save size={14} />
+                  SAVE
+                </button>
+                <button
+                  onClick={discardRecording}
+                  disabled={isSaving}
+                  className="discard-btn"
+                >
+                  <Trash2 size={14} />
+                  DISCARD
+                </button>
+              </div>
+            )}
+
+            {isSaving && <div className="saving-indicator ml-2">SAVING...</div>}
           </div>
+
+          <div className="w-[1px] h-6 bg-border mx-1" />
+
+          {/* CHANNEL SELECTOR */}
+          <div className="flex items-center gap-2 bg-surface/50 p-1 rounded-lg border border-border px-3">
+            <span className="text-[10px] font-bold text-muted uppercase tracking-wider">Channels</span>
+            <div className="flex gap-1.5">
+              {Array.from({ length: numChannels }).map((_, chNum) => {
+                const chKey = `ch${chNum}`;
+                const isSelected = recordingChannels.includes(chNum);
+                const sensor = channelMapping[chKey]?.sensor || '??';
+
+                return (
+                  <button
+                    key={chKey}
+                    onClick={() => {
+                      setRecordingChannels(prev =>
+                        prev.includes(chNum)
+                          ? prev.filter(c => c !== chNum)
+                          : [...prev, chNum].sort()
+                      )
+                    }}
+                    className={`px-2 py-0.5 rounded text-[11px] font-bold transition-all border ${isSelected
+                      ? 'bg-primary text-white border-primary shadow-sm'
+                      : 'bg-bg text-muted border-border hover:text-text'
+                      }`}
+                  >
+                    CH{chNum} ({sensor})
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           <div>
             {isRecording && <div className="recording-status">● RECORDING IN PROGRESS</div>}
           </div>
@@ -280,8 +375,8 @@ export default function LiveView({ wsData, wsEvent, config, isPaused }) {
       </div>
 
       {Array.from({ length: numChannels }).map((_, chIdx) => {
-        const isEnabled = activeChannels.includes(chIdx);
-        if (!isEnabled) return null; // We strict render only enabled
+        // Render all channels up to numChannels (2)
+        const isEnabled = channelMapping[`ch${chIdx}`]?.enabled !== false;
 
         const sensorName = channelMapping[`ch${chIdx}`]?.sensor
         const currentZoom = channelConfig[chIdx]?.zoom || 1
@@ -303,6 +398,7 @@ export default function LiveView({ wsData, wsEvent, config, isPaused }) {
               annotations={annotations.filter(a => a.channel === `ch${chIdx}`)}
               currentZoom={currentZoom}
               currentManual={currentManual}
+              channelIndex={chIdx}
               onZoomChange={(z) => { updateChannelConfig(chIdx, 'zoom', z); updateChannelConfig(chIdx, 'manualRange', ""); }}
               onRangeChange={(val) => updateChannelConfig(chIdx, 'manualRange', val)}
               onTimeWindowChange={(val) => updateChannelConfig(chIdx, 'timeWindowMs', val)}

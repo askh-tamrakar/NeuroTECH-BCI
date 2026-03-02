@@ -1,14 +1,31 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import AnimatedList from '../ui/AnimatedList';
-import { Trash, ClipboardX, Trash2, FolderPlus, RefreshCw, ChevronLeft, ChevronRight, Edit2, GitMerge, Check, X, ArchiveX } from 'lucide-react';
+import CustomSelect from '../ui/CustomSelect';
+import { Trash, ClipboardX, Trash2, FolderPlus, RefreshCw, Edit2, GitMerge, Check, X, ArchiveX, Filter, ArrowUpDown, ArrowUp, ArrowDown, ListFilter, Hash, ArrowDownToLine, ArrowUpToLine } from 'lucide-react';
 
 export default function SessionManagerPanel({
     activeSensor,
     currentSessionName,
     onSessionChange,
-    refreshTrigger = 0,
     isTestMode = false,
-    inputRef // Ref for focusing from parent
+    inputRef, // Ref for focusing from parent
+    sessions = [],
+    isLoading = false,
+    isTableLoading = false,
+    isResetMode = true,
+    rows = [],
+    totalRows = 0,
+    absoluteTotalRows = 0,
+    hasMore = true,
+    refreshTrigger = 0, // NEW PROP
+    onFetchDetails,
+    onDeleteSession,
+    onRenameSession,
+    onMergeSessions,
+    onDeleteRow,
+    onClearSession,
+    onCreateSession
 }) {
     const SENSOR_LABEL_MAP = {
         'EMG': { 0: 'Rest', 1: 'Rock', 2: 'Paper', 3: 'Scissors' },
@@ -24,10 +41,6 @@ export default function SessionManagerPanel({
         return map[num] !== undefined ? map[num] : val;
     };
 
-    const [sessions, setSessions] = useState([]);
-    const [loading, setLoading] = useState(false);
-    const [selectedSessionRows, setSelectedSessionRows] = useState([]);
-    const [rowsLoading, setRowsLoading] = useState(false);
     const [newSessionInput, setNewSessionInput] = useState("");
     const lastSessionRef = useRef(null);
 
@@ -38,6 +51,7 @@ export default function SessionManagerPanel({
     const [mergeMode, setMergeMode] = useState(false);
     const [selectedMergeSessions, setSelectedMergeSessions] = useState([]);
     const [mergeTargetName, setMergeTargetName] = useState("");
+    const [offset, setOffset] = useState(0);
 
     const handleRenameSubmit = async (sessionName, e) => {
         if (e) e.stopPropagation();
@@ -45,66 +59,18 @@ export default function SessionManagerPanel({
             setRenamingSession(null);
             return;
         }
-
-        const cleanOld = sessionName.replace(`${activeSensor.toLowerCase()}_session_`, '');
-        const cleanNew = renameInput.trim().replace(/[^a-zA-Z0-9]/g, '_');
-
-        if (cleanOld === cleanNew) {
-            setRenamingSession(null);
-            return;
-        }
-
-        try {
-            const res = await fetch(`/api/sessions/${activeSensor}/${encodeURIComponent(sessionName)}/rename`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ new_name: cleanNew })
-            });
-
-            if (res.ok) {
-                await fetchSessions();
-                if (sessionName === fullCurrentSessionName) {
-                    onSessionChange(cleanNew);
-                }
-            } else {
-                console.error("Failed to rename session");
-            }
-        } catch (err) {
-            console.error("Error renaming session", err);
-        } finally {
-            setRenamingSession(null);
-        }
+        onRenameSession(sessionName, renameInput.trim());
+        setRenamingSession(null);
     };
 
     const handleMultiMergeSubmit = async () => {
         if (!mergeTargetName.trim() || selectedMergeSessions.length < 2) {
             return;
         }
-
-        const targetClean = mergeTargetName.trim().replace(/[^a-zA-Z0-9]/g, '_');
-
-        try {
-            const res = await fetch(`/api/sessions/${activeSensor}/merge_multiple`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    source_sessions: selectedMergeSessions,
-                    target_session: targetClean
-                })
-            });
-
-            if (res.ok) {
-                await fetchSessions();
-                setMergeMode(false);
-                setSelectedMergeSessions([]);
-                setMergeTargetName("");
-                onSessionChange(targetClean);
-            } else {
-                console.error("Failed to merge sessions");
-            }
-        } catch (err) {
-            console.error("Error merging sessions", err);
-        }
+        onMergeSessions(selectedMergeSessions, mergeTargetName.trim());
+        setMergeMode(false);
+        setSelectedMergeSessions([]);
+        setMergeTargetName("");
     };
 
     const toggleMergeSelection = (sessionName) => {
@@ -116,20 +82,10 @@ export default function SessionManagerPanel({
     };
 
     const handleCreate = () => {
-        if (isTestMode) return; // Disable create in test mode
+        if (isTestMode) return;
         const name = newSessionInput.trim();
         if (!name) return;
-
-        // Optimistically add to list (sanitize to match backend roughly)
-        // Backend uses: re.sub(r'[^a-zA-Z0-9]', '_', name)
-        const safeName = name.replace(/[^a-zA-Z0-9]/g, '_');
-        const fullName = `${activeSensor.toLowerCase()}_session_${safeName}`;
-
-        if (!sessions.includes(fullName)) {
-            setSessions(prev => [fullName, ...prev]);
-        }
-
-        onSessionChange(safeName);
+        onCreateSession(name);
         setNewSessionInput("");
     };
 
@@ -156,141 +112,43 @@ export default function SessionManagerPanel({
         onSessionChange(clean);
     };
 
-    const handleDeleteSession = async (sessionName, e) => {
+    const handleDeleteSessionProxy = (sessionName, e) => {
         e.stopPropagation();
-
-        try {
-            const url = isTestMode
-                ? `/api/prediction/sessions/${sessionName}`
-                : `/api/sessions/${activeSensor}/${sessionName}`;
-
-            const res = await fetch(url, {
-                method: 'DELETE'
-            });
-
-            if (res.ok) {
-                // Remove from list immediately
-                setSessions(prev => prev.filter(s => s !== sessionName));
-
-                // If current, clear
-                if (sessionName === currentSessionName || sessionName.includes(currentSessionName)) {
-                    onSessionChange("Default");
-                }
-            } else {
-                console.error("Failed to delete session");
-            }
-        } catch (err) {
-            console.error("Error deleting session:", err);
-        }
+        onDeleteSession(sessionName);
     };
 
     // Clear session rows but keep the session itself active (Emptying it)
-    const handleClearSessionData = async (e) => {
+    const handleClearSessionData = (e) => {
         e.stopPropagation();
         if (!fullCurrentSessionName) return;
-
-        try {
-            await setLoading(true); // Reuse loading or new state
-            // 1. Delete the session
-            const url = isTestMode
-                ? `/api/prediction/sessions/${fullCurrentSessionName}`
-                : `/api/sessions/${activeSensor}/${fullCurrentSessionName}`;
-
-            const res = await fetch(url, {
-                method: 'DELETE'
-            });
-
-            if (res.ok) {
-                setSelectedSessionRows([]);
-
-                if (!sessions.find(s => s === fullCurrentSessionName)) {
-                    setSessions(prev => [fullCurrentSessionName, ...prev]);
-                }
-            }
-        } catch (err) {
-            console.error("Error clearing session:", err);
-        } finally {
-            setLoading(false);
+        if (onClearSession) {
+            onClearSession(fullCurrentSessionName);
         }
     };
 
-    // Fetch list of sessions
-    const fetchSessions = async () => {
-        setLoading(true);
-        try {
-            const url = isTestMode
-                ? `/api/prediction/sessions`
-                : `/api/sessions/${activeSensor}`;
-
-            const res = await fetch(url);
-            const data = await res.json();
-            if (data.tables) {
-                setSessions(data.tables.reverse());
-            }
-        } catch (err) {
-            console.error("Failed to fetch sessions:", err);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    // Initial fetch of sessions list
-    useEffect(() => {
-        fetchSessions();
-    }, [activeSensor]);
-
-    // Pagination State
-    const [offset, setOffset] = useState(0);
-    const [totalRows, setTotalRows] = useState(0);
-    const [hasMore, setHasMore] = useState(true);
     const LIMIT = 20;
 
-    // Track scroll direction for appending vs prepending
-    const [fetchDirection, setFetchDirection] = useState('down'); // 'down' or 'up'
+    // Fetch list of sessions (Proxy to parent)
+    const fetchSessions = () => {
+        onFetchDetails({ fullName: fullCurrentSessionName, limit: LIMIT, offset: 0, isReset: true, sortBy, order, label: filterLabel === 'all' ? null : filterLabel, from: rowFrom || null, to: rowTo || null });
+    };
 
-    const memoizedRows = useMemo(() => {
-        return selectedSessionRows.map((row, idx) => {
-            return (
-                <tr key={`${row.id || idx}-${row.timestamp}`} className="border-b border-border hover:bg-border transition-colors group">
-                    <td className="px-3 py-1.5 text-primary">{row.absoluteIndex !== undefined ? row.absoluteIndex + 1 : idx + 1 + offset}</td>
-                    {/* Assuming row has 'label' or 'class' and 'features' */}
-                    <td className="px-3 py-1.5 font-bold text-text">
-                        {getLabelName(activeSensor, row.label !== undefined ? row.label : (row.class !== undefined ? row.class : 'Unknown'))}
-                    </td>
-                    {isTestMode && (
-                        <td className={`px-3 py-1.5 font-bold ${row.class === row.label ? 'text-emerald-500' : 'text-red-500'}`}>
-                            {row.predicted_label || row.class || '-'}
-                        </td>
-                    )}
+    // Sorting & Filtering State
+    const [sortBy, setSortBy] = useState('id');
+    const [order, setOrder] = useState('ASC');
+    const [filterLabel, setFilterLabel] = useState('all');
+    const [rowFrom, setRowFrom] = useState('');
+    const [rowTo, setRowTo] = useState('');
 
-                    {/* Dynamic Feature Cells */}
-                    {row.features && !Array.isArray(row.features) ? (
-                        Object.keys(selectedSessionRows[0].features).map(key => (
-                            <td key={key} className="px-3 py-1.5 text-muted font-mono">
-                                {(typeof row.features[key] === 'number') ? row.features[key].toFixed(2) : row.features[key]}
-                            </td>
-                        ))
-                    ) : (
-                        <td className="px-3 py-1.5 text-muted truncate max-w-[200px]" title={JSON.stringify(row.features)}>
-                            {Array.isArray(row.features)
-                                ? row.features.map(f => f.toFixed(2)).join(', ')
-                                : JSON.stringify(row.features)}
-                        </td>
-                    )}
+    const tableContainerRef = useRef(null);
+    const scrollTimeout = useRef(null);
 
-                    <td className="pr-1 py-1 text-xs text-left font-bold text-primary uppercase border-b border-border w-10  opacity-0 group-hover:opacity-100 transition-opacity ">
-                        <button
-                            title="Clear Rows"
-                            onClick={(e) => handleDeleteRow(row.id, e)}
-                            className="p-0.5 hover:bg-red-500/20 text-muted hover:text-red-500 rounded transition-colors"
-                        >
-                            <ClipboardX size={20} />
-                        </button>
-                    </td>
-                </tr>
-            );
-        });
-    }, [selectedSessionRows, activeSensor, isTestMode]);
+    const rowVirtualizer = useVirtualizer({
+        count: rows.length,
+        getScrollElement: () => tableContainerRef.current,
+        estimateSize: () => 36, // approx row height
+        overscan: 10,
+    });
 
     // Helper to get full table name from the current short name
     const fullCurrentSessionName = useMemo(() => {
@@ -313,157 +171,242 @@ export default function SessionManagerPanel({
     useEffect(() => {
         if (fullCurrentSessionName) {
             setOffset(0);
-            setHasMore(true);
-            setSelectedSessionRows([]);
-            setTotalRows(0);
-
-            // Trigger initial fetch
-            fetchSessionDetails(0, true);
-        } else {
-            setSelectedSessionRows([]);
+            onFetchDetails({
+                fullName: fullCurrentSessionName,
+                limit: LIMIT,
+                offset: 0,
+                isReset: true,
+                sortBy,
+                order,
+                label: filterLabel === 'all' ? null : filterLabel,
+                from: rowFrom || null,
+                to: rowTo || null
+            });
         }
-    }, [fullCurrentSessionName, refreshTrigger]);
+    }, [fullCurrentSessionName, sortBy, order, filterLabel]); // Fetch automatically on these structural changes
 
-    // Fetch session details
-    const fetchSessionDetails = async (currentOffset = 0, isReset = false, direction = 'down') => {
+    // Manual Refresh/Apply function
+    const handleApplyFilters = () => {
         if (!fullCurrentSessionName) return;
-
-        // Prevent duplicate calls if already loading (except reset)
-        if (rowsLoading && !isReset) return;
-
-        setRowsLoading(true);
-
-        try {
-            const url = isTestMode
-                ? `/api/prediction/sessions/${fullCurrentSessionName}`
-                : `/api/sessions/${activeSensor}/${fullCurrentSessionName}?limit=${LIMIT}&offset=${currentOffset}`;
-
-            const res = await fetch(url);
-            if (res.ok) {
-                const data = await res.json();
-
-                const newRows = Array.isArray(data) ? data : (data.rows || []);
-                const total = data.total !== undefined ? data.total : newRows.length;
-
-                // Annotate rows with their absolute position in DB to fix numbering
-                const annotatedRows = newRows.map((r, i) => ({ ...r, absoluteIndex: currentOffset + i }));
-
-                setTotalRows(total);
-
-                if (isReset) {
-                    setSelectedSessionRows(annotatedRows);
-                } else {
-                    setSelectedSessionRows(prev => {
-                        // Append or prepend based on direction
-                        if (direction === 'down') {
-                            // Don't add duplicates (strict ID/timestamp check)
-                            const existingIds = new Set(prev.map(p => p.id || p.timestamp));
-                            const uniqueNewRows = annotatedRows.filter(r => !existingIds.has(r.id || r.timestamp));
-                            return [...prev, ...uniqueNewRows];
-                        } else {
-                            const existingIds = new Set(prev.map(p => p.id || p.timestamp));
-                            const uniqueNewRows = annotatedRows.filter(r => !existingIds.has(r.id || r.timestamp));
-                            return [...uniqueNewRows, ...prev];
-                        }
-                    });
-                }
-
-                // Update hasMore based on total count
-                if (annotatedRows.length < LIMIT || (currentOffset + annotatedRows.length >= total)) {
-                    setHasMore(false);
-                } else {
-                    setHasMore(true);
-                }
-            } else {
-                console.error("Failed to fetch session details");
-                if (isReset) setSelectedSessionRows([]);
-            }
-        } catch (err) {
-            console.error("Error fetching session details:", err);
-            if (isReset) setSelectedSessionRows([]);
-        } finally {
-            setRowsLoading(false);
-        }
+        setOffset(0);
+        onFetchDetails({
+            fullName: fullCurrentSessionName,
+            limit: LIMIT,
+            offset: 0,
+            isReset: true,
+            sortBy,
+            order,
+            label: filterLabel === 'all' ? null : filterLabel,
+            from: rowFrom || null,
+            to: rowTo || null
+        });
     };
 
-    // Pagination Handlers
+    // Refresh when new data is added
+    useEffect(() => {
+        if (fullCurrentSessionName && refreshTrigger) {
+            onFetchDetails({
+                fullName: fullCurrentSessionName,
+                limit: LIMIT,
+                offset: offset,
+                isReset: true,
+                sortBy,
+                order,
+                label: filterLabel === 'all' ? null : filterLabel,
+                from: rowFrom || null,
+                to: rowTo || null
+            });
+        }
+    }, [refreshTrigger, fullCurrentSessionName, sortBy, order, filterLabel, rowFrom, rowTo]);
+
+    // Pagination Handler
     const handleNextPage = () => {
-        if (!hasMore || rowsLoading) return;
+        if (!hasMore || isLoading) return;
         const nextOffset = offset + LIMIT;
         setOffset(nextOffset);
-        setFetchDirection('down');
-        fetchSessionDetails(nextOffset, false, 'down');
+        onFetchDetails({
+            fullName: fullCurrentSessionName,
+            limit: LIMIT,
+            offset: nextOffset,
+            isReset: false,
+            direction: 'down',
+            sortBy,
+            order,
+            label: filterLabel === 'all' ? null : filterLabel,
+            from: rowFrom || null,
+            to: rowTo || null
+        });
     };
 
     const handlePrevPage = () => {
-        if (offset === 0 || rowsLoading) return;
+        if (offset === 0 || isLoading) return;
         const prevOffset = Math.max(0, offset - LIMIT);
         setOffset(prevOffset);
-        setFetchDirection('up');
-        fetchSessionDetails(prevOffset, false, 'up');
-        setHasMore(true);
+        onFetchDetails({
+            fullName: fullCurrentSessionName,
+            limit: LIMIT,
+            offset: prevOffset,
+            isReset: false,
+            direction: 'up',
+            sortBy,
+            order,
+            label: filterLabel === 'all' ? null : filterLabel,
+            from: rowFrom || null,
+            to: rowTo || null
+        });
     };
-
-    const tableContainerRef = useRef(null);
-    const scrollTimeout = useRef(null);
 
     const handleScroll = (e) => {
         if (scrollTimeout.current) clearTimeout(scrollTimeout.current);
-
         scrollTimeout.current = setTimeout(() => {
             const { scrollTop, scrollHeight, clientHeight } = e.target;
-
-            // Reached bottom
             if (scrollHeight - scrollTop <= clientHeight + 50) {
                 handleNextPage();
             }
-            // Reached top 
-            // else if (scrollTop === 0) {
-            //     handlePrevPage();
-            // }
         }, 150);
-    };
-
-    const handleDeleteRow = async (rowId, e) => {
-        e.stopPropagation();
-        if (!fullCurrentSessionName) return;
-
-        try {
-            // Optimistic update
-            const prevRows = [...selectedSessionRows];
-            setSelectedSessionRows(prev => prev.filter(r => r.id !== rowId));
-
-            const url = isTestMode
-                ? `/api/prediction/sessions/${fullCurrentSessionName}/rows/${rowId}`
-                : `/api/sessions/${activeSensor}/${fullCurrentSessionName}/rows/${rowId}`;
-
-            const res = await fetch(url, {
-                method: 'DELETE'
-            });
-
-            if (!res.ok) {
-                console.error("Failed to delete row");
-                // Revert on failure
-                setSelectedSessionRows(prevRows);
-            }
-        } catch (err) {
-            console.error("Error deleting row:", err);
-        }
     };
 
     return (
         <div className="flex h-full bg-surface border-2 border-border rounded-xl overflow-hidden shadow-card p-1 gap-1">
 
             {/* LEFT PANE: Selected Session Table View */}
-            <div className="flex-grow flex flex-col min-w-0 bg-bg/50 rounded-lg border border-muted overflow-hidden relative">
-                {/* Table Header / Title */}
-                <div className="px-3 py-2 border-b border-muted bg-surface/50 flex justify-between items-center">
-                    <span className="text-xs font-bold text-muted uppercase tracking-wider">
-                        {currentSessionName ? currentSessionName.replace(`${activeSensor.toLowerCase()}_session_`, '') : 'Select a Session'}
-                    </span>
-                    <span className="text-xs font-mono text-muted">
-                        Total Saved: {totalRows}
-                    </span>
+            <div className="flex-grow flex flex-col min-w-0 bg-bg/10 rounded-lg border border-muted overflow-hidden relative">
+                {/* Table Header / Toolbar */}
+                <div className="px-3 py-2 border-b border-muted bg-bg flex flex-wrap items-center gap-3">
+                    {/* Session Name Label */}
+                    <div className="flex items-center gap-2 px-3 bg-primary/10 rounded border border-primary shrink-0 h-9">
+                        <FolderPlus size={18} className="text-primary" />
+                        <span className="text-sm font-bold text-text uppercase tracking-wider truncate max-w-[150px]">
+                            {currentSessionName ? currentSessionName.replace(`${activeSensor.toLowerCase()}_session_`, '') : 'Select a Session'}
+                        </span>
+                    </div>
+
+                    <div className="h-8 w-[1px] bg-white/10 shrink-0 mx-1"></div>
+
+                    {/* Filter Controls */}
+                    <div className="flex items-center gap-2 shrink-0">
+                        {/* Class Filter */}
+                        <div className="flex items-center gap-1.5 bg-white/5 pl-2 pr-1 py-0.5 rounded border border-surface h-9 shrink-0 flex-1 min-w-[140px] max-w-[180px]">
+                            <ListFilter size={16} className="text-muted shrink-0" />
+                            <CustomSelect
+                                value={filterLabel}
+                                onChange={(val) => setFilterLabel(val)}
+                                options={[
+                                    { value: 'all', label: 'All Classes' },
+                                    ...Object.entries(SENSOR_LABEL_MAP[activeSensor] || {}).map(([val, name]) => ({ value: val, label: name }))
+                                ]}
+                                className="h-full w-full flex items-center"
+                                triggerClassName="!bg-transparent !border-none !p-0 !min-h-0 !shadow-none !text-[11px]"
+                            />
+                        </div>
+
+                        {/* Sort By */}
+                        <div className="flex items-center gap-1 bg-white/5 pl-2 pr-1 py-0.5 rounded border border-surface h-9 shrink-0 flex-1 min-w-[130px] max-w-[150px]">
+                            <ArrowUpDown size={16} className="text-muted shrink-0" />
+                            <CustomSelect
+                                value={sortBy}
+                                onChange={(val) => setSortBy(val)}
+                                options={[
+                                    { value: 'id', label: 'S.No' },
+                                    { value: 'label', label: 'Class' },
+                                    { value: 'timestamp', label: 'Time' }
+                                ]}
+                                className="h-full w-full flex items-center"
+                                triggerClassName="!bg-transparent !border-none !p-0 !min-h-0 !shadow-none !text-[11px]"
+                            />
+                            <button
+                                onClick={() => setOrder(prev => prev === 'ASC' ? 'DESC' : 'ASC')}
+                                className="px-1.5 hover:text-primary transition-colors text-muted flex items-center shrink-0 h-full"
+                                title={order === 'ASC' ? 'Ascending' : 'Descending'}
+                            >
+                                {order === 'ASC' ? <ArrowUp size={16} /> : <ArrowDown size={16} />}
+                            </button>
+                        </div>
+
+                        {/* Row Range */}
+                        <div className="flex items-center gap-1 bg-white/5 px-2 py-1 rounded border border-surface h-9 shrink-0">
+                            <div className="flex items-center gap-1 bg-bg/50 rounded px-1.5 py-1">
+                                <ArrowDownToLine size={14} className="text-primary font-bold" title="From Row" />
+                                <input
+                                    type="number"
+                                    placeholder="From"
+                                    className="bg-transparent w-10 text-center text-xs text-text border-none focus:ring-0 p-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                    value={rowFrom}
+                                    onChange={(e) => setRowFrom(e.target.value)}
+                                />
+                            </div>
+                            <span className="text-muted text-xs font-bold">-</span>
+                            <div className="flex items-center gap-1 bg-bg/50 rounded px-1.5 py-1">
+                                <ArrowUpToLine size={14} className="text-primary font-bold" title="To Row" />
+                                <input
+                                    type="number"
+                                    placeholder="To"
+                                    className="bg-transparent w-10 text-center text-xs text-text border-none focus:ring-0 p-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                    value={rowTo}
+                                    onChange={(e) => setRowTo(e.target.value)}
+                                />
+                            </div>
+                            <button
+                                onClick={handleApplyFilters}
+                                className="p-1 hover:bg-primary/20 text-primary rounded transition-colors ml-1"
+                                title="Apply Range"
+                            >
+                                <Check size={16} />
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="h-8 w-[1px] bg-white/10 shrink-0 mx-1"></div>
+
+                    {/* Status & Actions */}
+                    <div className="flex items-center gap-3 ml-auto shrink-0">
+                        {/* Row Count Status */}
+                        <div className="flex items-center gap-1.5 px-3 bg-white/5 rounded border border-white/5 h-9">
+                            <span className="text-xs text-muted uppercase font-bold">Showing</span>
+                            <span className="text-sm font-bold text-text">{totalRows}</span>
+                            <span className="text-xs text-muted">of</span>
+                            <span className="text-sm font-bold text-muted">{absoluteTotalRows}</span>
+                        </div>
+
+                        <div className="flex items-center gap-1 h-9">
+                            {!isTestMode && (
+                                <button
+                                    onClick={() => onClearSession(fullCurrentSessionName)}
+                                    className="px-3 hover:bg-red-500/20 text-muted hover:text-red-500 rounded border border-transparent hover:border-red-500/30 transition-all flex items-center gap-1.5 h-full"
+                                    title="Clear All Rows"
+                                >
+                                    <Trash2 size={16} />
+                                    <span className="text-xs font-bold uppercase hidden xl:block">Clear</span>
+                                </button>
+                            )}
+                            <div className="h-6 w-[1px] bg-white/10 mx-1"></div>
+                            <button
+                                onClick={() => onFetchDetails({
+                                    fullName: fullCurrentSessionName,
+                                    limit: LIMIT, offset: 0, isReset: true,
+                                    sortBy, order, label: filterLabel === 'all' ? null : filterLabel,
+                                    from: rowFrom || null, to: rowTo || null
+                                })}
+                                className="px-2 w-9 flex items-center justify-center text-muted hover:text-primary rounded hover:bg-white/5 transition-colors h-full"
+                                title="Refresh Table"
+                            >
+                                <RefreshCw size={16} />
+                            </button>
+                            <button
+                                onClick={() => {
+                                    setSortBy('id');
+                                    setOrder('ASC');
+                                    setFilterLabel('all');
+                                    setRowFrom('');
+                                    setRowTo('');
+                                }}
+                                className="px-2 w-9 flex items-center justify-center text-muted hover:text-white rounded hover:bg-red-500/20 hover:text-red-500 transition-colors h-full"
+                                title="Reset Filters"
+                            >
+                                <X size={16} />
+                            </button>
+                        </div>
+                    </div>
                 </div>
 
                 {/* Table Content */}
@@ -472,61 +415,127 @@ export default function SessionManagerPanel({
                     ref={tableContainerRef}
                     onScroll={handleScroll}
                 >
-                    {rowsLoading ? (
+                    {/* Primary Loading Overlay (Only on Reset/Initial Load) */}
+                    {isTableLoading && isResetMode && (
                         <div className="absolute inset-0 flex items-center justify-center text-muted text-xs animate-pulse bg-surface/50 z-20">
                             Loading data...
                         </div>
-                    ) : selectedSessionRows.length === 0 && !rowsLoading ? (
+                    )}
+
+                    {/* Empty State */}
+                    {rows.length === 0 && !isTableLoading ? (
                         <div className="absolute inset-0 flex flex-col items-center justify-center text-muted opacity-50 gap-2">
                             <ClipboardX size={60} strokeWidth={1.5} />
                             <span className="text-2xl">No data available</span>
                         </div>
                     ) : (
-                        <table className="w-full text-left border-collapse">
-                            <thead className="bg-surface/50 sticky top-0 z-10 backdrop-blur-sm">
-                                <tr>
-                                    <th className="px-3 py-1.5 text-xs font-bold text-primary uppercase border-b border-text w-12">S.No</th>
-                                    <th className="px-3 py-1.5 text-xs font-bold text-primary uppercase border-b border-text w-24">
-                                        {isTestMode ? "Actual" : "Class"}
-                                    </th>
-                                    {isTestMode && (
+                        <div className="relative">
+                            <table className="w-full text-left border-collapse">
+                                <thead className="bg-surface/50 sticky top-0 z-10 backdrop-blur-sm">
+                                    <tr>
+                                        <th className="px-3 py-1.5 text-xs font-bold text-primary uppercase border-b border-text w-12">S.No</th>
                                         <th className="px-3 py-1.5 text-xs font-bold text-primary uppercase border-b border-text w-24">
-                                            Predicted
+                                            {isTestMode ? "Actual" : "Class"}
                                         </th>
-                                    )}
-                                    {/* Dynamic Feature Headers */}
-                                    {selectedSessionRows.length > 0 && selectedSessionRows[0].features && !Array.isArray(selectedSessionRows[0].features) ? (
-                                        Object.keys(selectedSessionRows[0].features).map(key => (
-                                            <th key={key} className="px-3 py-1.5 text-xs font-bold text-primary uppercase border-b border-text">
-                                                {key}
+                                        {isTestMode && (
+                                            <th className="px-3 py-1.5 text-xs font-bold text-primary uppercase border-b border-text w-24">
+                                                Predicted
                                             </th>
-                                        ))
-                                    ) : (
-                                        <th className="px-3 py-1.5 text-xs font-bold text-muted uppercase border-b border-border">Features</th>
+                                        )}
+                                        {/* Dynamic Feature Headers */}
+                                        {rows.length > 0 && rows[0].features && !Array.isArray(rows[0].features) ? (
+                                            Object.keys(rows[0].features).map(key => (
+                                                <th key={key} className="px-3 py-1.5 text-xs font-bold text-primary uppercase border-b border-text">
+                                                    {key}
+                                                </th>
+                                            ))
+                                        ) : (
+                                            <th className="px-3 py-1.5 text-xs font-bold text-muted uppercase border-b border-border">Features</th>
+                                        )}
+                                        <th className="pr-1 py-1 text-xs text-left font-bold text-primary uppercase border-b border-text w-10">
+                                            <button
+                                                title="Clear Rows"
+                                                onClick={handleClearSessionData}
+                                                className="p-0.5 hover:bg-red-500/20 text-muted hover:text-red-500 rounded transition-colors"
+                                            >
+                                                <Trash2 size={18} />
+                                            </button>
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody className="text-xs font-mono">
+                                    {rowVirtualizer.getVirtualItems().length > 0 && (
+                                        <tr>
+                                            <td style={{ height: `${rowVirtualizer.getVirtualItems()[0].start}px` }} colSpan="100%" />
+                                        </tr>
                                     )}
-                                    <th className="pr-1 py-1 text-xs text-left font-bold text-primary uppercase border-b border-text w-10">
-                                        <button
-                                            title="Clear Rows"
-                                            onClick={handleClearSessionData}
-                                            className="p-0.5 hover:bg-red-500/20 text-muted hover:text-red-500 rounded transition-colors"
-                                        >
-                                            <Trash2 size={18} />
-                                        </button>
-                                    </th>
-                                </tr>
-                            </thead>
-                            <tbody className="text-xs font-mono">
-                                {memoizedRows}
-                            </tbody>
-                        </table>
+                                    {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                                        const idx = virtualRow.index;
+                                        const row = rows[idx];
+                                        if (!row) return null;
+
+                                        return (
+                                            <tr key={`${row.id || idx}-${row.timestamp}`} className="border-b border-border hover:bg-border transition-colors group">
+                                                <td className="px-3 py-1.5 text-primary">{row.absoluteIndex !== undefined ? row.absoluteIndex + 1 : idx + 1 + offset}</td>
+                                                <td className="px-3 py-1.5 font-bold text-text">
+                                                    {getLabelName(activeSensor, row.label !== undefined ? row.label : (row.class !== undefined ? row.class : 'Unknown'))}
+                                                </td>
+                                                {isTestMode && (
+                                                    <td className={`px-3 py-1.5 font-bold ${row.class === row.label ? 'text-emerald-500' : 'text-red-500'}`}>
+                                                        {row.predicted_label || row.class || '-'}
+                                                    </td>
+                                                )}
+
+                                                {rows.length > 0 && rows[0].features && !Array.isArray(rows[0].features) ? (
+                                                    Object.keys(rows[0].features).map(key => (
+                                                        <td key={key} className="px-3 py-1.5 text-muted font-mono">
+                                                            {(typeof row.features[key] === 'number') ? row.features[key].toFixed(2) : row.features[key]}
+                                                        </td>
+                                                    ))
+                                                ) : (
+                                                    <td className="px-3 py-1.5 text-muted truncate max-w-[200px]" title={JSON.stringify(row.features)}>
+                                                        {Array.isArray(row.features)
+                                                            ? row.features.map(f => f.toFixed(2)).join(', ')
+                                                            : JSON.stringify(row.features)}
+                                                    </td>
+                                                )}
+
+                                                <td className="pr-1 py-1 text-xs text-left font-bold text-primary uppercase border-b border-border w-10  opacity-0 group-hover:opacity-100 transition-opacity ">
+                                                    <button
+                                                        title="Clear Rows"
+                                                        onClick={(e) => { e.stopPropagation(); onDeleteRow(row.id); }}
+                                                        className="p-0.5 hover:bg-red-500/20 text-muted hover:text-red-500 rounded transition-colors"
+                                                    >
+                                                        <ClipboardX size={20} />
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                    {rowVirtualizer.getVirtualItems().length > 0 && (
+                                        <tr>
+                                            <td style={{ height: `${rowVirtualizer.getTotalSize() - rowVirtualizer.getVirtualItems()[rowVirtualizer.getVirtualItems().length - 1].end}px` }} colSpan="100%" />
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+
+                            {/* Pagination / Append Loading Indicator */}
+                            {isTableLoading && !isResetMode && (
+                                <div className="p-3 bg-surface/80 border-t border-border flex items-center justify-center gap-2 text-xs text-muted sticky bottom-0 backdrop-blur-sm">
+                                    <RefreshCw size={14} className="animate-spin" />
+                                    Loading more entries...
+                                </div>
+                            )}
+                        </div>
                     )}
 
                 </div>
             </div>
 
             {/* RIGHT PANE: Session List */}
-            <div className="w-1/3 min-w-[180px] max-w-[250px] flex flex-col bg-surface rounded-lg border border-muted overflow-hidden">
-                <div className="p-3 border-b border-muted bg-bg/30">
+            <div className="w-1/3 min-w-[180px] max-w-[250px] flex flex-col bg-bg/10 rounded-lg border border-muted overflow-hidden">
+                <div className="p-3 border-b border-muted bg-surface">
                     <h3 className="font-bold text-base text-text uppercase tracking-wide flex items-center justify-between pr-2 mb-2">
                         <span>Sessions</span>
                         <div className="flex gap-1 items-center">
@@ -545,7 +554,7 @@ export default function SessionManagerPanel({
                                     <GitMerge size={16} />
                                 </button>
                             )}
-                            <button onClick={fetchSessions} className="text-muted hover:text-primary p-1">
+                            <button onClick={() => onFetchDetails({ fullName: fullCurrentSessionName, limit: LIMIT, offset: 0, isReset: true, sortBy, order, label: filterLabel === 'all' ? null : filterLabel, from: rowFrom || null, to: rowTo || null })} className="text-muted hover:text-primary p-1">
                                 <RefreshCw size={16} />
                             </button>
                         </div>
@@ -612,12 +621,12 @@ export default function SessionManagerPanel({
                 </div>
 
                 <div className="flex-grow overflow-hidden relative p-0 bg-surface/30">
-                    {loading ? (
+                    {isLoading ? (
                         <div className="flex flex-col items-center justify-center h-full text-muted space-y-2 pb-10">
                             <RefreshCw size={40} className="animate-spin opacity-40" />
                             <span className="text-sm">Fetching sessions...</span>
                         </div>
-                    ) : sessions.length === 0 ? (
+                    ) : sessions.length === 0 && !isLoading ? (
                         <div className="flex flex-col items-center justify-center h-full text-muted opacity-60 space-y-2 pb-10">
                             <ArchiveX size={50} strokeWidth={1.5} />
                             <span className="text-xl italic">No saved sessions</span>
@@ -698,7 +707,7 @@ export default function SessionManagerPanel({
                                                 </>
                                             )}
                                             <button
-                                                onClick={(e) => handleDeleteSession(sessionName, e)}
+                                                onClick={(e) => handleDeleteSessionProxy(sessionName, e)}
                                                 className={`p-0.5 rounded hover:bg-red-500/10 hover:text-red-400 transition-all ${isSelected ? 'text-primary/50' : 'text-border group-hover:text-muted'}`}
                                                 title="Delete Session"
                                             >
