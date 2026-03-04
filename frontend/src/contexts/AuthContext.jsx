@@ -3,7 +3,7 @@ import React, { createContext, useState, useEffect, useContext } from 'react'
 const AuthContext = createContext(null)
 
 // PHP Bridge URL - Updated to the provided working host
-const API_BASE_URL = 'https://aksh.tamrakar.withaspire.in/public/auth.php'
+const API_BASE_URL = 'https://aksh.tamrakar.withaspire.in/auth.php'
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
