@@ -1,5 +1,4 @@
 <?php
-session_start();
 date_default_timezone_set('Asia/Kolkata');
 
 header("Access-Control-Allow-Origin: *");
@@ -19,8 +18,16 @@ $host = "localhost";
 $db_name = "withadae_neurotech";
 $username = "withadae_neuro_admin";
 $password = 'firstSep@7219'; 
-define('AUTH_VERSION', '1.0.6-SECURE_OTP');
+define('AUTH_VERSION', '1.0.7-FILE_OTP');
 define('ENCRYPTION_KEY', 'n3ur0_t3ch_k3y_2026'); // Replace with a more secure key in production
+define('OTP_VAULT_DIR', __DIR__ . '/temp_otp');
+
+// Ensure OTP vault exists
+if (!is_dir(OTP_VAULT_DIR)) {
+    mkdir(OTP_VAULT_DIR, 0755, true);
+    // Add .htaccess to prevent direct access if on Apache
+    file_put_contents(OTP_VAULT_DIR . '/.htaccess', "Order Deny,Allow\nDeny from all");
+}
 
 try {
     $conn = new PDO("mysql:host=$host;dbname=$db_name", $username, $password);
@@ -45,7 +52,10 @@ function encrypt_data($data) {
 }
 
 function decrypt_data($data) {
-    list($encrypted_data, $iv) = explode('::', base64_decode($data), 2);
+    if (!$data) return null;
+    $parts = explode('::', base64_decode($data), 2);
+    if (count($parts) < 2) return null;
+    list($encrypted_data, $iv) = $parts;
     return openssl_decrypt($encrypted_data, 'aes-256-cbc', ENCRYPTION_KEY, 0, $iv);
 }
 
@@ -170,7 +180,7 @@ if ($action === 'test') {
         "smtp_server_connectivity" => $smtp_conn,
         "php_mail_enabled" => function_exists('mail'),
         "columns_found" => $columns,
-        "session_id" => session_id()
+        "otp_vault_ready" => is_writable(OTP_VAULT_DIR)
     ]);
     exit;
 }
@@ -200,11 +210,13 @@ if ($action === 'signup') {
     $otp = sprintf("%04d", mt_rand(0, 9999));
     $expiry = time() + 900; // 15 minutes
 
-    // Store OTP in Session (Encrypted)
-    $_SESSION['otp_data'][$email] = encrypt_data(json_encode([
+    // Store OTP in File Vault (Encrypted)
+    $vault_file = OTP_VAULT_DIR . '/' . md5($email);
+    $payload = encrypt_data(json_encode([
         'otp' => $otp,
         'expiry' => $expiry
     ]));
+    file_put_contents($vault_file, $payload);
 
     // Prepare profile image blob
     $image_blob = null;
@@ -251,11 +263,13 @@ if ($action === 'signup') {
     $otp = sprintf("%04d", mt_rand(0, 9999));
     $expiry = time() + 900;
 
-    // Update OTP in Session
-    $_SESSION['otp_data'][$email] = encrypt_data(json_encode([
+    // Update OTP in File Vault
+    $vault_file = OTP_VAULT_DIR . '/' . md5($email);
+    $payload = encrypt_data(json_encode([
         'otp' => $otp,
         'expiry' => $expiry
     ]));
+    file_put_contents($vault_file, $payload);
 
     $smtp_log = "";
     if (sendOTPEmail($email, $otp, $smtp_log)) {
@@ -269,18 +283,20 @@ if ($action === 'signup') {
     $email = $data['email'] ?? '';
     $otp = $data['otp'] ?? '';
 
-    if (!isset($_SESSION['otp_data'][$email])) {
-        echo json_encode(["status" => "error", "message" => "No active access vector found for this session."]);
+    $vault_file = OTP_VAULT_DIR . '/' . md5($email);
+    if (!file_exists($vault_file)) {
+        echo json_encode(["status" => "error", "message" => "No active access vector found for this vector ID."]);
         exit;
     }
 
-    $decrypted = decrypt_data($_SESSION['otp_data'][$email]);
+    $content = file_get_contents($vault_file);
+    $decrypted = decrypt_data($content);
     $otp_info = json_decode($decrypted, true);
 
     if ($otp_info && $otp_info['otp'] === $otp && $otp_info['expiry'] > time()) {
         $stmt = $conn->prepare("UPDATE users SET is_verified = 1 WHERE email = ?");
         $stmt->execute([$email]);
-        unset($_SESSION['otp_data'][$email]); // Clear OTP after success
+        unlink($vault_file); // Clear OTP after success
         echo json_encode(["status" => "success", "message" => "Consciousness synchronized. Welcome to the network."]);
     } else {
         echo json_encode(["status" => "error", "message" => "Invalid or expired access vector."]);
