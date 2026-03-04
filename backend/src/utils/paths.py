@@ -9,13 +9,13 @@ def get_project_root():
     # Start from this file's location: src/utils/paths.py
     current = Path(__file__).resolve()
     
-    # Walk up until we find 'src' or 'frontend' or '.git' to identify root
+    # Walk up until we find 'backend' and 'frontend' to identify root
     for parent in current.parents:
-        if (parent / 'src').exists() and (parent / 'frontend').exists():
+        if (parent / 'backend').exists() and (parent / 'frontend').exists():
             return parent
             
     # Fallback to pure relative (4 levels up from src/utils/paths.py)
-    return current.parent.parent.parent
+    return current.parent.parent.parent.parent
     
 PROJECT_ROOT = get_project_root()
 FRONTEND_DIR = PROJECT_ROOT / "frontend"

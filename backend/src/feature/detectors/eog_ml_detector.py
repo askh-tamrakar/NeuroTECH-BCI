@@ -41,6 +41,10 @@ class EOGMLDetector:
             project_root = Path(__file__).resolve().parent.parent.parent.parent
             models_dir = project_root / "frontend" / "public" / "data" / "EOG" / "models"
             
+            # If default eog_rf is not found, use dino-ml which is the available EOG model
+            if model_name == "eog_rf" and not (models_dir / "eog_rf.joblib").exists():
+                 model_name = "dino-ml"
+            
             clean_name = "".join([c for c in model_name if c.isalnum() or c in ('_', '-')])
             
             model_path = models_dir / f"{clean_name}.joblib"

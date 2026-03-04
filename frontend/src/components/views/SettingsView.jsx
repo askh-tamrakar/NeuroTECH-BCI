@@ -1,3 +1,4 @@
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useTheme } from '../../contexts/ThemeContext'
 import { useAuth } from '../../contexts/AuthContext'
 import {
@@ -305,41 +306,47 @@ export default function SettingsView({ latency = 0 }) {
     <div className="w-full mx-auto pt-8 px-4 lg:px-8 pb-32 space-y-10">
 
       {/* Header */}
-      <div className="flex items-center gap-5 mb-10">
-        <div className="p-5 bg-primary/20 rounded-2xl text-primary shadow-glow">
-          <Settings size={44} strokeWidth={2.5} />
-        </div>
-        <div>
-          <h1 className="text-4xl font-black text-text tracking-tighter uppercase">Settings</h1>
-          <p className="text-xl text-muted font-medium">Manage your workspace preferences & neural controls</p>
-        </div>
-      </div>
-
-      {/* User Profile Panel */}
-      {user && (
-        <div className="card p-8 bg-surface rounded-[2rem] border-2 border-primary/20 shadow-xl flex items-center justify-between overflow-hidden relative group">
-          <div className="absolute inset-0 bg-primary/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"></div>
-          <div className="flex items-center gap-8 relative z-10">
-            <div className="w-20 h-20 rounded-2xl bg-primary/10 flex items-center justify-center text-primary border-2 border-primary/20 shadow-glow">
-              <span className="text-3xl font-black">{user.username?.charAt(0).toUpperCase() || 'U'}</span>
-            </div>
-            <div className="space-y-1">
-              <h3 className="text-sm font-black text-muted uppercase tracking-[0.3em]">Neural Operator Profile</h3>
-              <div className="flex items-center gap-3">
-                <span className="text-3xl font-black text-text tracking-tighter uppercase">{user.username || 'Anonymous'}</span>
-                <span className="px-3 py-1 bg-primary text-bg text-[10px] font-black rounded-full tracking-widest uppercase">Level 1</span>
-              </div>
-              <p className="text-sm text-muted font-medium font-mono">{user.email}</p>
-            </div>
+      <div className="flex items-center justify-between gap-5 mb-10">
+        <div className="flex items-center gap-5">
+          <div className="p-5 bg-primary/20 rounded-2xl text-primary shadow-glow">
+            <Settings size={44} strokeWidth={2.5} />
           </div>
-          <button
-            onClick={logout}
-            className="px-8 py-4 bg-red-500/10 text-red-500 border-2 border-red-500/20 rounded-xl font-black uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all shadow-lg active:scale-95 relative z-10"
-          >
-            Disconnect Link
-          </button>
+          <div>
+            <h1 className="text-4xl font-black text-text tracking-tighter uppercase"> Settings </h1>
+            <p className="text-xl text-muted font-medium">Manage your workspace preferences & neural controls</p>
+          </div>
         </div>
-      )}
+
+        {/* User Profile Panel */}
+        {user && (
+          <div className="card p-8 gap-12 bg-surface rounded-[2rem] border-2 border-primary/20 shadow-xl flex items-center justify-between overflow-hidden relative group">
+            <div className="absolute inset-0 bg-primary/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"></div>
+            <div className="flex items-center gap-8 relative z-10">
+              <div className="w-20 h-20 rounded-2xl bg-primary/10 flex items-center justify-center text-primary border-2 border-primary/20 shadow-glow overflow-hidden">
+                {user.avatarUrl ? (
+                  <img src={user.avatarUrl} alt="Neural Avatar" className="w-full h-full object-cover" />
+                ) : (
+                  <span className="text-3xl font-black">{(user.name || user.username)?.charAt(0).toUpperCase() || 'U'}</span>
+                )}
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-sm font-black text-muted uppercase tracking-[0.3em]">Neural Operator Profile</h3>
+                <div className="flex items-center gap-3">
+                  <span className="text-3xl font-black text-text tracking-tighter uppercase">{user.username || 'Anonymous'}</span>
+
+                </div>
+                <p className="text-sm text-muted font-medium font-mono">{user.email}</p>
+              </div>
+            </div>
+            <button
+              onClick={logout}
+              className="px-8 py-4 bg-red-500/10 text-red-500 border-2 border-red-500/20 rounded-xl font-black uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all shadow-lg active:scale-95 relative z-10"
+            >
+              Disconnect Link
+            </button>
+          </div>
+        )}
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-start">
         {/* LEFT COLUMN: Appearance & Connectivity */}

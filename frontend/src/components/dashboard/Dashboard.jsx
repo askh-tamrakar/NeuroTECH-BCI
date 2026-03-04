@@ -90,7 +90,7 @@ export default function Dashboard() {
 
 
   const navItems = React.useMemo(() => [
-    { label: 'GRAPHS', onClick: () => setCurrentPage('live'), href: '#live' },
+    { label: 'TERMINAL', onClick: () => setCurrentPage('live'), href: '#live' },
     { label: 'Dino', onClick: () => setCurrentPage('dino'), href: '#dino' },
     { label: 'SSVEP', onClick: () => setCurrentPage('ssvep'), href: '#ssvep' },
     { label: 'RPS', onClick: () => setCurrentPage('rps'), href: '#rps' },
@@ -134,7 +134,7 @@ export default function Dashboard() {
       <div className="header" style={{ zIndex: 50 }}>
         <div className="header-inner">
           <div className="flex items-center gap-3">
-            <div className="relative group cursor-pointer" onClick={logout} title="Click to Logout">
+            <div className="relative group cursor-pointer" onClick={() => setCurrentPage('live')} title="Back to Terminal">
               <div className="absolute inset-0 bg-primary/20 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
               <video muted autoPlay loop playsInline preload="auto" aria-label="logo animation" className="w-24 h-16 relative z-10 rounded-lg border border-border bg-black object-cover">
                 <source src="/Resources/brain_animation.mp4" type="video/mp4" />

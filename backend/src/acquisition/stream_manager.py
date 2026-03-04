@@ -67,7 +67,7 @@ class StreamManagerApp:
                 self.log(f"✅ LSL Stream 'BioSignals-Raw-uV' created ({', '.join(channel_labels)}).")
 
                 # MAGIC STRING required by pipeline.py (Keep this!)
-                print(f"Created stream 'BioSignals-Events'")
+                print(f"Created stream 'BioSignals-Events'", flush=True)
                 self.log("✅ LSL Stream 'BioSignals-Events' reported ready.")
 
                 # Initialize Processed Stream
@@ -161,7 +161,7 @@ class StreamManagerApp:
             self.log_text.config(state="disabled")
         
         self.root.after_idle(_update_ui)
-        print(message) # Mirror to stdout for system integration
+        print(message, flush=True) # Mirror to stdout for system integration
 
     def start_server(self):
         if self.is_running:

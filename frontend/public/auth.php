@@ -1,4 +1,5 @@
 <?php
+session_start();
 date_default_timezone_set('Asia/Kolkata');
 
 header("Access-Control-Allow-Origin: *");
@@ -18,7 +19,8 @@ $host = "localhost";
 $db_name = "withadae_neurotech";
 $username = "withadae_neuro_admin";
 $password = 'firstSep@7219'; 
-define('AUTH_VERSION', '1.0.5-USERNAME_IST');
+define('AUTH_VERSION', '1.0.6-SECURE_OTP');
+define('ENCRYPTION_KEY', 'n3ur0_t3ch_k3y_2026'); // Replace with a more secure key in production
 
 try {
     $conn = new PDO("mysql:host=$host;dbname=$db_name", $username, $password);
@@ -34,6 +36,18 @@ define('SMTP_HOST', 'mail.withaspire.in');
 define('SMTP_USER', 'neurotech@withaspire.in');
 define('SMTP_PASS', 'firstSep@7219');
 define('SMTP_PORT', 465);
+
+// OTP Helper Functions
+function encrypt_data($data) {
+    $iv = openssl_random_pseudo_bytes(openssl_cipher_iv_length('aes-256-cbc'));
+    $encrypted = openssl_encrypt($data, 'aes-256-cbc', ENCRYPTION_KEY, 0, $iv);
+    return base64_encode($encrypted . '::' . $iv);
+}
+
+function decrypt_data($data) {
+    list($encrypted_data, $iv) = explode('::', base64_decode($data), 2);
+    return openssl_decrypt($encrypted_data, 'aes-256-cbc', ENCRYPTION_KEY, 0, $iv);
+}
 
 function sendOTPEmail($to, $otp, &$log = "") {
     $subject = "Welcome to the World of Neurons";
@@ -131,7 +145,7 @@ if ($action === 'test') {
     try {
         $stmt = $conn->query("DESCRIBE users");
         $cols = $stmt->fetchAll(PDO::FETCH_COLUMN);
-        $required = ['is_verified', 'otp_code', 'otp_expiry'];
+        $required = ['is_verified', 'profile_image'];
         $missing = array_diff($required, $cols);
         $db_status = empty($missing) ? "Ready" : "Missing columns: " . implode(', ', $missing);
         $columns = $cols;
@@ -155,7 +169,8 @@ if ($action === 'test') {
         "db_table_status" => $db_status,
         "smtp_server_connectivity" => $smtp_conn,
         "php_mail_enabled" => function_exists('mail'),
-        "columns_found" => $columns
+        "columns_found" => $columns,
+        "session_id" => session_id()
     ]);
     exit;
 }
@@ -166,6 +181,7 @@ if ($action === 'signup') {
     $username = $data['username'] ?? '';
     $pass = $data['password'] ?? '';
     $name = $data['name'] ?? $username;
+    $profile_image_base64 = $data['profile_image'] ?? '';
     
     if (!$email || !$pass || !$username) {
         echo json_encode(["status" => "error", "message" => "Missing data (email, username, and password are required)"]);
@@ -182,17 +198,32 @@ if ($action === 'signup') {
 
     // Generate 4-digit OTP
     $otp = sprintf("%04d", mt_rand(0, 9999));
-    $expiry = date('Y-m-d H:i:s', strtotime('+15 minutes'));
+    $expiry = time() + 900; // 15 minutes
 
-    $stmt = $conn->prepare("INSERT INTO users (email, username, password, name, otp_code, otp_expiry) VALUES (?, ?, ?, ?, ?, ?)");
+    // Store OTP in Session (Encrypted)
+    $_SESSION['otp_data'][$email] = encrypt_data(json_encode([
+        'otp' => $otp,
+        'expiry' => $expiry
+    ]));
+
+    // Prepare profile image blob
+    $image_blob = null;
+    if ($profile_image_base64) {
+        if (preg_match('/^data:image\/(\w+);base64,/', $profile_image_base64)) {
+            $profile_image_base64 = substr($profile_image_base64, strpos($profile_image_base64, ',') + 1);
+        }
+        $image_blob = base64_decode($profile_image_base64);
+    }
+
+    $stmt = $conn->prepare("INSERT INTO users (email, username, password, name, profile_image) VALUES (?, ?, ?, ?, ?)");
     $smtp_log = "";
-    if ($stmt->execute([$email, $username, $pass, $name, $otp, $expiry])) {
+    if ($stmt->execute([$email, $username, $pass, $name, $image_blob])) {
         if (sendOTPEmail($email, $otp, $smtp_log)) {
             echo json_encode(["status" => "success", "message" => "Account created. Please check $email for the 4-digit access code."]);
         } else {
             echo json_encode([
                 "status" => "partial_success", 
-                "message" => "Account created, but failed to send verification email. Please check your spam folder or contact support.",
+                "message" => "Account created, but failed to send verification email.",
                 "debug" => $smtp_log
             ]);
         }
@@ -209,19 +240,28 @@ if ($action === 'signup') {
         exit;
     }
 
-    $otp = sprintf("%04d", mt_rand(0, 9999));
-    $expiry = date('Y-m-d H:i:s', strtotime('+15 minutes'));
-
-    $stmt = $conn->prepare("UPDATE users SET otp_code = ?, otp_expiry = ? WHERE email = ? AND is_verified = 0");
-    if ($stmt->execute([$otp, $expiry, $email])) {
-        $smtp_log = "";
-        if (sendOTPEmail($email, $otp, $smtp_log)) {
-            echo json_encode(["status" => "success", "message" => "New access vector sent to $email"]);
-        } else {
-            echo json_encode(["status" => "error", "message" => "Failed to send email", "debug" => $smtp_log]);
-        }
-    } else {
+    // Check if user exists and is not verified
+    $stmt = $conn->prepare("SELECT id FROM users WHERE email = ? AND is_verified = 0");
+    $stmt->execute([$email]);
+    if (!$stmt->fetch()) {
         echo json_encode(["status" => "error", "message" => "User not found or already verified"]);
+        exit;
+    }
+
+    $otp = sprintf("%04d", mt_rand(0, 9999));
+    $expiry = time() + 900;
+
+    // Update OTP in Session
+    $_SESSION['otp_data'][$email] = encrypt_data(json_encode([
+        'otp' => $otp,
+        'expiry' => $expiry
+    ]));
+
+    $smtp_log = "";
+    if (sendOTPEmail($email, $otp, $smtp_log)) {
+        echo json_encode(["status" => "success", "message" => "New access vector sent to $email"]);
+    } else {
+        echo json_encode(["status" => "error", "message" => "Failed to send email", "debug" => $smtp_log]);
     }
 
 } elseif ($action === 'verify-otp') {
@@ -229,13 +269,18 @@ if ($action === 'signup') {
     $email = $data['email'] ?? '';
     $otp = $data['otp'] ?? '';
 
-    $stmt = $conn->prepare("SELECT * FROM users WHERE email = ? AND otp_code = ? AND otp_expiry > NOW()");
-    $stmt->execute([$email, $otp]);
-    $user = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!isset($_SESSION['otp_data'][$email])) {
+        echo json_encode(["status" => "error", "message" => "No active access vector found for this session."]);
+        exit;
+    }
 
-    if ($user) {
-        $stmt = $conn->prepare("UPDATE users SET is_verified = 1, otp_code = NULL WHERE email = ?");
+    $decrypted = decrypt_data($_SESSION['otp_data'][$email]);
+    $otp_info = json_decode($decrypted, true);
+
+    if ($otp_info && $otp_info['otp'] === $otp && $otp_info['expiry'] > time()) {
+        $stmt = $conn->prepare("UPDATE users SET is_verified = 1 WHERE email = ?");
         $stmt->execute([$email]);
+        unset($_SESSION['otp_data'][$email]); // Clear OTP after success
         echo json_encode(["status" => "success", "message" => "Consciousness synchronized. Welcome to the network."]);
     } else {
         echo json_encode(["status" => "error", "message" => "Invalid or expired access vector."]);
@@ -251,7 +296,19 @@ if ($action === 'signup') {
     $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if ($user) {
+        if ($user['is_verified'] == 0) {
+             echo json_encode(["status" => "error", "message" => "Neural identity not yet verified. Check your email."]);
+             exit;
+        }
+
         unset($user['password']);
+        
+        // Encode profile image blob to base64 for frontend
+        if ($user['profile_image']) {
+            $user['avatarUrl'] = 'data:image/png;base64,' . base64_encode($user['profile_image']);
+            unset($user['profile_image']); // Don't send the raw blob
+        }
+
         echo json_encode(["status" => "success", "user" => $user, "token" => "bci_session_" . bin2hex(random_bytes(16))]);
     } else {
         echo json_encode(["status" => "error", "message" => "Invalid credentials"]);

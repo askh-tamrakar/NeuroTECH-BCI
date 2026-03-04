@@ -18,12 +18,17 @@ export function AuthProvider({ children }) {
     setLoading(false)
   }, [])
 
-  const signup = async (email, password, name, username) => {
+  const signup = async (email, password, name, username, profileImage = null) => {
     try {
+      const payload = { email, password, name, username }
+      if (profileImage) {
+        payload.profile_image = profileImage
+      }
+
       const res = await fetch(`${API_BASE_URL}?action=signup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, name, username })
+        body: JSON.stringify(payload)
       })
       const data = await res.json()
       if (data.status === 'success') {

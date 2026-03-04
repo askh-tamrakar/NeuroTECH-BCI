@@ -186,9 +186,13 @@ export function SettingsProvider({ children }) {
                 let serverTracks = [];
                 try {
                     const API_BASE_URL = import.meta.env.VITE_API_URL || '';
-                    const res = await fetch(`${API_BASE_URL}/api/audio/tracks`, { signal: AbortSignal.timeout(2000) });
-                    if (res.ok) {
-                        serverTracks = await res.json();
+                    if (API_BASE_URL && !API_BASE_URL.includes('localhost')) {
+                        const res = await fetch(`${API_BASE_URL}/api/audio/tracks`, { signal: AbortSignal.timeout(2000) });
+                        if (res.ok) {
+                            serverTracks = await res.json();
+                        } else if (res.status === 404) {
+                            console.log('ℹ️ Server audio tracks API not available (Offline Mode)');
+                        }
                     }
                 } catch (e) {
                     console.warn('Backend audio API unavailable, using local/default tracks only.');

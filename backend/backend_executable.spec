@@ -16,9 +16,17 @@ added_files = [
 ]
 
 # Binary dependencies
-binaries = [
-    ('I:/miniforge3/Lib/site-packages/pylsl/lib/lsl.dll', '.'),
-]
+import pylsl
+lsl_lib_dir = os.path.dirname(pylsl.__file__)
+binaries = []
+
+# Find lsl.dll in common locations searched by pylsl
+for root, dirs, files in os.walk(lsl_lib_dir):
+    for f in files:
+        if f.lower() == 'lsl.dll':
+            # Add to root for easiest discovery
+            binaries.append((os.path.join(root, f), '.'))
+            break
 
 # BrainFlow DLLs often need to be collected explicitly
 import brainflow
@@ -37,7 +45,8 @@ hidden_imports = [
     'eventlet.hubs.kqueue',
     'eventlet.hubs.selects',
     'dns',
-] + collect_submodules('src')
+    'pylsl',
+] + collect_submodules('src') + collect_submodules('pylsl')
 
 a = Analysis(
     ['launcher.py'],

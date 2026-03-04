@@ -42,6 +42,10 @@ class RPSDetector:
             # UPDATED: Use EMG subfolder
             models_dir = project_root / "frontend" / "public" / "data" / "EMG" / "models"
             
+            # If default emg_rf is not found, use a fallback RPS model
+            if model_name == "emg_rf" and not (models_dir / "emg_rf.joblib").exists():
+                 model_name = "rps" # rps.joblib is one of the available models
+                 
             clean_name = "".join([c for c in model_name if c.isalnum() or c in ('_', '-')])
             
             model_path = models_dir / f"{clean_name}.joblib"

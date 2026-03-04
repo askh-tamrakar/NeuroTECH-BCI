@@ -662,7 +662,7 @@ export default function MLTrainingView() {
             </div>}
 
             {/* CONTENT scrollable container */}
-            <div className="flex-1 w-full min-h-0 overflow-y-auto custom-scrollbar">
+            <div className="flex-1 w-full min-h-0 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']">
                 <div className="h-full min-h-[800px] grid grid-cols-12 grid-rows-6 gap-4 pb-2">
                     {/* LEFT SIDEBAR CONTROLS (Span 3) - NOW CONTAINS ACCURACY & FEATURES TOO */}
                     <div className="col-span-12 lg:col-span-3 row-span-6 flex flex-col gap-4">
