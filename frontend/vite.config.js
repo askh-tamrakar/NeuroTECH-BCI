@@ -68,11 +68,7 @@ export default defineConfig({
     open: true,
     proxy: {
       '/api': {
-<<<<<<< HEAD
-        target: 'http://localhost:8000',
-=======
         target: 'http://localhost:5005',
->>>>>>> extra-features
         changeOrigin: true,
         secure: false,
       },
@@ -87,11 +83,7 @@ export default defineConfig({
         }
       },
       '/socket.io': {
-<<<<<<< HEAD
-        target: 'http://localhost:8000',
-=======
         target: 'http://localhost:5005',
->>>>>>> extra-features
         changeOrigin: true,
         ws: true,
       }
