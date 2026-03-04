@@ -13,6 +13,7 @@ $host = "localhost";
 $db_name = "withadae_neurotech";
 $username = "withadae_neuro_admin";
 $password = 'firstSep@7219'; 
+define('AUTH_VERSION', '1.0.4-DRY_RUN_LOGS');
 
 try {
     $conn = new PDO("mysql:host=$host;dbname=$db_name", $username, $password);
@@ -29,7 +30,7 @@ define('SMTP_USER', 'neurotech@withaspire.in');
 define('SMTP_PASS', 'firstSep@7219');
 define('SMTP_PORT', 465);
 
-function sendOTPEmail($to, $otp) {
+function sendOTPEmail($to, $otp, &$log = "") {
     $subject = "Welcome to the World of Neurons";
     $from = SMTP_USER;
     
@@ -66,54 +67,68 @@ function sendOTPEmail($to, $otp) {
         "Subject: $subject"
     ];
 
-    // Using specialized SMTP sending via SSL
     try {
         $host = "ssl://" . SMTP_HOST;
-        $port = SMTP_PORT;
-        $timeout = 10;
-        $socket = fsockopen($host, $port, $errno, $errstr, $timeout);
+        $socket = fsockopen($host, SMTP_PORT, $errno, $errstr, 15);
+        if (!$socket) {
+            $log = "Connection Failed: $errstr ($errno)";
+            return false;
+        }
 
-        if (!$socket) return false;
-
-        $getResponse = function($socket) {
+        $getResponse = function($socket) use (&$log) {
             $response = "";
             while ($str = fgets($socket, 4096)) {
                 $response .= $str;
+                $log .= "> " . $str;
                 if (substr($str, 3, 1) == " ") break;
             }
             return $response;
         };
 
+        $log .= "Connecting to $host...\n";
         $getResponse($socket);
-        fwrite($socket, "EHLO " . $_SERVER['HTTP_HOST'] . "\r\n");
-        $getResponse($socket);
+        
+        $cmds = [
+            "EHLO " . ($_SERVER['HTTP_HOST'] ?? 'localhost') => "EHLO sent",
+            "AUTH LOGIN" => "AUTH LOGIN started",
+            base64_encode(SMTP_USER) => "User sent",
+            base64_encode(SMTP_PASS) => "Pass sent",
+            "MAIL FROM: <$from>" => "Mail From sent",
+            "RCPT TO: <$to>" => "Recipient sent",
+            "DATA" => "Data start sent"
+        ];
 
-        fwrite($socket, "AUTH LOGIN\r\n");
-        $getResponse($socket);
-        fwrite($socket, base64_encode(SMTP_USER) . "\r\n");
-        $getResponse($socket);
-        fwrite($socket, base64_encode(SMTP_PASS) . "\r\n");
-        $getResponse($socket);
-
-        fwrite($socket, "MAIL FROM: <$from>\r\n");
-        $getResponse($socket);
-        fwrite($socket, "RCPT TO: <$to>\r\n");
-        $getResponse($socket);
-        fwrite($socket, "DATA\r\n");
-        $getResponse($socket);
+        foreach ($cmds as $cmd => $desc) {
+            fwrite($socket, $cmd . "\r\n");
+            $res = $getResponse($socket);
+            if (substr($res, 0, 1) >= '4') {
+                $log .= "Error at $desc: $res";
+                return false;
+            }
+        }
 
         fwrite($socket, implode("\r\n", $headers) . "\r\n\r\n" . $message . "\r\n.\r\n");
         $getResponse($socket);
-
         fwrite($socket, "QUIT\r\n");
         fclose($socket);
         return true;
     } catch (Exception $e) {
+        $log .= "Exception: " . $e->getMessage();
         return false;
     }
 }
 
 $action = $_GET['action'] ?? '';
+
+if ($action === 'test') {
+    echo json_encode([
+        "status" => "online", 
+        "version" => AUTH_VERSION, 
+        "php_mail_enabled" => function_exists('mail'),
+        "smtp_host" => SMTP_HOST
+    ]);
+    exit;
+}
 
 if ($action === 'signup') {
     $data = json_decode(file_get_contents("php://input"), true);
@@ -131,11 +146,16 @@ if ($action === 'signup') {
     $expiry = date('Y-m-d H:i:s', strtotime('+15 minutes'));
 
     $stmt = $conn->prepare("INSERT INTO users (email, password, name, otp_code, otp_expiry) VALUES (?, ?, ?, ?, ?)");
+    $smtp_log = "";
     if ($stmt->execute([$email, $pass, $name, $otp, $expiry])) {
-        if (sendOTPEmail($email, $otp)) {
+        if (sendOTPEmail($email, $otp, $smtp_log)) {
             echo json_encode(["status" => "success", "message" => "Account created. Please check your email for the 4-digit access code."]);
         } else {
-            echo json_encode(["status" => "partial_success", "message" => "Account created, but failed to send verification email. Please contact support."]);
+            echo json_encode([
+                "status" => "partial_success", 
+                "message" => "Account created, but failed to send verification email. Please check your spam folder or contact support.",
+                "debug" => $smtp_log
+            ]);
         }
     } else {
         echo json_encode(["status" => "error", "message" => "Failed to create account"]);

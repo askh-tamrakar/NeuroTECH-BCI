@@ -3,7 +3,7 @@ import React, { createContext, useState, useEffect, useContext } from 'react'
 const AuthContext = createContext(null)
 
 // PHP Bridge URL - Updated to the provided working host
-const API_BASE_URL = 'https://aksh.tamrakar.withaspire.in/auth.php'
+const API_BASE_URL = 'https://neurotech.withaspire.in/auth.php'
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
@@ -27,7 +27,9 @@ export function AuthProvider({ children }) {
       })
       const data = await res.json()
       if (data.status === 'success') {
-        return { success: true, email } // Return email so frontend knows who to verify
+        return { success: true, email }
+      } else if (data.status === 'partial_success') {
+        return { success: true, email, partial: true, debug: data.debug }
       } else {
         return { success: false, message: data.message }
       }
