@@ -124,7 +124,9 @@ def api_eval_emg():
     # Default to EMG for backward compat on this endpoint if not specified
     res = evaluate_saved_model(sensor='EMG', table_name=table_name, model_name=model_name)
     if "error" in res:
-        return jsonify(res), 400
+        # Return 200 for evaluation errors (like "no model") to avoid console spam.
+        # The frontend handles the 'error' key in the JSON payload.
+        return jsonify(res), 200
     return jsonify(res)
 
 @training_bp.route('/api/model/evaluate/eog', methods=['POST'])
@@ -134,7 +136,7 @@ def api_eval_eog():
     model_name = params.get('model_name')
     res = evaluate_saved_eog_model(table_name=table_name, model_name=model_name)
     if "error" in res:
-        return jsonify(res), 400
+        return jsonify(res), 200
     return jsonify(res)
 
 @training_bp.route('/api/models/emg', methods=['GET'])

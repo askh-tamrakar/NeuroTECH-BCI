@@ -6,10 +6,8 @@ import werkzeug
 audio_bp = Blueprint('audio', __name__)
 
 # Paths
-# Calculate root reliably
-_current_dir = Path(__file__).resolve().parent
-PROJECT_ROOT = _current_dir.parent.parent.parent.parent.parent
-BASE_AUDIO_DIR = (PROJECT_ROOT / "frontend" / "public" / "data" / "audio").resolve()
+from src.utils.paths import get_base_data_dir
+BASE_AUDIO_DIR = get_base_data_dir() / "audio"
 
 # Ensure directory exists
 if not BASE_AUDIO_DIR.exists():

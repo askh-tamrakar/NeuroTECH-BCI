@@ -7,8 +7,8 @@ import os
 recording_bp = Blueprint('recording', __name__)
 
 # Paths
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent.parent
-BASE_DATA_DIR = PROJECT_ROOT / "frontend" / "public" / "data"
+from src.utils.paths import get_base_data_dir
+BASE_DATA_DIR = get_base_data_dir()
 
 @recording_bp.route('/api/record', methods=['POST'])
 def api_record_session():

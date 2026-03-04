@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
+import { audioStorage } from '../utils/AudioStorage';
 
 const SettingsContext = createContext(null);
 
@@ -120,45 +121,6 @@ export function SettingsProvider({ children }) {
         return DEFAULT_SETTINGS;
     });
 
-    // Initial fetch of available tracks
-    useEffect(() => {
-        const fetchTracks = async () => {
-            try {
-                const API_BASE_URL = import.meta.env.VITE_API_URL || '';
-                const res = await fetch(`${API_BASE_URL}/api/audio/tracks`);
-                if (res.ok) {
-                    const tracks = await res.json();
-                    updateDeepSettings('audio.availableTracks', tracks);
-
-                    // If no track is selected but tracks are available, select the first one
-                    const saved = localStorage.getItem('neurotech_settings');
-                    const currentSettings = saved ? JSON.parse(saved) : {};
-                    if (tracks.length > 0 && (!currentSettings.audio || !currentSettings.audio.bgmTrack)) {
-                        updateDeepSettings('audio.bgmTrack', tracks[0].name);
-                    }
-                }
-            } catch (err) {
-                console.error('Failed to fetch audio tracks:', err);
-            }
-        };
-        fetchTracks();
-    }, []);
-
-    // Save to localStorage whenever settings change
-    useEffect(() => {
-        try {
-            // We DON'T want to save the full availableTracks list to localStorage to keep it small
-            const { availableTracks, ...safeAudio } = settings.audio;
-            const settingsToSave = {
-                ...settings,
-                audio: safeAudio
-            };
-            localStorage.setItem('neurotech_settings', JSON.stringify(settingsToSave));
-        } catch (e) {
-            console.error('Failed to save settings:', e);
-        }
-    }, [settings]);
-
     // Update a specific setting section
     const updateSettings = useCallback((section, newValues) => {
         setSettings(prev => ({
@@ -196,6 +158,80 @@ export function SettingsProvider({ children }) {
             setSettings(DEFAULT_SETTINGS);
         }
     }, []);
+
+    // Initial fetch of available tracks and config
+    useEffect(() => {
+        const fetchInitialData = async () => {
+            // 1. Load public/config.json as base overrides
+            try {
+                const configRes = await fetch('./config.json');
+                if (configRes.ok) {
+                    const publicConfig = await configRes.json();
+                    setSettings(prev => deepMerge(prev, publicConfig));
+                }
+            } catch (e) {
+                console.warn('Could not load public/config.json, using defaults.');
+            }
+
+            const defaultTracks = [
+                { name: 'Fed_Up_Slowed__Reverb_-_Ghostemane_1772539057.mp3', size: 5680123, isDefault: true }
+            ];
+
+            try {
+                // 1. Get local tracks from IndexedDB
+                const localTracks = await audioStorage.getAllTracks();
+                const formattedLocal = localTracks.map(t => ({ ...t, isLocal: true }));
+
+                // 2. Try to get server tracks (optional/fallback)
+                let serverTracks = [];
+                try {
+                    const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+                    const res = await fetch(`${API_BASE_URL}/api/audio/tracks`, { signal: AbortSignal.timeout(2000) });
+                    if (res.ok) {
+                        serverTracks = await res.json();
+                    }
+                } catch (e) {
+                    console.warn('Backend audio API unavailable, using local/default tracks only.');
+                }
+
+                // 3. Combine all tracks, removing duplicates by name
+                const allTracks = [...defaultTracks, ...formattedLocal, ...serverTracks];
+                const uniqueTracks = allTracks.reduce((acc, current) => {
+                    const x = acc.find(item => item.name === current.name);
+                    if (!x) return acc.concat([current]);
+                    return acc;
+                }, []);
+
+                updateDeepSettings('audio.availableTracks', uniqueTracks);
+
+                // 4. Default selection logic
+                const saved = localStorage.getItem('neurotech_settings');
+                const currentSettings = saved ? JSON.parse(saved) : {};
+                if (uniqueTracks.length > 0 && (!currentSettings.audio || !currentSettings.audio.bgmTrack)) {
+                    updateDeepSettings('audio.bgmTrack', uniqueTracks[0].name);
+                }
+            } catch (err) {
+                console.error('Failed to initialize audio tracks:', err);
+                updateDeepSettings('audio.availableTracks', defaultTracks);
+            }
+        };
+        fetchInitialData();
+    }, [updateDeepSettings]);
+
+    // Save to localStorage whenever settings change
+    useEffect(() => {
+        try {
+            // We DON'T want to save the full availableTracks list to localStorage to keep it small
+            const { availableTracks, ...safeAudio } = settings.audio;
+            const settingsToSave = {
+                ...settings,
+                audio: safeAudio
+            };
+            localStorage.setItem('neurotech_settings', JSON.stringify(settingsToSave));
+        } catch (e) {
+            console.error('Failed to save settings:', e);
+        }
+    }, [settings]);
 
     const contextValue = useMemo(() => ({
         settings,

@@ -38,7 +38,8 @@ from src.learning.tree_utils import tree_to_json
 from src.database.db_manager import db_manager
 
 # Paths
-MODELS_ROOT = Path(__file__).resolve().parent.parent.parent / "frontend" / "public" / "data"
+from src.utils.paths import get_base_data_dir
+MODELS_ROOT = get_base_data_dir()
 
 # Global State for Active Models (per sensor)
 ACTIVE_MODELS = {

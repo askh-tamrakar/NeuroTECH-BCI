@@ -69,10 +69,9 @@ class AcquisitionApp:
         self.config = self._load_config()
         
         # Paths
-        # Resolve project root relative to this file: src/acquisition -> src -> root
-        project_root = Path(__file__).resolve().parent.parent.parent
-        self.save_path = project_root / "frontend" / "public" / "data" / "EMG" / "raw" / "session"
-        self.config_path = project_root / "config" / "sensor_config.json"
+        from utils.paths import get_base_data_dir, get_config_dir
+        self.save_path = get_base_data_dir() / "EMG" / "raw" / "session"
+        self.config_path = get_config_dir() / "sensor_config.json"
         
         # Serial reader & parser
         self.serial_reader = None

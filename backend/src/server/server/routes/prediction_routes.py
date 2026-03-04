@@ -10,8 +10,8 @@ from src.server.server.lsl_service import extract_emg_features
 prediction_bp = Blueprint('prediction', __name__)
 
 # DB Path configuration
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent.parent
-PREDICTION_DB_DIR = PROJECT_ROOT / "prediction" / "emg"
+from src.utils.paths import get_base_data_dir
+PREDICTION_DB_DIR = get_base_data_dir() / "PREDICTION" / "EMG"
 PREDICTION_DB_PATH = PREDICTION_DB_DIR / "emg.db"
 
 def get_db_connection():

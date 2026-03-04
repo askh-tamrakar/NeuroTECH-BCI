@@ -30,6 +30,7 @@ import {
 import { useSettings } from '../../contexts/SettingsContext'
 import { soundHandler } from '../../handlers/SoundHandler'
 import { Music, Volume2, Upload, VolumeX } from 'lucide-react'
+import { audioStorage } from '../../utils/AudioStorage'
 
 // Helper for color inputs
 const ColorInput = ({ label, value, onChange }) => (
@@ -173,54 +174,70 @@ export default function SettingsView({ latency = 0 }) {
     const file = e.target.files[0];
     if (!file) return;
 
-    const formData = new FormData();
-    formData.append('file', file);
-
     try {
-      const API_BASE_URL = import.meta.env.VITE_API_URL || '';
-      const res = await fetch(`${API_BASE_URL}/api/audio/upload`, {
-        method: 'POST',
-        body: formData,
-      });
+      // 1. Save to IndexedDB for offline support
+      const savedTrack = await audioStorage.saveTrack(file);
 
-      if (res.ok) {
-        const result = await res.json();
-        // Refresh tracks list
-        const tracksRes = await fetch(`${API_BASE_URL}/api/audio/tracks`);
-        if (tracksRes.ok) {
-          const tracks = await tracksRes.json();
-          updateDeepSettings('audio.availableTracks', tracks);
-          // Auto-select if it's the only one
-          if (tracks.length === 1) {
-            updateDeepSettings('audio.bgmTrack', tracks[0].name);
-          }
-        }
-        soundHandler.playDataSave(); // Feedback
+      // 2. Update local state
+      const currentTracks = settings.audio.availableTracks || [];
+      const updatedTracks = [...currentTracks, { ...savedTrack, isLocal: true }];
+
+      // Remove duplicates
+      const uniqueTracks = updatedTracks.reduce((acc, current) => {
+        const x = acc.find(item => item.name === current.name);
+        if (!x) return acc.concat([current]);
+        return acc;
+      }, []);
+
+      updateDeepSettings('audio.availableTracks', uniqueTracks);
+
+      // Auto-select if it's the only one or just uploaded
+      updateDeepSettings('audio.bgmTrack', savedTrack.name);
+
+      soundHandler.playDataSave(); // Feedback
+
+      // 3. Optional: Try to upload to backend if online
+      try {
+        const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+        const formData = new FormData();
+        formData.append('file', file);
+        fetch(`${API_BASE_URL}/api/audio/upload`, { method: 'POST', body: formData })
+          .catch(e => console.log('Offline: Could not sync to server, but saved locally.'));
+      } catch (e) {
+        // Ignore backend sync errors
       }
+
     } catch (err) {
       console.error('Upload failed:', err);
     }
   };
 
-  const handleDeleteTrack = async (filename) => {
+  const handleDeleteTrack = async (track) => {
     try {
-      const API_BASE_URL = import.meta.env.VITE_API_URL || '';
-      const res = await fetch(`${API_BASE_URL}/api/audio/track/${filename}`, {
-        method: 'DELETE',
-      });
+      const filename = track.name;
 
-      if (res.ok) {
-        const tracksRes = await fetch(`${API_BASE_URL}/api/audio/tracks`);
-        if (tracksRes.ok) {
-          const tracks = await tracksRes.json();
-          updateDeepSettings('audio.availableTracks', tracks);
-          // If we deleted the active track, select another or null
-          if (settings.audio.bgmTrack === filename) {
-            updateDeepSettings('audio.bgmTrack', tracks.length > 0 ? tracks[0].name : null);
-          }
-        }
-        soundHandler.playDataSave(); // Feedback (using save sound for now)
+      // 1. Delete from IndexedDB if local
+      if (track.isLocal) {
+        await audioStorage.deleteTrack(filename);
       }
+
+      // 2. Update local state
+      const updatedTracks = settings.audio.availableTracks.filter(t => t.name !== filename);
+      updateDeepSettings('audio.availableTracks', updatedTracks);
+
+      if (settings.audio.bgmTrack === filename) {
+        updateDeepSettings('audio.bgmTrack', updatedTracks.length > 0 ? updatedTracks[0].name : null);
+      }
+
+      soundHandler.playDataSave();
+
+      // 3. Optional: Try to delete from server
+      try {
+        const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+        fetch(`${API_BASE_URL}/api/audio/track/${filename}`, { method: 'DELETE' })
+          .catch(e => console.log('Offline: Could not delete from server.'));
+      } catch (e) { }
+
     } catch (err) {
       console.error('Delete failed:', err);
     }
@@ -233,18 +250,43 @@ export default function SettingsView({ latency = 0 }) {
       soundHandler.setBgmVolume(settings.audio.bgmVolume ?? 0.3);
 
       if (settings.audio.bgmEnabled && settings.audio.bgmTrack) {
-        // Use full URL to be sure, defaulting to common dev port if env not set
-        const API_BASE_URL = import.meta.env.VITE_API_URL || '';
-        const trackUrl = `${API_BASE_URL}/api/audio/track/${settings.audio.bgmTrack}`;
-        soundHandler.loadBackgroundMusic(trackUrl).then(() => {
-          soundHandler.startBackgroundMusic();
-        });
+        const track = settings.audio.availableTracks?.find(t => t.name === settings.audio.bgmTrack);
+
+        const loadTrack = async () => {
+          let trackUrl = '';
+
+          if (track?.isLocal) {
+            const localData = await audioStorage.getTrack(track.name);
+            if (localData && localData.data) {
+              trackUrl = URL.createObjectURL(localData.data);
+            }
+          } else if (track?.isDefault) {
+            trackUrl = `data/audio/${track.name}`;
+          } else {
+            const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+            trackUrl = `${API_BASE_URL}/api/audio/track/${settings.audio.bgmTrack}`;
+          }
+
+          if (trackUrl) {
+            await soundHandler.loadBackgroundMusic(trackUrl);
+            soundHandler.startBackgroundMusic();
+
+            // Clean up blob URL if it was created
+            if (trackUrl.startsWith('blob:')) {
+              // Note: We might need to keep it if SoundHandler doesn't buffer it immediately,
+              // but loadBackgroundMusic is async and awaits decode, so it's safe.
+              // Actually, better to clean up after some time or on next load.
+            }
+          }
+        };
+
+        loadTrack();
       }
       else {
         soundHandler.stopBackgroundMusic();
       }
     }
-  }, [settings.audio?.bgmEnabled, settings.audio?.bgmTrack, settings.audio?.bgmVolume, settings.audio?.sfxEnabled]);
+  }, [settings.audio?.bgmEnabled, settings.audio?.bgmTrack, settings.audio?.bgmVolume, settings.audio?.sfxEnabled, settings.audio?.availableTracks]);
 
   const handleCreateTheme = () => {
     const newId = addTheme(`Custom Theme ${themes.length + 1}`);
@@ -572,7 +614,7 @@ export default function SettingsView({ latency = 0 }) {
                               </div>
 
                               <button
-                                onClick={() => handleDeleteTrack(track.name)}
+                                onClick={() => handleDeleteTrack(track)}
                                 className="p-2 text-muted hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-all"
                                 title="Delete Track"
                               >

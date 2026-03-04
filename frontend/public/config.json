@@ -1,0 +1,16 @@
+{
+    "general": {
+        "apiUrl": "http://localhost:8000",
+        "wsUrl": "ws://localhost:1972",
+        "useMock": false
+    },
+    "audio": {
+        "sfxEnabled": true,
+        "bgmEnabled": true,
+        "bgmVolume": 0.3
+    },
+    "ml": {
+        "modelPath": "/models/model.json",
+        "dataPath": "/data/processed/"
+    }
+}
