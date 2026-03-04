@@ -9,7 +9,8 @@ export default function CustomSelect({
     options = [],
     disabled = false,
     placeholder = "Select...",
-    className = ""
+    className = "",
+    triggerClassName = ""
 }) {
     const [isOpen, setIsOpen] = useState(false);
     const containerRef = useRef(null);
@@ -48,6 +49,7 @@ export default function CustomSelect({
                     hover:border-primary/50 transition-all duration-200
                     focus:outline-none focus:ring-1 focus:ring-primary/50
                     ${isOpen ? 'border-primary/50 ring-1 ring-primary/50' : ''}
+                    ${triggerClassName}
                 `}
             >
                 <span className={`truncate ${!value ? 'text-muted' : 'text-text'}`}>

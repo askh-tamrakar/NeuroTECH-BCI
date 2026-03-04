@@ -110,11 +110,65 @@
 
 .record-btn.idle {
   background-color: #10b981;
-  color: var(--emerald-contrast, white);
+  color: white;
 }
 
 .record-btn.idle:hover {
   transform: translateY(-1px);
+  background-color: #059669;
+}
+
+.record-btn.paused-btn {
+  background-color: #f59e0b;
+  color: white;
+}
+
+.record-btn.paused-btn:hover {
+  background-color: #d97706;
+}
+
+.confirm-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0.5rem;
+  background-color: rgba(var(--surface-rgb), 0.5);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+}
+
+.save-btn {
+  background-color: #10b981;
+  color: white;
+  padding: 0.25rem 0.75rem;
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  transition: all 0.2s;
+}
+
+.save-btn:hover {
+  background-color: #059669;
+}
+
+.discard-btn {
+  background-color: #ef4444;
+  color: white;
+  padding: 0.25rem 0.75rem;
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  transition: all 0.2s;
+}
+
+.discard-btn:hover {
+  background-color: #dc2626;
 }
 
 .record-indicator-dot {

@@ -8,7 +8,7 @@ import LiveDashboard from '../views/LiveDashboard'
 import DinoView from '../views/DinoView'
 import SSVEPView from '../views/SSVEPView'
 import RPSGame from '../views/RPSGame'
-import CalibrationView from '../views/CalibrationView'
+import DataCollectionView from '../views/DataCollectionView'
 import MLTrainingView from '../views/MLTrainingView'
 import SettingsView from '../views/SettingsView'
 
@@ -21,6 +21,7 @@ import { ConnectionButton } from '../ui/ConnectionButton';
 export default function Dashboard() {
   const { user, logout } = useAuth()
   const [currentPage, setCurrentPage] = useState('live')
+<<<<<<< HEAD
 
   // WebSocket (Auto-connects now)
   const { status, lastMessage, lastConfig, lastEvent, latency, sendMessage } = useWebSocket()
@@ -77,6 +78,18 @@ export default function Dashboard() {
       });
     };
   }, [sendMessage, status]);
+=======
+  // const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [localWs, setLocalWs] = useState(import.meta.env.VITE_WS_URL || 'http://localhost:5005')
+  const [ngrokWs, setNgrokWs] = useState(import.meta.env.VITE_NGROK_WS_URL || 'wss://squelchingly-thriftier-cecile.ngrok-free.dev')
+
+  // Choose default based on whether we're loaded over https/ngrok or localhost
+  const defaultWsSource = typeof window !== 'undefined' && window.location.hostname !== 'localhost' ? ngrokWs : localWs;
+  const { status, lastMessage, lastConfig, lastEvent, latency, connect, disconnect, sendMessage, currentUrl } = useWebSocket(defaultWsSource)
+
+  // WebSocket modal state and preset URLs
+  const [wsModalOpen, setWsModalOpen] = useState(false)
+>>>>>>> extra-features
 
   const { themes, currentTheme, currentThemeId, setTheme } = useTheme();
   const [authView, setAuthView] = useState(null);
@@ -140,7 +153,7 @@ export default function Dashboard() {
     { label: 'SSVEP', onClick: () => setCurrentPage('ssvep'), href: '#ssvep' },
     { label: 'RPS', onClick: () => setCurrentPage('rps'), href: '#rps' },
     { label: 'M. L.', onClick: () => setCurrentPage('ml_training'), href: '#ml_training' },
-    { label: 'Calibration', onClick: () => setCurrentPage('calibration'), href: '#calibration' },
+    { label: 'Data Collection', onClick: () => setCurrentPage('data_collection'), href: '#data_collection' },
     { label: 'Settings', onClick: () => setCurrentPage('settings'), href: '#settings' },
     {
       label: 'Theme',
@@ -148,7 +161,7 @@ export default function Dashboard() {
       key: 'theme-dropdown',
       href: '#',
       menu: ({ close }) => (
-        <ScrollStack>
+        <ScrollStack style={{ '--scroll-stack-width': `${pillSize.width + 78}px` }}>
           {themes.map((t) => (
             <ScrollStackItem key={t.id}>
               <Pill
@@ -181,8 +194,13 @@ export default function Dashboard() {
           <div className="flex items-center gap-3">
             <div className="relative group cursor-pointer" onClick={logout} title="Click to Logout">
               <div className="absolute inset-0 bg-primary/20 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+<<<<<<< HEAD
               <video muted autoPlay loop playsInline preload="auto" aria-label="logo animation" className="h-16 relative z-10 rounded-lg border border-border bg-black object-cover">
                 <source src="/Resources/Brain_Model_Bg.mp4" type="video/mp4" />
+=======
+              <video muted autoPlay loop playsInline preload="auto" aria-label="logo animation" className="w-24 h-16 relative z-10 rounded-lg border border-border bg-black object-cover">
+                <source src="/Resources/brain_animation.mp4" type="video/mp4" />
+>>>>>>> extra-features
               </video>
             </div>
 
@@ -243,6 +261,25 @@ export default function Dashboard() {
         {currentPage === 'ml_training' && <MLTrainingView />}
         {currentPage === 'settings' && <SettingsView />}
 
+<<<<<<< HEAD
+=======
+          return (
+            <>
+              {showSpacers && <div className="h-[94px] shrink-0" />}
+
+              {currentPage === 'live' && <LiveDashboard wsData={lastMessage} wsConfig={lastConfig} wsEvent={lastEvent} sendMessage={sendMessage} wsUrl={currentUrl || defaultWsSource} />}
+              {currentPage === 'dino' && <DinoView isConnected={!!lastMessage} wsEvent={lastEvent} isPaused={false} />}
+              {currentPage === 'ssvep' && <SSVEPView isConnected={!!lastMessage} wsEvent={lastEvent} />}
+              {currentPage === 'rps' && <RPSGame wsEvent={lastEvent} />}
+              {currentPage === 'data_collection' && <DataCollectionView wsData={lastMessage} wsEvent={lastEvent} config={lastConfig} wsUrl={currentUrl || defaultWsSource} />}
+              {currentPage === 'ml_training' && <MLTrainingView />}
+              {currentPage === 'settings' && <SettingsView latency={latency} />}
+
+              {showSpacers && <div className="h-[35px] shrink-0" />}
+            </>
+          );
+        })()}
+>>>>>>> extra-features
       </div>
 
       {/* Footer */}

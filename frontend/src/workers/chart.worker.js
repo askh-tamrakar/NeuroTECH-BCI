@@ -11,7 +11,31 @@ let height = 0;
 // points: { time: number, value: number, future: number|undef }[]
 let points = [];
 const MAX_POINTS = 50000; // Keep enough history
+let channelIndex = -1; // To be set via INIT or SET_CONFIG
 
+const broadcast = new BroadcastChannel('bci-data-stream');
+broadcast.onmessage = (e) => {
+    if (e.data.type === 'DATA_BATCH' && channelIndex !== -1) {
+        const samples = e.data.samples;
+        const newPoints = [];
+
+        samples.forEach(s => {
+            if (s.channels) {
+                const chObj = s.channels[channelIndex] || s.channels[`ch${channelIndex}`] || s.channels[String(channelIndex)];
+                let val = 0;
+                if (chObj !== undefined) {
+                    if (typeof chObj === 'number') val = chObj;
+                    else val = chObj.value ?? 0;
+                }
+                newPoints.push({ time: s.timestamp, value: val });
+            }
+        });
+
+        if (newPoints.length > 0) {
+            addData(newPoints);
+        }
+    }
+};
 // Visual State
 let windows = []; // { id, start, end, type }
 let config = {
@@ -20,18 +44,19 @@ let config = {
     yMax: 100,
     zoom: 1,
     offset: 0,
-    lineColor: '#00ff00',
+    lineColor: 'var(--graph-line-1, #00ff00)',
     bgColor: 'transparent', // Use transparent to show CSS background or passed theme
-    gridColor: '#333333',
-    textColor: '#888888',
-    surface: '#1e1e1e'
+    gridColor: 'var(--graph-grid, #333333)',
+    textColor: 'var(--graph-text, #888888)',
+    surface: 'var(--panel-bg, #1e1e1e)',
+    themeAxisColor: 'var(--graph-text, #9ca3af)',
+    themeColor: 'var(--graph-grid, #333)'
 };
 
 // Scanner State
 let scannerX = null;
 let scannerValue = null;
 
-// Animation
 // Animation
 let animationFrameId = null;
 
@@ -46,6 +71,7 @@ self.onmessage = function (e) {
     switch (type) {
         case 'INIT':
             init(payload);
+            if (payload.channelIndex !== undefined) channelIndex = payload.channelIndex;
             break;
         case 'RESIZE':
             width = payload.width;
@@ -65,6 +91,7 @@ self.onmessage = function (e) {
             break;
         case 'SET_CONFIG':
             config = { ...config, ...payload };
+            if (payload.channelIndex !== undefined) channelIndex = payload.channelIndex;
             requestRender();
             break;
         case 'SET_SCANNER':
@@ -94,34 +121,11 @@ function handleCalcSelection(payload) {
     const timeWindow = config.timeWindow;
     const centerTimeOffset = timeWindow / 2;
 
-    // x_px = ( (centerTimeOffset - (now - t_ms)) / timeWindow ) * width
-    // x_px / width = (centerTimeOffset - now + t_ms) / timeWindow
-    // (x_px / width) * timeWindow = centerTimeOffset - now + t_ms
-    // t_ms = (x_px / width) * timeWindow - centerTimeOffset + now
-
-    // Simplification from draw(): 
-    // x_ms = centerTimeOffset - age
-    // age = centerTimeOffset - x_ms
-    // t_ms = now - age = now - (centerTimeOffset - x_ms)
-    // x_ms is relative time in window [0, timeWindow] ? No.
-    // Let's reverse properly:
+    const leftMargin = 50;
+    const drawWidth = width - leftMargin;
 
     const pxToTime = (px) => {
-        // x_px to relative time (0 to timeWindow)
-        // x_rel_ms = (px / width) * timeWindow
-        // but 0 is LEFT edge (past), width is RIGHT edge (future).
-        // My draw logic: x=0 is 'now - center', x=width is 'now + center'.
-        // wait, draw logic:
-        /*
-            const age = now - p.time;
-            const x_ms = centerTimeOffset - age; 
-            const x_px = timeToPx(x_ms);
-            
-            x_px = 0 when x_ms = 0 => age = centerTimeOffset => p.time = now - center
-            x_px = width when x_ms = timeWindow => age = center - timeWindow = -center => p.time = now + center
-        */
-
-        const x_rel_ms = (px / width) * timeWindow; // 0 to 5000
+        const x_rel_ms = ((px - leftMargin) / drawWidth) * timeWindow; // 0 to timeWindow
         const age = centerTimeOffset - x_rel_ms;
         return now - age;
     };
@@ -185,7 +189,14 @@ function handleGetSamples(payload, idPromise) {
 // --- Rendering ---
 
 function loop(timestamp) {
-    draw();
+    try {
+        draw();
+    } catch (e) {
+        if (!self.__hasLoggedDrawError) {
+            console.error("Worker Draw Error (throttled):", e);
+            self.__hasLoggedDrawError = true;
+        }
+    }
     animationFrameId = requestAnimationFrame(loop);
 }
 
@@ -199,14 +210,12 @@ function draw() {
     // 1. Clear - USE THEME BG
     ctx.clearRect(0, 0, width, height); // Clear valid transparency
 
-    if (config.bgColor && config.bgColor !== 'transparent') {
-        ctx.fillStyle = config.bgColor;
-        ctx.fillRect(0, 0, width, height);
-    }
+    // Removed default solid background drawing
+    // We let the CSS background from SignalChart.css handle it or the global CSS.
 
     if (points.length === 0) {
         // Draw placeholder grid
-        drawGrid(Date.now(), config.timeWindow, config.timeWindow / 2);
+        drawGrid(Date.now(), config.timeWindow, config.timeWindow / 2, 45);
         return;
     }
 
@@ -215,7 +224,9 @@ function draw() {
     const timeWindow = config.timeWindow;
     const centerTimeOffset = timeWindow / 2;
 
-    const timeToPx = (t_rel_ms) => (t_rel_ms / timeWindow) * width;
+    const leftMargin = 45;
+    const drawWidth = width - leftMargin;
+    const timeToPx = (t_rel_ms) => leftMargin + (t_rel_ms / timeWindow) * drawWidth;
 
     const yMin = config.yMin;
     const yMax = config.yMax;
@@ -229,7 +240,13 @@ function draw() {
     };
 
     // Draw Grid (Background)
-    drawGrid(now, timeWindow, centerTimeOffset);
+    drawGrid(now, timeWindow, centerTimeOffset, leftMargin, padY, availH);
+
+    // Context save and clip to prevent drawing over left margin
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(leftMargin, 0, drawWidth, height);
+    ctx.clip();
 
     // Draw Windows (Behind Signal)
     windows.forEach(win => {
@@ -261,23 +278,23 @@ function draw() {
             // "Saved" = Red/Blue
             // "Error" = Gray
 
-            let fill = 'rgba(255, 255, 255, 0.05)';
-            let stroke = 'rgba(255, 255, 255, 0.2)';
+            let fill = 'var(--selection-bg, rgba(255, 255, 255, 0.05))';
+            let stroke = 'var(--selection-border, rgba(255, 255, 255, 0.2))';
 
             if (win.status === 'collected') {
-                fill = 'rgba(16, 185, 129, 0.15)'; // Green-500
+                fill = 'rgba(16, 185, 129, 0.25)'; // Green-500
                 stroke = '#10b981';
             } else if (win.status === 'pending') {
-                fill = 'rgba(245, 158, 11, 0.15)'; // Amber-500
+                fill = 'rgba(245, 158, 11, 0.25)'; // Amber-500
                 stroke = '#f59e0b';
             } else if (win.status === 'recording') {
-                fill = 'rgba(59, 130, 246, 0.15)'; // Blue-500
+                fill = 'rgba(59, 130, 246, 0.25)'; // Blue-500
                 stroke = '#3b82f6';
             } else if (win.status === 'saved') {
-                fill = 'rgba(124, 58, 237, 0.15)'; // Violet-600
+                fill = 'rgba(124, 58, 237, 0.25)'; // Violet-600
                 stroke = '#7c3aed';
             } else if (win.status === 'error') {
-                fill = 'rgba(156, 163, 175, 0.15)'; // Gray-400
+                fill = 'rgba(156, 163, 175, 0.25)'; // Gray-400
                 stroke = '#9ca3af';
             }
 
@@ -290,26 +307,38 @@ function draw() {
             ctx.fillRect(px1, yTop, wFunc, hRegion);
 
             ctx.strokeStyle = stroke;
-            ctx.lineWidth = 1;
+            ctx.lineWidth = 2; // Thicker border
             ctx.strokeRect(px1, yTop, wFunc, hRegion);
 
             // Label
             if (win.label) {
-                ctx.fillStyle = stroke;
-                ctx.font = '10px monospace';
-                ctx.fillText(win.label, px1 + 2, height - 5);
+                ctx.save();
+                ctx.fillStyle = '#ffffff'; // Always use white for high contrast on dark windows
+                ctx.globalAlpha = 0.9;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+
+                const centerX = px1 + wFunc / 2;
+                const centerY = yTop + hRegion / 2;
+
+                const fontSize = win.label.length > 10 ? 24 : 36; // Larger font
+                ctx.font = `bold ${fontSize}px sans-serif`;
+
+                ctx.fillText(win.label, centerX, centerY);
+                ctx.restore();
             }
         }
     });
 
+    // --- Icon Definitions Removed ---
+
+
     // Draw Signal with Neon Glow and Smoothing
     ctx.strokeStyle = config.lineColor;
-    ctx.lineWidth = 3;
-    ctx.lineJoin = 'round';
-    ctx.lineCap = 'round';
+    ctx.lineWidth = 3; // Reduced from 3.5 to match live graph
 
-    // Neon Glow
-    ctx.shadowBlur = 8;
+    // Neon Glow - Stronger
+    ctx.shadowBlur = 6; // Reduced from 12 to match live graph
     ctx.shadowColor = config.lineColor;
 
     ctx.beginPath();
@@ -370,13 +399,15 @@ function draw() {
     // Draw Cursor (Center)
     const centerPx = timeToPx(centerTimeOffset);
 
-    // 1. Vertical Line
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 1;
+    // 1. Vertical Line (0 x-axis line bold dash)
+    ctx.strokeStyle = 'var(--text-secondary, #ffffff)';
+    ctx.lineWidth = 2; // Bold
+    ctx.setLineDash([8, 8]); // Dash
     ctx.beginPath();
     ctx.moveTo(centerPx, 0);
     ctx.lineTo(centerPx, height);
     ctx.stroke();
+    ctx.setLineDash([]); // Reset line dash
 
     // 2. Current Value Dot
     if (points.length > 0) {
@@ -390,47 +421,83 @@ function draw() {
         ctx.arc(centerPx, y_px, 4, 0, Math.PI * 2);
         ctx.fill();
         ctx.shadowBlur = 0; // Reset
+    }
 
-        // Future dashed line
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
-        ctx.setLineDash([4, 4]);
+    ctx.restore(); // Restore clip
+
+}
+
+function drawGrid(now, timeWindow, centerTimeOffset, leftMargin, padY, availH) {
+    // We get leftMargin from parameters, fallback if undefined (like empty grid)
+    leftMargin = leftMargin;
+    const drawWidth = width - leftMargin;
+    const timeToPx = (t_rel_ms) => leftMargin + (t_rel_ms / timeWindow) * drawWidth;
+
+    ctx.globalAlpha = 0.3;
+    ctx.lineWidth = 1;
+    ctx.font = '10px sans-serif'; // decreased font size to match live graph
+    ctx.fillStyle = config.themeAxisColor || config.themeColor || '#888';
+
+    // Horizontal (Value) - Y-Axis Labels
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+
+    const yMin = config.yMin;
+    const yMax = config.yMax;
+    const yRange = yMax - yMin || 1;
+
+    // Ticks: let's do ~7 lines to match Live Graph
+    const tickCount = 7;
+
+    for (let i = 0; i < tickCount; i++) {
+        const norm = i / (tickCount - 1);
+        const val = yMax - norm * yRange; // Top to bottom
+
+        // If padY/availH not passed, recalculate
+        const currentPadY = padY !== undefined ? padY : height * 0.1;
+        const currentAvailH = availH !== undefined ? availH : height - 2 * currentPadY;
+        const y = currentPadY + norm * currentAvailH;
+
+        // Draw text label
+        // Use text baseline mapping to match Live Graph
+        ctx.globalAlpha = 0.8;
+        ctx.fillStyle = config.themeAxisColor || '#9ca3af';
+        ctx.fillText(Math.round(val), leftMargin - 10, y);
+        ctx.globalAlpha = 0.3;
+
+        // Draw horizontal grid lines (Y-axis lines) with dashed theme color
+        ctx.strokeStyle = config.themeAxisColor || config.themeColor || config.gridColor || '#333';
+        ctx.setLineDash([3, 3]);
         ctx.beginPath();
-        ctx.moveTo(centerPx, valToPy(0)); // Center line? Or current val?
-        // User asked for "horizontal line on the point y = 0" usually means baseline?
-        // Let's stick to standard centerline if zero-centered, or just continue the trend?
-        // Let's draw a faint baseline at 0 if visible
-        const zeroY = valToPy(0);
-        if (zeroY >= 0 && zeroY <= height) {
-            ctx.moveTo(0, zeroY);
-            ctx.lineTo(width, zeroY);
-        }
+        ctx.moveTo(leftMargin, y);
+        ctx.lineTo(width, y);
         ctx.stroke();
         ctx.setLineDash([]);
     }
 
-    // Scanner
-    if (scannerX !== null && scannerValue !== null) {
-        // scannerX is timestamp?
-        // In old chart it was passed as prop `scannerX={hoverX}`.
-        // If we don't handle hover logic in worker yet, this might be unused.
-        // Skipping for now unless requested.
+    // Draw horizontal axis (X-axis) at y=0
+    const currentPadY = padY !== undefined ? padY : height * 0.1;
+    const currentAvailH = availH !== undefined ? availH : height - 2 * currentPadY;
+    const zeroY = height - (currentPadY + ((0 - yMin) / yRange) * currentAvailH);
+    if (zeroY >= currentPadY && zeroY <= height - currentPadY) {
+        ctx.strokeStyle = config.themeAxisColor || config.themeColor || '#aaaaaa';
+        ctx.globalAlpha = 0.8;
+        ctx.lineWidth = 2; // Match the thick zero line of Live Graph
+        ctx.setLineDash([5, 5]);
+        ctx.beginPath();
+        ctx.moveTo(leftMargin, zeroY);
+        ctx.lineTo(width, zeroY);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.lineWidth = 1;
+        ctx.globalAlpha = 0.3;
     }
-}
 
-function drawGrid(now, timeWindow, centerTimeOffset) {
-    const timeToPx = (t_rel_ms) => (t_rel_ms / timeWindow) * width;
-
-    ctx.strokeStyle = config.gridColor || '#333';
-    ctx.lineWidth = 1;
-    ctx.font = '10px monospace';
-    ctx.fillStyle = config.textColor || '#888';
+    // Vertical (Time)Grid - Only Draw Labels
+    ctx.fillStyle = config.themeAxisColor || config.themeColor || '#888';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
 
-    ctx.beginPath();
-
-    // Vertical (Time)Grid
-    // Align to nearest second of ABSOLUTE time logic
     const startSec = Math.floor((now - centerTimeOffset) / 1000);
     const endSec = Math.floor((now + centerTimeOffset) / 1000);
 
@@ -440,36 +507,16 @@ function drawGrid(now, timeWindow, centerTimeOffset) {
         const x_ms = centerTimeOffset - age;
         const x_px = timeToPx(x_ms);
 
-        // Draw Line
-        ctx.moveTo(x_px, 0);
-        ctx.lineTo(x_px, height);
+        if (x_px < leftMargin) continue;
 
-        // Draw Label
-        // Format relative to center?
+        // Draw Label Only
         const diff = (t_abs - now) / 1000;
-        const label = diff > 0 ? `+${diff.toFixed(0)}s` : `${diff.toFixed(0)}s`;
+        const label = diff > 0 ? `+${diff.toFixed(2)}s` : `${diff.toFixed(2)}s`;
 
+        ctx.globalAlpha = 0.8;
         ctx.fillText(label, x_px, height - 12);
+        ctx.globalAlpha = 0.3;
     }
 
-    // Horizontal (Value)
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'bottom';
-
-    const yMin = config.yMin;
-    const yMax = config.yMax;
-    const yRange = yMax - yMin || 1;
-
-    for (let i = 0; i <= 5; i++) {
-        const norm = i / 5;
-        const val = yMin + norm * yRange;
-        const y = height - (height * 0.1 + norm * (height * 0.8)); // Match valToPy logic roughly
-
-        ctx.moveTo(0, y);
-        ctx.lineTo(width, y);
-
-        ctx.fillText(Math.round(val), 2, y - 2);
-    }
-    ctx.stroke();
+    ctx.globalAlpha = 1.0;
 }
-

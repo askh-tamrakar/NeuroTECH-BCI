@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import '../../styles/views/DinoView.css'
 import CameraPanel from '../ui/CameraPanel'
 import CustomSelect from '../ui/CustomSelect'
@@ -6,11 +6,14 @@ import Counter from '../ui/Counter'
 import {
     ScanEye, SlidersHorizontal, ArrowUp, Pause, Play, Trash2, Wifi, WifiOff, Save, Skull, Trophy, Keyboard, Eye,
     Gamepad2, Globe, Sparkles, Atom, Ruler, Settings, RotateCcw, ScrollText, Timer, Weight, MoveVertical,
-    MoveHorizontal, Maximize, ArrowDownToLine, Grid, Sun, Moon, Cloud, Star, TreePine, Leaf, PlayCircle, Hand,
-    Layers, Zap, Clock, ChevronDown, Activity, Hash, Target, Radio, Signal, Circle
+    MoveHorizontal, Maximize, ArrowDownToLine, Grid, Sun, Moon, Cloud, Star, TreePine, Leaf, Hand,
+    Layers, Zap, Clock, ChevronDown, Activity, Target, Radio, Signal, Circle
 } from 'lucide-react'
+import { soundHandler } from '../../handlers/SoundHandler'
 
-export default function DinoView({ wsData, wsEvent, isPaused }) {
+export default function DinoView({ isConnected, wsEvent, isPaused }) {
+    const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+
     // Game state
     const [gameState, setGameState] = useState('ready') // ready, playing, paused, gameOver
     const [score, setScore] = useState(0)
@@ -19,6 +22,7 @@ export default function DinoView({ wsData, wsEvent, isPaused }) {
     )
     const [eyeState, setEyeState] = useState('open') // open, blink, double-blink
     const [showSettings, setShowSettings] = useState(false)
+    const [models, setModels] = useState([]) // EOG Models
 
     // Game settings (easy mode default)
     const DEFAULT_SETTINGS = {
@@ -38,6 +42,8 @@ export default function DinoView({ wsData, wsEvent, isPaused }) {
         JUMP_DISTANCE: 300,
         ENABLE_MANUAL_CONTROLS: true,
         CONTROL_CHANNEL: 'any',
+        DETECTION_METHOD: 'ML', // Or 'ML'
+        ACTIVE_MODEL: 'dino ml',
         OBSTACLE_BONUS_FACTOR: 0.015,
 
         // Visual Customization
@@ -112,7 +118,10 @@ export default function DinoView({ wsData, wsEvent, isPaused }) {
     const rightEyeRef = useRef(null)
     const distanceRef = useRef(0) // Track distance for parallax
 
-    const settingsRef = useRef(DEFAULT_SETTINGS)
+    const settingsRef = useRef(settings)
+    useEffect(() => {
+        settingsRef.current = settings
+    }, [settings])
 
     // Visuals Refs
     const gameTimeRef = useRef(0) // 0 to 1 (0=dawn, 0.25=noon, 0.5=dusk, 0.75=midnight)
@@ -181,21 +190,132 @@ export default function DinoView({ wsData, wsEvent, isPaused }) {
 
     useEffect(() => {
         settingsRef.current = settings
-    }, [settings])
 
-    // Handle EOG blink detection
-    const handleEOGBlink = (source = 'blink') => {
-        const now = Date.now()
-        const timeSinceLastPress = now - blinkPressTimeRef.current
+        // When method changes to ML, ensure a model is selected
+        if (settings.DETECTION_METHOD === 'ML' && models.length > 0) {
+            // Priority: 'dino ml' > currently selected > active on backend > first available
+            const preferred = models.find(m => m.name === 'dino ml');
+            const current = models.find(m => m.name === settings.ACTIVE_MODEL);
+            const activeOnBackend = models.find(m => m.active);
 
-        if (timeSinceLastPress < 400 && timeSinceLastPress > 75) {
-            handleDoublePress(source)
-        } else {
-            handleSinglePress(source)
+            const targetModel = preferred || current || activeOnBackend || models[0];
+
+            if (settings.ACTIVE_MODEL !== targetModel.name) {
+                handleSettingChange('ACTIVE_MODEL', targetModel.name);
+            }
         }
 
-        blinkPressTimeRef.current = now
-    }
+    }, [settings, models])
+
+    // Load available EOG models
+    useEffect(() => {
+        fetch(`${API_BASE_URL}/api/models/eog`)
+            .then(res => res.json())
+            .then(data => {
+                setModels(data);
+                if (data.length > 0) {
+                    const dinoModel = data.find(m => m.name === 'dino ml');
+                    const activeModel = data.find(m => m.active);
+
+                    // Prioritize 'dino ml' if no model is set or if it's the expected default
+                    if (!settings.ACTIVE_MODEL || settings.ACTIVE_MODEL === 'dino ml') {
+                        const target = dinoModel || activeModel || data[0];
+                        handleSettingChange('ACTIVE_MODEL', target.name);
+                    }
+                }
+            })
+            .catch(err => console.error("Failed to load EOG models:", err));
+    }, []);
+
+    // Push Config to Backend when Detection Method or Model changes
+    useEffect(() => {
+        // We only care if they changed METHOD or MODEL
+        const updateBackendConfig = async () => {
+            try {
+                const res = await fetch(`${API_BASE_URL}/api/config`);
+                if (!res.ok) return;
+                const config = await res.json();
+
+                // Deep copy to avoid mutating state directly
+                const newConfig = JSON.parse(JSON.stringify(config));
+
+                if (!newConfig.features) newConfig.features = {};
+                if (!newConfig.features.EOG) newConfig.features.EOG = {};
+
+                let changed = false;
+                if (newConfig.features.EOG.detection_method !== settings.DETECTION_METHOD) {
+                    newConfig.features.EOG.detection_method = settings.DETECTION_METHOD;
+                    changed = true;
+                }
+
+                if (settings.DETECTION_METHOD === 'ML' && settings.ACTIVE_MODEL) {
+                    if (!newConfig.active_models) newConfig.active_models = {};
+                    if (newConfig.active_models.EOG !== settings.ACTIVE_MODEL) {
+                        newConfig.active_models.EOG = settings.ACTIVE_MODEL;
+                        changed = true;
+                    }
+                }
+
+                if (changed) {
+                    await fetch(`${API_BASE_URL}/api/config`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(newConfig)
+                    });
+                    console.log("[Dino] Backend feature config updated:", {
+                        method: settings.DETECTION_METHOD,
+                        model: settings.ACTIVE_MODEL
+                    });
+                }
+
+            } catch (err) {
+                console.error("Failed to update backend config:", err);
+            }
+        };
+
+        updateBackendConfig();
+    }, [settings.DETECTION_METHOD, settings.ACTIVE_MODEL]);
+
+    // Auto Select Smart Channel
+    const [availableChannels, setAvailableChannels] = useState([
+        { label: 'Any Channel', value: 'any' },
+        { label: 'Channel 0', value: 'ch0' },
+        { label: 'Channel 1', value: 'ch1' }
+    ]);
+
+    useEffect(() => {
+        fetch(`${API_BASE_URL}/api/config`)
+            .then(res => res.json())
+            .then(config => {
+                const mapping = config.channel_mapping || {};
+                const eogChannels = [];
+                // Check all possible hardware channels
+                ['ch0', 'ch1', 'ch2', 'ch3'].forEach(ch => {
+                    if (mapping[ch] && mapping[ch].sensor === 'EOG' && mapping[ch].enabled) {
+                        eogChannels.push(ch);
+                    }
+                });
+
+                if (eogChannels.length === 0) {
+                    setAvailableChannels([{ label: 'No EOG Sensor Mapped', value: 'none' }]);
+                    handleSettingChange('CONTROL_CHANNEL', 'none');
+                } else if (eogChannels.length === 1) {
+                    setAvailableChannels([{ label: `Channel ${eogChannels[0].replace('ch', '')}`, value: eogChannels[0] }]);
+                    handleSettingChange('CONTROL_CHANNEL', eogChannels[0]);
+                } else {
+                    const options = [{ label: 'Select Channel...', value: 'any' }];
+                    eogChannels.forEach(ch => {
+                        options.push({ label: `Channel ${ch.replace('ch', '')}`, value: ch });
+                    });
+                    setAvailableChannels(options);
+
+                    if (settingsRef.current.CONTROL_CHANNEL !== 'any' && !eogChannels.includes(settingsRef.current.CONTROL_CHANNEL)) {
+                        handleSettingChange('CONTROL_CHANNEL', 'any');
+                    }
+                }
+            })
+            .catch(err => console.error("Error fetching config for channels", err));
+    }, []);
 
     // WebSocket Event Listener (Blinks)
     useEffect(() => {
@@ -208,20 +328,22 @@ export default function DinoView({ wsData, wsEvent, isPaused }) {
             return
         }
 
-        if (wsEvent.event === 'BLINK' || wsEvent.event === 'SingleBlink') {
-            console.log("🦖 Dino: Blink Event Received via Logic Pipeline!");
-            handleEOGBlink();
+        if (wsEvent.event === 'SingleBlink') {
+            console.log("🦖 Dino: Single Blink Event Received!");
+            handleSinglePress('blink');
+        } else if (wsEvent.event === 'DoubleBlink') {
+            console.log("🦖 Dino: Double Blink Event Received!");
+            handleDoublePress('blink');
         }
-    }, [wsEvent]);
+    }, [wsEvent, settings.CONTROL_CHANNEL]); // Added settings.CONTROL_CHANNEL to dependency array
 
-    // Track Connection Status Logging
     useEffect(() => {
-        if (wsData) {
+        if (isConnected) {
             logEvent("Sensor Connected", 'connection')
         } else {
             logEvent("Sensor Disconnected", 'disconnect')
         }
-    }, [!!wsData]) // Only trigger on boolean flip
+    }, [isConnected]) // Only trigger on boolean flip
 
     // --- Worker Bridge ---
     const workerRef = useRef(null)
@@ -271,16 +393,15 @@ export default function DinoView({ wsData, wsEvent, isPaused }) {
                     sunNight: styles.getPropertyValue('--sun-night').trim(),
                     moonDay: styles.getPropertyValue('--moon-day').trim(),
                     moonNight: styles.getPropertyValue('--moon-night').trim(),
-                    // New simplified mappings
-                    dinoDay: styles.getPropertyValue('--dino').trim(),
-                    dinoNight: styles.getPropertyValue('--dino').trim(),
-                    obstacleDay: styles.getPropertyValue('--obstacle').trim(),
-                    obstacleNight: styles.getPropertyValue('--obstacle').trim(),
-                    obstacleBorder: styles.getPropertyValue('--obstacle-border').trim(),
-                    groundDay: styles.getPropertyValue('--ground').trim(),
-                    groundNight: styles.getPropertyValue('--ground').trim(),
-                    groundLineDay: styles.getPropertyValue('--ground-line').trim(),
-                    groundLineNight: styles.getPropertyValue('--ground-line').trim(),
+                    dinoDay: (styles.getPropertyValue('--dino-day') || styles.getPropertyValue('--dino') || styles.getPropertyValue('--primary')).trim(),
+                    dinoNight: (styles.getPropertyValue('--dino-night') || styles.getPropertyValue('--dino') || styles.getPropertyValue('--primary')).trim(),
+                    obstacleDay: (styles.getPropertyValue('--obstacle-day') || styles.getPropertyValue('--obstacle') || styles.getPropertyValue('--primary')).trim(),
+                    obstacleNight: (styles.getPropertyValue('--obstacle-night') || styles.getPropertyValue('--obstacle') || styles.getPropertyValue('--primary')).trim(),
+                    obstacleBorder: (styles.getPropertyValue('--obstacle-border') || styles.getPropertyValue('--text')).trim(),
+                    groundDay: (styles.getPropertyValue('--ground-day') || styles.getPropertyValue('--ground') || styles.getPropertyValue('--surface')).trim(),
+                    groundNight: (styles.getPropertyValue('--ground-night') || styles.getPropertyValue('--ground') || styles.getPropertyValue('--surface')).trim(),
+                    groundLineDay: (styles.getPropertyValue('--ground-line-day') || styles.getPropertyValue('--ground-line') || styles.getPropertyValue('--accent')).trim(),
+                    groundLineNight: (styles.getPropertyValue('--ground-line-night') || styles.getPropertyValue('--ground-line') || styles.getPropertyValue('--accent')).trim(),
                     skyDay: styles.getPropertyValue('--sky-day').trim(),
                     skyNight: styles.getPropertyValue('--sky-night').trim()
                 }
@@ -362,6 +483,7 @@ export default function DinoView({ wsData, wsEvent, isPaused }) {
                 const { type, score, highScore: newHigh } = e.data
                 if (type === 'GAME_OVER') {
                     setGameState('gameOver')
+                    soundHandler.playDinoDead();
                     if (score !== undefined) {
                         scoreRef.current = score
                         logEvent(`Game Over! Score: ${Math.floor(score / 10)}`, 'gameover')
@@ -482,13 +604,15 @@ export default function DinoView({ wsData, wsEvent, isPaused }) {
         if (workerRef.current) {
             // Exclude canvas dimensions so we don't overwrite the resize observer's values
             // with potentially stale default settings
-            const { CANVAS_WIDTH, CANVAS_HEIGHT, ...safeSettings } = settings
+            const { CANVAS_WIDTH, CANVAS_HEIGHT, ...safeSettings } = settings;
+            console.log("[Dino] Syncing settings to worker:", safeSettings);
             workerRef.current.postMessage({
                 type: 'SETTINGS',
                 payload: safeSettings
             })
         }
     }, [settings])
+
 
     // Sync Highscore reset
     useEffect(() => {
@@ -501,39 +625,59 @@ export default function DinoView({ wsData, wsEvent, isPaused }) {
     }, [highScore])
 
     // Bridge Inputs
-    const handleSinglePress = (source = 'blink') => {
-        const text = source === 'keyboard' ? "Spacebar (Jump)" : "Blink Detected (Jump)"
-        const type = source === 'keyboard' ? 'keyboard' : 'jump' // 'jump' maps to ArrowUp (which is good for blink too? or use Eye). Let's use 'blink' type for Eye icon.
-        // Actually, user wants "Jump Triggered" vs "Blink Detected". 
-        // Let's be consistent: 
-        // Keyboard: "Spacebar (Jump)" -> Keyboard Icon
-        // Blink: "Blink Detected (Jump)" -> Eye Icon 
+    const startGame = useCallback(() => {
+        if (workerRef.current) {
+            workerRef.current.postMessage({ type: 'INPUT', payload: { action: 'start' } });
+        }
+        setGameState('playing');
+    }, []);
 
+    const jump = useCallback(() => {
+        if (workerRef.current) {
+            workerRef.current.postMessage({ type: 'INPUT', payload: { action: 'jump' } });
+        }
+    }, []);
+
+    const resetGame = useCallback(() => {
+        if (workerRef.current) {
+            workerRef.current.postMessage({ type: 'INPUT', payload: { action: 'reset' } });
+        }
+        setGameState('ready');
+        setScore(0);
+    }, []);
+
+    const handleSinglePress = useCallback((source = 'blink') => {
+        const text = source === 'keyboard' ? "Spacebar (Jump)" : "Blink Detected (Jump)"
         logEvent(text, source === 'keyboard' ? 'keyboard' : 'blink')
         triggerSingleBlink()
 
-        if (workerRef.current) {
-            console.log("[DinoView] Sending 'jump' to worker. Ref:", workerRef.current)
-            workerRef.current.postMessage({ type: 'INPUT', payload: { action: 'jump' } })
-        } else {
-            console.warn("[DinoView] Worker ref is missing!")
+        if (gameState === 'ready' || gameState === 'gameOver') {
+            startGame();
+        } else if (gameState === 'playing') {
+            soundHandler.playDinoJump();
+            jump();
         }
+    }, [gameState, startGame, jump, logEvent]);
 
-        // Optimistic state update for UI status
-        if (gameStateRef.current === 'ready' || gameStateRef.current === 'gameOver') {
-            setGameState('playing')
-        }
-    }
-
-    const handleDoublePress = (source = 'blink') => {
+    const handleDoublePress = useCallback((source = 'blink') => {
         const text = source === 'keyboard' ? "Spacebar x2 (Pause)" : "Double Blink (Pause)"
         logEvent(text, 'toggle')
         triggerDoubleBlink()
 
-        if (workerRef.current) {
-            workerRef.current.postMessage({ type: 'INPUT', payload: { action: 'pause' } })
+        if (gameState === 'playing') {
+            soundHandler.playDinoPause();
+            if (workerRef.current) {
+                workerRef.current.postMessage({ type: 'INPUT', payload: { action: 'pause' } });
+            }
+            setGameState('paused');
+        } else if (gameState === 'paused') {
+            soundHandler.playDinoPause();
+            if (workerRef.current) {
+                workerRef.current.postMessage({ type: 'INPUT', payload: { action: 'resume' } });
+            }
+            setGameState('playing');
         }
-    }
+    }, [gameState, logEvent]);
 
     // Manual Keyboard Controls
     useEffect(() => {
@@ -543,13 +687,13 @@ export default function DinoView({ wsData, wsEvent, isPaused }) {
                 // Check if manual controls enabled
                 console.log("[DinoView] Spacebar pressed. Manual controls:", settings.ENABLE_MANUAL_CONTROLS)
                 if (settings.ENABLE_MANUAL_CONTROLS) {
-                    handleEOGBlink('keyboard') // Use the same unified logic for consistency
+                    handleSinglePress('keyboard') // Use the same unified logic for consistency
                 }
             }
         }
         window.addEventListener('keydown', handleKeyDown)
         return () => window.removeEventListener('keydown', handleKeyDown)
-    }, [settings])
+    }, [settings, handleSinglePress])
 
     // Blink Visuals (Optional - kept for side panel feedback)
     const triggerSingleBlink = () => {
@@ -562,10 +706,26 @@ export default function DinoView({ wsData, wsEvent, isPaused }) {
     }
 
     const handleSettingChange = (key, value) => {
-        setSettings(prev => ({
-            ...prev,
-            [key]: typeof value === 'string' ? value : (typeof value === 'boolean' ? value : parseFloat(value))
-        }))
+        setSettings(prev => {
+            const newValue = typeof value === 'string' ? value : (typeof value === 'boolean' ? value : parseFloat(value));
+
+            // Log specific setting changes to event log and console
+            if (key === 'DETECTION_METHOD' && prev.DETECTION_METHOD !== newValue) {
+                logEvent(`[Setup] Method: ${newValue}`, 'settings');
+                console.log(`[Dino] Detection Method changed to: ${newValue}`);
+            } else if (key === 'ACTIVE_MODEL' && prev.ACTIVE_MODEL !== newValue) {
+                logEvent(`[Setup] Model: ${newValue}`, 'settings');
+                console.log(`[Dino] Active Model changed to: ${newValue}`);
+            } else if (key === 'CONTROL_CHANNEL' && prev.CONTROL_CHANNEL !== newValue) {
+                logEvent(`[Setup] Channel: ${newValue}`, 'settings');
+                console.log(`[Dino] Control Channel changed to: ${newValue}`);
+            }
+
+            return {
+                ...prev,
+                [key]: newValue
+            };
+        });
     }
 
     const handleSaveSettings = () => {
@@ -605,7 +765,7 @@ export default function DinoView({ wsData, wsEvent, isPaused }) {
                     <div className="game-card">
                         <div className="game-header">
                             <h2 className="game-title">
-                                <span className={`status-eye ${wsData ? 'connected' : 'disconnected'}`}><ScanEye size={32} /></span>
+                                <span className={`status-eye ${isConnected ? 'connected' : 'disconnected'}`}><ScanEye size={32} /></span>
                                 EOG Dino Game
                             </h2>
                             <button
@@ -688,8 +848,8 @@ export default function DinoView({ wsData, wsEvent, isPaused }) {
                                         </div>
                                         <div className="stat-block stat-block-end mb-1">
                                             <span className="stat-label flex items-center gap-1"><Radio size={24} /> Sensor</span>
-                                            <div className={`stat-value-sensor ${wsData ? 'text-green-500' : 'text-red-500'}`}>
-                                                {wsData ? 'Connected' : 'Disconnected'}
+                                            <div className={`stat-value-sensor ${(isConnected && settings.CONTROL_CHANNEL !== 'none') ? 'text-green-500' : 'text-red-500'}`}>
+                                                {(isConnected && settings.CONTROL_CHANNEL !== 'none') ? 'Connected' : 'Disconnected'}
                                             </div>
                                         </div>
                                     </div>
@@ -715,7 +875,7 @@ export default function DinoView({ wsData, wsEvent, isPaused }) {
                 <div className="game-sidebar pr-1.5">
                     <div className="shrink-0" style={{ height: '85px' }} />
                     {/* Camera Panel */}
-                    <CameraPanel />
+                    <CameraPanel initialCameraOn={false} />
 
                     {/* Eye Controls Panel */}
                     <div className="card bg-surface border border-border shadow-card rounded-2xl p-4 " style={{ flexShrink: 0 }}>
@@ -733,22 +893,35 @@ export default function DinoView({ wsData, wsEvent, isPaused }) {
 
                         <div className="mt-4 pt-3 border-t border-border space-y-3">
                             <SettingSelect
-                                label="Control Channel"
-                                value={settings.CONTROL_CHANNEL}
+                                label="Method"
+                                value={settings.DETECTION_METHOD}
                                 options={[
-                                    { label: 'Any Channel', value: 'any' },
-                                    { label: 'Channel 0', value: 'ch0' },
-                                    { label: 'Channel 1', value: 'ch1' },
-                                    { label: 'Channel 2', value: 'ch2' },
-                                    { label: 'Channel 3', value: 'ch3' },
+                                    { label: 'ML', value: 'ML' },
+                                    { label: 'Threshold', value: 'Threshold' }
                                 ]}
+                                onChange={(v) => handleSettingChange('DETECTION_METHOD', v)}
+                            />
+
+                            {settings.DETECTION_METHOD === 'ML' && models.length > 0 && (
+                                <SettingSelect
+                                    label="Model"
+                                    value={settings.ACTIVE_MODEL || ''}
+                                    options={models.map(m => ({ label: m.name, value: m.name }))}
+                                    onChange={(v) => handleSettingChange('ACTIVE_MODEL', v)}
+                                />
+                            )}
+
+                            <SettingSelect
+                                label="Channel"
+                                value={settings.CONTROL_CHANNEL}
+                                options={availableChannels}
                                 onChange={(v) => handleSettingChange('CONTROL_CHANNEL', v)}
                             />
 
                             <div className="flex justify-between items-center text-xs">
                                 <span className="text-muted font-medium uppercase tracking-wider flex items-center gap-1"><Signal size={12} /> Input Status</span>
-                                <span className={`font-bold ${wsData ? 'text-green-500' : 'text-red-500'}`}>
-                                    {wsData ? 'ACTIVE' : 'OFFLINE'}
+                                <span className={`font-bold ${settings.CONTROL_CHANNEL === 'none' ? 'text-red-500' : (isConnected ? 'text-green-500' : 'text-red-500')}`}>
+                                    {settings.CONTROL_CHANNEL === 'none' ? 'INACTIVE' : (isConnected ? 'ACTIVE' : 'OFFLINE')}
                                 </span>
                             </div>
                         </div>

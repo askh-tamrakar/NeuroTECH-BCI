@@ -939,7 +939,7 @@ function draw() {
         if (gameState === 'ready') {
             ctx.textAlign = 'center';
             ctx.font = 'bold 24px sans-serif';
-            ctx.fillStyle = COLORS.text;
+            ctx.fillStyle = CURRENT_COLORS.dino;
             ctx.fillText('Blink to Start!', width / 2, height / 2 - 20);
         } else if (gameState === 'paused') {
             // Draw semi-transparent overlay
@@ -960,7 +960,7 @@ function draw() {
             ctx.font = 'bold 36px sans-serif';
             ctx.fillStyle = COLORS.primary;
             ctx.fillText('GAME OVER!', width / 2, height / 2 - 20);
-            ctx.fillStyle = COLORS.text;
+            ctx.fillStyle = CURRENT_COLORS.dino;
             ctx.font = '24px sans-serif';
             ctx.fillText('Blink to restart', width / 2, height / 2 + 20);
         }

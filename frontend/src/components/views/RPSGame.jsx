@@ -1,12 +1,31 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+<<<<<<< HEAD
+=======
+import { BrainCircuit, Activity, ImageIcon } from 'lucide-react';
+import { soundHandler } from '../../handlers/SoundHandler';
+import CustomSelect from '../ui/CustomSelect';
+>>>>>>> extra-features
 import '../../styles/views/RPSGame.css';
 
 const MOVES = ['ROCK', 'PAPER', 'SCISSORS'];
 
 const ASSETS = {
+<<<<<<< HEAD
     ROCK: '/images/rock.png',
     PAPER: '/images/paper.png',
     SCISSORS: '/images/scissors.png',
+=======
+    set1: {
+        ROCK: '/images/rock.png',
+        PAPER: '/images/paper.png',
+        SCISSORS: '/images/scissors.png',
+    },
+    set2: {
+        ROCK: '/images/Rock_2.png',
+        PAPER: '/images/Paper_2.png',
+        SCISSORS: '/images/Scissor_2.png',
+    }
+>>>>>>> extra-features
 };
 
 const WIN_CONDITIONS = {
@@ -15,7 +34,76 @@ const WIN_CONDITIONS = {
     SCISSORS: 'PAPER',
 };
 
+<<<<<<< HEAD
 const RPSGame = ({ wsEvent }) => {
+=======
+const MoveImage = ({ move, assetType, type, onImageError, globalFallbackMode }) => {
+    const [localError, setLocalError] = useState(false);
+
+    useEffect(() => {
+        setLocalError(false);
+    }, [move, assetType]);
+
+    const handleError = () => {
+        setLocalError(true);
+        if (onImageError) {
+            onImageError();
+        }
+    };
+
+    if (assetType === 'emoji' || localError || globalFallbackMode) {
+        return (
+            <span className="pop" style={{ fontSize: '14rem', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%' }}>
+                {move === 'ROCK' ? '🪨' : move === 'PAPER' ? '📄' : '✂️'}
+            </span>
+        );
+    }
+
+    const currentSet = ASSETS[assetType] || ASSETS.set1;
+    const src = currentSet[move];
+
+    // Transformation logic
+    let transform = '';
+    if (assetType === 'set1' || assetType === 'image') {
+        transform = type === 'player' ? 'rotate(45deg)' : 'rotate(-45deg)';
+
+        // Specific flips requested by user
+        if (move === 'ROCK' && type === 'player') {
+            transform += ' scaleX(-1)';
+        } else if (move === 'PAPER' && type === 'computer') {
+            transform += ' scaleX(-1)';
+        } else if (move === 'SCISSORS' && type === 'computer') {
+            transform += ' scaleX(-1)';
+        }
+    } else if (assetType === 'set2') {
+        if (type === 'computer') {
+            transform = 'scaleX(-1)';
+        }
+    }
+
+    return (
+        <div className="pop" style={{ width: '300px', height: '300px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <img
+                src={src}
+                alt={move}
+                className="card-image"
+                style={{
+                    transform: transform,
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'contain',
+                    transition: 'transform 0.3s ease-out'
+                }}
+                onError={handleError}
+            />
+        </div>
+    );
+};
+
+const RPSGame = ({ wsEvent }) => {
+    const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+
+>>>>>>> extra-features
     // Game State
     const [gameState, setGameState] = useState('idle'); // 'idle', 'waiting', 'revealed', 'resetting'
     const [playerMove, setPlayerMove] = useState(null);
@@ -24,9 +112,23 @@ const RPSGame = ({ wsEvent }) => {
     const [countdown, setCountdown] = useState(0);
     // Mode: automatic via WS events, or manual via on-screen buttons
     const [manualMode, setManualMode] = useState(false);
+<<<<<<< HEAD
     // Difficulty for computer move randomness: 'low' (repeats sometimes), 'moderate' (avoid repeats), 'high' (fully random)
     const [difficulty, setDifficulty] = useState('moderate');
 
+=======
+    // Visual asset mode
+    const [assetType, setAssetType] = useState('set1'); // 'set1', 'set2', 'emoji'
+    const [globalFallbackMode, setGlobalFallbackMode] = useState(false);
+
+    // Difficulty for computer move randomness: 'low' (repeats sometimes), 'moderate' (avoid repeats), 'high' (fully random)
+    const [difficulty, setDifficulty] = useState('moderate');
+
+    // Models
+    const [models, setModels] = useState([]);
+    const [selectedModel, setSelectedModel] = useState('');
+
+>>>>>>> extra-features
     // Stats
     const [score, setScore] = useState({ player: 0, computer: 0 });
 
@@ -59,27 +161,71 @@ const RPSGame = ({ wsEvent }) => {
     }, [difficulty]);
 
     const togglePrediction = (active) => {
+<<<<<<< HEAD
         fetch(`/api/emg/predict/${active ? 'start' : 'stop'}`, { method: 'POST' })
+=======
+        fetch(`${API_BASE_URL}/api/emg/predict/${active ? 'start' : 'stop'}`, { method: 'POST' })
+>>>>>>> extra-features
             .catch(err => console.error("Prediction toggle failed:", err));
     };
 
     const resetGame = useCallback(() => {
+<<<<<<< HEAD
         setGameState('idle');
+=======
+>>>>>>> extra-features
         setPlayerMove(null);
         setResult(null);
         processingRef.current = false;
         pickComputerMove();
+<<<<<<< HEAD
         // Disable prediction when game ends
         togglePrediction(false);
     }, [pickComputerMove]);
+=======
+
+        if (!manualMode) {
+            setGameState('waiting_for_rest');
+            // Keep prediction running for auto-restart
+        } else {
+            setGameState('idle');
+            // Disable prediction when game sends to idle
+            togglePrediction(false);
+        }
+    }, [pickComputerMove, manualMode]);
+>>>>>>> extra-features
 
     // Connect on mount
     useEffect(() => {
         pickComputerMove();
+<<<<<<< HEAD
+=======
+
+        // Fetch models
+        fetch(`${API_BASE_URL}/api/models/emg`)
+            .then(res => res.json())
+            .then(data => {
+                setModels(data);
+                if (data.length > 0) {
+                    const activeModel = data.find(m => m.active);
+                    if (activeModel) {
+                        setSelectedModel(activeModel.name);
+                    } else {
+                        // No active model found, auto-load the first one
+                        const first = data[0].name;
+                        setSelectedModel(first);
+                        handleModelChange({ target: { value: first } });
+                    }
+                }
+            })
+            .catch(err => console.error("Failed to load models:", err));
+
+>>>>>>> extra-features
         // Ensure prediction is off on mount/unmount
         return () => togglePrediction(false);
     }, [pickComputerMove]);
 
+<<<<<<< HEAD
     // Event Log State
     const [eventLogs, setEventLogs] = useState([]);
 
@@ -103,6 +249,77 @@ const RPSGame = ({ wsEvent }) => {
         // Check if we are in waiting state
         if (gameState !== 'waiting' || processingRef.current) return;
 
+=======
+    const handleModelChange = async (e) => {
+        const name = e.target.value;
+        setSelectedModel(name);
+        // Load model on backend
+        try {
+            const res = await fetch(`${API_BASE_URL}/api/models/emg/load`, {
+                method: 'POST',
+                body: JSON.stringify({ model_name: name }),
+                headers: { 'Content-Type': 'application/json' }
+            });
+            if (!res.ok) {
+                const err = await res.json();
+                console.error("Failed to switch model:", err);
+            } else {
+                console.log("Model switched successfully to:", name);
+            }
+        } catch (err) {
+            console.error("Failed to switch model (network):", err);
+        }
+    };
+
+    // Event Log State
+    const [eventLogs, setEventLogs] = useState([]);
+    const [currentPrediction, setCurrentPrediction] = useState('REST');
+
+    // -------------------------------------------------------------
+    // EVENT LOGGING (runs ONLY when wsEvent changes to prevent double logs)
+    // -------------------------------------------------------------
+    useEffect(() => {
+        if (!wsEvent) return;
+
+        // Unified Real-time prediction handling
+        if (wsEvent.event === 'emg_prediction') {
+            setCurrentPrediction(String(wsEvent.label || 'REST').toUpperCase());
+            return;
+        }
+
+        const eventName = String(wsEvent.event || '').toUpperCase();
+        if (!eventName || eventName.trim() === '' || eventName === 'UNKNOWN_EVENT') return;
+
+        // Log game-critical events (moves)
+        if (eventName !== 'REST' && MOVES.includes(eventName)) {
+            setEventLogs(prev => [{
+                id: Date.now() + Math.random(),
+                time: new Date().toLocaleTimeString(),
+                name: eventName,
+                channel: wsEvent.channel
+            }, ...prev].slice(0, 15));
+        }
+    }, [wsEvent]);
+
+    // -------------------------------------------------------------
+    // GAME LOGIC (Handle Event via Prop only if NOT in manual mode)
+    // -------------------------------------------------------------
+    useEffect(() => {
+        if (!wsEvent || manualMode) return;
+
+        const eventName = String(wsEvent.event || '').toUpperCase();
+
+        // Check for Auto-Restart Logic (Waiting for Rest)
+        if (gameState === 'waiting_for_rest') {
+            if (eventName === 'REST') {
+                setGameState('waiting');
+            }
+            return;
+        }
+
+        // Check if we are in waiting state
+        if (gameState !== 'waiting' || processingRef.current || !eventName || eventName.trim() === '') return;
+>>>>>>> extra-features
 
         // Filter for RPS events
         if (MOVES.includes(eventName)) {
@@ -118,6 +335,10 @@ const RPSGame = ({ wsEvent }) => {
 
         setPlayerMove(pMove);
         setComputerMove(cMove); // Ensure it's set in state for rendering
+<<<<<<< HEAD
+=======
+        soundHandler.playRPSMove(); // Play sound on move selection
+>>>>>>> extra-features
 
         determineWinner(pMove, cMove);
         setGameState('revealed');
@@ -164,12 +385,24 @@ const RPSGame = ({ wsEvent }) => {
     const determineWinner = (p, c) => {
         if (p === c) {
             setResult('TIE');
+<<<<<<< HEAD
         } else if (WIN_CONDITIONS[p] === c) {
             setResult('WIN');
             setScore(prev => ({ ...prev, player: prev.player + 1 }));
         } else {
             setResult('LOSE');
             setScore(prev => ({ ...prev, computer: prev.computer + 1 }));
+=======
+            soundHandler.playRPSMove(); // Play sound for tie
+        } else if (WIN_CONDITIONS[p] === c) {
+            setResult('WIN');
+            setScore(prev => ({ ...prev, player: prev.player + 1 }));
+            soundHandler.playRPSWin(); // Play sound for win
+        } else {
+            setResult('LOSE');
+            setScore(prev => ({ ...prev, computer: prev.computer + 1 }));
+            soundHandler.playRPSLose(); // Play sound for lose
+>>>>>>> extra-features
         }
     };
 
@@ -190,6 +423,7 @@ const RPSGame = ({ wsEvent }) => {
             <div className={boxClass}>
                 <div className="card-label">{type === 'player' ? 'YOU' : 'COMPUTER'}</div>
                 {revealed && move ? (
+<<<<<<< HEAD
                     <img
                         src={ASSETS[move]}
                         alt={move}
@@ -199,6 +433,14 @@ const RPSGame = ({ wsEvent }) => {
                             e.target.style.display = 'none';
                             e.target.parentNode.innerHTML += `<span style="font-size:4rem">${move === 'ROCK' ? '🪨' : move === 'PAPER' ? '📄' : '✂️'}</span>`
                         }}
+=======
+                    <MoveImage
+                        move={move}
+                        assetType={assetType}
+                        type={type}
+                        onImageError={() => setGlobalFallbackMode(true)}
+                        globalFallbackMode={globalFallbackMode}
+>>>>>>> extra-features
                     />
                 ) : (
                     <div className="card-placeholder">?</div>
@@ -210,6 +452,10 @@ const RPSGame = ({ wsEvent }) => {
     const handlePlay = () => {
         setGameState('waiting');
         pickComputerMove();
+<<<<<<< HEAD
+=======
+        soundHandler.playRPSStart(); // Play sound on game start
+>>>>>>> extra-features
         // Enable prediction only if not in manual mode
         if (!manualMode) {
             togglePrediction(true);
@@ -217,6 +463,7 @@ const RPSGame = ({ wsEvent }) => {
     };
 
     return (
+<<<<<<< HEAD
         <div className="rps-container">
 
             <div className="h-[94px] shrink-0" />
@@ -303,6 +550,160 @@ const RPSGame = ({ wsEvent }) => {
             </div>
 
             <div className="h-[35px] shrink-0" />
+=======
+        <div className="rps-container overflow-hidden relative">
+            <div className="rps-main">
+                {/* Absolute positioning for Title, Scoreboard, and Controls to float them at the top */}
+                <div className="absolute top-8 left-8 right-8 flex justify-between items-start z-20 pointer-events-none">
+                    {/* Left side: elements must have pointer-events-auto to be clickable */}
+                    <div className="flex flex-col gap-4 pointer-events-auto">
+                        <div className="rps-title" style={{ marginBottom: 0 }}>NEURO RPS</div>
+
+                        <div className="top-controls flex flex-wrap" style={{ marginLeft: 0 }}>
+                            <div className="flex items-center gap-2 bg-surface rounded px-2 py-1 border border-white/10 ml-2">
+                                <BrainCircuit size={16} className="text-primary" />
+                                <div className="w-40">
+                                    <CustomSelect
+                                        value={selectedModel}
+                                        onChange={(val) => handleModelChange({ target: { value: val } })}
+                                        options={models.map(m => ({ value: m.name, label: m.name }))}
+                                        placeholder="Select Model"
+                                        className="border-none bg-transparent"
+                                    />
+                                </div>
+                            </div>
+                            <div className="w-32">
+                                <CustomSelect
+                                    value={difficulty}
+                                    onChange={setDifficulty}
+                                    options={[
+                                        { value: 'low', label: 'Low' },
+                                        { value: 'moderate', label: 'Moderate' },
+                                        { value: 'high', label: 'High' }
+                                    ]}
+                                    placeholder="Difficulty"
+                                />
+                            </div>
+
+                            <button className={`mode-btn ${manualMode ? 'active' : ''}`} onClick={toggleManualMode} title="Toggle manual mode">
+                                {manualMode ? 'Manual' : 'Auto'}
+                            </button>
+                            <button
+                                className="flex items-center justify-center p-2 rounded bg-white/5 border border-white/10 hover:bg-white/10 transition-colors ml-2"
+                                onClick={() => {
+                                    setAssetType(prev => prev === 'set1' ? 'set2' : 'set1');
+                                    setGlobalFallbackMode(false); // Reset fallback on type change
+                                    soundHandler.playRPSWarp(); // Play sound on asset type switch
+                                }}
+                                title="Toggle Asset Type"
+                            >
+                                <ImageIcon size={18} className="text-muted hover:text-white transition-colors" />
+                            </button>
+                        </div>
+
+                        {gameState !== 'waiting' && result && (
+                            <div className="result-overlay-side animate-in slide-in-from-left duration-500">
+                                <div className={`result-text-side ${result.toLowerCase()}`}>
+                                    {result === 'TIE' ? (
+                                        <>IT'S A<br />TIE</>
+                                    ) : (
+                                        <>YOU<br />{result}!</>
+                                    )}
+                                </div>
+                                <div className="text-muted mt-2 font-mono tracking-widest text-lg">
+                                    RESETTING IN {countdown}...
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Center Scoreboard using margin auto and position absolute inside the flex container */}
+                    <div className="absolute left-1/2 -translate-x-1/2 top-0 pointer-events-auto">
+                        <div className="scoreboard" style={{ position: 'relative', transform: 'none', left: 'auto', top: 'auto' }}>
+                            <div>Player: <strong>{score.player}</strong></div>
+                            <div>Computer: <strong>{score.computer}</strong></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="rps-main">
+                    {/* Status Text and Play Button shifted down */}
+                    <div className="status-text mt-8" style={{ minHeight: '60px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1.5rem' }}>
+                        {gameState === 'idle' ? (
+                            <button
+                                onClick={handlePlay}
+                                className="px-8 py-2 bg-primary text-primary-contrast rounded-xl font-bold text-lg shadow-lg hover:scale-105 transition-transform animate-in zoom-in duration-300"
+                            >
+                                PLAY
+                            </button>
+                        ) : (
+                            <button
+                                onClick={() => {
+                                    setGameState('idle');
+                                    togglePrediction(false);
+                                }}
+                                className="px-6 py-2 bg-red-600/90 hover:bg-red-500 text-white rounded-xl font-bold text-lg shadow-lg hover:scale-105 transition-transform animate-in zoom-in duration-300"
+                            >
+                                STOP
+                            </button>
+                        )}
+
+                        {gameState === 'waiting' && !manualMode && (
+                            <span className="pulse">
+                                {currentPrediction === 'REST' || currentPrediction === 'UNKNOWN'
+                                    ? "Waiting for Player Gesture..."
+                                    : "Recording Gesture..."}
+                            </span>
+                        )}
+                        {gameState === 'waiting_for_rest' && !manualMode && <span className="animate-pulse text-yellow-400">Release Gesture...</span>}
+                        {gameState === 'waiting' && manualMode && <span className="pulse">Manual Mode: press <strong>R</strong>/<strong>P</strong>/<strong>S</strong></span>}
+                        {gameState !== 'waiting' && gameState !== 'waiting_for_rest' && gameState !== 'idle' && (
+                            <span className="animate-in fade-in zoom-in duration-300">
+                                {manualMode ? "Round Complete" : "Result Received"}
+                            </span>
+                        )}
+                    </div>
+
+                    <div className="cards-row">
+                        {renderCard('player', playerMove, !!playerMove)}
+
+                        <div className="vs-badge">VS</div>
+
+                        {/* Computer hidden until revealed */}
+                        {renderCard('computer', computerMove, gameState !== 'waiting')}
+                    </div>
+
+                </div>
+            </div>
+
+            <div className="rps-sidebar">
+                {/* Event Log Panel */}
+                <div className="w-full h-full flex flex-col bg-surface/80 border border-white/10 rounded-2xl p-6 backdrop-blur-md shadow-2xl">
+                    <div className="text-sm font-bold text-muted uppercase tracking-wider mb-4 flex justify-between items-center pb-3 border-b border-white/10 flex-shrink-0">
+                        <span>Event Log</span>
+                        <span className="text-[11px] opacity-60">Last 15 events</span>
+                    </div>
+                    <div className="space-y-2 font-mono text-sm overflow-y-auto flex-1 pr-2 custom-scrollbar">
+                        {eventLogs.length === 0 ? (
+                            <div className="text-muted/50 italic py-4 text-center">No events received yet...</div>
+                        ) : (
+                            eventLogs.map((log) => (
+                                <div key={log.id} className="flex gap-4 py-2 border-b border-white/5 last:border-0 hover:bg-white/5 px-3 rounded text-base">
+                                    <span className="text-muted">{log.time}</span>
+                                    <span className={`font-bold ${log.name === 'ROCK' ? 'text-amber-400' :
+                                        log.name === 'PAPER' ? 'text-blue-400' :
+                                            log.name === 'SCISSORS' ? 'text-pink-400' : 'text-text'
+                                        }`}>
+                                        {log.name}
+                                    </span>
+                                    <span className="text-muted ml-auto text-xs">{log.channel}</span>
+                                </div>
+                            ))
+                        )}
+                    </div>
+                </div>
+            </div>
+>>>>>>> extra-features
         </div>
     );
 };

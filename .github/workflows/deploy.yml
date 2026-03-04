@@ -6,6 +6,7 @@ on:
       - master
       - develop
       - Test-WebApplication
+      - extra-features
 
 jobs:
   build-and-deploy:
@@ -23,7 +24,11 @@ jobs:
         with:
           node-version: 20
 
+<<<<<<< HEAD
       - name: Install Frontend Dependencies
+=======
+      - name: Install Dependencies
+>>>>>>> extra-features
         run: cd frontend && npm ci
 
       - name: Build React App
@@ -36,7 +41,11 @@ jobs:
           REMOTE_HOST: ${{ secrets.CPANEL_HOST }}
           REMOTE_USER: ${{ secrets.CPANEL_USER }}
           SOURCE: "frontend/dist/"
+<<<<<<< HEAD
           TARGET: ${{ secrets.CPANEL_PATH }}
+=======
+          TARGET: ${{secrets.CPANEL_PATH}}
+>>>>>>> extra-features
           ARGS: "-avz --delete"
           SSH_ARGS: "-o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o KexAlgorithms=+diffie-hellman-group-exchange-sha256"
 

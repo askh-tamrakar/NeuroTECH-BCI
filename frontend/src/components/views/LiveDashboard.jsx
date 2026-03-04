@@ -4,7 +4,7 @@ import LiveView from '../views/LiveView'
 import { ConfigService } from '../../services/ConfigService'
 import '../../styles/live/LiveDashboard.css'
 
-export default function LiveDashboard({ wsData, wsConfig, wsEvent, sendMessage }) {
+export default function LiveDashboard({ wsData, wsConfig, wsEvent, sendMessage, wsUrl }) {
     const [config, setConfig] = useState()
     const [isPaused, setIsPaused] = useState(false)
     const [loading, setLoading] = useState(true)
@@ -78,6 +78,7 @@ export default function LiveDashboard({ wsData, wsConfig, wsEvent, sendMessage }
                         wsEvent={wsEvent}
                         config={config}
                         isPaused={isPaused}
+                        wsUrl={wsUrl}
                     />
                 </div>
             </main>

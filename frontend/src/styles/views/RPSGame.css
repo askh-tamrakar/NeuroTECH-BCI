@@ -1,6 +1,7 @@
 /* RPS Game Styles */
 .rps-container {
   display: flex;
+<<<<<<< HEAD
   flex-direction: column;
   align-items: center;
   justify-content: center;
@@ -13,29 +14,82 @@
 
 .rps-title {
   font-size: 3rem;
+=======
+  flex-direction: row;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 2rem;
+  padding: 2rem;
+  color: var(--text);
+  position: relative;
+  width: 100%;
+  flex: 1;
+  height: 100%;
+}
+
+.rps-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  position: relative;
+  height: 100%;
+}
+
+.rps-sidebar {
+  width: 380px;
+  position: absolute;
+  right: 2rem;
+  top: 2rem;
+  z-index: 50;
+}
+
+.rps-title {
+  font-size: 4rem;
+>>>>>>> extra-features
   font-weight: 800;
   margin-bottom: 2rem;
   background: linear-gradient(135deg, var(--primary), var(--accent));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
+<<<<<<< HEAD
   text-shadow: 0 4px 12px rgba(0,0,0,0.3);
+=======
+  text-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+>>>>>>> extra-features
   letter-spacing: 2px;
 }
 
 /* Mode button */
 .mode-btn {
+<<<<<<< HEAD
   background: rgba(255,255,255,0.06);
   color: var(--text);
   border: 1px solid rgba(255,255,255,0.06);
+=======
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+>>>>>>> extra-features
   padding: 0.5rem 0.9rem;
   border-radius: 999px;
   cursor: pointer;
   transition: all 0.2s ease;
 }
+<<<<<<< HEAD
 .mode-btn.active {
   background: linear-gradient(90deg, var(--primary), var(--accent));
   color: white;
   box-shadow: 0 6px 20px rgba(0,0,0,0.4);
+=======
+
+.mode-btn.active {
+  background: linear-gradient(90deg, var(--primary), var(--accent));
+  color: white;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+>>>>>>> extra-features
   transform: translateY(-2px);
 }
 
@@ -46,6 +100,7 @@
   margin-left: 0.75rem;
 }
 
+<<<<<<< HEAD
 /* Scoreboard - move to top */
 .scoreboard {
   position: absolute;
@@ -74,6 +129,66 @@
   .card-box { width: 180px; height: 260px; padding: 1.4rem; }
   .card-image { width: 110px; height: 110px; }
   .vs-badge { width: 60px; height: 60px; font-size: 1.2rem }
+=======
+/* Scoreboard */
+.scoreboard {
+  background: rgba(0, 0, 0, 0.45);
+  padding: 12px 24px;
+  border-radius: 16px;
+  display: flex;
+  gap: 24px;
+  align-items: center;
+  font-weight: 800;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(8px);
+}
+
+.top-controls {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+  margin-left: 0.5rem
+}
+
+.difficulty-select {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 0.35rem 0.6rem;
+  border-radius: 8px;
+}
+
+.scoreboard div {
+  font-size: 1.8rem;
+  letter-spacing: 1px;
+}
+
+.scoreboard div strong {
+  color: var(--primary);
+  font-size: 2.2rem;
+  margin-left: 8px;
+}
+
+/* Small responsive tweaks */
+@media (max-width: 800px) {
+  .card-box {
+    width: 180px;
+    height: 260px;
+    padding: 1.4rem;
+  }
+
+  .card-image {
+    width: 110px;
+    height: 110px;
+  }
+
+  .vs-badge {
+    width: 60px;
+    height: 60px;
+    font-size: 1.2rem
+  }
+>>>>>>> extra-features
 }
 
 .gamestage {
@@ -85,7 +200,11 @@
 }
 
 .status-text {
+<<<<<<< HEAD
   font-size: 1.5rem;
+=======
+  font-size: 2rem;
+>>>>>>> extra-features
   text-align: center;
   margin-bottom: 2rem;
   color: var(--muted);
@@ -94,9 +213,16 @@
 
 .cards-row {
   display: flex;
+<<<<<<< HEAD
   gap: 4rem;
   justify-content: center;
   align-items: center;
+=======
+  gap: 6rem;
+  justify-content: center;
+  align-items: center;
+  margin-top: 4rem;
+>>>>>>> extra-features
 }
 
 .card-box {
@@ -104,14 +230,24 @@
   backdrop-filter: blur(10px);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 20px;
+<<<<<<< HEAD
   padding: 2rem;
   width: 250px;
   height: 350px;
+=======
+  padding: 2.5rem;
+  width: 340px;
+  height: 460px;
+>>>>>>> extra-features
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
+<<<<<<< HEAD
   box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+=======
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+>>>>>>> extra-features
   transition: all 0.4s ease;
   position: relative;
 }
@@ -133,14 +269,21 @@
 }
 
 .card-label {
+<<<<<<< HEAD
   font-size: 1.2rem;
   font-weight: 700;
   margin-bottom: 1rem;
+=======
+  font-size: 1.6rem;
+  font-weight: 700;
+  margin-bottom: 1.5rem;
+>>>>>>> extra-features
   text-transform: uppercase;
   letter-spacing: 1px;
 }
 
 .card-image {
+<<<<<<< HEAD
   width: 150px;
   height: 150px;
   object-fit: contain;
@@ -155,10 +298,40 @@
 .card-placeholder {
   font-size: 5rem;
   color: rgba(255,255,255,0.2);
+=======
+  width: 200px;
+  height: 200px;
+  object-fit: contain;
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.4));
+  transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.pop {
+  animation: popIn 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards,
+    breathing-zoom 3s ease-in-out 0.6s infinite;
+}
+
+@keyframes breathing-zoom {
+
+  0%,
+  100% {
+    transform: scale(1);
+  }
+
+  50% {
+    transform: scale(1.04);
+  }
+}
+
+.card-placeholder {
+  font-size: 7rem;
+  color: rgba(255, 255, 255, 0.2);
+>>>>>>> extra-features
   animation: pulse-slow 3s infinite;
 }
 
 .vs-badge {
+<<<<<<< HEAD
   font-size: 2rem;
   font-weight: 900;
   color: var(--accent);
@@ -171,6 +344,20 @@
   align-items: center;
   justify-content: center;
   box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+=======
+  font-size: 2.8rem;
+  font-weight: 900;
+  color: var(--accent);
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 50%;
+  width: 100px;
+  height: 100px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+>>>>>>> extra-features
 }
 
 .result-overlay {
@@ -207,6 +394,7 @@
   filter: drop-shadow(0 0 15px rgba(245, 158, 11, 0.5));
 }
 
+<<<<<<< HEAD
 /* Animations */
 @keyframes popIn {
   0% { transform: scale(0); opacity: 0; }
@@ -223,3 +411,87 @@
   from { transform: translateY(20px); opacity: 0; }
   to { transform: translateY(0); opacity: 1; }
 }
+=======
+/* Result Overlay Side */
+.result-overlay-side {
+  margin-top: 4rem;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  max-width: 450px;
+}
+
+.result-text-side {
+  font-size: 5.5rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  line-height: 0.9;
+  letter-spacing: -2px;
+  filter: drop-shadow(0 0 20px rgba(255, 255, 255, 0.1));
+}
+
+.result-text-side.win {
+  background: linear-gradient(135deg, #10b981, #34d399, #059669);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 0 30px rgba(16, 185, 129, 0.4));
+}
+
+.result-text-side.lose {
+  background: linear-gradient(135deg, #ef4444, #f87171, #dc2626);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 0 30px rgba(239, 68, 68, 0.4));
+}
+
+.result-text-side.tie {
+  background: linear-gradient(135deg, #f59e0b, #fbbf24, #d97706);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 0 30px rgba(245, 158, 11, 0.4));
+}
+
+/* Animations */
+@keyframes popIn {
+  0% {
+    transform: scale(0);
+    opacity: 0;
+  }
+
+  80% {
+    transform: scale(1.2);
+    opacity: 1;
+  }
+
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes pulse-slow {
+
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.3;
+  }
+
+  50% {
+    transform: scale(1.1);
+    opacity: 0.6;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+>>>>>>> extra-features

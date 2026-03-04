@@ -11,9 +11,9 @@ const AnimatedItem = ({ children, delay = 0, index, onMouseEnter, onClick }) => 
       data-index={index}
       onMouseEnter={onMouseEnter}
       onClick={onClick}
-      initial={{ scale: 0.7, opacity: 0 }}
-      animate={inView ? { scale: 1, opacity: 1 } : { scale: 0.7, opacity: 0 }}
-      transition={{ duration: 0.2, delay }}
+      initial={{ scale: 0.1, opacity: 0.5 }}
+      animate={inView ? { scale: 1, opacity: 1 } : { scale: 0.8, opacity: 0 }}
+      transition={{ duration: 0.1, delay }}
       style={{ marginBottom: '1rem', cursor: 'pointer' }}
     >
       {children}
@@ -46,10 +46,14 @@ const AnimatedList = ({
   displayScrollbar = true,
   initialSelectedIndex = -1,
   selectedIndex: controlledSelectedIndex, // Optional prop for controlled usage
-  renderItem = null // Optional custom renderer: (item, index, isSelected) => Node
+  renderItem = null, // Optional custom renderer: (item, index, isSelected) => Node
+  optimizeLargeLists = true // NEW: Skip animations for large lists to fix lag
 }) => {
   const listRef = useRef(null);
   const [internalSelectedIndex, setInternalSelectedIndex] = useState(initialSelectedIndex);
+
+  // If list is massive, bypass heavy intersection observers
+  const isLargeList = optimizeLargeLists && items.length > 50;
 
   // Use controlled index if provided, otherwise use internal state
   const selectedIndex = controlledSelectedIndex !== undefined ? controlledSelectedIndex : internalSelectedIndex;
@@ -143,14 +147,8 @@ const AnimatedList = ({
   return (
     <div className={`scroll-list-container ${className}`}>
       <div ref={listRef} className={`scroll-list ${!displayScrollbar ? 'no-scrollbar' : ''}`} onScroll={handleScroll}>
-        {items.map((item, index) => (
-          <AnimatedItem
-            key={index}
-            delay={0.1}
-            index={index}
-            onMouseEnter={() => handleItemMouseEnter(index)}
-            onClick={() => handleItemClick(item, index)}
-          >
+        {items.map((item, index) => {
+          const itemContent = (
             <div className={`item ${selectedIndex === index ? 'selected' : ''} ${itemClassName}`}>
               {renderItem ? (
                 renderItem(item, index, selectedIndex === index)
@@ -158,8 +156,34 @@ const AnimatedList = ({
                 <p className="item-text">{item}</p>
               )}
             </div>
-          </AnimatedItem>
-        ))}
+          );
+
+          if (isLargeList) {
+            return (
+              <div
+                key={index}
+                data-index={index}
+                onMouseEnter={() => handleItemMouseEnter(index)}
+                onClick={() => handleItemClick(item, index)}
+                style={{ marginBottom: '1rem', cursor: 'pointer' }}
+              >
+                {itemContent}
+              </div>
+            );
+          }
+
+          return (
+            <AnimatedItem
+              key={index}
+              delay={0.1}
+              index={index}
+              onMouseEnter={() => handleItemMouseEnter(index)}
+              onClick={() => handleItemClick(item, index)}
+            >
+              {itemContent}
+            </AnimatedItem>
+          );
+        })}
       </div>
     </div>
   );

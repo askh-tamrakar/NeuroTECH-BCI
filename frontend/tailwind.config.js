@@ -1,4 +1,14 @@
 /** @type {import('tailwindcss').Config} */
+
+function withOpacity(variableName) {
+	return ({ opacityValue }) => {
+		if (opacityValue !== undefined) {
+			return `rgba(var(${variableName}-rgb), ${opacityValue})`;
+		}
+		return `var(${variableName})`;
+	};
+}
+
 export default {
 	darkMode: ["class"],
 	content: [
@@ -8,39 +18,39 @@ export default {
 	theme: {
 		extend: {
 			colors: {
-				bg: 'var(--bg)',
-				surface: 'var(--surface)',
-				text: 'var(--text)',
+				bg: withOpacity('--bg'),
+				surface: withOpacity('--surface'),
+				text: withOpacity('--text'),
 				muted: {
-					DEFAULT: 'var(--muted)',
+					DEFAULT: withOpacity('--muted'),
 					foreground: 'var(--muted-foreground)'
 				},
 				primary: {
-					DEFAULT: 'var(--primary)',
+					DEFAULT: withOpacity('--primary'),
 					foreground: 'var(--primary-foreground)'
 				},
 				'primary-contrast': 'var(--primary-contrast)',
 				accent: {
-					DEFAULT: 'var(--accent)',
+					DEFAULT: withOpacity('--accent'),
 					foreground: 'var(--accent-foreground)'
 				},
-				border: 'var(--border)',
-				background: 'var(--background)',
-				foreground: 'var(--foreground)',
+				border: withOpacity('--border'),
+				background: withOpacity('--background'),
+				foreground: withOpacity('--foreground'),
 				card: {
-					DEFAULT: 'var(--card)',
+					DEFAULT: withOpacity('--card'),
 					foreground: 'var(--card-foreground)'
 				},
 				popover: {
-					DEFAULT: 'var(--popover)',
+					DEFAULT: withOpacity('--popover'),
 					foreground: 'var(--popover-foreground)'
 				},
 				secondary: {
-					DEFAULT: 'var(--secondary)',
+					DEFAULT: withOpacity('--secondary'),
 					foreground: 'var(--secondary-foreground)'
 				},
 				destructive: {
-					DEFAULT: 'var(--destructive)',
+					DEFAULT: withOpacity('--destructive'),
 					foreground: 'var(--destructive-foreground)'
 				},
 				input: 'var(--input)',
