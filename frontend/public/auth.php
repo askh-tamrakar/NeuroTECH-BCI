@@ -238,7 +238,7 @@ if ($action === 'signup') {
 
     // Generate 4-digit OTP
     $otp = sprintf("%04d", mt_rand(0, 9999));
-    $expiry = time() + 900; // 15 minutes
+    $expiry = time() + 60; // 1 minute
 
     // Store OTP in File Vault (Encrypted)
     $vault_file = OTP_VAULT_DIR . '/' . md5($email);
@@ -291,7 +291,7 @@ if ($action === 'signup') {
     }
 
     $otp = sprintf("%04d", mt_rand(0, 9999));
-    $expiry = time() + 900;
+    $expiry = time() + 60;
 
     // Update OTP in File Vault
     $vault_file = OTP_VAULT_DIR . '/' . md5($email);
@@ -347,7 +347,7 @@ if ($action === 'signup') {
              
              // Trigger new OTP for unverified user on login attempt
              $otp = sprintf("%04d", mt_rand(0, 9999));
-             $expiry = time() + 900;
+             $expiry = time() + 60;
              $vault_file = OTP_VAULT_DIR . '/' . md5($user['email']);
              file_put_contents($vault_file, encrypt_data(json_encode(['otp' => $otp, 'expiry' => $expiry])));
              sendOTPEmail($user['email'], $otp);

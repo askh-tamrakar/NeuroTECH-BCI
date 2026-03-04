@@ -35,6 +35,8 @@ export function AuthProvider({ children }) {
         return { success: true, email }
       } else if (data.status === 'partial_success') {
         return { success: true, email, partial: true, debug: data.debug }
+      } else if (data.status === 'unverified_exists') {
+        return { success: false, status: data.status, email: data.email, message: data.message }
       } else {
         return { success: false, message: data.message }
       }
@@ -90,6 +92,8 @@ export function AuthProvider({ children }) {
         localStorage.setItem('bci_user', JSON.stringify(data.user))
         setUser(data.user)
         return { success: true }
+      } else if (data.status === 'unverified_exists') {
+        return { success: false, status: data.status, email: data.email, message: data.message }
       } else {
         return { success: false, message: data.message }
       }

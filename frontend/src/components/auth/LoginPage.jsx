@@ -73,7 +73,7 @@ export default function LoginPage() {
   const [profileImage, setProfileImage] = useState(null)
   const [imagePreview, setImagePreview] = useState(null)
 
-  const [timeLeft, setTimeLeft] = useState(900) // 15 minutes
+  const [timeLeft, setTimeLeft] = useState(60) // 1 minute
   const [resendLoading, setResendLoading] = useState(false)
   const [loading, setLoading] = useState(false)
   const [errors, setErrors] = useState({})
@@ -125,7 +125,7 @@ export default function LoginPage() {
     const result = await resendOtp(email)
     if (result.success) {
       setMessage('New access vector transmitted.')
-      setTimeLeft(900)
+      setTimeLeft(60)
     } else {
       setErrors({ form: result.message })
     }
@@ -171,12 +171,12 @@ export default function LoginPage() {
         if (result.success) {
           setMessage(`Neural account initiated. check ${email} for access vector.`)
           setShowOtp(true)
-          setTimeLeft(900)
+          setTimeLeft(60)
         } else if (result.status === 'unverified_exists') {
           setEmail(result.email)
           setMessage(result.message)
           setShowOtp(true)
-          setTimeLeft(900)
+          setTimeLeft(60)
         } else {
           setErrors({ form: result.message })
         }
@@ -186,7 +186,7 @@ export default function LoginPage() {
           setEmail(result.email)
           setMessage(result.message)
           setShowOtp(true)
-          setTimeLeft(900)
+          setTimeLeft(60)
         } else if (!result.success) {
           setErrors({ form: result.message })
         }
@@ -336,13 +336,13 @@ export default function LoginPage() {
                         onChange={(e) => setOtp(e.target.value.replace(/[^0-9]/g, ''))}
                         className="w-full bg-black/50 backdrop-blur-md border border-white/10 rounded-2xl px-4 py-6 outline-none text-center text-5xl tracking-[1em] font-mono text-white shadow-inner focus:border-[var(--primary)] transition-all"
                         placeholder="0000"
-                        style={{ borderColor: timeLeft < 60 ? '#ef4444' : undefined }}
+                        style={{ borderColor: timeLeft < 15 && timeLeft > 0 ? '#ef4444' : undefined }}
                       />
                       <div className="flex items-center justify-center space-x-2 mt-4 text-xs font-mono opacity-60 text-white">
-                        <RefreshCw className={`w-3 h-3 ${timeLeft < 60 ? 'text-red-400 animate-spin' : ''}`} />
-                        <span className={timeLeft < 60 ? 'text-red-400' : ''}>Expiring in: {formatTime(timeLeft)}</span>
+                        <RefreshCw className={`w-3 h-3 ${timeLeft < 15 && timeLeft > 0 ? 'text-red-400 animate-spin' : ''}`} />
+                        <span className={timeLeft < 15 && timeLeft > 0 ? 'text-red-400' : ''}>Expiring in: {formatTime(timeLeft)}</span>
                       </div>
-                      <button type="button" onClick={handleResend} disabled={resendLoading || timeLeft > 840} className="mt-3 text-[10px] uppercase font-bold tracking-widest text-[var(--accent)] hover:text-white transition-colors disabled:opacity-30">
+                      <button type="button" onClick={handleResend} disabled={resendLoading || timeLeft > 0} className="mt-3 text-[10px] uppercase font-bold tracking-widest text-[var(--accent)] hover:text-white transition-colors disabled:opacity-30">
                         {resendLoading ? 'Re-transmitting...' : 'Request New Vector'}
                       </button>
                     </div>
