@@ -23,6 +23,46 @@ try {
     exit;
 }
 
+// SMTP Settings
+define('SMTP_HOST', 'mail.withaspire.in');
+define('SMTP_USER', 'neurotech@withaspire.in');
+define('SMTP_PASS', 'firstSep@7219');
+define('SMTP_PORT', 465);
+
+function sendOTPEmail($to, $otp) {
+    $subject = "Welcome to the World of Neurons";
+    $message = "
+    <html>
+    <body style='background-color: #0a0a0a; color: #ffffff; font-family: Arial, sans-serif; padding: 40px;'>
+        <div style='max-width: 600px; margin: 0 auto; border: 1px solid #333; border-radius: 12px; padding: 30px; background: linear-gradient(145deg, #121212, #000000);'>
+            <h1 style='color: #00f2fe; text-align: center; text-transform: uppercase; letter-spacing: 2px;'>The Neural Gate Awaits</h1>
+            <p style='font-size: 18px; line-height: 1.6; text-align: center; color: #b0b0b0;'>
+                Welcome, traveler. You are about to step into the vast, electric expanse of the human mind. 
+                The synapses are firing, the signals are clear, and your entry is nearly complete.
+            </p>
+            <div style='background: rgba(0, 242, 254, 0.1); border: 1px solid #00f2fe; border-radius: 8px; padding: 20px; margin: 30px 0; text-align: center;'>
+                <span style='display: block; font-size: 12px; text-transform: uppercase; color: #00f2fe; margin-bottom: 10px;'>Your Access Vector</span>
+                <span style='font-size: 48px; font-weight: bold; letter-spacing: 12px; color: #ffffff;'>$otp</span>
+            </div>
+            <p style='color: #666; font-size: 14px; text-align: center;'>
+                Enter these four digits to harmonize your consciousness with our network.
+            </p>
+            <hr style='border: 0; border-top: 1px solid #333; margin: 30px 0;'>
+            <p style='font-size: 12px; text-align: center; color: #444;'>
+                NeuroTECH System // Synchronizing. Please do not reply to this transmission.
+            </p>
+        </div>
+    </body>
+    </html>
+    ";
+
+    $headers = "MIME-Version: 1.0" . "\r\n";
+    $headers .= "Content-type:text/html;charset=UTF-8" . "\r\n";
+    $headers .= 'From: NeuroTECH <' . SMTP_USER . '>' . "\r\n";
+
+    return mail($to, $subject, $message, $headers);
+}
+
 $action = $_GET['action'] ?? '';
 
 if ($action === 'signup') {
@@ -36,19 +76,36 @@ if ($action === 'signup') {
         exit;
     }
 
-    // Check if user exists
-    $stmt = $conn->prepare("SELECT id FROM users WHERE email = ?");
-    $stmt->execute([$email]);
-    if ($stmt->fetch()) {
-        echo json_encode(["status" => "error", "message" => "User already exists"]);
-        exit;
-    }
+    // Generate 4-digit OTP
+    $otp = sprintf("%04d", mt_rand(0, 9999));
+    $expiry = date('Y-m-d H:i:s', strtotime('+15 minutes'));
 
-    $stmt = $conn->prepare("INSERT INTO users (email, password, name) VALUES (?, ?, ?)");
-    if ($stmt->execute([$email, $pass, $name])) {
-        echo json_encode(["status" => "success", "message" => "Account created"]);
+    $stmt = $conn->prepare("INSERT INTO users (email, password, name, otp_code, otp_expiry) VALUES (?, ?, ?, ?, ?)");
+    if ($stmt->execute([$email, $pass, $name, $otp, $expiry])) {
+        if (sendOTPEmail($email, $otp)) {
+            echo json_encode(["status" => "success", "message" => "Account created. Please check your email for the 4-digit access code."]);
+        } else {
+            echo json_encode(["status" => "partial_success", "message" => "Account created, but failed to send verification email. Please contact support."]);
+        }
     } else {
         echo json_encode(["status" => "error", "message" => "Failed to create account"]);
+    }
+
+} elseif ($action === 'verify-otp') {
+    $data = json_decode(file_get_contents("php://input"), true);
+    $email = $data['email'] ?? '';
+    $otp = $data['otp'] ?? '';
+
+    $stmt = $conn->prepare("SELECT * FROM users WHERE email = ? AND otp_code = ? AND otp_expiry > NOW()");
+    $stmt->execute([$email, $otp]);
+    $user = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if ($user) {
+        $stmt = $conn->prepare("UPDATE users SET is_verified = 1, otp_code = NULL WHERE email = ?");
+        $stmt->execute([$email]);
+        echo json_encode(["status" => "success", "message" => "Consciousness synchronized. Welcome to the network."]);
+    } else {
+        echo json_encode(["status" => "error", "message" => "Invalid or expired access vector."]);
     }
 
 } elseif ($action === 'login') {

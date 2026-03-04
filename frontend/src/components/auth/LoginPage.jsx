@@ -4,12 +4,14 @@ import { useTheme } from '../../contexts/ThemeContext'
 import '../../styles/index.css' // Assuming global styles are here
 
 export default function LoginPage() {
-  const { login, signup } = useAuth()
+  const { login, signup, verifyOtp } = useAuth()
   const { currentTheme } = useTheme()
   const [isSignup, setIsSignup] = useState(false)
+  const [showOtp, setShowOtp] = useState(false)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [name, setName] = useState('')
+  const [otp, setOtp] = useState('')
   const [loading, setLoading] = useState(false)
   const [errors, setErrors] = useState({})
   const [message, setMessage] = useState('')
@@ -37,11 +39,21 @@ export default function LoginPage() {
     }
 
     try {
-      if (isSignup) {
+      if (showOtp) {
+        const result = await verifyOtp(email, otp)
+        if (result.success) {
+          setMessage(result.message)
+          setShowOtp(false)
+          setIsSignup(false)
+          setOtp('')
+        } else {
+          setErrors({ form: result.message })
+        }
+      } else if (isSignup) {
         const result = await signup(email, password, name)
         if (result.success) {
-          setMessage('Account created! Please sign in.')
-          setIsSignup(false)
+          setMessage('Account created! Please enter the 4-digit access vector sent to your neural ID.')
+          setShowOtp(true)
         } else {
           setErrors({ form: result.message })
         }
@@ -97,46 +109,65 @@ export default function LoginPage() {
         )}
 
         <form onSubmit={handleSubmit} className="space-y-6">
-          {isSignup && (
+          {showOtp ? (
             <div className="group relative">
-              <label className="block text-xs font-bold uppercase tracking-widest mb-1 opacity-70 ml-1">Full Name</label>
+              <label className="block text-xs font-bold uppercase tracking-widest mb-1 opacity-70 ml-1">Access Vector (OTP)</label>
               <input
                 type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="w-full bg-black bg-opacity-30 border border-opacity-20 rounded-xl px-4 py-3 outline-none focus:border-opacity-100 transition-all text-sm"
+                maxLength="4"
+                value={otp}
+                onChange={(e) => setOtp(e.target.value.replace(/[^0-9]/g, ''))}
+                className="w-full bg-black bg-opacity-30 border border-opacity-20 rounded-xl px-4 py-3 outline-none focus:border-opacity-100 transition-all text-center text-2xl tracking-[12px] font-mono"
                 style={{ borderColor: 'var(--primary)' }}
-                placeholder="John Doe"
+                placeholder="0000"
               />
-              {errors.name && <p className="text-red-500 text-[10px] mt-1 uppercase font-bold tracking-tighter">{errors.name}</p>}
+              {errors.otp && <p className="text-red-500 text-[10px] mt-1 uppercase font-bold tracking-tighter">{errors.otp}</p>}
             </div>
+          ) : (
+            <>
+              {isSignup && (
+                <div className="group relative">
+                  <label className="block text-xs font-bold uppercase tracking-widest mb-1 opacity-70 ml-1">Full Name</label>
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="w-full bg-black bg-opacity-30 border border-opacity-20 rounded-xl px-4 py-3 outline-none focus:border-opacity-100 transition-all text-sm"
+                    style={{ borderColor: 'var(--primary)' }}
+                    placeholder="John Doe"
+                  />
+                  {errors.name && <p className="text-red-500 text-[10px] mt-1 uppercase font-bold tracking-tighter">{errors.name}</p>}
+                </div>
+              )}
+
+              <div className="group relative">
+                <label className="block text-xs font-bold uppercase tracking-widest mb-1 opacity-70 ml-1">Neural ID (Email)</label>
+                <input
+                  type="email"
+                  value={email}
+                  disabled={showOtp}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full bg-black bg-opacity-30 border border-opacity-20 rounded-xl px-4 py-3 outline-none focus:border-opacity-100 transition-all text-sm"
+                  style={{ borderColor: 'var(--primary)' }}
+                  placeholder="operator@neuro.sys"
+                />
+                {errors.email && <p className="text-red-500 text-[10px] mt-1 uppercase font-bold tracking-tighter">{errors.email}</p>}
+              </div>
+
+              <div className="group relative">
+                <label className="block text-xs font-bold uppercase tracking-widest mb-1 opacity-70 ml-1">Access Key</label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full bg-black bg-opacity-30 border border-opacity-20 rounded-xl px-4 py-3 outline-none focus:border-opacity-100 transition-all text-sm"
+                  style={{ borderColor: 'var(--primary)' }}
+                  placeholder="••••••••"
+                />
+                {errors.password && <p className="text-red-500 text-[10px] mt-1 uppercase font-bold tracking-tighter">{errors.password}</p>}
+              </div>
+            </>
           )}
-
-          <div className="group relative">
-            <label className="block text-xs font-bold uppercase tracking-widest mb-1 opacity-70 ml-1">Neural ID (Email)</label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full bg-black bg-opacity-30 border border-opacity-20 rounded-xl px-4 py-3 outline-none focus:border-opacity-100 transition-all text-sm"
-              style={{ borderColor: 'var(--primary)' }}
-              placeholder="operator@neuro.sys"
-            />
-            {errors.email && <p className="text-red-500 text-[10px] mt-1 uppercase font-bold tracking-tighter">{errors.email}</p>}
-          </div>
-
-          <div className="group relative">
-            <label className="block text-xs font-bold uppercase tracking-widest mb-1 opacity-70 ml-1">Access Key</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full bg-black bg-opacity-30 border border-opacity-20 rounded-xl px-4 py-3 outline-none focus:border-opacity-100 transition-all text-sm"
-              style={{ borderColor: 'var(--primary)' }}
-              placeholder="••••••••"
-            />
-            {errors.password && <p className="text-red-500 text-[10px] mt-1 uppercase font-bold tracking-tighter">{errors.password}</p>}
-          </div>
 
           <button
             type="submit"
@@ -148,7 +179,9 @@ export default function LoginPage() {
               boxShadow: !loading ? '0 0 20px var(--primary)' : 'none'
             }}
           >
-            <span className="relative z-10">{loading ? 'Processing...' : (isSignup ? 'Initialize Account' : 'Establish Link')}</span>
+            <span className="relative z-10">
+              {loading ? 'Processing...' : (showOtp ? 'Synchronize Consciousness' : (isSignup ? 'Initialize Account' : 'Establish Link'))}
+            </span>
             <div className="absolute inset-0 bg-white opacity-0 group-hover:opacity-20 transition-opacity"></div>
           </button>
 

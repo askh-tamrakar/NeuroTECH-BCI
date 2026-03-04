@@ -132,7 +132,7 @@ export default function Dashboard() {
     <div className="app-root">
       {/* Navigation */}
       <div className="header" style={{ zIndex: 50 }}>
-        <div className="header-inner container">
+        <div className="header-inner">
           <div className="flex items-center gap-3">
             <div className="relative group cursor-pointer" onClick={logout} title="Click to Logout">
               <div className="absolute inset-0 bg-primary/20 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>

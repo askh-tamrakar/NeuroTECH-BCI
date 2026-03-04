@@ -27,13 +27,32 @@ export function AuthProvider({ children }) {
       })
       const data = await res.json()
       if (data.status === 'success') {
-        return { success: true }
+        return { success: true, email } // Return email so frontend knows who to verify
       } else {
         return { success: false, message: data.message }
       }
     } catch (err) {
       console.error('Signup error:', err)
       return { success: false, message: 'Connection to auth server failed' }
+    }
+  }
+
+  const verifyOtp = async (email, otp) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}?action=verify-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, otp })
+      })
+      const data = await res.json()
+      if (data.status === 'success') {
+        return { success: true, message: data.message }
+      } else {
+        return { success: false, message: data.message }
+      }
+    } catch (err) {
+      console.error('OTP verification error:', err)
+      return { success: false, message: 'Verification failed' }
     }
   }
 
@@ -66,7 +85,7 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, signup }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, signup, verifyOtp }}>
       {children}
     </AuthContext.Provider>
   )

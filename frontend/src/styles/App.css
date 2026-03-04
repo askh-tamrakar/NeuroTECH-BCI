@@ -7,32 +7,32 @@
     /* Map Shadcn variables to Legacy Theme variables */
     --background: var(--bg);
     --foreground: var(--text);
-    
+
     --card: var(--surface);
     --card-foreground: var(--text);
-    
+
     --popover: var(--surface);
     --popover-foreground: var(--text);
-    
+
     --primary: var(--primary);
     --primary-foreground: var(--primary-contrast);
-    
+
     --secondary: var(--surface);
     --secondary-foreground: var(--text);
-    
+
     --muted: var(--muted);
     --muted-foreground: var(--text);
-    
+
     --accent: var(--accent);
     --accent-foreground: var(--text);
-    
+
     --destructive: #ef4444;
     --destructive-foreground: #ffffff;
-    
+
     --border: var(--border);
     --input: var(--border);
     --ring: var(--primary);
-    
+
     --radius: 0.5rem;
 
     /* Chart colors (keep as HSL if needed, or map to hex) */
@@ -48,6 +48,7 @@
   * {
     border-color: var(--border);
   }
+
   body {
     background-color: var(--bg);
     color: var(--text);
@@ -55,10 +56,12 @@
 }
 
 .app-root {
-  height: 100vh; /* changed from min-height */
+  height: 100vh;
+  /* changed from min-height */
   display: flex;
   flex-direction: column;
-  overflow: hidden; /* prevent body scroll */
+  overflow: hidden;
+  /* prevent body scroll */
 }
 
 .brand {
@@ -67,17 +70,18 @@
   gap: 12px;
 }
 
-.brand img { 
-  width: 40px; 
-  height: 40px; 
+.brand img {
+  width: 40px;
+  height: 40px;
 }
-.brand video { 
-  width: 64px; 
-  height: 64px; 
-  border-radius: 6px; 
-  object-fit: fill; 
-  pointer-events: none; 
-  user-select: none; 
+
+.brand video {
+  width: 64px;
+  height: 64px;
+  border-radius: 6px;
+  object-fit: fill;
+  pointer-events: none;
+  user-select: none;
 }
 
 .header {
@@ -95,16 +99,18 @@
 
 .header-inner {
   display: flex;
-  margin: 0 auto;
+  margin-left: 12px;
+  margin-right: 12px;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
   padding: 10px 0px;
 }
 
-.title { 
-  font-size: 26px; 
-  font-weight: 1000; }
+.title {
+  font-size: 26px;
+  font-weight: 1000;
+}
 
 .nav {
   display: none;
@@ -118,23 +124,33 @@
   display: flex;
   align-items: center;
   gap: 6px;
- }
-
-.pill-nav a {
-    border-radius: 999px;
-    color: var(--muted);
-    font-size: 15px;
-    font-weight: 800;
-    padding: 10px 14px;
-    text-decoration: none;
-    transition: color .15s ease, transform .15s ease, background-color .15s ease, box-shadow .15s ease;
 }
 
-.pill-nav a:hover { color: var(--text); background: color-mix(in srgb, var(--bg) 70%, transparent); transform: translateY(-1px); box-shadow: 0 6px 14px var(--shadow); }
-.pill-nav a:active { transform: translateY(0); }
+.pill-nav a {
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 15px;
+  font-weight: 800;
+  padding: 10px 14px;
+  text-decoration: none;
+  transition: color .15s ease, transform .15s ease, background-color .15s ease, box-shadow .15s ease;
+}
+
+.pill-nav a:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--bg) 70%, transparent);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 14px var(--shadow);
+}
+
+.pill-nav a:active {
+  transform: translateY(0);
+}
 
 @media (min-width: 720px) {
-  .nav { display: flex; }
+  .nav {
+    display: flex;
+  }
 }
 
 /* Dropdown wrapper */
@@ -143,11 +159,11 @@
 }
 
 .dropdown-menu {
- position: relative;
- right: -84px;
- top: -48px;
- height: 42px;
- padding: 6px;
+  position: relative;
+  right: -84px;
+  top: -48px;
+  height: 42px;
+  padding: 6px;
 }
 
 .dropdown-menu .scroll-stack-end {
@@ -192,14 +208,14 @@
   gap: 20px;
 }
 
-.footer { 
+.footer {
   position: fixed;
   bottom: 0;
   left: 0;
   width: 100%;
   z-index: 50;
-  color: var(--muted); 
-  text-align: center; 
+  color: var(--muted);
+  text-align: center;
   height: 32px;
   padding: 0;
   border-top: 1px solid color-mix(in srgb, var(--border) 15%, transparent);
@@ -219,9 +235,17 @@
 }
 
 @keyframes pulse {
-  0% { transform: scale(1); }
-  50% { transform: scale(1.05); }
-  100% { transform: scale(1); }
+  0% {
+    transform: scale(1);
+  }
+
+  50% {
+    transform: scale(1.05);
+  }
+
+  100% {
+    transform: scale(1);
+  }
 }
 
 
@@ -235,9 +259,16 @@
   color: var(--muted);
 }
 
-.file-name { color: var(--text); font-weight: 600; }
+.file-name {
+  color: var(--text);
+  font-weight: 600;
+}
 
-.actions { display: flex; gap: 12px; flex-wrap: wrap; }
+.actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
 
 /* Hero */
 .hero {
@@ -252,7 +283,9 @@
 }
 
 @media (max-width: 960px) {
-  .hero-grid { grid-template-columns: 1fr; }
+  .hero-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .headline {
@@ -263,13 +296,16 @@
 /* First line: main brand */
 .headline-line.main {
   font-size: clamp(24px, 3vw, 34px);
-  letter-spacing: -0.9px; /* tighter so it looks bold & compact */
+  letter-spacing: -0.9px;
+  /* tighter so it looks bold & compact */
 }
 
 /* Second line: visually same width, slightly smaller */
 .headline-line.sub {
-  font-size: clamp(20px, 2.6vw, 24.5px); /* smaller than main line */
-  letter-spacing: 0.6px;             /* less negative tracking */
+  font-size: clamp(20px, 2.6vw, 24.5px);
+  /* smaller than main line */
+  letter-spacing: 0.6px;
+  /* less negative tracking */
   background: linear-gradient(90deg, var(--primary), var(--accent));
   -webkit-background-clip: text;
   background-clip: text;
@@ -278,29 +314,29 @@
 }
 
 
-.lede { 
-  color: var(--muted); 
-  font-size: clamp(16px, 2.2vw, 30px); 
-  max-width: 48ch; 
+.lede {
+  color: var(--muted);
+  font-size: clamp(16px, 2.2vw, 30px);
+  max-width: 48ch;
 }
 
-.cta { 
-  display: flex; 
-  gap: 12px; 
-  margin-top: 24px; 
-  flex-wrap: wrap; 
+.cta {
+  display: flex;
+  gap: 12px;
+  margin-top: 24px;
+  flex-wrap: wrap;
 }
 
-.btn-primary { 
-  background: var(--primary); 
-  color: #0a0a0a; 
-  font-size: 16px; 
+.btn-primary {
+  background: var(--primary);
+  color: #0a0a0a;
+  font-size: 16px;
 }
 
-.btn-secondary { 
-  background: transparent; 
-  color: var(--text); 
-  border: 1px solid var(--border); 
+.btn-secondary {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border);
 }
 
 .mosaic {
@@ -317,9 +353,10 @@
   aspect-ratio: 4/3;
 }
 
-.mosaic video, .mosaic img { 
-  width: 100%; 
-  height: 100%; 
-  object-fit: cover; 
-  display: block; 
+.mosaic video,
+.mosaic img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
