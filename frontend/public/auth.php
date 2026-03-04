@@ -31,6 +31,8 @@ define('SMTP_PORT', 465);
 
 function sendOTPEmail($to, $otp) {
     $subject = "Welcome to the World of Neurons";
+    $from = SMTP_USER;
+    
     $message = "
     <html>
     <body style='background-color: #0a0a0a; color: #ffffff; font-family: Arial, sans-serif; padding: 40px;'>
@@ -56,11 +58,59 @@ function sendOTPEmail($to, $otp) {
     </html>
     ";
 
-    $headers = "MIME-Version: 1.0" . "\r\n";
-    $headers .= "Content-type:text/html;charset=UTF-8" . "\r\n";
-    $headers .= 'From: NeuroTECH <' . SMTP_USER . '>' . "\r\n";
+    $headers = [
+        "MIME-Version: 1.0",
+        "Content-type: text/html; charset=UTF-8",
+        "From: NeuroTECH <$from>",
+        "To: $to",
+        "Subject: $subject"
+    ];
 
-    return mail($to, $subject, $message, $headers);
+    // Using specialized SMTP sending via SSL
+    try {
+        $host = "ssl://" . SMTP_HOST;
+        $port = SMTP_PORT;
+        $timeout = 10;
+        $socket = fsockopen($host, $port, $errno, $errstr, $timeout);
+
+        if (!$socket) return false;
+
+        $getResponse = function($socket) {
+            $response = "";
+            while ($str = fgets($socket, 4096)) {
+                $response .= $str;
+                if (substr($str, 3, 1) == " ") break;
+            }
+            return $response;
+        };
+
+        $getResponse($socket);
+        fwrite($socket, "EHLO " . $_SERVER['HTTP_HOST'] . "\r\n");
+        $getResponse($socket);
+
+        fwrite($socket, "AUTH LOGIN\r\n");
+        $getResponse($socket);
+        fwrite($socket, base64_encode(SMTP_USER) . "\r\n");
+        $getResponse($socket);
+        fwrite($socket, base64_encode(SMTP_PASS) . "\r\n");
+        $getResponse($socket);
+
+        fwrite($socket, "MAIL FROM: <$from>\r\n");
+        $getResponse($socket);
+        fwrite($socket, "RCPT TO: <$to>\r\n");
+        $getResponse($socket);
+        fwrite($socket, "DATA\r\n");
+        $getResponse($socket);
+
+        fwrite($socket, implode("\r\n", $headers) . "\r\n\r\n" . $message . "\r\n.\r\n");
+        $getResponse($socket);
+
+        fwrite($socket, "QUIT\r\n");
+        fclose($socket);
+        return true;
+    } catch (Exception $e) {
+        return false;
+    }
 }
 
 $action = $_GET['action'] ?? '';
