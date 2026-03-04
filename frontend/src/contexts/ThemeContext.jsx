@@ -767,6 +767,64 @@ const DEFAULT_THEMES = [
             '--graph-text': '#D9C8FF',
         }
     },
+    {
+        id: 'theme-neurotech',
+        name: 'Neurotech Neon',
+        type: 'default',
+        colors: {
+            '--bg': '#050510',
+            '--surface': '#0a0a1f',
+            '--text': '#e0f2ff',
+            '--muted': '#8090a0',
+            '--primary': '#00f2ff',
+            '--primary-contrast': '#050510',
+            '--accent': '#bc00ff',
+            '--border': '#1a1a3a',
+            '--shadow': 'rgba(0, 242, 255, 0.2)',
+            // Dino
+            '--day': '#0a0a1f',
+            '--night': '#050510',
+            '--tree-day': '#bc00ff',
+            '--tree-night': '#00f2ff',
+            '--cloud-day': '#1a1a3a',
+            '--cloud-night': '#0a0a1f',
+            '--sun-day': '#00f2ff',
+            '--sun-night': '#bc00ff',
+            '--moon-day': '#ffffff',
+            '--moon-night': '#e0f2ff',
+            '--sky-day': '#050510',
+            '--sky-night': '#050510',
+            // Extended Text
+            '--text-secondary': '#8090a0',
+            '--text-tertiary': '#405060',
+            '--text-highlight': '#00f2ff',
+            '--text-error': '#ff2d55',
+            '--text-success': '#00ffaa',
+            // Typography
+            '--title': '#00f2ff',
+            '--heading': '#bc00ff',
+            '--label': '#8090a0',
+            // Sections & Panels
+            '--section-bg': '#0a0a1f',
+            '--section-border': '#1a1a3a',
+            '--panel-bg': '#0f0f2d',
+            '--panel-border': '#2a2a4a',
+            '--header-bg': '#050510',
+            '--header-text': '#00f2ff',
+            // Interactive/Events
+            '--event-bg': 'rgba(0, 242, 255, 0.1)',
+            '--event-border': '#00f2ff',
+            '--event-text': '#e0f2ff',
+            '--selection-bg': 'rgba(188, 0, 255, 0.2)',
+            '--selection-border': '#bc00ff',
+            // Graphs
+            '--graph-line-1': '#00f2ff',
+            '--graph-line-2': '#bc00ff',
+            '--graph-bg': '#050510',
+            '--graph-grid': '#1a1a3a',
+            '--graph-text': '#8090a0',
+        }
+    },
 ];
 
 const ThemeContext = createContext(null);
