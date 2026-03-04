@@ -1,12 +1,11 @@
-name: Deploy App to cPanel
+
+name: Deploy React App to cPanel
 
 on:
   push:
     branches:
       - master
       - develop
-      - Test-WebApplication
-      - extra-features
 
 jobs:
   build-and-deploy:
@@ -16,69 +15,24 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # -------------------------------------------------------------------------
-      # FRONTEND DEPLOYMENT
-      # -------------------------------------------------------------------------
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
-<<<<<<< HEAD
-      - name: Install Frontend Dependencies
-=======
       - name: Install Dependencies
->>>>>>> extra-features
         run: cd frontend && npm ci
 
       - name: Build React App
         run: cd frontend && npm run build
 
-      - name: Deploy Frontend via SSH
+      - name: Deploy via SSH to cPanel
         uses: easingthemes/ssh-deploy@v5.0.1
         env:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
           REMOTE_HOST: ${{ secrets.CPANEL_HOST }}
           REMOTE_USER: ${{ secrets.CPANEL_USER }}
           SOURCE: "frontend/dist/"
-<<<<<<< HEAD
-          TARGET: ${{ secrets.CPANEL_PATH }}
-=======
           TARGET: ${{secrets.CPANEL_PATH}}
->>>>>>> extra-features
           ARGS: "-avz --delete"
-          SSH_ARGS: "-o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o KexAlgorithms=+diffie-hellman-group-exchange-sha256"
-
-      # -------------------------------------------------------------------------
-      # BACKEND DEPLOYMENT
-      # -------------------------------------------------------------------------
-      - name: Prepare Backend Artifacts
-        run: |
-          cp requirements.txt backend/
-          # If you have a .env.example or other root files needed, copy them here too
-
-      - name: Deploy Backend via SSH
-        uses: easingthemes/ssh-deploy@v5.0.1
-        env:
-          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-          REMOTE_HOST: ${{ secrets.CPANEL_HOST }}
-          REMOTE_USER: ${{ secrets.CPANEL_USER }}
-          SOURCE: "backend/"
-          # Using the secret name provided by the user
-          TARGET: ${{ secrets.CPANEL_PATH_BACKEND }}
-          # Exclude strictly local/dev files if necessary, though .gitignore usually handles it.
-          # We do NOT want to delete everything on the remote if it contains virtualenvs or tmp files
-          # but normally sync deletes extraneously. 
-          # PRO TIP: Exclude 'venv' or 'virtualenv' if the user stores it in the same dir (bad practice but common).
-          # For now, standard sync.
-          ARGS: "-avz --delete --exclude=.venus --exclude=venv --exclude=.env --exclude=db.sqlite3 --exclude=media" 
-          SSH_ARGS: "-o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o KexAlgorithms=+diffie-hellman-group-exchange-sha256"
-
-      - name: Install Dependencies & Restart Backend
-        run: |
-          mkdir -p ~/.ssh/
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          ssh -o StrictHostKeyChecking=no -o KexAlgorithms=+diffie-hellman-group-exchange-sha256 -i ~/.ssh/id_rsa ${{ secrets.CPANEL_USER }}@${{ secrets.CPANEL_HOST }} "cd ${{ secrets.CPANEL_PATH_BACKEND }} && .venus/bin/pip install -r requirements.txt && .venus/bin/python manage.py migrate --no-input && .venus/bin/python manage.py collectstatic --no-input && mkdir -p tmp && touch tmp/restart.txt"
-
-
+          SSH_ARGS: "-o IdentitiesOnly=yes -o StrictHostKeyChecking=no"
