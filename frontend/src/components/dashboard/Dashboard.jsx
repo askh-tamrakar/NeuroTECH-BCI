@@ -21,10 +21,16 @@ import { ConnectionButton } from '../ui/ConnectionButton';
 export default function Dashboard() {
   const { user, logout } = useAuth()
   const [currentPage, setCurrentPage] = useState('live')
-<<<<<<< HEAD
+  // Connection & Source State
+  const [localWs, setLocalWs] = useState(import.meta.env.VITE_WS_URL || 'http://localhost:5005')
+  const [ngrokWs, setNgrokWs] = useState(import.meta.env.VITE_NGROK_WS_URL || 'wss://squelchingly-thriftier-cecile.ngrok-free.dev')
+
+  // Choose default based on whether we're loaded over https/ngrok or localhost
+  const defaultWsSource = typeof window !== 'undefined' && window.location.hostname !== 'localhost' ? ngrokWs : localWs;
 
   // WebSocket (Auto-connects now)
-  const { status, lastMessage, lastConfig, lastEvent, latency, sendMessage } = useWebSocket()
+  const { status, lastMessage, lastConfig, lastEvent, latency, sendMessage, currentUrl } = useWebSocket(defaultWsSource)
+  const [wsModalOpen, setWsModalOpen] = useState(false)
 
   // Serial & Acquisition Logic
   const {
@@ -78,18 +84,6 @@ export default function Dashboard() {
       });
     };
   }, [sendMessage, status]);
-=======
-  // const [sidebarOpen, setSidebarOpen] = useState(true)
-  const [localWs, setLocalWs] = useState(import.meta.env.VITE_WS_URL || 'http://localhost:5005')
-  const [ngrokWs, setNgrokWs] = useState(import.meta.env.VITE_NGROK_WS_URL || 'wss://squelchingly-thriftier-cecile.ngrok-free.dev')
-
-  // Choose default based on whether we're loaded over https/ngrok or localhost
-  const defaultWsSource = typeof window !== 'undefined' && window.location.hostname !== 'localhost' ? ngrokWs : localWs;
-  const { status, lastMessage, lastConfig, lastEvent, latency, connect, disconnect, sendMessage, currentUrl } = useWebSocket(defaultWsSource)
-
-  // WebSocket modal state and preset URLs
-  const [wsModalOpen, setWsModalOpen] = useState(false)
->>>>>>> extra-features
 
   const { themes, currentTheme, currentThemeId, setTheme } = useTheme();
   const [authView, setAuthView] = useState(null);
@@ -194,13 +188,8 @@ export default function Dashboard() {
           <div className="flex items-center gap-3">
             <div className="relative group cursor-pointer" onClick={logout} title="Click to Logout">
               <div className="absolute inset-0 bg-primary/20 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-<<<<<<< HEAD
-              <video muted autoPlay loop playsInline preload="auto" aria-label="logo animation" className="h-16 relative z-10 rounded-lg border border-border bg-black object-cover">
-                <source src="/Resources/Brain_Model_Bg.mp4" type="video/mp4" />
-=======
               <video muted autoPlay loop playsInline preload="auto" aria-label="logo animation" className="w-24 h-16 relative z-10 rounded-lg border border-border bg-black object-cover">
                 <source src="/Resources/brain_animation.mp4" type="video/mp4" />
->>>>>>> extra-features
               </video>
             </div>
 
@@ -211,7 +200,7 @@ export default function Dashboard() {
                 <div className="headline-line sub">BCI Dashboard</div>
               </div>
             </div>
-          </div>
+          </div >
 
           <nav className="nav shrink-0">
             <div className="backdrop-blur-sm bg-surface/50 border border-white/5 rounded-full p-1">
@@ -239,12 +228,12 @@ export default function Dashboard() {
               stopAcquisition={handleStopAcquisition}
             />
           </div>
-        </div>
+        </div >
 
         {/* [REMOVED] Spacer Logic. Rely on padding of the content area or CSS margin. 
             If Header is fixed (position: fixed), we need padding-top on the main content, not a spacer div inside it.
         */}
-      </div>
+      </div >
 
       {/* Main Content Area */}
       {/* Added pt-[96px] to account for fixed header if needed. Using inline style or tailwind. */}
@@ -261,29 +250,10 @@ export default function Dashboard() {
         {currentPage === 'ml_training' && <MLTrainingView />}
         {currentPage === 'settings' && <SettingsView />}
 
-<<<<<<< HEAD
-=======
-          return (
-            <>
-              {showSpacers && <div className="h-[94px] shrink-0" />}
-
-              {currentPage === 'live' && <LiveDashboard wsData={lastMessage} wsConfig={lastConfig} wsEvent={lastEvent} sendMessage={sendMessage} wsUrl={currentUrl || defaultWsSource} />}
-              {currentPage === 'dino' && <DinoView isConnected={!!lastMessage} wsEvent={lastEvent} isPaused={false} />}
-              {currentPage === 'ssvep' && <SSVEPView isConnected={!!lastMessage} wsEvent={lastEvent} />}
-              {currentPage === 'rps' && <RPSGame wsEvent={lastEvent} />}
-              {currentPage === 'data_collection' && <DataCollectionView wsData={lastMessage} wsEvent={lastEvent} config={lastConfig} wsUrl={currentUrl || defaultWsSource} />}
-              {currentPage === 'ml_training' && <MLTrainingView />}
-              {currentPage === 'settings' && <SettingsView latency={latency} />}
-
-              {showSpacers && <div className="h-[35px] shrink-0" />}
-            </>
-          );
-        })()}
->>>>>>> extra-features
-      </div>
+      </div >
 
       {/* Footer */}
-      <div className="footer">
+      < div className="footer" >
         <span className="flex items-center gap-1">NeuroTECH - A BCI Project </span>  •  {' '}
         <a onClick={() => setAuthView('signup')} className="muted flex items-center gap-1" href="#signup" rel="noreferrer">
           Sign Up
@@ -297,8 +267,8 @@ export default function Dashboard() {
         >
           GitHub
         </a>
-      </div>
-    </div>
+      </div >
+    </div >
 
   );
 }

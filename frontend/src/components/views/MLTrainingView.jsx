@@ -1,14 +1,11 @@
 import Tree from 'react-d3-tree';
 import { useState, useEffect } from 'react';
-<<<<<<< HEAD
-=======
 import {
     Trash2, Rocket, ArrowRight, Save, Target, ListOrdered, Database, Hand, Eye, Network, Grid3X3, Brain, PieChart, RefreshCw, Sliders, ChevronLeft, ChevronRight, Circle,
     Cpu, Activity, Download, Layers, Clock, Settings, Play, GitBranch, BarChart2, Info
 } from 'lucide-react';
 import { soundHandler } from '../../handlers/SoundHandler';
 import CustomSelect from '../ui/CustomSelect';
->>>>>>> extra-features
 
 const TabButton = ({ active, onClick, children }) => (
     <button
@@ -35,25 +32,6 @@ const renderCustomNodeElement = ({ nodeDatum, toggleNode }) => (
     </g>
 );
 
-<<<<<<< HEAD
-// BENTO COMPONENTS
-const AccuracyCard = ({ accuracy, n_samples, source }) => (
-    <div className="card h-full flex flex-col justify-center items-center p-6 bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-sm hover:shadow-md transition-shadow">
-        <h3 className="text-xl font-bold text-[var(--muted)] uppercase tracking-widest mb-2">Model Accuracy</h3>
-        {accuracy !== null && accuracy !== undefined ? (
-            <>
-                <div className="text-5xl font-black text-[var(--primary)] mb-2">{(accuracy * 100).toFixed(1)}%</div>
-                <p className="text-base text-[var(--text)] opacity-70">on {n_samples} test samples</p>
-                {source && <p className="text-xs text-[var(--muted)] mt-2 font-mono bg-[var(--bg)] px-2 py-1 rounded border border-[var(--border)]">{source}</p>}
-            </>
-        ) : (
-            <div className="text-center">
-                <div className="text-3xl text-[var(--muted)] mb-1">N/A</div>
-                <p className="text-sm text-[var(--muted)] opacity-60">No data to evaluate</p>
-                <p className="text-xs text-[var(--muted)] opacity-40 mt-1">Select a valid session</p>
-            </div>
-        )}
-=======
 // --- NEW/UPDATED COMPONENTS ---
 
 const SavedModelsList = ({ models, selectedModelName, onSelect, onDelete }) => (
@@ -137,23 +115,10 @@ const SplitAccuracyCard = ({ accuracy, n_samples, source, models, selectedModelN
                 </div>
             </div>
         </div>
->>>>>>> extra-features
     </div>
 );
 
 const FeatureImportanceCard = ({ importances }) => (
-<<<<<<< HEAD
-    <div className="card h-full flex flex-col p-4 bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-sm">
-        <h3 className="text-base font-bold text-[var(--muted)] uppercase tracking-widest mb-4 border-b border-[var(--border)] pb-2">Top Features</h3>
-        <ul className="h-full overflow-y-auto custom-scrollbar flex-grow flex flex-col justify-between pr-2 pb-1">
-            {Object.entries(importances).sort(([, a], [, b]) => b - a).slice(0, 8).map(([name, imp]) => (
-                <li key={name} className="flex items-center text-[var(--text)] group ">
-                    <span className="w-16 font-mono text-[15px] text-[var(--muted)] truncate">{name}</span>
-                    <div className="flex-1 h-3.5 bg-[var(--bg)] rounded-full ml-2 overflow-hidden border border-[var(--border)]">
-                        <div className="h-full bg-[var(--primary)] group-hover:bg-[var(--accent)] transition-colors" style={{ width: `${imp * 100}%` }}></div>
-                    </div>
-                    <span className="ml-2 text-[16px] w-8 text-right font-mono">{(imp * 100).toFixed(0)}%</span>
-=======
     <div className="card h-full flex flex-col p-4 bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-sm scrollbar-thin">
         <h3 className="text-base flex items-center font-bold text-[var(--muted)] uppercase tracking-widest mb-4 border-b border-[var(--border)] pb-2">
             <ListOrdered className="mr-2 w-4 h-4" /> Top Features
@@ -166,7 +131,6 @@ const FeatureImportanceCard = ({ importances }) => (
                         <div className="h-full bg-[var(--primary)] group-hover:bg-[var(--accent)] transition-colors" style={{ width: `${imp * 100}%` }}></div>
                     </div>
                     <span className="ml-2 text-[13px] w-8 text-right font-mono">{(imp * 100).toFixed(0)}%</span>
->>>>>>> extra-features
                 </li>
             ))}
         </ul>
@@ -176,25 +140,17 @@ const FeatureImportanceCard = ({ importances }) => (
 // New Component for Hyperparameters
 const HyperparametersCard = ({ params, onChange }) => (
     <div className="card h-full flex flex-col p-4 bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-sm">
-<<<<<<< HEAD
-        <h3 className="text-base font-bold text-[var(--muted)] uppercase tracking-widest border-b border-[var(--border)] pb-2">Hyperparameters</h3>
-=======
         <h3 className="text-base flex items-center font-bold text-[var(--muted)] uppercase tracking-widest border-b border-[var(--border)] pb-2">
             <Sliders className="mr-2 w-4 h-4" /> Hyperparameters
         </h3>
->>>>>>> extra-features
         <div className="py-4 space-y-4 flex-grow flex flex-col justify-between">
             <div>
                 <div className="flex justify-between mb-1">
                     <span className="text-xs text-[var(--text)]">Trees</span>
                     <span className="text-xs font-mono text-[var(--primary)]">{params.n_estimators}</span>
                 </div>
-<<<<<<< HEAD
-                <input type="range" min="10" max="500" step="10" name="n_estimators" value={params.n_estimators} onChange={onChange} className="w-full accent-[var(--primary)]" />
-=======
                 <input type="range" min="5" max="500" step="5" name="n_estimators" value={params.n_estimators} onChange={onChange} className="w-full accent-[var(--primary)]" />
->>>>>>> extra-features
-            </div>
+            </div >
             <div>
                 <div className="flex justify-between mb-1">
                     <span className="text-xs text-[var(--text)]">Max Depth</span>
@@ -209,8 +165,6 @@ const HyperparametersCard = ({ params, onChange }) => (
                 </div>
                 <input type="range" min="0.1" max="0.9" step="0.05" name="test_size" value={params.test_size} onChange={onChange} className="w-full accent-[var(--primary)]" />
             </div>
-<<<<<<< HEAD
-=======
             <div>
                 <div className="flex justify-between mb-1">
                     <span className="text-xs text-[var(--text)]">Pruning (Min Impurity Decr)</span>
@@ -218,18 +172,10 @@ const HyperparametersCard = ({ params, onChange }) => (
                 </div>
                 <input type="range" min="0" max="0.2" step="0.005" name="min_impurity_decrease" value={params.min_impurity_decrease} onChange={onChange} className="w-full accent-[var(--primary)]" />
             </div>
->>>>>>> extra-features
-        </div>
-    </div>
+        </div >
+    </div >
 );
 
-<<<<<<< HEAD
-const ConfusionMatrixCard = ({ matrix, labels, n_samples }) => (
-    <div className="card h-full flex flex-col p-4 bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-sm">
-        <div className="flex justify-between items-center border-b border-[var(--border)] pb-2">
-            <h3 className="text-sm font-bold text-[var(--muted)] uppercase tracking-widest">
-                Confusion Matrix
-=======
 const RenderClassLabel = ({ label, sensor }) => {
     // EOG Special Icons
     if (sensor === 'EOG') {
@@ -252,19 +198,14 @@ const ConfusionMatrixCard = ({ matrix, labels, n_samples, sensor }) => (
         <div className="flex justify-between items-center border-b border-[var(--border)] pb-2">
             <h3 className="text-sm flex items-center font-bold text-[var(--muted)] uppercase tracking-widest">
                 <Grid3X3 className="mr-2 w-4 h-4" /> Confusion Matrix
->>>>>>> extra-features
                 {n_samples !== undefined && <span className="ml-2 text-xs normal-case opacity-70">({n_samples} samples)</span>}
             </h3>
             <div className="flex items-center gap-2 text-[10px] bg-[var(--bg)] px-2 py-0.5 rounded border border-[var(--border)]">
                 <span className="font-bold text-[var(--text)]">Actual</span>
-<<<<<<< HEAD
-                <span className="text-[var(--muted)]">→</span>
-=======
                 <span className="text-[var(--muted)]"><ArrowRight size={14} /></span>
->>>>>>> extra-features
                 <span className="font-bold text-[var(--primary)]">Pred</span>
-            </div>
-        </div>
+            </div >
+        </div >
         <div className="flex-grow overflow-hidden flex flex-col h-full py-4 relative">
             {matrix ? (
                 <table className="w-full h-full text-[16px] text-center text-[var(--text)] border-collapse table-fixed">
@@ -272,13 +213,8 @@ const ConfusionMatrixCard = ({ matrix, labels, n_samples, sensor }) => (
                         <tr>
                             <th className="p-2 w-24 text-left text-[var(--muted)] font-normal italic border-b border-[var(--border)] bg-[var(--bg)]/30">Class</th>
                             {labels.map((l, i) => (
-<<<<<<< HEAD
-                                <th key={i} className="p-2 font-bold text-[var(--primary)] border-b border-[var(--border)] bg-[var(--bg)]/10 truncate" title={l}>
-                                    {l}
-=======
                                 <th key={i} className="p-2 font-bold text-[var(--primary)] border-b border-[var(--border)] bg-[var(--bg)]/10 truncate">
                                     <RenderClassLabel label={l} sensor={sensor} />
->>>>>>> extra-features
                                 </th>
                             ))}
                         </tr>
@@ -287,33 +223,33 @@ const ConfusionMatrixCard = ({ matrix, labels, n_samples, sensor }) => (
                         {matrix.map((row, i) => (
                             <tr key={i} className="hover:bg-[var(--surface)]/50 transition-colors group">
 <<<<<<< HEAD
-                                <td className="p-2 font-bold text-[var(--text)] text-left border-r border-[var(--border)] bg-[var(--bg)]/20 truncate" title={labels[i]}>
-                                    {labels[i]}
+<td className="p-2 font-bold text-[var(--text)] text-left border-r border-[var(--border)] bg-[var(--bg)]/20 truncate" title={labels[i]}>
+    {labels[i]}
 =======
                                 <td className="p-2 font-bold text-[var(--text)] text-left border-r border-[var(--border)] bg-[var(--bg)]/20 truncate">
-                                    <RenderClassLabel label={labels[i]} sensor={sensor} />
+        <RenderClassLabel label={labels[i]} sensor={sensor} />
 >>>>>>> extra-features
-                                </td>
-                                {row.map((cell, j) => (
-                                    <td key={j} className={`p-2 border border-[var(--border)] transition-all ${i === j
-                                        ? 'bg-[var(--primary)]/20 font-black text-[var(--primary)]'
-                                        : cell > 0 ? 'bg-red-500/10 text-red-400 font-medium' : 'text-[var(--muted)] opacity-20'
-                                        }`}>
-                                        {cell}
-                                    </td>
-                                ))}
-                            </tr>
+    </td>
+    {row.map((cell, j) => (
+        <td key={j} className={`p-2 border border-[var(--border)] transition-all ${i === j
+            ? 'bg-[var(--primary)]/20 font-black text-[var(--primary)]'
+            : cell > 0 ? 'bg-red-500/10 text-red-400 font-medium' : 'text-[var(--muted)] opacity-20'
+            }`}>
+            {cell}
+        </td>
+    ))}
+</tr>
                         ))}
-                    </tbody>
-                </table>
+                    </tbody >
+                </table >
             ) : (
-                <div className="absolute inset-0 flex flex-col items-center justify-center">
-                    <div className="text-3xl text-[var(--muted)] mb-1">N/A</div>
-                    <p className="text-sm text-[var(--muted)] opacity-60">No confusion data</p>
-                </div>
-            )}
-        </div>
+    <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <div className="text-3xl text-[var(--muted)] mb-1">N/A</div>
+        <p className="text-sm text-[var(--muted)] opacity-60">No confusion data</p>
     </div>
+)}
+        </div >
+    </div >
 );
 
 const getDepth = (node) => {
@@ -342,194 +278,194 @@ const DecisionTreeCard = ({ structure }) => {
                     renderCustomNodeElement={renderCustomNodeElement}
                 />
 =======
-const DecisionTreeCard = ({ structure, treeIndex, totalTrees, onTreeChange, loading }) => {
+const DecisionTreeCard = ({structure, treeIndex, totalTrees, onTreeChange, loading}) => {
     const depth = getDepth(structure);
-    return (
-        <div className="card h-full flex flex-col p-0 bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-sm overflow-hidden relative group">
-            <div className="absolute top-4 left-4 z-10 bg-[var(--bg)]/90 backdrop-blur px-3 py-2 rounded border border-[var(--border)] shadow-sm flex flex-col gap-2">
-                <div className="flex justify-between items-center gap-4">
-                    <h3 className="text-sm flex items-center font-bold text-[var(--text)]">
-                        <Network className="mr-2 w-4 h-4" /> Decision Tree Visualization
-                    </h3>
-                    <span className="text-xs font-mono text-[var(--primary)]">Tree {treeIndex + 1} / {totalTrees}</span>
-                </div>
+                return (
+                <div className="card h-full flex flex-col p-0 bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-sm overflow-hidden relative group">
+                    <div className="absolute top-4 left-4 z-10 bg-[var(--bg)]/90 backdrop-blur px-3 py-2 rounded border border-[var(--border)] shadow-sm flex flex-col gap-2">
+                        <div className="flex justify-between items-center gap-4">
+                            <h3 className="text-sm flex items-center font-bold text-[var(--text)]">
+                                <Network className="mr-2 w-4 h-4" /> Decision Tree Visualization
+                            </h3>
+                            <span className="text-xs font-mono text-[var(--primary)]">Tree {treeIndex + 1} / {totalTrees}</span>
+                        </div>
 
-                {totalTrees > 1 && (
-                    <div className="flex items-center gap-2">
-                        <button
-                            disabled={treeIndex <= 0}
-                            onClick={() => onTreeChange(treeIndex - 1)}
-                            className="p-1 rounded hover:bg-[var(--surface)] disabled:opacity-30"
-                        >
-                            <ChevronLeft className="w-5 h-5" />
-                        </button>
-                        <input
-                            type="range"
-                            min="0"
-                            max={totalTrees - 1}
-                            value={treeIndex}
-                            onChange={(e) => onTreeChange(parseInt(e.target.value))}
-                            className="w-32 accent-[var(--primary)] h-1.5"
-                        />
-                        <button
-                            disabled={treeIndex >= totalTrees - 1}
-                            onClick={() => onTreeChange(treeIndex + 1)}
-                            className="p-1 rounded hover:bg-[var(--surface)] disabled:opacity-30"
-                        >
-                            <ChevronRight className="w-5 h-5" />
-                        </button>
+                        {totalTrees > 1 && (
+                            <div className="flex items-center gap-2">
+                                <button
+                                    disabled={treeIndex <= 0}
+                                    onClick={() => onTreeChange(treeIndex - 1)}
+                                    className="p-1 rounded hover:bg-[var(--surface)] disabled:opacity-30"
+                                >
+                                    <ChevronLeft className="w-5 h-5" />
+                                </button>
+                                <input
+                                    type="range"
+                                    min="0"
+                                    max={totalTrees - 1}
+                                    value={treeIndex}
+                                    onChange={(e) => onTreeChange(parseInt(e.target.value))}
+                                    className="w-32 accent-[var(--primary)] h-1.5"
+                                />
+                                <button
+                                    disabled={treeIndex >= totalTrees - 1}
+                                    onClick={() => onTreeChange(treeIndex + 1)}
+                                    className="p-1 rounded hover:bg-[var(--surface)] disabled:opacity-30"
+                                >
+                                    <ChevronRight className="w-5 h-5" />
+                                </button>
+                            </div>
+                        )}
                     </div>
-                )}
-            </div>
 
-            <div className={`w-full h-full bg-[var(--bg)] transition-opacity ${loading ? 'opacity-50' : 'opacity-100'}`} style={{ minHeight: '400px' }}>
-                {structure ? (
-                    <Tree
-                        /* key={treeIndex} Force re-render removed to keep zoom */
-                        data={structure}
-                        orientation="vertical"
-                        translate={{ x: 400, y: 50 }}
-                        pathFunc="step"
-                        depthFactor={depth < 10 ? 100 : undefined}
-                        separation={{ siblings: 1.5, nonSiblings: 2 }}
-                        zoomable={true}
-                        renderCustomNodeElement={renderCustomNodeElement}
-                    />
-                ) : (
-                    <div className="flex items-center justify-center h-full text-[var(--muted)]">Loading Tree...</div>
-                )}
+                    <div className={`w-full h-full bg-[var(--bg)] transition-opacity ${loading ? 'opacity-50' : 'opacity-100'}`} style={{ minHeight: '400px' }}>
+                        {structure ? (
+                            <Tree
+                                /* key={treeIndex} Force re-render removed to keep zoom */
+                                data={structure}
+                                orientation="vertical"
+                                translate={{ x: 400, y: 50 }}
+                                pathFunc="step"
+                                depthFactor={depth < 10 ? 100 : undefined}
+                                separation={{ siblings: 1.5, nonSiblings: 2 }}
+                                zoomable={true}
+                                renderCustomNodeElement={renderCustomNodeElement}
+                            />
+                        ) : (
+                            <div className="flex items-center justify-center h-full text-[var(--muted)]">Loading Tree...</div>
+                        )}
 >>>>>>> extra-features
-            </div>
-        </div>
+                    </div>
+                </div>
     );
 };
 
 <<<<<<< HEAD
-// Updated ControlPanel (Removed Hyperparameters)
-const ControlPanel = ({
-    onTrain,
-    loading,
-    onEval,
-    evalLoading,
+    // Updated ControlPanel (Removed Hyperparameters)
+    const ControlPanel = ({
+        onTrain,
+        loading,
+        onEval,
+        evalLoading,
 =======
 // Updated ControlPanel (Added Model Name Input)
 const ControlPanel = ({
     onTrain,
     loading,
 >>>>>>> extra-features
-    sessions,
-    selectedSession,
-    onSessionSelect,
-    onRefreshSessions,
-    activeTab,
+        sessions,
+        selectedSession,
+        onSessionSelect,
+        onRefreshSessions,
+        activeTab,
 <<<<<<< HEAD
-    setActiveTab
+        setActiveTab
 =======
     setActiveTab,
     modelName,
     setModelName
 >>>>>>> extra-features
-}) => (
-    <div className="space-y-4">
-        {/* Session Select */}
-        <div className="card p-4 bg-[var(--surface)] border border-[var(--border)] rounded-xl flex flex-col gap-2">
-            <span className="flex flex-row justify-between">
+    }) => (
+        <div className="space-y-4">
+            {/* Session Select */}
+            <div className="card p-4 bg-[var(--surface)] border border-[var(--border)] rounded-xl flex flex-col gap-2">
+                <span className="flex flex-row justify-between">
 <<<<<<< HEAD
-                <label className="text-xl font-bold text-[var(--muted)] uppercase tracking-wide mb-2 block">Training Data</label>
+    <label className="text-xl font-bold text-[var(--muted)] uppercase tracking-wide mb-2 block">Training Data</label>
 =======
                 <label className="text-xl flex items-center font-bold text-[var(--muted)] uppercase tracking-wide mb-2">
                     <Database className="mr-2 w-6 h-6" /> Training Data
                 </label>
 >>>>>>> extra-features
-                {/* TABS */}
-                <span className="flex bg-[var(--surface)] rounded-lg p-1 border border-[var(--border)]">
-                    <button
-                        onClick={() => { setActiveTab('EMG'); onSessionSelect(null); }}
-                        className={`px-2 py-1.5 rounded-md text-sm font-medium transition-all ${activeTab === 'EMG' ? 'bg-[var(--primary)] text-white shadow' : 'text-[var(--text)] hover:text-[var(--primary)]'} `}
-                    >
+    {/* TABS */ }
+    <span className="flex bg-[var(--surface)] rounded-lg p-1 border border-[var(--border)]">
+        <button
+            onClick={() => { setActiveTab('EMG'); onSessionSelect(null); }}
+            className={`px-2 py-1.5 rounded-md text-sm font-medium transition-all ${activeTab === 'EMG' ? 'bg-[var(--primary)] text-white shadow' : 'text-[var(--text)] hover:text-[var(--primary)]'} `}
+        >
 <<<<<<< HEAD
-                        EMG (Gestures)
+EMG(Gestures)
 =======
                         <Hand className="inline mr-1 w-4 h-4" /> EMG
 >>>>>>> extra-features
-                    </button>
-                    <button
-                        onClick={() => { setActiveTab('EOG'); onSessionSelect(null); }}
-                        className={`px-2 py-1.5 rounded-md text-sm font-medium transition-all ${activeTab === 'EOG' ? 'bg-[var(--primary)] text-white shadow' : 'text-[var(--text)] hover:text-[var(--primary)]'} `}
-                    >
+                    </button >
+    <button
+        onClick={() => { setActiveTab('EOG'); onSessionSelect(null); }}
+        className={`px-2 py-1.5 rounded-md text-sm font-medium transition-all ${activeTab === 'EOG' ? 'bg-[var(--primary)] text-white shadow' : 'text-[var(--text)] hover:text-[var(--primary)]'} `}
+    >
 <<<<<<< HEAD
-                        EOG (Blinks)
+EOG(Blinks)
 =======
                         <Eye className="inline mr-1 w-4 h-4" /> EOG
 >>>>>>> extra-features
-                    </button>
-                </span>
-            </span>
+                    </button >
+                </span >
+            </span >
 
 <<<<<<< HEAD
-            <div className="flex gap-2">
-                <select
-                    className="flex-1 bg-[var(--bg)] text-[var(--text)] border border-[var(--border)] rounded p-2 text-lg focus:border-[var(--primary)] outline-none"
-                    value={selectedSession || ''}
-                    onChange={(e) => onSessionSelect(e.target.value)}
-                >
-                    <option value="">All Available Data</option>
-                    {sessions.map(s => (
-                        <option key={s.table} value={s.table}>{s.name}</option>
-                    ))}
-                </select>
-                <button onClick={onRefreshSessions} className="p-2.5 border border-[var(--border)] rounded hover:bg-[var(--bg)] text-[var(--text)]" title="Refresh Sessions">🔄</button>
+    <div className="flex gap-2">
+        <select
+            className="flex-1 bg-[var(--bg)] text-[var(--text)] border border-[var(--border)] rounded p-2 text-lg focus:border-[var(--primary)] outline-none"
+            value={selectedSession || ''}
+            onChange={(e) => onSessionSelect(e.target.value)}
+        >
+            <option value="">All Available Data</option>
+            {sessions.map(s => (
+                <option key={s.table} value={s.table}>{s.name}</option>
+            ))}
+        </select>
+        <button onClick={onRefreshSessions} className="p-2.5 border border-[var(--border)] rounded hover:bg-[var(--bg)] text-[var(--text)]" title="Refresh Sessions">🔄</button>
 =======
             {/* Model Name Input (Generic) */}
-            <div>
-                <input
-                    type="text"
-                    value={modelName}
-                    onChange={(e) => setModelName(e.target.value)}
-                    placeholder={`Name for new ${activeTab} model...`}
-                    className="w-full bg-[var(--bg)] text-[var(--text)] border border-[var(--border)] rounded p-2 focus:border-[var(--primary)] outline-none mb-2"
-                />
-            </div>
-
-            <div className="flex gap-2">
-                <CustomSelect
-                    className="flex-1"
-                    value={selectedSession || ''}
-                    onChange={(val) => onSessionSelect(val)}
-                    options={[
-                        { value: "", label: "All Available Data" },
-                        ...sessions.map(s => ({ value: s.table, label: s.name }))
-                    ]}
-                    placeholder="Select Session..."
-                />
-                <button onClick={onRefreshSessions} className="p-2.5 border border-[var(--border)] rounded hover:bg-[var(--bg)] text-[var(--text)]" title="Refresh Sessions"><RefreshCw className="w-5 h-5" /></button>
->>>>>>> extra-features
-            </div>
+        <div>
+            <input
+                type="text"
+                value={modelName}
+                onChange={(e) => setModelName(e.target.value)}
+                placeholder={`Name for new ${activeTab} model...`}
+                className="w-full bg-[var(--bg)] text-[var(--text)] border border-[var(--border)] rounded p-2 focus:border-[var(--primary)] outline-none mb-2"
+            />
         </div>
 
-        {/* Actions */}
-        <div className="grid grid-cols-1 gap-3">
-            <button
-                onClick={onTrain}
-                disabled={loading}
-                className="btn py-3 bg-[var(--primary)] text-white hover:opacity-90 font-bold rounded-xl shadow-lg hover:translate-y-[-1px] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-<<<<<<< HEAD
-                {loading ? 'Training...' : '🚀 Train New Model'}
-            </button>
+        <div className="flex gap-2">
+            <CustomSelect
+                className="flex-1"
+                value={selectedSession || ''}
+                onChange={(val) => onSessionSelect(val)}
+                options={[
+                    { value: "", label: "All Available Data" },
+                    ...sessions.map(s => ({ value: s.table, label: s.name }))
+                ]}
+                placeholder="Select Session..."
+            />
+            <button onClick={onRefreshSessions} className="p-2.5 border border-[var(--border)] rounded hover:bg-[var(--bg)] text-[var(--text)]" title="Refresh Sessions"><RefreshCw className="w-5 h-5" /></button>
+>>>>>>> extra-features
+        </div>
+    </div>
 
-            <button
-                onClick={onEval}
-                disabled={evalLoading}
-                className="btn py-2 bg-[var(--bg)] text-[var(--text)] border border-[var(--border)] hover:bg-[var(--surface)] font-medium rounded-xl transition-all"
-            >
-                {evalLoading ? '📂 Loading...' : '📂 Load Saved Model'}
+{/* Actions */ }
+<div className="grid grid-cols-1 gap-3">
+    <button
+        onClick={onTrain}
+        disabled={loading}
+        className="btn py-3 bg-[var(--primary)] text-white hover:opacity-90 font-bold rounded-xl shadow-lg hover:translate-y-[-1px] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+    >
+<<<<<<< HEAD
+{ loading ? 'Training...' : '🚀 Train New Model' }
+            </button >
+
+    <button
+        onClick={onEval}
+        disabled={evalLoading}
+        className="btn py-2 bg-[var(--bg)] text-[var(--text)] border border-[var(--border)] hover:bg-[var(--surface)] font-medium rounded-xl transition-all"
+    >
+        {evalLoading ? '📂 Loading...' : '📂 Load Saved Model'}
 =======
                 {loading ? 'Training...' : <><Rocket className="inline mr-2 w-5 h-5" /> Train New Model</>}
 >>>>>>> extra-features
-            </button>
-        </div>
-    </div>
+    </button>
+        </div >
+    </div >
 );
 
 export default function MLTrainingView() {
@@ -582,7 +518,7 @@ export default function MLTrainingView() {
     const [selectedModelName, setSelectedModelName] = useState(null);
     const [trainModelNameInput, setTrainModelNameInput] = useState('');
 
-    // Result States per sensor to persist when switching tabs? 
+    // Result States per sensor to persist when switching tabs?
     // Or just one activeResult? One activeResult is simpler but clears on switch.
     // Let's use a ref or object to cache if we wanted, but state is fine.
     const [results, setResults] = useState({ EMG: null, EOG: null });
