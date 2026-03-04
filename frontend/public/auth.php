@@ -1,4 +1,5 @@
 <?php
+date_default_timezone_set('Asia/Kolkata');
 
 header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Methods: POST, GET, OPTIONS");
@@ -17,7 +18,7 @@ $host = "localhost";
 $db_name = "withadae_neurotech";
 $username = "withadae_neuro_admin";
 $password = 'firstSep@7219'; 
-define('AUTH_VERSION', '1.0.4-DRY_RUN_LOGS');
+define('AUTH_VERSION', '1.0.5-USERNAME_IST');
 
 try {
     $conn = new PDO("mysql:host=$host;dbname=$db_name", $username, $password);
@@ -125,11 +126,36 @@ function sendOTPEmail($to, $otp, &$log = "") {
 $action = $_GET['action'] ?? '';
 
 if ($action === 'test') {
+    $db_status = "Unknown";
+    $columns = [];
+    try {
+        $stmt = $conn->query("DESCRIBE users");
+        $cols = $stmt->fetchAll(PDO::FETCH_COLUMN);
+        $required = ['is_verified', 'otp_code', 'otp_expiry'];
+        $missing = array_diff($required, $cols);
+        $db_status = empty($missing) ? "Ready" : "Missing columns: " . implode(', ', $missing);
+        $columns = $cols;
+    } catch (Exception $e) {
+        $db_status = "Error: " . $e->getMessage();
+    }
+
+    $smtp_conn = "Testing...";
+    $errno = 0; $errstr = "";
+    $s = @fsockopen("ssl://" . SMTP_HOST, SMTP_PORT, $errno, $errstr, 5);
+    if ($s) {
+        $smtp_conn = "Success";
+        fclose($s);
+    } else {
+        $smtp_conn = "Failed: $errstr ($errno)";
+    }
+
     echo json_encode([
         "status" => "online", 
         "version" => AUTH_VERSION, 
+        "db_table_status" => $db_status,
+        "smtp_server_connectivity" => $smtp_conn,
         "php_mail_enabled" => function_exists('mail'),
-        "smtp_host" => SMTP_HOST
+        "columns_found" => $columns
     ]);
     exit;
 }
@@ -137,11 +163,20 @@ if ($action === 'test') {
 if ($action === 'signup') {
     $data = json_decode(file_get_contents("php://input"), true);
     $email = $data['email'] ?? '';
+    $username = $data['username'] ?? '';
     $pass = $data['password'] ?? '';
-    $name = $data['name'] ?? explode('@', $email)[0];
+    $name = $data['name'] ?? $username;
     
-    if (!$email || !$pass) {
-        echo json_encode(["status" => "error", "message" => "Missing data"]);
+    if (!$email || !$pass || !$username) {
+        echo json_encode(["status" => "error", "message" => "Missing data (email, username, and password are required)"]);
+        exit;
+    }
+
+    // Check if username or email exists
+    $stmt = $conn->prepare("SELECT id FROM users WHERE email = ? OR username = ?");
+    $stmt->execute([$email, $username]);
+    if ($stmt->fetch()) {
+        echo json_encode(["status" => "error", "message" => "Username or Email already exists"]);
         exit;
     }
 
@@ -149,11 +184,11 @@ if ($action === 'signup') {
     $otp = sprintf("%04d", mt_rand(0, 9999));
     $expiry = date('Y-m-d H:i:s', strtotime('+15 minutes'));
 
-    $stmt = $conn->prepare("INSERT INTO users (email, password, name, otp_code, otp_expiry) VALUES (?, ?, ?, ?, ?)");
+    $stmt = $conn->prepare("INSERT INTO users (email, username, password, name, otp_code, otp_expiry) VALUES (?, ?, ?, ?, ?, ?)");
     $smtp_log = "";
-    if ($stmt->execute([$email, $pass, $name, $otp, $expiry])) {
+    if ($stmt->execute([$email, $username, $pass, $name, $otp, $expiry])) {
         if (sendOTPEmail($email, $otp, $smtp_log)) {
-            echo json_encode(["status" => "success", "message" => "Account created. Please check your email for the 4-digit access code."]);
+            echo json_encode(["status" => "success", "message" => "Account created. Please check $email for the 4-digit access code."]);
         } else {
             echo json_encode([
                 "status" => "partial_success", 
@@ -163,6 +198,30 @@ if ($action === 'signup') {
         }
     } else {
         echo json_encode(["status" => "error", "message" => "Failed to create account"]);
+    }
+
+} elseif ($action === 'resend-otp') {
+    $data = json_decode(file_get_contents("php://input"), true);
+    $email = $data['email'] ?? '';
+
+    if (!$email) {
+        echo json_encode(["status" => "error", "message" => "Email required"]);
+        exit;
+    }
+
+    $otp = sprintf("%04d", mt_rand(0, 9999));
+    $expiry = date('Y-m-d H:i:s', strtotime('+15 minutes'));
+
+    $stmt = $conn->prepare("UPDATE users SET otp_code = ?, otp_expiry = ? WHERE email = ? AND is_verified = 0");
+    if ($stmt->execute([$otp, $expiry, $email])) {
+        $smtp_log = "";
+        if (sendOTPEmail($email, $otp, $smtp_log)) {
+            echo json_encode(["status" => "success", "message" => "New access vector sent to $email"]);
+        } else {
+            echo json_encode(["status" => "error", "message" => "Failed to send email", "debug" => $smtp_log]);
+        }
+    } else {
+        echo json_encode(["status" => "error", "message" => "User not found or already verified"]);
     }
 
 } elseif ($action === 'verify-otp') {
@@ -184,11 +243,11 @@ if ($action === 'signup') {
 
 } elseif ($action === 'login') {
     $data = json_decode(file_get_contents("php://input"), true);
-    $email = $data['email'] ?? '';
+    $username = $data['username'] ?? '';
     $pass = $data['password'] ?? '';
 
-    $stmt = $conn->prepare("SELECT * FROM users WHERE email = ? AND password = ?");
-    $stmt->execute([$email, $pass]);
+    $stmt = $conn->prepare("SELECT * FROM users WHERE username = ? AND password = ?");
+    $stmt->execute([$username, $pass]);
     $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if ($user) {

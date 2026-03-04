@@ -18,12 +18,12 @@ export function AuthProvider({ children }) {
     setLoading(false)
   }, [])
 
-  const signup = async (email, password, name) => {
+  const signup = async (email, password, name, username) => {
     try {
       const res = await fetch(`${API_BASE_URL}?action=signup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, name })
+        body: JSON.stringify({ email, password, name, username })
       })
       const data = await res.json()
       if (data.status === 'success') {
@@ -58,12 +58,26 @@ export function AuthProvider({ children }) {
     }
   }
 
-  const login = async (email, password) => {
+  const resendOtp = async (email) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}?action=resend-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+      })
+      const data = await res.json()
+      return { success: data.status === 'success', message: data.message, debug: data.debug }
+    } catch (err) {
+      return { success: false, message: 'Failed to resend' }
+    }
+  }
+
+  const login = async (username, password) => {
     try {
       const res = await fetch(`${API_BASE_URL}?action=login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
+        body: JSON.stringify({ username, password })
       })
       const data = await res.json()
       if (data.status === 'success') {
@@ -87,7 +101,7 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, signup, verifyOtp }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, signup, verifyOtp, resendOtp }}>
       {children}
     </AuthContext.Provider>
   )
