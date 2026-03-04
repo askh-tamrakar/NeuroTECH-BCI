@@ -216,9 +216,10 @@ export function useWebSocket(url = 'http://localhost:1972') {
 
     // === EVENT STREAM ===
     socketRef.current.on('bio_event', (eventData) => {
-      // console.log('⚡ Bio Event:', eventData)
+      console.log('⚡ Bio Event:', eventData)
       setLastEvent(eventData)
     })
+
 
     socketRef.current.on('emg_prediction', (data) => {
       // console.log('🧠 Prediction:', data) // Optional logging

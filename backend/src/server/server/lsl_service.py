@@ -114,14 +114,11 @@ def resolve_event_stream() -> bool:
         
     try:
         print(f"🔍 Searching for Event stream: {EVENT_STREAM_NAME}...")
-        streams = pylsl.resolve_streams(0.1) # Wait 100ms
+        streams = pylsl.resolve_byprop('name', EVENT_STREAM_NAME, timeout=1.0)
         
         target = None
         if streams:
-            for s in streams:
-                if s.name() == EVENT_STREAM_NAME:
-                    target = s
-                    break
+            target = streams[0]
         
         if target:
             state.event_inlet = pylsl.StreamInlet(target)

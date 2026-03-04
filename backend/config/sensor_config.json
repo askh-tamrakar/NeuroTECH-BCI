@@ -1,6 +1,6 @@
 {
   "active_models": {
-    "EMG": "rps-1200",
+    "EMG": "Neurobench",
     "EOG": "Neurobench"
   },
   "channel_mapping": {
