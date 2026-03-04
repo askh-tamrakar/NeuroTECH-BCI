@@ -8,6 +8,7 @@ import CustomSelect from '../ui/CustomSelect';
 import { useSettings } from '../../contexts/SettingsContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { Activity, Radio, Zap, Target, Square, Play, Palette, Brain, ChartSpline } from 'lucide-react';
+import { soundHandler } from '../../handlers/SoundHandler'
 
 // Workers
 import SessionWorker from '../../workers/session.worker.js?worker';
@@ -402,6 +403,7 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
     // Handlers
     const handleSensorChange = (sensor) => {
         setActiveSensor(sensor);
+        soundHandler.playMLSwitch();
         if (sensor === 'EEG' && mode !== 'test') {
             setMode('test');
         } else if (sensor !== 'EEG' && mode === 'recording') {
@@ -410,12 +412,18 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
         sessionWorkerRef.current?.postMessage({ type: 'SET_SENSOR', payload: sensor });
     };
 
+    const handleTargetChange = (newTarget) => {
+        setTargetLabel(newTarget);
+        soundHandler.playSettingSwitch();
+    };
+
     const startAutoWindowing = useCallback(() => {
         windowWorkerRef.current?.postMessage({ type: 'START_WINDOWING' });
     }, []);
 
     const handleStartCalibration = useCallback(async () => {
         setIsCalibrating(true);
+        soundHandler.playRPSStart(); // Sounds similar to a start/alert
         CalibrationApi.startCalibration(activeSensor, mode, targetLabel, windowDuration, sessionName)
             .catch(e => console.error("Start Calib API failed", e));
 
@@ -426,6 +434,7 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
 
     const handleStopCalibration = useCallback(async () => {
         setIsCalibrating(false);
+        soundHandler.playDinoPause(); // Sounds like a stop/pause
         windowWorkerRef.current?.postMessage({ type: 'STOP_WINDOWING' });
         await CalibrationApi.stopCalibration(activeSensor);
         setActiveWindow(null);
@@ -856,15 +865,22 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
     // Memoize chart config to prevent spurious worker updates
     const chartConfig = React.useMemo(() => {
         const themeColor = currentTheme?.colors?.['--primary'] || '#E3A500';
+
+        // Match the Live Graph axis color perfectly
+        const axisColor = currentTheme?.colors?.['--muted'] || '#9ca3af';
+
+        const defaultChannelColor = ['#3b82f6', '#10b981', '#f59e0b', '#a855f7'][activeChannelIndex % 4];
+
         return {
             yMin: currentYDomain[0],
             yMax: currentYDomain[1],
-            lineColor: customLineColor || (activeSensor === 'EMG' ? '#3b82f6' : (activeSensor === 'EOG' ? '#10b981' : '#f59e0b')),
+            lineColor: customLineColor || defaultChannelColor,
             bgColor: 'transparent',
             gridColor: '#444',
-            themeColor: themeColor // Pass theme color to worker
+            themeColor: themeColor, // Pass theme color to worker
+            themeAxisColor: axisColor // Match SignalChart.jsx exactly
         };
-    }, [currentYDomain, activeSensor, customLineColor, currentTheme]);
+    }, [currentYDomain, activeChannelIndex, customLineColor, currentTheme]);
 
     return (
         <div className="flex flex-col h-[calc(100dvh-120px)] bg-bg text-text animate-in fade-in duration-500 overflow-hidden">
@@ -986,7 +1002,7 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                     </div>
 
                     {/* Chart Header Controls */}
-                    <div className="px-3 py-1.5 border-b border-border bg-surface/50 flex items-center justify-between gap-4 max-h-[40px] flex-none">
+                    <div className="px-3 py-1.5 border-b border-border bg-bg flex items-center justify-between gap-4 max-h-[40px] flex-none">
                         <div className="flex items-center gap-3 overflow-x-auto no-scrollbar">
                             {/* Zoom */}
                             <div className="flex items-center gap-2 shrink-0">

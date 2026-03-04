@@ -92,10 +92,12 @@ export const ConfigService = {
             console.warn('⚠️ Failed to load from localStorage:', e)
         }
 
+        const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+
         // If no cache, try to load from backend (if endpoint exists)
         try {
             console.log('📡 Fetching config from backend...')
-            const response = await fetch('/api/config')
+            const response = await fetch(`${API_BASE_URL}/api/config`)
 
             if (response.status === 404) {
                 console.log('ℹ️ Backend /api/config endpoint not available (older web_server.py)')
@@ -152,8 +154,9 @@ export const ConfigService = {
      * Gracefully handles missing endpoint
      */
     async syncFromBackend() {
+        const API_BASE_URL = import.meta.env.VITE_API_URL || '';
         try {
-            const response = await fetch('/api/config')
+            const response = await fetch(`${API_BASE_URL}/api/config`)
 
             if (response.status === 404) {
                 console.log('ℹ️ Backend endpoint not available')
@@ -180,8 +183,9 @@ export const ConfigService = {
      * FIXED: Gracefully handles missing endpoint
      */
     async saveToBackend(config) {
+        const API_BASE_URL = import.meta.env.VITE_API_URL || '';
         try {
-            const response = await fetch('/api/config', {
+            const response = await fetch(`${API_BASE_URL}/api/config`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -213,13 +217,14 @@ export const ConfigService = {
      * Clear all config (localStorage + backend if available)
      */
     async clearConfig() {
+        const API_BASE_URL = import.meta.env.VITE_API_URL || '';
         try {
             localStorage.removeItem(CONFIG_KEY)
             console.log('🗑️ Config cleared from localStorage')
 
             // Also notify backend if endpoint exists
             try {
-                await fetch('/api/config', { method: 'DELETE' }).catch(() => { })
+                await fetch(`${API_BASE_URL}/api/config`, { method: 'DELETE' }).catch(() => { })
             } catch (e) {
                 console.warn('⚠️ Could not notify backend of config clear')
             }

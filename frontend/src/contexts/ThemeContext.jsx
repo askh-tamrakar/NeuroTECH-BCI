@@ -1,6 +1,13 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
 // Ported from index.css
+const hexToRgbTriple = (hex) => {
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return isNaN(r) ? null : `${r}, ${g}, ${b}`;
+};
+
 const DEFAULT_THEMES = [
     {
         id: 'theme-yellow-dark',
@@ -20,7 +27,7 @@ const DEFAULT_THEMES = [
             '--day': '#FFF7B0',
             '--night': '#2C2B28',
             '--tree-day': '#D9C974',
-            '--tree-night': '#FFFFE0',
+            '--tree-night': '#B8860B',
             '--cloud-day': '#D9C974',
             '--cloud-night': '#554d24',
             '--sun-day': '#F2B01E',
@@ -29,6 +36,35 @@ const DEFAULT_THEMES = [
             '--moon-night': '#FFF7B0',
             '--sky-day': '#FFFFE0',
             '--sky-night': '#2C2B28',
+            // Extended Text
+            '--text-secondary': '#D9C974',
+            '--text-tertiary': '#A18F3B',
+            '--text-highlight': '#F2B01E',
+            '--text-error': '#EF4444',
+            '--text-success': '#10B981',
+            // Typography
+            '--title': '#F2B01E',
+            '--heading': '#FFF7B0',
+            '--label': '#D9C974',
+            // Sections & Panels
+            '--section-bg': '#3B392F',
+            '--section-border': '#C69C00',
+            '--panel-bg': '#3B392F',
+            '--panel-border': '#4B493F',
+            '--header-bg': '#2C2B28',
+            '--header-text': '#F2B01E',
+            // Interactive/Events
+            '--event-bg': 'rgba(var(--primary-rgb), 0.2)',
+            '--event-border': '#F2B01E',
+            '--event-text': '#FFF7B0',
+            '--selection-bg': 'rgba(var(--accent-rgb), 0.3)',
+            '--selection-border': '#E3A500',
+            // Graphs
+            '--graph-line-1': '#F2B01E',
+            '--graph-line-2': '#E3A500',
+            '--graph-bg': '#2C2B28',
+            '--graph-grid': '#4B493F',
+            '--graph-text': '#D9C974',
         }
     },
     {
@@ -36,28 +72,57 @@ const DEFAULT_THEMES = [
         name: 'Golden Ember',
         type: 'default',
         colors: {
-            '--bg': '#FFF7B0',
+            '--bg': '#FFFDE7',
             '--surface': '#FFE680',
             '--text': '#2C2C2C',
-            '--muted': '#A18F3B',
+            '--muted': '#8D7A2F',
             '--primary': '#F2B01E',
             '--primary-contrast': '#ffffff',
             '--accent': '#E3A500',
             '--border': '#C69C00',
             '--shadow': 'rgba(0,0,0,0.25)',
             // Dino
-            '--day': '#FFF7B0',
-            '--night': '#2C2B28',
+            '--day': '#FFFDE7',
+            '--night': '#1c1a17',
             '--tree-day': '#2C2B28',
-            '--tree-night': '#FFE680',
-            '--cloud-day': '#FFE680',
+            '--tree-night': '#A18F3B',
+            '--cloud-day': '#F2B01E',
             '--cloud-night': '#554d24',
             '--sun-day': '#F2B01E',
             '--sun-night': '#F2B01E',
             '--moon-day': '#FFFFFF',
             '--moon-night': '#FFE680',
-            '--sky-day': '#FFF7B0',
-            '--sky-night': '#2C2B28',
+            '--sky-day': '#FFFDE7',
+            '--sky-night': '#1c1a17',
+            // Extended Text
+            '--text-secondary': '#8D7A2F',
+            '--text-tertiary': '#5D4037',
+            '--text-highlight': '#F2B01E',
+            '--text-error': '#EF4444',
+            '--text-success': '#10B981',
+            // Typography
+            '--title': '#2C2C2C',
+            '--heading': '#CC8E00',
+            '--label': '#8D7A2F',
+            // Sections & Panels
+            '--section-bg': '#FFE680',
+            '--section-border': '#C69C00',
+            '--panel-bg': '#FFFACD',
+            '--panel-border': '#FFE680',
+            '--header-bg': '#FFF7B0',
+            '--header-text': '#2C2C2C',
+            // Interactive/Events
+            '--event-bg': 'rgba(var(--primary-rgb), 0.2)',
+            '--event-border': '#F2B01E',
+            '--event-text': '#2C2C2C',
+            '--selection-bg': 'rgba(var(--primary-rgb), 0.25)',
+            '--selection-border': '#F2B01E',
+            // Graphs
+            '--graph-line-1': '#F2B01E',
+            '--graph-line-2': '#B8860B',
+            '--graph-bg': '#FFFDE7',
+            '--graph-grid': '#D9C260',
+            '--graph-text': '#5D4037',
         }
     },
     {
@@ -87,6 +152,35 @@ const DEFAULT_THEMES = [
             '--moon-night': '#FFEEB9',
             '--sky-day': '#FFECB3',
             '--sky-night': '#344E5C',
+            // Extended Text
+            '--text-secondary': '#FFECC8',
+            '--text-tertiary': '#D9C974',
+            '--text-highlight': '#EF3D59',
+            '--text-error': '#EF4444',
+            '--text-success': '#10B981',
+            // Typography
+            '--title': '#061016',
+            '--heading': '#EF3D59',
+            '--label': '#FFECC8',
+            // Sections & Panels
+            '--section-bg': '#4AB19D',
+            '--section-border': '#3E5C6C',
+            '--panel-bg': '#5AC0AC',
+            '--panel-border': '#4AB19D',
+            '--header-bg': '#344E5C',
+            '--header-text': '#EF3D59',
+            // Interactive/Events
+            '--event-bg': 'rgba(239, 61, 89, 0.2)',
+            '--event-border': '#EF3D59',
+            '--event-text': '#061016',
+            '--selection-bg': 'rgba(225, 122, 71, 0.3)',
+            '--selection-border': '#E17A47',
+            // Graphs
+            '--graph-line-1': '#EF3D59',
+            '--graph-line-2': '#E17A47',
+            '--graph-bg': '#344E5C',
+            '--graph-grid': '#3E5C6C',
+            '--graph-text': '#FFECC8',
         }
     },
     {
@@ -116,37 +210,38 @@ const DEFAULT_THEMES = [
             '--moon-night': '#F7E7DC',
             '--sky-day': '#B2DFDB',
             '--sky-night': '#305F72',
+            // Extended Text
+            '--text-secondary': '#F7E7DC',
+            '--text-tertiary': '#F1D1B5',
+            '--text-highlight': '#F18C8E',
+            '--text-error': '#EF4444',
+            '--text-success': '#10B981',
+            // Typography
+            '--title': '#10222B',
+            '--heading': '#F18C8E',
+            '--label': '#3B7187',
+            // Sections & Panels
+            '--section-bg': '#F1D1B5',
+            '--section-border': '#3B7187',
+            '--panel-bg': '#FDF4EC',
+            '--panel-border': '#F1D1B5',
+            '--header-bg': '#305F72',
+            '--header-text': '#F18C8E',
+            // Interactive/Events
+            '--event-bg': 'rgba(241, 140, 142, 0.2)',
+            '--event-border': '#F18C8E',
+            '--event-text': '#10222B',
+            '--selection-bg': 'rgba(86, 190, 166, 0.3)',
+            '--selection-border': '#56BEA6',
+            // Graphs
+            '--graph-line-1': '#F18C8E',
+            '--graph-line-2': '#56BEA6',
+            '--graph-bg': '#305F72',
+            '--graph-grid': '#3B7187',
+            '--graph-text': '#F7E7DC',
         }
     },
-    {
-        id: 'theme-mint',
-        name: 'Coral Mint',
-        type: 'default',
-        colors: {
-            '--bg': '#2A363B',
-            '--surface': '#99B898',
-            '--text': '#0b0f12',
-            '--muted': '#ffeadc',
-            '--primary': '#E84A5F',
-            '--primary-contrast': '#0b0f12',
-            '--accent': '#FF847C',
-            '--border': '#3b4950',
-            '--shadow': 'rgba(0,0,0,0.5)',
-            // Dino
-            '--day': '#FFDAB9',
-            '--night': '#2A363B',
-            '--tree-day': '#2A363B',
-            '--tree-night': '#99B898',
-            '--cloud-day': '#ffffff',
-            '--cloud-night': '#3b4950',
-            '--sun-day': '#E84A5F',
-            '--sun-night': '#C0392B',
-            '--moon-day': '#fff',
-            '--moon-night': '#FFEADC',
-            '--sky-day': '#FFDAB9',
-            '--sky-night': '#2A363B',
-        }
-    },
+
     {
         id: 'theme-ember',
         name: 'Ember Noir',
@@ -174,6 +269,35 @@ const DEFAULT_THEMES = [
             '--moon-night': '#E6C9AE',
             '--sky-day': '#FFFDE7',
             '--sky-night': '#1B1833',
+            // Extended Text
+            '--text-secondary': '#E6C9AE',
+            '--text-tertiary': '#AB4459',
+            '--text-highlight': '#F29F58',
+            '--text-error': '#EF4444',
+            '--text-success': '#10B981',
+            // Typography
+            '--title': '#FFF9F0',
+            '--heading': '#F29F58',
+            '--label': '#E6C9AE',
+            // Sections & Panels
+            '--section-bg': '#441752',
+            '--section-border': '#2C143D',
+            '--panel-bg': '#541E66',
+            '--panel-border': '#441752',
+            '--header-bg': '#1B1833',
+            '--header-text': '#F29F58',
+            // Interactive/Events
+            '--event-bg': 'rgba(var(--primary-rgb), 0.15)',
+            '--event-border': '#E11D48',
+            '--event-text': '#FFF1F2',
+            '--selection-bg': 'rgba(var(--accent-rgb), 0.2)',
+            '--selection-border': '#AB4459',
+            // Graphs
+            '--graph-line-1': '#F29F58',
+            '--graph-line-2': '#AB4459',
+            '--graph-bg': '#1B1833',
+            '--graph-grid': '#2C143D',
+            '--graph-text': '#E6C9AE',
         }
     },
     {
@@ -203,37 +327,38 @@ const DEFAULT_THEMES = [
             '--moon-night': '#e8d7df',
             '--sky-day': '#FFE4E1',
             '--sky-night': '#2C2C2C',
+            // Extended Text
+            '--text-secondary': '#E8D7DF',
+            '--text-tertiary': '#D47995',
+            '--text-highlight': '#F7374F',
+            '--text-error': '#EF4444',
+            '--text-success': '#10B981',
+            // Typography
+            '--title': '#FFFFFF',
+            '--heading': '#F7374F',
+            '--label': '#E8D7DF',
+            // Sections & Panels
+            '--section-bg': '#522546',
+            '--section-border': '#6A3C59',
+            '--panel-bg': '#642D55',
+            '--panel-border': '#522546',
+            '--header-bg': '#2C2C2C',
+            '--header-text': '#F7374F',
+            // Interactive/Events
+            '--event-bg': 'rgba(var(--primary-rgb), 0.2)',
+            '--event-border': '#F7374F',
+            '--event-text': '#FFFFFF',
+            '--selection-bg': 'rgba(var(--accent-rgb), 0.3)',
+            '--selection-border': '#88304E',
+            // Graphs
+            '--graph-line-1': '#F7374F',
+            '--graph-line-2': '#FF8FA3',
+            '--graph-bg': '#2C2C2C',
+            '--graph-grid': '#6A3C59',
+            '--graph-text': '#E8D7DF',
         }
     },
-    {
-        id: 'theme-amethyst',
-        name: 'Amethyst Dream',
-        type: 'default',
-        colors: {
-            '--bg': '#3E1E68',
-            '--surface': '#5D2F77',
-            '--text': '#FFF5F9',
-            '--muted': '#F9CEDC',
-            '--primary': '#E45A92',
-            '--primary-contrast': '#220B2D',
-            '--accent': '#FFACAC',
-            '--border': '#4A276F',
-            '--shadow': 'rgba(10, 0, 30, 0.5)',
-            // Dino
-            '--day': '#EDE7F6',
-            '--night': '#3E1E68',
-            '--tree-day': '#E45A92',
-            '--tree-night': '#220B2D',
-            '--cloud-day': '#fff',
-            '--cloud-night': '#4A276F',
-            '--sun-day': '#FFACAC',
-            '--sun-night': '#C2185B',
-            '--moon-day': '#fff',
-            '--moon-night': '#F9CEDC',
-            '--sky-day': '#EDE7F6',
-            '--sky-night': '#3E1E68',
-        }
-    },
+
     {
         id: 'theme-olive',
         name: 'Verdant Olive',
@@ -261,6 +386,35 @@ const DEFAULT_THEMES = [
             '--moon-night': '#DCEBDC',
             '--sky-day': '#E6F5E6',
             '--sky-night': '#2F5249',
+            // Extended Text
+            '--text-secondary': '#DCEBDC',
+            '--text-tertiary': '#97B067',
+            '--text-highlight': '#E3DE61',
+            '--text-error': '#EF4444',
+            '--text-success': '#10B981',
+            // Typography
+            '--title': '#F7FFF8',
+            '--heading': '#E3DE61',
+            '--label': '#DCEBDC',
+            // Sections & Panels
+            '--section-bg': '#437057',
+            '--section-border': '#5A8B74',
+            '--panel-bg': '#4E8064',
+            '--panel-border': '#437057',
+            '--header-bg': '#2F5249',
+            '--header-text': '#E3DE61',
+            // Interactive/Events
+            '--event-bg': 'rgba(var(--primary-rgb), 0.2)',
+            '--event-border': '#E3DE61',
+            '--event-text': '#F7FFF8',
+            '--selection-bg': 'rgba(var(--accent-rgb), 0.3)',
+            '--selection-border': '#97B067',
+            // Graphs
+            '--graph-line-1': '#E3DE61',
+            '--graph-line-2': '#97B067',
+            '--graph-bg': '#2F5249',
+            '--graph-grid': '#5A8B74',
+            '--graph-text': '#DCEBDC',
         }
     },
     {
@@ -280,8 +434,8 @@ const DEFAULT_THEMES = [
             // Dino
             '--day': '#F1F5F9',
             '--night': '#0b0d12',
-            '--tree-day': '#7aa2f7',
-            '--tree-night': '#0b0d12',
+            '--tree-day': '#A6ADC8',
+            '--tree-night': '#1A2131',
             '--cloud-day': '#ffffff',
             '--cloud-night': '#202534',
             '--sun-day': '#F9A8D4',
@@ -290,6 +444,35 @@ const DEFAULT_THEMES = [
             '--moon-night': '#C7D0DD',
             '--sky-day': '#E2E8F0',
             '--sky-night': '#0b0d12',
+            // Extended Text
+            '--text-secondary': '#C7D0DD',
+            '--text-tertiary': '#7A6B29',
+            '--text-highlight': '#7AA2F7',
+            '--text-error': '#EF4444',
+            '--text-success': '#10B981',
+            // Typography
+            '--title': '#F1F5F9',
+            '--heading': '#7AA2F7',
+            '--label': '#C7D0DD',
+            // Sections & Panels
+            '--section-bg': '#121723',
+            '--section-border': '#202534',
+            '--panel-bg': '#1A2131',
+            '--panel-border': '#121723',
+            '--header-bg': '#0B0D12',
+            '--header-text': '#7AA2F7',
+            // Interactive/Events
+            '--event-bg': 'rgba(var(--primary-rgb), 0.2)',
+            '--event-border': '#7AA2F7',
+            '--event-text': '#F1F5F9',
+            '--selection-bg': 'rgba(var(--accent-rgb), 0.3)',
+            '--selection-border': '#A6ADC8',
+            // Graphs
+            '--graph-line-1': '#7AA2F7',
+            '--graph-line-2': '#A6ADC8',
+            '--graph-bg': '#0B0D12',
+            '--graph-grid': '#202534',
+            '--graph-text': '#C7D0DD',
         }
     },
     {
@@ -309,7 +492,7 @@ const DEFAULT_THEMES = [
             // Dino
             '--day': '#E8F5E9',
             '--night': '#0e1512',
-            '--tree-day': '#2ecc71',
+            '--tree-day': '#1ABC9C',
             '--tree-night': '#08110e',
             '--cloud-day': '#ffffff',
             '--cloud-night': '#1b332a',
@@ -319,6 +502,35 @@ const DEFAULT_THEMES = [
             '--moon-night': '#CFE9DB',
             '--sky-day': '#E8F5E9',
             '--sky-night': '#0e1512',
+            // Extended Text
+            '--text-secondary': '#CFE9DB',
+            '--text-tertiary': '#1ABC9C',
+            '--text-highlight': '#2ECC71',
+            '--text-error': '#EF4444',
+            '--text-success': '#10B981',
+            // Typography
+            '--title': '#E9FFF1',
+            '--heading': '#2ECC71',
+            '--label': '#CFE9DB',
+            // Sections & Panels
+            '--section-bg': '#14201B',
+            '--section-border': '#1B332A',
+            '--panel-bg': '#1C2C26',
+            '--panel-border': '#14201B',
+            '--header-bg': '#0E1512',
+            '--header-text': '#2ECC71',
+            // Interactive/Events
+            '--event-bg': 'rgba(var(--primary-rgb), 0.2)',
+            '--event-border': '#2ECC71',
+            '--event-text': '#E9FFF1',
+            '--selection-bg': 'rgba(var(--accent-rgb), 0.3)',
+            '--selection-border': '#1ABC9C',
+            // Graphs
+            '--graph-line-1': '#2ECC71',
+            '--graph-line-2': '#1ABC9C',
+            '--graph-bg': '#0E1512',
+            '--graph-grid': '#1B332A',
+            '--graph-text': '#CFE9DB',
         }
     },
     {
@@ -338,8 +550,8 @@ const DEFAULT_THEMES = [
             // Dino
             '--day': '#E0F7FA',
             '--night': '#071a2c',
-            '--tree-day': '#23a6f2',
-            '--tree-night': '#0f2e4a',
+            '--tree-day': '#1F6FEB',
+            '--tree-night': '#0F2E4A',
             '--cloud-day': '#ffffff',
             '--cloud-night': '#17415f',
             '--sun-day': '#FFD700',
@@ -348,6 +560,35 @@ const DEFAULT_THEMES = [
             '--moon-night': '#B9D8EA',
             '--sky-day': '#B2EBF2',
             '--sky-night': '#071a2c',
+            // Extended Text
+            '--text-secondary': '#B9D8EA',
+            '--text-tertiary': '#1F6FEB',
+            '--text-highlight': '#23A6F2',
+            '--text-error': '#EF4444',
+            '--text-success': '#10B981',
+            // Typography
+            '--title': '#E7F6FF',
+            '--heading': '#23A6F2',
+            '--label': '#B9D8EA',
+            // Sections & Panels
+            '--section-bg': '#0F2E4A',
+            '--section-border': '#17415F',
+            '--panel-bg': '#153C61',
+            '--panel-border': '#0F2E4A',
+            '--header-bg': '#071A2C',
+            '--header-text': '#23A6F2',
+            // Interactive/Events
+            '--event-bg': 'rgba(var(--primary-rgb), 0.2)',
+            '--event-border': '#38BDF8',
+            '--event-text': '#F0F9FF',
+            '--selection-bg': 'rgba(var(--accent-rgb), 0.25)',
+            '--selection-border': '#1F6FEB',
+            // Graphs
+            '--graph-line-1': '#23A6F2',
+            '--graph-line-2': '#1F6FEB',
+            '--graph-bg': '#071A2C',
+            '--graph-grid': '#17415F',
+            '--graph-text': '#B9D8EA',
         }
     },
     {
@@ -367,8 +608,8 @@ const DEFAULT_THEMES = [
             // Dino
             '--day': '#FFF5EE',
             '--night': '#1e0b12',
-            '--tree-day': '#ff7a59',
-            '--tree-night': '#4b1a22',
+            '--tree-day': '#FFB86B',
+            '--tree-night': '#4B1A22',
             '--cloud-day': '#ffffff',
             '--cloud-night': '#4b1a22',
             '--sun-day': '#ffb86b',
@@ -377,6 +618,35 @@ const DEFAULT_THEMES = [
             '--moon-night': '#FFD6C8',
             '--sky-day': '#FFF5EE',
             '--sky-night': '#1e0b12',
+            // Extended Text
+            '--text-secondary': '#FFD6C8',
+            '--text-tertiary': '#FFB86B',
+            '--text-highlight': '#FF7A59',
+            '--text-error': '#EF4444',
+            '--text-success': '#10B981',
+            // Typography
+            '--title': '#FFF4EE',
+            '--heading': '#FF7A59',
+            '--label': '#FFD6C8',
+            // Sections & Panels
+            '--section-bg': '#2B0F18',
+            '--section-border': '#4B1A22',
+            '--panel-bg': '#3D1522',
+            '--panel-border': '#2B0F18',
+            '--header-bg': '#1E0B12',
+            '--header-text': '#FF7A59',
+            // Interactive/Events
+            '--event-bg': 'rgba(var(--primary-rgb), 0.15)',
+            '--event-border': '#F59E0B',
+            '--event-text': '#FFFBEB',
+            '--selection-bg': 'rgba(var(--accent-rgb), 0.2)',
+            '--selection-border': '#FFB86B',
+            // Graphs
+            '--graph-line-1': '#FF7A59',
+            '--graph-line-2': '#FFB86B',
+            '--graph-bg': '#1E0B12',
+            '--graph-grid': '#4B1A22',
+            '--graph-text': '#FFD6C8',
         }
     },
     {
@@ -396,7 +666,7 @@ const DEFAULT_THEMES = [
             // Dino
             '--day': '#F3E5F5',
             '--night': '#1A1A1D',
-            '--tree-day': '#A64D79',
+            '--tree-day': '#6A1E55',
             '--tree-night': '#3B1C32',
             '--cloud-day': '#fff',
             '--cloud-night': '#4a2a40',
@@ -406,95 +676,39 @@ const DEFAULT_THEMES = [
             '--moon-night': '#E7CFE0',
             '--sky-day': '#F3E5F5',
             '--sky-night': '#1A1A1D',
+            // Extended Text
+            '--text-secondary': '#E7CFE0',
+            '--text-tertiary': '#A64D79',
+            '--text-highlight': '#F7ECF4',
+            '--text-error': '#EF4444',
+            '--text-success': '#10B981',
+            // Typography
+            '--title': '#F7ECF4',
+            '--heading': '#A64D79',
+            '--label': '#E7CFE0',
+            // Sections & Panels
+            '--section-bg': '#3B1C32',
+            '--section-border': '#4A2A40',
+            '--panel-bg': '#4A233F',
+            '--panel-border': '#3B1C32',
+            '--header-bg': '#1A1A1D',
+            '--header-text': '#A64D79',
+            // Interactive/Events
+            '--event-bg': 'rgba(166, 77, 121, 0.2)',
+            '--event-border': '#BC6FF1',
+            '--event-text': '#F7EFFF',
+            '--selection-bg': 'rgba(106, 30, 85, 0.3)',
+            '--selection-border': '#6A1E55',
+            // Graphs
+            '--graph-line-1': '#A64D79',
+            '--graph-line-2': '#6A1E55',
+            '--graph-bg': '#1A1A1D',
+            '--graph-grid': '#4A2A40',
+            '--graph-text': '#E7CFE0',
         }
     },
-    {
-        id: 'theme-crimson',
-        name: 'Crimson Blaze',
-        type: 'default',
-        colors: {
-            '--bg': '#00224D',
-            '--surface': '#5D0E41',
-            '--text': '#FDECEC',
-            '--muted': '#E6B7BE',
-            '--primary': '#FF204E',
-            '--primary-contrast': '#0F0F1F',
-            '--accent': '#A0153E',
-            '--border': '#3B0B2E',
-            '--shadow': 'rgba(0, 0, 0, 0.5)',
-            // Dino
-            '--day': '#FFEBEE',
-            '--night': '#00224D',
-            '--tree-day': '#5D0E41',
-            '--tree-night': '#000',
-            '--cloud-day': '#fff',
-            '--cloud-night': '#3B0B2E',
-            '--sun-day': '#FF204E',
-            '--sun-night': '#8B0000',
-            '--moon-day': '#fff',
-            '--moon-night': '#E6B7BE',
-            '--sky-day': '#FFEBEE',
-            '--sky-night': '#00224D',
-        }
-    },
-    {
-        id: 'theme-inferno',
-        name: 'Inferno Burst',
-        type: 'default',
-        colors: {
-            '--bg': '#52006A',
-            '--surface': '#7A0B57',
-            '--text': '#FFF2E5',
-            '--muted': '#FFCDA6',
-            '--primary': '#FFA900',
-            '--primary-contrast': '#1A0B0F',
-            '--accent': '#FF7600',
-            '--border': '#8A1A3C',
-            '--shadow': 'rgba(0, 0, 0, 0.45)',
-            // Dino
-            '--day': '#FFF3E0',
-            '--night': '#52006A',
-            '--tree-day': '#7A0B57',
-            '--tree-night': '#220030',
-            '--cloud-day': '#fff',
-            '--cloud-night': '#8A1A3C',
-            '--sun-day': '#FFA900',
-            '--sun-night': '#D35400',
-            '--moon-day': '#fff',
-            '--moon-night': '#FFCDA6',
-            '--sky-day': '#FFF3E0',
-            '--sky-night': '#52006A',
-        }
-    },
-    {
-        id: 'theme-rosewood',
-        name: 'Rosewood Velvet',
-        type: 'default',
-        colors: {
-            '--bg': '#3A0519',
-            '--surface': '#670D2F',
-            '--text': '#FFF3F7',
-            '--muted': '#E7B3C3',
-            '--primary': '#A53860',
-            '--primary-contrast': '#15040A',
-            '--accent': '#EF88AD',
-            '--border': '#53132E',
-            '--shadow': 'rgba(0, 0, 0, 0.45)',
-            // Dino
-            '--day': '#FCE4EC',
-            '--night': '#3A0519',
-            '--tree-day': '#670D2F',
-            '--tree-night': '#15040A',
-            '--cloud-day': '#fff',
-            '--cloud-night': '#53132E',
-            '--sun-day': '#EF88AD',
-            '--sun-night': '#880E4F',
-            '--moon-day': '#fff',
-            '--moon-night': '#E7B3C3',
-            '--sky-day': '#F8BBD0',
-            '--sky-night': '#3A0519',
-        }
-    },
+
+
     {
         id: 'theme-violet',
         name: 'Royal Violet',
@@ -512,7 +726,7 @@ const DEFAULT_THEMES = [
             // Dino
             '--day': '#E6E6FA',
             '--night': '#030637',
-            '--tree-day': '#910A67',
+            '--tree-day': '#720455',
             '--tree-night': '#240046',
             '--cloud-day': '#ffffff',
             '--cloud-night': '#3C0753',
@@ -522,6 +736,35 @@ const DEFAULT_THEMES = [
             '--moon-night': '#D9C8FF',
             '--sky-day': '#E6E6FA',
             '--sky-night': '#030637',
+            // Extended Text
+            '--text-secondary': '#D9C8FF',
+            '--text-tertiary': '#910A67',
+            '--text-highlight': '#F4F0FF',
+            '--text-error': '#EF4444',
+            '--text-success': '#10B981',
+            // Typography
+            '--title': '#F4F0FF',
+            '--heading': '#910A67',
+            '--label': '#D9C8FF',
+            // Sections & Panels
+            '--section-bg': '#3C0753',
+            '--section-border': '#4F2A6A',
+            '--panel-bg': '#4F0A6B',
+            '--panel-border': '#3C0753',
+            '--header-bg': '#030637',
+            '--header-text': '#910A67',
+            // Interactive/Events
+            '--event-bg': 'rgba(var(--primary-rgb), 0.2)',
+            '--event-border': '#910A67',
+            '--event-text': '#F4F0FF',
+            '--selection-bg': 'rgba(var(--accent-rgb), 0.3)',
+            '--selection-border': '#720455',
+            // Graphs
+            '--graph-line-1': '#910A67',
+            '--graph-line-2': '#720455',
+            '--graph-bg': '#030637',
+            '--graph-grid': '#4F2A6A',
+            '--graph-text': '#D9C8FF',
         }
     },
 ];
@@ -583,6 +826,14 @@ export function ThemeProvider({ children }) {
         // Apply all CSS variables
         Object.entries(currentTheme.colors).forEach(([key, value]) => {
             root.style.setProperty(key, value);
+
+            // If it's a hex color, also generate an RGB triplet variable for Tailwind opacity support
+            if (typeof value === 'string' && value.startsWith('#')) {
+                const rgb = hexToRgbTriple(value);
+                if (rgb) {
+                    root.style.setProperty(`${key}-rgb`, rgb);
+                }
+            }
         });
 
         // Semantic Overrides helper (dino etc) that might resort to defaults in CSS if missing

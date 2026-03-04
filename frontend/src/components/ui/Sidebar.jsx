@@ -415,10 +415,10 @@ function FilterSection({
                     type="range"
                     min="0.1"
                     max="200"
-                    step="1"
+                    step="0.1"
                     value={filterConfig.cutoff || 1}
                     onChange={(e) => onFilterChange(sensorType, 'cutoff', Number(e.target.value))}
-                    className={`w-full accent-${accentColor}-500 h-1 bg-bg rounded-lg appearance-none cursor-pointer`}
+                    className={`w-full accent-${accentColor}-500 h-1 bg-bg rounded-lg cursor-pointer`}
                 />
                 <div className="flex justify-between text-[10px] text-muted font-mono">
                     <span>0.1 Hz</span>
@@ -442,7 +442,7 @@ function FilterSection({
                         step="1"
                         value={filterConfig.order || 4}
                         onChange={(e) => onFilterChange(sensorType, 'order', Number(e.target.value))}
-                        className={`w-full accent-${accentColor}-500 h-1 bg-bg rounded-lg appearance-none cursor-pointer`}
+                        className={`w-full accent-${accentColor}-500 h-1 bg-bg rounded-lg cursor-pointer`}
                     />
                     <div className="flex justify-between text-[10px] text-muted font-mono">
                         <span>1st</span>

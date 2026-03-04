@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import '../../styles/views/DinoView.css'
 import CameraPanel from '../ui/CameraPanel'
 import CustomSelect from '../ui/CustomSelect'
@@ -9,8 +9,11 @@ import {
     MoveHorizontal, Maximize, ArrowDownToLine, Grid, Sun, Moon, Cloud, Star, TreePine, Leaf, Hand,
     Layers, Zap, Clock, ChevronDown, Activity, Target, Radio, Signal, Circle
 } from 'lucide-react'
+import { soundHandler } from '../../handlers/SoundHandler'
 
 export default function DinoView({ isConnected, wsEvent, isPaused }) {
+    const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+
     // Game state
     const [gameState, setGameState] = useState('ready') // ready, playing, paused, gameOver
     const [score, setScore] = useState(0)
@@ -39,8 +42,8 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
         JUMP_DISTANCE: 300,
         ENABLE_MANUAL_CONTROLS: true,
         CONTROL_CHANNEL: 'any',
-        DETECTION_METHOD: 'Threshold', // Or 'ML'
-        ACTIVE_MODEL: '',
+        DETECTION_METHOD: 'ML', // Or 'ML'
+        ACTIVE_MODEL: 'dino ml',
         OBSTACLE_BONUS_FACTOR: 0.015,
 
         // Visual Customization
@@ -115,7 +118,10 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
     const rightEyeRef = useRef(null)
     const distanceRef = useRef(0) // Track distance for parallax
 
-    const settingsRef = useRef(DEFAULT_SETTINGS)
+    const settingsRef = useRef(settings)
+    useEffect(() => {
+        settingsRef.current = settings
+    }, [settings])
 
     // Visuals Refs
     const gameTimeRef = useRef(0) // 0 to 1 (0=dawn, 0.25=noon, 0.5=dusk, 0.75=midnight)
@@ -186,22 +192,35 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
         settingsRef.current = settings
 
         // When method changes to ML, ensure a model is selected
-        if (settings.DETECTION_METHOD === 'ML' && !settings.ACTIVE_MODEL && models.length > 0) {
-            handleSettingChange('ACTIVE_MODEL', models.find(m => m.active)?.name || models[0].name)
+        if (settings.DETECTION_METHOD === 'ML' && models.length > 0) {
+            // Priority: 'dino ml' > currently selected > active on backend > first available
+            const preferred = models.find(m => m.name === 'dino ml');
+            const current = models.find(m => m.name === settings.ACTIVE_MODEL);
+            const activeOnBackend = models.find(m => m.active);
+
+            const targetModel = preferred || current || activeOnBackend || models[0];
+
+            if (settings.ACTIVE_MODEL !== targetModel.name) {
+                handleSettingChange('ACTIVE_MODEL', targetModel.name);
+            }
         }
 
     }, [settings, models])
 
     // Load available EOG models
     useEffect(() => {
-        fetch('/api/models/eog')
+        fetch(`${API_BASE_URL}/api/models/eog`)
             .then(res => res.json())
             .then(data => {
                 setModels(data);
-                if (data.length > 0 && !settings.ACTIVE_MODEL) {
+                if (data.length > 0) {
+                    const dinoModel = data.find(m => m.name === 'dino ml');
                     const activeModel = data.find(m => m.active);
-                    if (activeModel) {
-                        handleSettingChange('ACTIVE_MODEL', activeModel.name);
+
+                    // Prioritize 'dino ml' if no model is set or if it's the expected default
+                    if (!settings.ACTIVE_MODEL || settings.ACTIVE_MODEL === 'dino ml') {
+                        const target = dinoModel || activeModel || data[0];
+                        handleSettingChange('ACTIVE_MODEL', target.name);
                     }
                 }
             })
@@ -213,7 +232,7 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
         // We only care if they changed METHOD or MODEL
         const updateBackendConfig = async () => {
             try {
-                const res = await fetch('/api/config');
+                const res = await fetch(`${API_BASE_URL}/api/config`);
                 if (!res.ok) return;
                 const config = await res.json();
 
@@ -238,7 +257,7 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
                 }
 
                 if (changed) {
-                    await fetch('/api/config', {
+                    await fetch(`${API_BASE_URL}/api/config`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(newConfig)
@@ -265,7 +284,7 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
     ]);
 
     useEffect(() => {
-        fetch('/api/config')
+        fetch(`${API_BASE_URL}/api/config`)
             .then(res => res.json())
             .then(config => {
                 const mapping = config.channel_mapping || {};
@@ -316,7 +335,7 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
             console.log("🦖 Dino: Double Blink Event Received!");
             handleDoublePress('blink');
         }
-    }, [wsEvent]);
+    }, [wsEvent, settings.CONTROL_CHANNEL]); // Added settings.CONTROL_CHANNEL to dependency array
 
     useEffect(() => {
         if (isConnected) {
@@ -374,16 +393,15 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
                     sunNight: styles.getPropertyValue('--sun-night').trim(),
                     moonDay: styles.getPropertyValue('--moon-day').trim(),
                     moonNight: styles.getPropertyValue('--moon-night').trim(),
-                    // New simplified mappings
-                    dinoDay: styles.getPropertyValue('--dino').trim(),
-                    dinoNight: styles.getPropertyValue('--dino').trim(),
-                    obstacleDay: styles.getPropertyValue('--obstacle').trim(),
-                    obstacleNight: styles.getPropertyValue('--obstacle').trim(),
-                    obstacleBorder: styles.getPropertyValue('--obstacle-border').trim(),
-                    groundDay: styles.getPropertyValue('--ground').trim(),
-                    groundNight: styles.getPropertyValue('--ground').trim(),
-                    groundLineDay: styles.getPropertyValue('--ground-line').trim(),
-                    groundLineNight: styles.getPropertyValue('--ground-line').trim(),
+                    dinoDay: (styles.getPropertyValue('--dino-day') || styles.getPropertyValue('--dino') || styles.getPropertyValue('--primary')).trim(),
+                    dinoNight: (styles.getPropertyValue('--dino-night') || styles.getPropertyValue('--dino') || styles.getPropertyValue('--primary')).trim(),
+                    obstacleDay: (styles.getPropertyValue('--obstacle-day') || styles.getPropertyValue('--obstacle') || styles.getPropertyValue('--primary')).trim(),
+                    obstacleNight: (styles.getPropertyValue('--obstacle-night') || styles.getPropertyValue('--obstacle') || styles.getPropertyValue('--primary')).trim(),
+                    obstacleBorder: (styles.getPropertyValue('--obstacle-border') || styles.getPropertyValue('--text')).trim(),
+                    groundDay: (styles.getPropertyValue('--ground-day') || styles.getPropertyValue('--ground') || styles.getPropertyValue('--surface')).trim(),
+                    groundNight: (styles.getPropertyValue('--ground-night') || styles.getPropertyValue('--ground') || styles.getPropertyValue('--surface')).trim(),
+                    groundLineDay: (styles.getPropertyValue('--ground-line-day') || styles.getPropertyValue('--ground-line') || styles.getPropertyValue('--accent')).trim(),
+                    groundLineNight: (styles.getPropertyValue('--ground-line-night') || styles.getPropertyValue('--ground-line') || styles.getPropertyValue('--accent')).trim(),
                     skyDay: styles.getPropertyValue('--sky-day').trim(),
                     skyNight: styles.getPropertyValue('--sky-night').trim()
                 }
@@ -465,6 +483,7 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
                 const { type, score, highScore: newHigh } = e.data
                 if (type === 'GAME_OVER') {
                     setGameState('gameOver')
+                    soundHandler.playDinoDead();
                     if (score !== undefined) {
                         scoreRef.current = score
                         logEvent(`Game Over! Score: ${Math.floor(score / 10)}`, 'gameover')
@@ -585,13 +604,15 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
         if (workerRef.current) {
             // Exclude canvas dimensions so we don't overwrite the resize observer's values
             // with potentially stale default settings
-            const { CANVAS_WIDTH, CANVAS_HEIGHT, ...safeSettings } = settings
+            const { CANVAS_WIDTH, CANVAS_HEIGHT, ...safeSettings } = settings;
+            console.log("[Dino] Syncing settings to worker:", safeSettings);
             workerRef.current.postMessage({
                 type: 'SETTINGS',
                 payload: safeSettings
             })
         }
     }, [settings])
+
 
     // Sync Highscore reset
     useEffect(() => {
@@ -604,39 +625,59 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
     }, [highScore])
 
     // Bridge Inputs
-    const handleSinglePress = (source = 'blink') => {
-        const text = source === 'keyboard' ? "Spacebar (Jump)" : "Blink Detected (Jump)"
-        const type = source === 'keyboard' ? 'keyboard' : 'jump' // 'jump' maps to ArrowUp (which is good for blink too? or use Eye). Let's use 'blink' type for Eye icon.
-        // Actually, user wants "Jump Triggered" vs "Blink Detected". 
-        // Let's be consistent: 
-        // Keyboard: "Spacebar (Jump)" -> Keyboard Icon
-        // Blink: "Blink Detected (Jump)" -> Eye Icon 
+    const startGame = useCallback(() => {
+        if (workerRef.current) {
+            workerRef.current.postMessage({ type: 'INPUT', payload: { action: 'start' } });
+        }
+        setGameState('playing');
+    }, []);
 
+    const jump = useCallback(() => {
+        if (workerRef.current) {
+            workerRef.current.postMessage({ type: 'INPUT', payload: { action: 'jump' } });
+        }
+    }, []);
+
+    const resetGame = useCallback(() => {
+        if (workerRef.current) {
+            workerRef.current.postMessage({ type: 'INPUT', payload: { action: 'reset' } });
+        }
+        setGameState('ready');
+        setScore(0);
+    }, []);
+
+    const handleSinglePress = useCallback((source = 'blink') => {
+        const text = source === 'keyboard' ? "Spacebar (Jump)" : "Blink Detected (Jump)"
         logEvent(text, source === 'keyboard' ? 'keyboard' : 'blink')
         triggerSingleBlink()
 
-        if (workerRef.current) {
-            console.log("[DinoView] Sending 'jump' to worker. Ref:", workerRef.current)
-            workerRef.current.postMessage({ type: 'INPUT', payload: { action: 'jump' } })
-        } else {
-            console.warn("[DinoView] Worker ref is missing!")
+        if (gameState === 'ready' || gameState === 'gameOver') {
+            startGame();
+        } else if (gameState === 'playing') {
+            soundHandler.playDinoJump();
+            jump();
         }
+    }, [gameState, startGame, jump, logEvent]);
 
-        // Optimistic state update for UI status
-        if (gameStateRef.current === 'ready' || gameStateRef.current === 'gameOver') {
-            setGameState('playing')
-        }
-    }
-
-    const handleDoublePress = (source = 'blink') => {
+    const handleDoublePress = useCallback((source = 'blink') => {
         const text = source === 'keyboard' ? "Spacebar x2 (Pause)" : "Double Blink (Pause)"
         logEvent(text, 'toggle')
         triggerDoubleBlink()
 
-        if (workerRef.current) {
-            workerRef.current.postMessage({ type: 'INPUT', payload: { action: 'pause' } })
+        if (gameState === 'playing') {
+            soundHandler.playDinoPause();
+            if (workerRef.current) {
+                workerRef.current.postMessage({ type: 'INPUT', payload: { action: 'pause' } });
+            }
+            setGameState('paused');
+        } else if (gameState === 'paused') {
+            soundHandler.playDinoPause();
+            if (workerRef.current) {
+                workerRef.current.postMessage({ type: 'INPUT', payload: { action: 'resume' } });
+            }
+            setGameState('playing');
         }
-    }
+    }, [gameState, logEvent]);
 
     // Manual Keyboard Controls
     useEffect(() => {
@@ -646,13 +687,13 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
                 // Check if manual controls enabled
                 console.log("[DinoView] Spacebar pressed. Manual controls:", settings.ENABLE_MANUAL_CONTROLS)
                 if (settings.ENABLE_MANUAL_CONTROLS) {
-                    handleEOGBlink('keyboard') // Use the same unified logic for consistency
+                    handleSinglePress('keyboard') // Use the same unified logic for consistency
                 }
             }
         }
         window.addEventListener('keydown', handleKeyDown)
         return () => window.removeEventListener('keydown', handleKeyDown)
-    }, [settings])
+    }, [settings, handleSinglePress])
 
     // Blink Visuals (Optional - kept for side panel feedback)
     const triggerSingleBlink = () => {

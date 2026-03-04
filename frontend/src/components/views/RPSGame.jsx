@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { BrainCircuit, Activity, ImageIcon } from 'lucide-react';
+import { soundHandler } from '../../handlers/SoundHandler';
 import CustomSelect from '../ui/CustomSelect';
 import '../../styles/views/RPSGame.css';
 
@@ -24,14 +25,21 @@ const WIN_CONDITIONS = {
     SCISSORS: 'PAPER',
 };
 
-const MoveImage = ({ move, assetType, type }) => {
-    const [hasError, setHasError] = useState(false);
+const MoveImage = ({ move, assetType, type, onImageError, globalFallbackMode }) => {
+    const [localError, setLocalError] = useState(false);
 
     useEffect(() => {
-        setHasError(false);
+        setLocalError(false);
     }, [move, assetType]);
 
-    if (assetType === 'emoji' || hasError) {
+    const handleError = () => {
+        setLocalError(true);
+        if (onImageError) {
+            onImageError();
+        }
+    };
+
+    if (assetType === 'emoji' || localError || globalFallbackMode) {
         return (
             <span className="pop" style={{ fontSize: '14rem', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%' }}>
                 {move === 'ROCK' ? '🪨' : move === 'PAPER' ? '📄' : '✂️'}
@@ -74,13 +82,15 @@ const MoveImage = ({ move, assetType, type }) => {
                     objectFit: 'contain',
                     transition: 'transform 0.3s ease-out'
                 }}
-                onError={() => setHasError(true)}
+                onError={handleError}
             />
         </div>
     );
 };
 
 const RPSGame = ({ wsEvent }) => {
+    const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+
     // Game State
     const [gameState, setGameState] = useState('idle'); // 'idle', 'waiting', 'revealed', 'resetting'
     const [playerMove, setPlayerMove] = useState(null);
@@ -91,6 +101,8 @@ const RPSGame = ({ wsEvent }) => {
     const [manualMode, setManualMode] = useState(false);
     // Visual asset mode
     const [assetType, setAssetType] = useState('set1'); // 'set1', 'set2', 'emoji'
+    const [globalFallbackMode, setGlobalFallbackMode] = useState(false);
+
     // Difficulty for computer move randomness: 'low' (repeats sometimes), 'moderate' (avoid repeats), 'high' (fully random)
     const [difficulty, setDifficulty] = useState('moderate');
 
@@ -130,7 +142,7 @@ const RPSGame = ({ wsEvent }) => {
     }, [difficulty]);
 
     const togglePrediction = (active) => {
-        fetch(`/api/emg/predict/${active ? 'start' : 'stop'}`, { method: 'POST' })
+        fetch(`${API_BASE_URL}/api/emg/predict/${active ? 'start' : 'stop'}`, { method: 'POST' })
             .catch(err => console.error("Prediction toggle failed:", err));
     };
 
@@ -155,7 +167,7 @@ const RPSGame = ({ wsEvent }) => {
         pickComputerMove();
 
         // Fetch models
-        fetch('/api/models/emg')
+        fetch(`${API_BASE_URL}/api/models/emg`)
             .then(res => res.json())
             .then(data => {
                 setModels(data);
@@ -182,7 +194,7 @@ const RPSGame = ({ wsEvent }) => {
         setSelectedModel(name);
         // Load model on backend
         try {
-            const res = await fetch('/api/models/emg/load', {
+            const res = await fetch(`${API_BASE_URL}/api/models/emg/load`, {
                 method: 'POST',
                 body: JSON.stringify({ model_name: name }),
                 headers: { 'Content-Type': 'application/json' }
@@ -261,6 +273,7 @@ const RPSGame = ({ wsEvent }) => {
 
         setPlayerMove(pMove);
         setComputerMove(cMove); // Ensure it's set in state for rendering
+        soundHandler.playRPSMove(); // Play sound on move selection
 
         determineWinner(pMove, cMove);
         setGameState('revealed');
@@ -307,12 +320,15 @@ const RPSGame = ({ wsEvent }) => {
     const determineWinner = (p, c) => {
         if (p === c) {
             setResult('TIE');
+            soundHandler.playRPSMove(); // Play sound for tie
         } else if (WIN_CONDITIONS[p] === c) {
             setResult('WIN');
             setScore(prev => ({ ...prev, player: prev.player + 1 }));
+            soundHandler.playRPSWin(); // Play sound for win
         } else {
             setResult('LOSE');
             setScore(prev => ({ ...prev, computer: prev.computer + 1 }));
+            soundHandler.playRPSLose(); // Play sound for lose
         }
     };
 
@@ -333,7 +349,13 @@ const RPSGame = ({ wsEvent }) => {
             <div className={boxClass}>
                 <div className="card-label">{type === 'player' ? 'YOU' : 'COMPUTER'}</div>
                 {revealed && move ? (
-                    <MoveImage move={move} assetType={assetType} type={type} />
+                    <MoveImage
+                        move={move}
+                        assetType={assetType}
+                        type={type}
+                        onImageError={() => setGlobalFallbackMode(true)}
+                        globalFallbackMode={globalFallbackMode}
+                    />
                 ) : (
                     <div className="card-placeholder">?</div>
                 )}
@@ -344,6 +366,7 @@ const RPSGame = ({ wsEvent }) => {
     const handlePlay = () => {
         setGameState('waiting');
         pickComputerMove();
+        soundHandler.playRPSStart(); // Play sound on game start
         // Enable prediction only if not in manual mode
         if (!manualMode) {
             togglePrediction(true);
@@ -390,7 +413,11 @@ const RPSGame = ({ wsEvent }) => {
                             </button>
                             <button
                                 className="flex items-center justify-center p-2 rounded bg-white/5 border border-white/10 hover:bg-white/10 transition-colors ml-2"
-                                onClick={() => setAssetType(prev => prev === 'set1' ? 'set2' : prev === 'set2' ? 'emoji' : 'set1')}
+                                onClick={() => {
+                                    setAssetType(prev => prev === 'set1' ? 'set2' : 'set1');
+                                    setGlobalFallbackMode(false); // Reset fallback on type change
+                                    soundHandler.playRPSWarp(); // Play sound on asset type switch
+                                }}
                                 title="Toggle Asset Type"
                             >
                                 <ImageIcon size={18} className="text-muted hover:text-white transition-colors" />
@@ -453,7 +480,11 @@ const RPSGame = ({ wsEvent }) => {
                         )}
                         {gameState === 'waiting_for_rest' && !manualMode && <span className="animate-pulse text-yellow-400">Release Gesture...</span>}
                         {gameState === 'waiting' && manualMode && <span className="pulse">Manual Mode: press <strong>R</strong>/<strong>P</strong>/<strong>S</strong></span>}
-                        {gameState !== 'waiting' && gameState !== 'waiting_for_rest' && gameState !== 'idle' && <span>Result Received</span>}
+                        {gameState !== 'waiting' && gameState !== 'waiting_for_rest' && gameState !== 'idle' && (
+                            <span className="animate-in fade-in zoom-in duration-300">
+                                {manualMode ? "Round Complete" : "Result Received"}
+                            </span>
+                        )}
                     </div>
 
                     <div className="cards-row">

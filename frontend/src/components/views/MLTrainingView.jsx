@@ -1,12 +1,10 @@
 import Tree from 'react-d3-tree';
 import { useState, useEffect } from 'react';
 import {
-    Trash2, Rocket, ArrowRight,
-    Save, Target, ListOrdered, Database,
-    Hand, Eye, Network, Grid3X3, Brain,
-    PieChart, RefreshCw, Sliders,
-    ChevronLeft, ChevronRight, Circle
+    Trash2, Rocket, ArrowRight, Save, Target, ListOrdered, Database, Hand, Eye, Network, Grid3X3, Brain, PieChart, RefreshCw, Sliders, ChevronLeft, ChevronRight, Circle,
+    Cpu, Activity, Download, Layers, Clock, Settings, Play, GitBranch, BarChart2, Info
 } from 'lucide-react';
+import { soundHandler } from '../../handlers/SoundHandler';
 import CustomSelect from '../ui/CustomSelect';
 
 const TabButton = ({ active, onClick, children }) => (
@@ -393,6 +391,7 @@ const ControlPanel = ({
 );
 
 export default function MLTrainingView() {
+    const API_BASE_URL = import.meta.env.VITE_API_URL || '';
     const [activeTab, setActiveTab] = useState('EMG');
 
     // --- SESSIONS ---
@@ -403,7 +402,7 @@ export default function MLTrainingView() {
     const fetchSessions = async () => {
         try {
             const sensor = activeTab;
-            const res = await fetch(`/api/sessions/${sensor}`);
+            const res = await fetch(`${API_BASE_URL}/api/sessions/${sensor}`);
             if (res.ok) {
                 const data = await res.json();
                 if (data.tables) {
@@ -444,7 +443,7 @@ export default function MLTrainingView() {
 
     const fetchModels = async () => {
         try {
-            const res = await fetch(`/api/models/${activeTab}`);
+            const res = await fetch(`${API_BASE_URL}/api/models/${activeTab}`);
             if (res.ok) {
                 const data = await res.json();
                 setModels(data);
@@ -458,7 +457,7 @@ export default function MLTrainingView() {
         // Removed confirmation as requested
         try {
             // Ensure sensor path is lowercase (e.g., 'emg', 'eog') to match backend routes
-            const res = await fetch(`/api/models/${activeTab.toLowerCase()}/${name}`, { method: 'DELETE' });
+            const res = await fetch(`${API_BASE_URL}/api/models/${activeTab.toLowerCase()}/${name}`, { method: 'DELETE' });
             if (res.ok) {
                 fetchModels();
                 if (selectedModelName === name) setSelectedModelName(null);
@@ -475,12 +474,14 @@ export default function MLTrainingView() {
 
         try {
             setEvalLoading(true);
-            const res = await fetch(`/api/models/${activeTab}/load`, {
+            const res = await fetch(`${API_BASE_URL}/api/models/${activeTab}/load`, {
                 method: 'POST',
                 body: JSON.stringify({ model_name: name }),
                 headers: { 'Content-Type': 'application/json' }
             });
             if (!res.ok) throw new Error("Failed to load model backend");
+
+            soundHandler.playMLSwitch(); // Play sound on successful model load
 
             // After loading, trigger eval to refresh UI
             setTreeIndex(0);
@@ -523,8 +524,9 @@ export default function MLTrainingView() {
 
         setTreeIndex(index);
         setTreeLoading(true);
+        soundHandler.playMLTreeStep(); // Play sound on tree step
         try {
-            const res = await fetch('/api/model/tree', {
+            const res = await fetch(`${API_BASE_URL}/api/model/tree`, {
                 method: 'POST',
                 body: JSON.stringify({ sensor: activeTab, model_name: model, tree_index: index }),
                 headers: { 'Content-Type': 'application/json' }
@@ -585,8 +587,8 @@ export default function MLTrainingView() {
             // Let's use specific ones or update backend to have generic.
             // Creating a map for now.
             const endpointMap = {
-                'EMG': '/api/train-emg-rf',
-                'EOG': '/api/train-eog-rf'
+                'EMG': `${API_BASE_URL}/api/train-emg-rf`,
+                'EOG': `${API_BASE_URL}/api/train-eog-rf`
             };
 
             const res = await fetch(endpointMap[activeTab], {
@@ -615,8 +617,8 @@ export default function MLTrainingView() {
 
         try {
             const endpointMap = {
-                'EMG': '/api/model/evaluate', // legacy endpoint
-                'EOG': '/api/model/evaluate/eog'
+                'EMG': `${API_BASE_URL}/api/model/evaluate`, // legacy endpoint
+                'EOG': `${API_BASE_URL}/api/model/evaluate/eog`
             };
 
             const res = await fetch(endpointMap[activeTab], {

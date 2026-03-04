@@ -1,0 +1,23 @@
+{
+  "active_models": {
+    "EMG": "all",
+    "EOG": "Neurobench"
+  },
+  "channel_mapping": {
+    "ch0": {
+      "enabled": true,
+      "sensor": "EMG"
+    },
+    "ch1": {
+      "enabled": true,
+      "sensor": "EEG"
+    }
+  },
+  "display": {
+    "scannerX": 0,
+    "showGrid": true,
+    "timeWindowMs": 10000
+  },
+  "num_channels": 2,
+  "sampling_rate": 512
+}

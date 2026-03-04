@@ -44,18 +44,19 @@ let config = {
     yMax: 100,
     zoom: 1,
     offset: 0,
-    lineColor: '#00ff00',
+    lineColor: 'var(--graph-line-1, #00ff00)',
     bgColor: 'transparent', // Use transparent to show CSS background or passed theme
-    gridColor: '#333333',
-    textColor: '#888888',
-    surface: '#1e1e1e'
+    gridColor: 'var(--graph-grid, #333333)',
+    textColor: 'var(--graph-text, #888888)',
+    surface: 'var(--panel-bg, #1e1e1e)',
+    themeAxisColor: 'var(--graph-text, #9ca3af)',
+    themeColor: 'var(--graph-grid, #333)'
 };
 
 // Scanner State
 let scannerX = null;
 let scannerValue = null;
 
-// Animation
 // Animation
 let animationFrameId = null;
 
@@ -119,18 +120,6 @@ function handleCalcSelection(payload) {
     const now = Date.now() - (config.offset || 0) - timeOffset;
     const timeWindow = config.timeWindow;
     const centerTimeOffset = timeWindow / 2;
-
-    // x_px = ( (centerTimeOffset - (now - t_ms)) / timeWindow ) * width
-    // x_px / width = (centerTimeOffset - now + t_ms) / timeWindow
-    // (x_px / width) * timeWindow = centerTimeOffset - now + t_ms
-    // t_ms = (x_px / width) * timeWindow - centerTimeOffset + now
-
-    // Simplification from draw(): 
-    // x_ms = centerTimeOffset - age
-    // age = centerTimeOffset - x_ms
-    // t_ms = now - age = now - (centerTimeOffset - x_ms)
-    // x_ms is relative time in window [0, timeWindow] ? No.
-    // Let's reverse properly:
 
     const leftMargin = 50;
     const drawWidth = width - leftMargin;
@@ -221,10 +210,8 @@ function draw() {
     // 1. Clear - USE THEME BG
     ctx.clearRect(0, 0, width, height); // Clear valid transparency
 
-    if (config.bgColor && config.bgColor !== 'transparent') {
-        ctx.fillStyle = config.bgColor;
-        ctx.fillRect(0, 0, width, height);
-    }
+    // Removed default solid background drawing
+    // We let the CSS background from SignalChart.css handle it or the global CSS.
 
     if (points.length === 0) {
         // Draw placeholder grid
@@ -291,8 +278,8 @@ function draw() {
             // "Saved" = Red/Blue
             // "Error" = Gray
 
-            let fill = 'rgba(255, 255, 255, 0.05)';
-            let stroke = 'rgba(255, 255, 255, 0.2)';
+            let fill = 'var(--selection-bg, rgba(255, 255, 255, 0.05))';
+            let stroke = 'var(--selection-border, rgba(255, 255, 255, 0.2))';
 
             if (win.status === 'collected') {
                 fill = 'rgba(16, 185, 129, 0.25)'; // Green-500
@@ -348,10 +335,10 @@ function draw() {
 
     // Draw Signal with Neon Glow and Smoothing
     ctx.strokeStyle = config.lineColor;
-    ctx.lineWidth = 3.5; // Reduced from 4
+    ctx.lineWidth = 3; // Reduced from 3.5 to match live graph
 
     // Neon Glow - Stronger
-    ctx.shadowBlur = 12;
+    ctx.shadowBlur = 6; // Reduced from 12 to match live graph
     ctx.shadowColor = config.lineColor;
 
     ctx.beginPath();
@@ -413,7 +400,7 @@ function draw() {
     const centerPx = timeToPx(centerTimeOffset);
 
     // 1. Vertical Line (0 x-axis line bold dash)
-    ctx.strokeStyle = '#ffffff';
+    ctx.strokeStyle = 'var(--text-secondary, #ffffff)';
     ctx.lineWidth = 2; // Bold
     ctx.setLineDash([8, 8]); // Dash
     ctx.beginPath();
@@ -438,13 +425,6 @@ function draw() {
 
     ctx.restore(); // Restore clip
 
-    // Scanner
-    if (scannerX !== null && scannerValue !== null) {
-        // scannerX is timestamp?
-        // In old chart it was passed as prop `scannerX={hoverX}`.
-        // If we don't handle hover logic in worker yet, this might be unused.
-        // Skipping for now unless requested.
-    }
 }
 
 function drawGrid(now, timeWindow, centerTimeOffset, leftMargin, padY, availH) {
@@ -455,8 +435,8 @@ function drawGrid(now, timeWindow, centerTimeOffset, leftMargin, padY, availH) {
 
     ctx.globalAlpha = 0.3;
     ctx.lineWidth = 1;
-    ctx.font = '13px monospace'; // increased font
-    ctx.fillStyle = config.themeColor || '#888';
+    ctx.font = '10px sans-serif'; // decreased font size to match live graph
+    ctx.fillStyle = config.themeAxisColor || config.themeColor || '#888';
 
     // Horizontal (Value) - Y-Axis Labels
     ctx.textAlign = 'right';
@@ -466,19 +446,27 @@ function drawGrid(now, timeWindow, centerTimeOffset, leftMargin, padY, availH) {
     const yMax = config.yMax;
     const yRange = yMax - yMin || 1;
 
-    for (let i = 0; i <= 5; i++) {
-        const norm = i / 5;
-        const val = yMin + norm * yRange;
+    // Ticks: let's do ~7 lines to match Live Graph
+    const tickCount = 7;
+
+    for (let i = 0; i < tickCount; i++) {
+        const norm = i / (tickCount - 1);
+        const val = yMax - norm * yRange; // Top to bottom
+
         // If padY/availH not passed, recalculate
         const currentPadY = padY !== undefined ? padY : height * 0.1;
         const currentAvailH = availH !== undefined ? availH : height - 2 * currentPadY;
-        const y = height - (currentPadY + norm * currentAvailH);
+        const y = currentPadY + norm * currentAvailH;
 
         // Draw text label
+        // Use text baseline mapping to match Live Graph
+        ctx.globalAlpha = 0.8;
+        ctx.fillStyle = config.themeAxisColor || '#9ca3af';
         ctx.fillText(Math.round(val), leftMargin - 10, y);
+        ctx.globalAlpha = 0.3;
 
         // Draw horizontal grid lines (Y-axis lines) with dashed theme color
-        ctx.strokeStyle = config.themeColor || config.gridColor || '#333';
+        ctx.strokeStyle = config.themeAxisColor || config.themeColor || config.gridColor || '#333';
         ctx.setLineDash([3, 3]);
         ctx.beginPath();
         ctx.moveTo(leftMargin, y);
@@ -487,22 +475,26 @@ function drawGrid(now, timeWindow, centerTimeOffset, leftMargin, padY, availH) {
         ctx.setLineDash([]);
     }
 
-    // Draw horizontal axis (X-axis) at y=0, starting after labels 
+    // Draw horizontal axis (X-axis) at y=0
     const currentPadY = padY !== undefined ? padY : height * 0.1;
     const currentAvailH = availH !== undefined ? availH : height - 2 * currentPadY;
     const zeroY = height - (currentPadY + ((0 - yMin) / yRange) * currentAvailH);
     if (zeroY >= currentPadY && zeroY <= height - currentPadY) {
-        ctx.strokeStyle = config.themeColor;
-        ctx.setLineDash([8, 5]);
+        ctx.strokeStyle = config.themeAxisColor || config.themeColor || '#aaaaaa';
+        ctx.globalAlpha = 0.8;
+        ctx.lineWidth = 2; // Match the thick zero line of Live Graph
+        ctx.setLineDash([5, 5]);
         ctx.beginPath();
         ctx.moveTo(leftMargin, zeroY);
         ctx.lineTo(width, zeroY);
         ctx.stroke();
         ctx.setLineDash([]);
+        ctx.lineWidth = 1;
+        ctx.globalAlpha = 0.3;
     }
 
     // Vertical (Time)Grid - Only Draw Labels
-    ctx.fillStyle = config.themeColor || '#888';
+    ctx.fillStyle = config.themeAxisColor || config.themeColor || '#888';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
 
@@ -519,7 +511,7 @@ function drawGrid(now, timeWindow, centerTimeOffset, leftMargin, padY, availH) {
 
         // Draw Label Only
         const diff = (t_abs - now) / 1000;
-        const label = diff > 0 ? `+${diff.toFixed(0)}s` : `${diff.toFixed(0)}s`;
+        const label = diff > 0 ? `+${diff.toFixed(2)}s` : `${diff.toFixed(2)}s`;
 
         ctx.globalAlpha = 0.8;
         ctx.fillText(label, x_px, height - 12);
@@ -528,4 +520,3 @@ function drawGrid(now, timeWindow, centerTimeOffset, leftMargin, padY, availH) {
 
     ctx.globalAlpha = 1.0;
 }
-

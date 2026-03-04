@@ -36,19 +36,18 @@ function AppContent() {
 }
 
 import CursorHandler from './components/ui/CursorHandler';
+import ErrorBoundary from './components/ErrorBoundary';
 
-import { ThemeProvider } from './contexts/ThemeContext'
-import { SettingsProvider } from './contexts/SettingsContext'
 
 export default function App() {
   return (
-    <ThemeProvider>
-      <SettingsProvider>
-        <CursorHandler />
+    <>
+      <CursorHandler />
+      <ErrorBoundary>
         <AuthProvider>
           <AppContent />
         </AuthProvider>
-      </SettingsProvider>
-    </ThemeProvider>
+      </ErrorBoundary>
+    </>
   )
 }

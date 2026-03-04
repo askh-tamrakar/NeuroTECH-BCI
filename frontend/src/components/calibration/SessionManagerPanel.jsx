@@ -270,9 +270,9 @@ export default function SessionManagerPanel({
         <div className="flex h-full bg-surface border-2 border-border rounded-xl overflow-hidden shadow-card p-1 gap-1">
 
             {/* LEFT PANE: Selected Session Table View */}
-            <div className="flex-grow flex flex-col min-w-0 bg-bg/10 rounded-lg border border-muted overflow-hidden relative">
+            <div className="flex-grow flex flex-col min-w-0 bg-[var(--section-bg)] rounded-lg border border-[var(--section-border)] overflow-hidden relative">
                 {/* Table Header / Toolbar */}
-                <div className="px-3 py-2 border-b border-muted bg-bg flex flex-wrap items-center gap-3">
+                <div className="px-3 py-2 border-b border-[var(--section-border)] bg-[var(--header-bg)] flex flex-wrap items-center gap-3">
                     {/* Session Name Label */}
                     <div className="flex items-center gap-2 px-3 bg-primary/10 rounded border border-primary shrink-0 h-9">
                         <FolderPlus size={18} className="text-primary" />
@@ -281,13 +281,13 @@ export default function SessionManagerPanel({
                         </span>
                     </div>
 
-                    <div className="h-8 w-[1px] bg-white/10 shrink-0 mx-1"></div>
+                    <div className="h-8 w-[1px] bg-[var(--section-border)] opacity-20 shrink-0 mx-1"></div>
 
                     {/* Filter Controls */}
                     <div className="flex items-center gap-2 shrink-0">
                         {/* Class Filter */}
-                        <div className="flex items-center gap-1.5 bg-white/5 pl-2 pr-1 py-0.5 rounded border border-surface h-9 shrink-0 flex-1 min-w-[140px] max-w-[180px]">
-                            <ListFilter size={16} className="text-muted shrink-0" />
+                        <div className="flex items-center gap-1.5 bg-[var(--bg)]/50 pl-2 pr-1 py-0.5 rounded border border-[var(--section-border)] h-9 shrink-0 flex-1 min-w-[140px] max-w-[180px]">
+                            <ListFilter size={16} className="text-[var(--text-secondary)] shrink-0" />
                             <CustomSelect
                                 value={filterLabel}
                                 onChange={(val) => setFilterLabel(val)}
@@ -301,8 +301,8 @@ export default function SessionManagerPanel({
                         </div>
 
                         {/* Sort By */}
-                        <div className="flex items-center gap-1 bg-white/5 pl-2 pr-1 py-0.5 rounded border border-surface h-9 shrink-0 flex-1 min-w-[130px] max-w-[150px]">
-                            <ArrowUpDown size={16} className="text-muted shrink-0" />
+                        <div className="flex items-center gap-1 bg-[var(--bg)]/50 pl-2 pr-1 py-0.5 rounded border border-[var(--section-border)] h-9 shrink-0 flex-1 min-w-[130px] max-w-[150px]">
+                            <ArrowUpDown size={16} className="text-[var(--text-secondary)] shrink-0" />
                             <CustomSelect
                                 value={sortBy}
                                 onChange={(val) => setSortBy(val)}
@@ -356,16 +356,16 @@ export default function SessionManagerPanel({
                         </div>
                     </div>
 
-                    <div className="h-8 w-[1px] bg-white/10 shrink-0 mx-1"></div>
+                    <div className="h-8 w-[1px] bg-[var(--section-border)] opacity-20 shrink-0 mx-1"></div>
 
                     {/* Status & Actions */}
                     <div className="flex items-center gap-3 ml-auto shrink-0">
                         {/* Row Count Status */}
-                        <div className="flex items-center gap-1.5 px-3 bg-white/5 rounded border border-white/5 h-9">
-                            <span className="text-xs text-muted uppercase font-bold">Showing</span>
-                            <span className="text-sm font-bold text-text">{totalRows}</span>
-                            <span className="text-xs text-muted">of</span>
-                            <span className="text-sm font-bold text-muted">{absoluteTotalRows}</span>
+                        <div className="flex items-center gap-1.5 px-3 bg-[var(--bg)]/50 rounded border border-[var(--section-border)] h-9">
+                            <span className="text-xs text-[var(--text-secondary)] uppercase font-bold">Showing</span>
+                            <span className="text-sm font-bold text-[var(--text)]">{totalRows}</span>
+                            <span className="text-xs text-[var(--text-secondary)]">of</span>
+                            <span className="text-sm font-bold text-[var(--text-secondary)]">{absoluteTotalRows}</span>
                         </div>
 
                         <div className="flex items-center gap-1 h-9">
@@ -431,14 +431,14 @@ export default function SessionManagerPanel({
                     ) : (
                         <div className="relative">
                             <table className="w-full text-left border-collapse">
-                                <thead className="bg-surface/50 sticky top-0 z-10 backdrop-blur-sm">
+                                <thead className="bg-[var(--header-bg)] sticky top-0 z-10 backdrop-blur-sm">
                                     <tr>
-                                        <th className="px-3 py-1.5 text-xs font-bold text-primary uppercase border-b border-text w-12">S.No</th>
-                                        <th className="px-3 py-1.5 text-xs font-bold text-primary uppercase border-b border-text w-24">
+                                        <th className="px-3 py-1.5 text-xs font-bold text-[var(--text-highlight)] uppercase border-b border-[var(--section-border)] w-12">S.No</th>
+                                        <th className="px-3 py-1.5 text-xs font-bold text-[var(--text-highlight)] uppercase border-b border-[var(--section-border)] w-24">
                                             {isTestMode ? "Actual" : "Class"}
                                         </th>
                                         {isTestMode && (
-                                            <th className="px-3 py-1.5 text-xs font-bold text-primary uppercase border-b border-text w-24">
+                                            <th className="px-3 py-1.5 text-xs font-bold text-[var(--text-highlight)] uppercase border-b border-[var(--section-border)] w-24">
                                                 Predicted
                                             </th>
                                         )}
@@ -476,7 +476,7 @@ export default function SessionManagerPanel({
 
                                         return (
                                             <tr key={`${row.id || idx}-${row.timestamp}`} className="border-b border-border hover:bg-border transition-colors group">
-                                                <td className="px-3 py-1.5 text-primary">{row.absoluteIndex !== undefined ? row.absoluteIndex + 1 : idx + 1 + offset}</td>
+                                                <td className="px-3 py-1.5 text-primary">{row.id !== undefined ? row.id : idx + 1 + offset}</td>
                                                 <td className="px-3 py-1.5 font-bold text-text">
                                                     {getLabelName(activeSensor, row.label !== undefined ? row.label : (row.class !== undefined ? row.class : 'Unknown'))}
                                                 </td>
@@ -534,9 +534,9 @@ export default function SessionManagerPanel({
             </div>
 
             {/* RIGHT PANE: Session List */}
-            <div className="w-1/3 min-w-[180px] max-w-[250px] flex flex-col bg-bg/10 rounded-lg border border-muted overflow-hidden">
-                <div className="p-3 border-b border-muted bg-surface">
-                    <h3 className="font-bold text-base text-text uppercase tracking-wide flex items-center justify-between pr-2 mb-2">
+            <div className="w-1/3 min-w-[180px] max-w-[250px] flex flex-col bg-[var(--panel-bg)] rounded-lg border border-[var(--panel-border)] overflow-hidden">
+                <div className="p-3 border-b border-[var(--panel-border)] bg-[var(--surface)]">
+                    <h3 className="font-bold text-base text-[var(--title)] uppercase tracking-wide flex items-center justify-between pr-2 mb-2">
                         <span>Sessions</span>
                         <div className="flex gap-1 items-center">
                             {!isTestMode && (

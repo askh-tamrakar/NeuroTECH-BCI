@@ -318,14 +318,11 @@ function draw() {
     const scannerPx = pL + (scannerPos / timeWindow) * plW;
     const cycleStartTs = latestTs - scannerPos;
 
-    // Split into HISTORY (left of scanner) and ACTIVE (right of scanner)
 
     // Center logic X:
     const timeToPx = (t_abs) => pL + ((t_abs % timeWindow) / timeWindow) * plW;
 
-    // Find active points and history points
-    // History points: time > rangeStart AND time < cycleStartTs
-    // Active points: time >= cycleStartTs AND time <= latestTs
+
 
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';
@@ -523,7 +520,7 @@ function drawGrid(yMin, yMax, valToPy, pL) {
 
         // Y-axis label
         const val = yMax - norm * (yMax - yMin);
-        const textStr = val.toFixed(0);
+        const textStr = val.toFixed(2); // Updated to decimals
 
         ctx.moveTo(pL, y);
         ctx.lineTo(width, y);
@@ -536,5 +533,43 @@ function drawGrid(yMin, yMax, valToPy, pL) {
     ctx.stroke();
 
     ctx.setLineDash([]);
+    ctx.globalAlpha = 1.0;
+
+    // Vertical (Time) Grid - Draw Static Labels on X-Axis
+    const timeWindow = config.timeWindowMs;
+    // We want the labels to be fixed positions on the screen.
+    // The graph shows data from -timeWindow (left) to 0s (right).
+    // Let's draw labels at fixed intervals, e.g., every 1s or 2s depending on the window size.
+
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillStyle = config.themeAxisColor || '#888';
+
+    // Determine a reasonable step size for the labels
+    let stepSec = 1;
+    if (timeWindow >= 10000) stepSec = 2; // e.g. 10s window -> every 2s
+    if (timeWindow >= 20000) stepSec = 5; // e.g. 20sq window -> every 5s
+
+    const totalSecs = Math.floor(timeWindow / 1000);
+    const plW = width - pL;
+
+    for (let s = 0; s <= totalSecs; s += stepSec) {
+        // s represents the time from the left edge
+        const normX = s / totalSecs; // 0.0 is left edge, 1.0 is right edge
+        const x_px = pL + (normX * plW);
+
+        // Don't draw too close to the left axis labels
+        if (x_px < pL + 10) continue;
+
+        const label = `${s}s`;
+
+        // If it's the right edge, maybe we want to skip if too close to border
+        if (s === totalSecs && x_px > width - 15) continue;
+
+        ctx.globalAlpha = 0.8;
+        ctx.fillText(label, x_px, height - 12);
+        ctx.globalAlpha = 0.3;
+    }
+
     ctx.globalAlpha = 1.0;
 }

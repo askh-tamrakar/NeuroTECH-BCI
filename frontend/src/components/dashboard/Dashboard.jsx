@@ -21,13 +21,15 @@ export default function Dashboard() {
   const { user, logout } = useAuth()
   const [currentPage, setCurrentPage] = useState('live')
   // const [sidebarOpen, setSidebarOpen] = useState(true)
-  const wsUrl = 'http://localhost:5005' // Prioritize local development port
-  const { status, lastMessage, lastConfig, lastEvent, latency, connect, disconnect, sendMessage } = useWebSocket(wsUrl)
+  const [localWs, setLocalWs] = useState(import.meta.env.VITE_WS_URL || 'http://localhost:5005')
+  const [ngrokWs, setNgrokWs] = useState(import.meta.env.VITE_NGROK_WS_URL || 'wss://squelchingly-thriftier-cecile.ngrok-free.dev')
+
+  // Choose default based on whether we're loaded over https/ngrok or localhost
+  const defaultWsSource = typeof window !== 'undefined' && window.location.hostname !== 'localhost' ? ngrokWs : localWs;
+  const { status, lastMessage, lastConfig, lastEvent, latency, connect, disconnect, sendMessage, currentUrl } = useWebSocket(defaultWsSource)
 
   // WebSocket modal state and preset URLs
   const [wsModalOpen, setWsModalOpen] = useState(false)
-  const [localWs, setLocalWs] = useState(import.meta.env.VITE_WS_URL || wsUrl)
-  const [ngrokWs, setNgrokWs] = useState(import.meta.env.VITE_NGROK_WS_URL || 'wss://squelchingly-thriftier-cecile.ngrok-free.dev')
 
   const { themes, currentTheme, currentThemeId, setTheme } = useTheme();
   const [authView, setAuthView] = useState(null);
@@ -207,11 +209,11 @@ export default function Dashboard() {
             <>
               {showSpacers && <div className="h-[94px] shrink-0" />}
 
-              {currentPage === 'live' && <LiveDashboard wsData={lastMessage} wsConfig={lastConfig} wsEvent={lastEvent} sendMessage={sendMessage} wsUrl={wsUrl} />}
+              {currentPage === 'live' && <LiveDashboard wsData={lastMessage} wsConfig={lastConfig} wsEvent={lastEvent} sendMessage={sendMessage} wsUrl={currentUrl || defaultWsSource} />}
               {currentPage === 'dino' && <DinoView isConnected={!!lastMessage} wsEvent={lastEvent} isPaused={false} />}
               {currentPage === 'ssvep' && <SSVEPView isConnected={!!lastMessage} wsEvent={lastEvent} />}
               {currentPage === 'rps' && <RPSGame wsEvent={lastEvent} />}
-              {currentPage === 'data_collection' && <DataCollectionView wsData={lastMessage} wsEvent={lastEvent} config={lastConfig} wsUrl={wsUrl} />}
+              {currentPage === 'data_collection' && <DataCollectionView wsData={lastMessage} wsEvent={lastEvent} config={lastConfig} wsUrl={currentUrl || defaultWsSource} />}
               {currentPage === 'ml_training' && <MLTrainingView />}
               {currentPage === 'settings' && <SettingsView latency={latency} />}
 

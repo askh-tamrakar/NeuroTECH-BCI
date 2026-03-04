@@ -88,5 +88,11 @@
     "password": "password123",
     "type": "login",
     "timestamp": 1772114847955
+  },
+  {
+    "email": "user@example.com",
+    "password": "password",
+    "type": "login",
+    "timestamp": 1772545662553
   }
 ]

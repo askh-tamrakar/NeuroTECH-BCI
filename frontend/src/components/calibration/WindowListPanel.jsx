@@ -18,10 +18,12 @@ export default function WindowListPanel({
     onDeleteAll,
     windowProgress = {}
 }) {
-    const stats = {
-        total: windows.length,
-        saved: windows.filter(w => w.status === 'saved' || w.status === 'correct').length,
-    };
+    // Track counts correctly for display
+    const recordingCount = windows.filter(w => w.status === 'recording' || w.status === 'pending').length;
+    const processedCount = windows.filter(w => w.status === 'collected').length;
+    const savedCount = windows.filter(w => w.status === 'saved' || w.status === 'correct').length;
+
+    const statsTotal = processedCount + recordingCount + savedCount;
 
     // Helper for sparkline
     const Sparkline = ({ data, color = '#10b981' }) => {
@@ -47,34 +49,34 @@ export default function WindowListPanel({
         );
     };
 
-    // Track progress of the CURRENT BATCH (Active/Collected), not total saved history
+    // Track progress of the CURRENT BATCH (Active/Collected) for Auto Mode
     const targetCount = autoLimit || 30;
-    const activeCount = windows.filter(w => w.status === 'recording' || w.status === 'pending' || w.status === 'collected').length;
+    const activeCount = recordingCount + processedCount; // Use the calculated counts
     const progress = Math.min(100, (activeCount / targetCount) * 100);
 
     return (
-        <div className="flex flex-col h-full bg-surface border-2 border-border rounded-xl overflow-hidden shadow-card animate-in fade-in duration-300">
+        <div className="flex flex-col h-full bg-[var(--surface)] border-2 border-[var(--border)] rounded-xl overflow-hidden shadow-card animate-in fade-in duration-300">
             {/* Header with stats and controls */}
-            <div className="px-3 py-3 border-b border-border bg-bg/50 flex flex-col gap-1">
+            <div className="px-3 py-3 border-b border-[var(--border)] bg-[var(--bg)]/50 flex flex-col gap-1">
                 <div className="flex justify-between items-center">
-                    <div className="font-bold text-text flex items-center text-[20px] gap-2">
-                        <Activity className="text-primary animate-pulse" size={24} />
+                    <div className="font-bold text-[var(--title)] flex items-center text-[20px] gap-2">
+                        <Activity className="text-[var(--primary)] animate-pulse" size={24} />
                         Collected Windows
                     </div>
 
                     {/* Auto-Calibration/Limit Toggle */}
                     <div className="flex items-center gap-2">
-                        <div className="flex items-center gap-1 bg-bg px-2 py-1 rounded border border-muted">
-                            <span className="text-[12px] font-bold text-muted uppercase">Limit:</span>
+                        <div className="flex items-center gap-1 bg-[var(--bg)] px-2 py-1 rounded border border-[var(--section-border)]">
+                            <span className="text-[12px] font-bold text-[var(--text-secondary)] uppercase">Limit:</span>
                             <input
                                 type="number"
-                                className="w-8 bg-transparent text-sm font-mono text-center outline-none text-text appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]"
+                                className="w-8 bg-transparent text-sm font-mono text-center outline-none text-[var(--text)] appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]"
                                 value={autoLimit}
                                 onChange={(e) => onAutoLimitChange?.(Number(e.target.value))}
                             />
                         </div>
                         {/* <div className="h-6 w-[2px] bg-border mx-1"></div> */}
-                        <span className={`text-[14px] pl-1 border-l-2 border-t-2 border-b-2 border-border font-bold uppercase ${autoCalibrate ? 'text-primary' : 'text-muted'}`}>Auto</span>
+                        <span className={`text-[14px] pl-1 border-l-2 border-t-2 border-b-2 border-[var(--border)] font-bold uppercase ${autoCalibrate ? 'text-[var(--primary)]' : 'text-[var(--text-secondary)]'}`}>Auto</span>
                         <button
                             onClick={() => onAutoCalibrateChange?.(!autoCalibrate)}
                             className={`w-8 h-4 rounded-full relative transition-colors border-2 border-border ${autoCalibrate ? 'bg-primary' : 'bg-bg'}`}
@@ -85,10 +87,10 @@ export default function WindowListPanel({
                 </div>
 
                 <div className="flex justify-between items-end">
-                    <div className="flex gap-4 text-[16px] font-mono text-muted uppercase tracking-widest">
-                        <span>Total: <span className="text-text">{stats.total}</span></span>
-                        <span>Processed: <span className="text-blue-400">{activeCount}</span></span>
-                        <span>Saved: <span className="text-emerald-400">{stats.saved}</span></span>
+                    <div className="flex gap-3 text-[14px] font-mono text-[var(--text-secondary)] uppercase tracking-widest">
+                        <span>Total: <span className="text-[var(--text)]">{statsTotal}</span></span>
+                        <span>Processed: <span className="text-blue-400">{processedCount}</span></span>
+                        <span>Saved: <span className="text-emerald-400">{savedCount}</span></span>
                     </div>
                     <div className="flex items-center gap-2">
                         <button
@@ -123,7 +125,7 @@ export default function WindowListPanel({
                         <div
                             key={win.id || index}
                             onClick={() => onHighlight?.(win)}
-                            className={`py-1 px-2 flex flex-col gap-0 rounded-lg border transition-all cursor-pointer group hover:translate-x-1 ${(win.status === 'recording' || win.status === 'pending')
+                            className={`py-1 px-2 flex flex-col gap-0 rounded-lg border transition-all cursor-pointer group hover:translate-x-1 animate-in slide-in-from-right-4 fade-in duration-300 ${(win.status === 'recording' || win.status === 'pending')
                                 ? 'bg-yellow-500/5 border-yellow-500/50 hover:border-yellow-500' // Yellow (Pending)
                                 : (win.status === 'collected')
                                     ? 'bg-blue-500/5 border-blue-500/50 hover:border-blue-500' // Blue (Ready)
@@ -151,7 +153,7 @@ export default function WindowListPanel({
                                             (win.status === 'collected') ? 'text-blue-500' :
                                                 (win.status === 'saved' || win.status === 'correct') ? 'text-emerald-500' :
                                                     (win.status === 'error' || win.status === 'incorrect') ? 'text-red-500' :
-                                                        'text-muted'
+                                                        'text-[var(--text-secondary)]'
                                             }`}>
                                             {(win.status === 'recording' || win.status === 'pending') ? 'Recording' :
                                                 (win.status === 'collected') ? 'Ready' :
@@ -174,7 +176,7 @@ export default function WindowListPanel({
                                                             '#6b7280'
                                         } />
                                     </div>
-                                    <span className="text-xs text-muted font-mono">
+                                    <span className="text-xs text-[var(--text-secondary)] font-mono">
                                         {(win.endTime - win.startTime).toFixed(0)}ms
                                     </span>
                                 </div>

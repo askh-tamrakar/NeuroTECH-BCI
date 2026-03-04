@@ -36,7 +36,7 @@ function connect(url) {
     socket = io(url, {
         reconnection: true,
         timeout: 10000,
-        transports: ['websocket']
+        transports: ['websocket', 'polling']
     });
 
     socket.on('connect', () => {

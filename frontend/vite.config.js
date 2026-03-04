@@ -58,6 +58,7 @@ const saveDetailsPlugin = () => ({
 });
 
 export default defineConfig({
+  base: './',
   plugins: [
     react(),
     saveDetailsPlugin() // Add our custom plugin here
@@ -81,5 +82,8 @@ export default defineConfig({
       ignored: ['**/public/data/**']
     },
     allowedHosts: ["squelchingly-thriftier-cecile.ngrok-free.dev"]
+  },
+  build: {
+    chunkSizeWarningLimit: 1500, // Supress >500kb size warnings for large interactive web apps
   }
 })

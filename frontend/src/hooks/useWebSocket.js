@@ -250,7 +250,6 @@ export function useWebSocket(url = 'http://localhost:1972') {
 
     setStatus('disconnected')
     setLatency(0)
-    setCurrentUrl(null)
     console.log('✅ Disconnected')
   }
 

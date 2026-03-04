@@ -89,6 +89,13 @@ const DEFAULT_SETTINGS = {
         windowDuration: 1500,
         autoLimit: 30,
         autoCalibrate: false
+    },
+    audio: {
+        sfxEnabled: true,
+        bgmEnabled: true,
+        bgmVolume: 0.3,
+        bgmTrack: null, // filename of the selected track
+        availableTracks: [], // list of track objects from server
     }
 };
 
@@ -99,6 +106,12 @@ export function SettingsProvider({ children }) {
             if (saved) {
                 // Deep merge with defaults to ensure new fields are added if missing in old save
                 const parsed = JSON.parse(saved);
+
+                // MIGRATION: Remove legacy base64 bgmFile to prevent atob errors and save space
+                if (parsed.audio && parsed.audio.bgmFile) {
+                    delete parsed.audio.bgmFile;
+                }
+
                 return deepMerge(DEFAULT_SETTINGS, parsed);
             }
         } catch (e) {
@@ -107,9 +120,43 @@ export function SettingsProvider({ children }) {
         return DEFAULT_SETTINGS;
     });
 
+    // Initial fetch of available tracks
+    useEffect(() => {
+        const fetchTracks = async () => {
+            try {
+                const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+                const res = await fetch(`${API_BASE_URL}/api/audio/tracks`);
+                if (res.ok) {
+                    const tracks = await res.json();
+                    updateDeepSettings('audio.availableTracks', tracks);
+
+                    // If no track is selected but tracks are available, select the first one
+                    const saved = localStorage.getItem('neurotech_settings');
+                    const currentSettings = saved ? JSON.parse(saved) : {};
+                    if (tracks.length > 0 && (!currentSettings.audio || !currentSettings.audio.bgmTrack)) {
+                        updateDeepSettings('audio.bgmTrack', tracks[0].name);
+                    }
+                }
+            } catch (err) {
+                console.error('Failed to fetch audio tracks:', err);
+            }
+        };
+        fetchTracks();
+    }, []);
+
     // Save to localStorage whenever settings change
     useEffect(() => {
-        localStorage.setItem('neurotech_settings', JSON.stringify(settings));
+        try {
+            // We DON'T want to save the full availableTracks list to localStorage to keep it small
+            const { availableTracks, ...safeAudio } = settings.audio;
+            const settingsToSave = {
+                ...settings,
+                audio: safeAudio
+            };
+            localStorage.setItem('neurotech_settings', JSON.stringify(settingsToSave));
+        } catch (e) {
+            console.error('Failed to save settings:', e);
+        }
     }, [settings]);
 
     // Update a specific setting section

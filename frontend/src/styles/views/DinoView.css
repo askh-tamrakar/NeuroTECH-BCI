@@ -305,7 +305,7 @@
 }
 
 .stat-value-status.playing {
-    color: #22c55e;
+    color: var(--text-success, #22c55e);
     animation: pulse 2s infinite;
 }
 
@@ -319,7 +319,7 @@
 }
 
 .stat-value-status.gameOver {
-    color: #ef4444;
+    color: var(--text-error, #ef4444);
 }
 
 .stat-value-status.default {
@@ -332,11 +332,11 @@
 }
 
 .text-green-500 {
-    color: #22c55e;
+    color: var(--text-success, #22c55e);
 }
 
 .text-red-500 {
-    color: #ef4444;
+    color: var(--text-error, #ef4444);
 }
 
 .stat-counter-large {
@@ -423,11 +423,11 @@
 }
 
 .status-eye.connected {
-    color: #10b981;
+    color: var(--text-success, #10b981);
 }
 
 .status-eye.disconnected {
-    color: #ff4444;
+    color: var(--text-error, #ff4444);
 }
 
 .spacer-footer-dino {
