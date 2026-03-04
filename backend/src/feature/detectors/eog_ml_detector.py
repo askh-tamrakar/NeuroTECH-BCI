@@ -2,6 +2,8 @@ import joblib
 import pandas as pd
 import numpy as np
 from pathlib import Path
+from src.utils.paths import get_models_dir
+
 from collections import Counter
 
 class EOGMLDetector:
@@ -37,9 +39,8 @@ class EOGMLDetector:
                 model_name = "eog_rf"
 
             # Locate model paths relative to project root
-            # This file is in src/feature/detectors
-            project_root = Path(__file__).resolve().parent.parent.parent.parent
-            models_dir = project_root / "frontend" / "public" / "data" / "EOG" / "models"
+            models_dir = get_models_dir('EOG')
+
             
             # If default eog_rf is not found, use dino-ml which is the available EOG model
             if model_name == "eog_rf" and not (models_dir / "eog_rf.joblib").exists():

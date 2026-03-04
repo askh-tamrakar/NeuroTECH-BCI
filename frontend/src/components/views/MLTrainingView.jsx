@@ -711,17 +711,15 @@ export default function MLTrainingView() {
 
                             {/* BOTTOM ROW: Tree Viz */}
                             {/* Tree Viz (Span 9, Row 4) - Extended full width */}
-                            {(activeResult || activeEvalResult).tree_structure && (
-                                <div className="col-span-12 md:col-span-9 row-span-4">
-                                    <DecisionTreeCard
-                                        structure={(activeResult || activeEvalResult).tree_structure}
-                                        treeIndex={treeIndex}
-                                        totalTrees={activeParams.n_estimators}
-                                        onTreeChange={fetchTree}
-                                        loading={loading || treeLoading}
-                                    />
-                                </div>
-                            )}
+                            <div className="col-span-12 md:col-span-9 row-span-4">
+                                <DecisionTreeCard
+                                    structure={(activeResult || activeEvalResult).tree_structure}
+                                    treeIndex={treeIndex}
+                                    totalTrees={activeParams.n_estimators}
+                                    onTreeChange={fetchTree}
+                                    loading={loading || treeLoading}
+                                />
+                            </div>
                             {/* Hyperparameters (Span 3, Row 2) - Replaces old Accuracy spot */}
                             <div className="col-span-12 md:col-span-3 row-span-2">
                                 <HyperparametersCard

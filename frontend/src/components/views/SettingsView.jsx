@@ -330,7 +330,7 @@ export default function SettingsView({ latency = 0 }) {
                 )}
               </div>
               <div className="space-y-1">
-                <h3 className="text-sm font-black text-muted uppercase tracking-[0.3em]">Neural Operator Profile</h3>
+                <h3 className="text-sm font-black text-muted uppercase tracking-[0.3em]">{user.name || 'Neural Operator Profile'}</h3>
                 <div className="flex items-center gap-3">
                   <span className="text-3xl font-black text-text tracking-tighter uppercase">{user.username || 'Anonymous'}</span>
 

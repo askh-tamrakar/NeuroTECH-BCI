@@ -18,7 +18,7 @@ $host = "localhost";
 $db_name = "withadae_neurotech";
 $username = "withadae_neuro_admin";
 $password = 'firstSep@7219'; 
-define('AUTH_VERSION', '1.0.7-FILE_OTP');
+define('AUTH_VERSION', '1.0.8-VERIFY_PATCH');
 define('ENCRYPTION_KEY', 'n3ur0_t3ch_k3y_2026'); // Replace with a more secure key in production
 define('OTP_VAULT_DIR', __DIR__ . '/temp_otp');
 
@@ -26,7 +26,9 @@ define('OTP_VAULT_DIR', __DIR__ . '/temp_otp');
 if (!is_dir(OTP_VAULT_DIR)) {
     mkdir(OTP_VAULT_DIR, 0755, true);
     // Add .htaccess to prevent direct access if on Apache
-    file_put_contents(OTP_VAULT_DIR . '/.htaccess', "Order Deny,Allow\nDeny from all");
+    if (strpos(strtolower($_SERVER['SERVER_SOFTWARE'] ?? ''), 'apache') !== false) {
+        file_put_contents(OTP_VAULT_DIR . '/.htaccess', "Order Deny,Allow\nDeny from all");
+    }
 }
 
 try {
@@ -198,12 +200,40 @@ if ($action === 'signup') {
         exit;
     }
 
-    // Check if username or email exists
-    $stmt = $conn->prepare("SELECT id FROM users WHERE email = ? OR username = ?");
+    // Check if user exists (either verified or unverified)
+    $stmt = $conn->prepare("SELECT id, is_verified, email FROM users WHERE email = ? OR username = ?");
     $stmt->execute([$email, $username]);
-    if ($stmt->fetch()) {
-        echo json_encode(["status" => "error", "message" => "Username or Email already exists"]);
-        exit;
+    $existingUser = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if ($existingUser) {
+        if ($existingUser['is_verified'] == 0) {
+            // Unverified user exists - trigger new OTP move to verify screen
+            $new_otp = sprintf("%04d", mt_rand(0, 9999));
+            $new_expiry = time() + 900;
+            $vault_file = OTP_VAULT_DIR . '/' . md5($existingUser['email']);
+            $payload = encrypt_data(json_encode(['otp' => $new_otp, 'expiry' => $new_expiry]));
+            file_put_contents($vault_file, $payload);
+            
+            $log = "";
+            if (sendOTPEmail($existingUser['email'], $new_otp, $log)) {
+                echo json_encode([
+                    "status" => "unverified_exists", 
+                    "email" => $existingUser['email'], 
+                    "message" => "Account exists but not synchronized. New access vector sent."
+                ]);
+            } else {
+                echo json_encode([
+                    "status" => "unverified_exists", 
+                    "email" => $existingUser['email'], 
+                    "message" => "Account exists but verification transmission failed.",
+                    "debug" => $log
+                ]);
+            }
+            exit;
+        } else {
+            echo json_encode(["status" => "error", "message" => "Username or Email already exists and is verified."]);
+            exit;
+        }
     }
 
     // Generate 4-digit OTP
@@ -313,7 +343,15 @@ if ($action === 'signup') {
 
     if ($user) {
         if ($user['is_verified'] == 0) {
-             echo json_encode(["status" => "error", "message" => "Neural identity not yet verified. Check your email."]);
+             echo json_encode(["status" => "unverified_exists", "email" => $user['email'], "message" => "Neural identity not yet verified. Generating new vector..."]);
+             
+             // Trigger new OTP for unverified user on login attempt
+             $otp = sprintf("%04d", mt_rand(0, 9999));
+             $expiry = time() + 900;
+             $vault_file = OTP_VAULT_DIR . '/' . md5($user['email']);
+             file_put_contents($vault_file, encrypt_data(json_encode(['otp' => $otp, 'expiry' => $expiry])));
+             sendOTPEmail($user['email'], $otp);
+             
              exit;
         }
 

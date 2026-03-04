@@ -46,7 +46,7 @@ const InputField = ({ icon: Icon, type, placeholder, value, onChange, error, lab
           <button
             type="button"
             onClick={() => setShowPassword(!showPassword)}
-            className="absolute right-4 text-white/40 hover:text-[var(--primary)] transition-colors focus:outline-none"
+            className="absolute right-4 text-white/60 hover:text-[var(--primary)] transition-colors focus:outline-none"
           >
             {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
           </button>
@@ -156,9 +156,13 @@ export default function LoginPage() {
         const result = await verifyOtp(email, otp)
         if (result.success) {
           setMessage(result.message)
-          setShowOtp(false)
-          setIsSignup(false)
-          setOtp('')
+          // Reduced verification time to 1s as requested
+          setTimeout(() => {
+            setShowOtp(false)
+            setIsSignup(false)
+            setOtp('')
+            setMessage('')
+          }, 1000)
         } else {
           setErrors({ form: result.message })
         }
@@ -168,19 +172,32 @@ export default function LoginPage() {
           setMessage(`Neural account initiated. check ${email} for access vector.`)
           setShowOtp(true)
           setTimeLeft(900)
+        } else if (result.status === 'unverified_exists') {
+          setEmail(result.email)
+          setMessage(result.message)
+          setShowOtp(true)
+          setTimeLeft(900)
         } else {
           setErrors({ form: result.message })
         }
       } else {
         const result = await login(username, password)
-        if (!result.success) {
+        if (result.status === 'unverified_exists') {
+          setEmail(result.email)
+          setMessage(result.message)
+          setShowOtp(true)
+          setTimeLeft(900)
+        } else if (!result.success) {
           setErrors({ form: result.message })
         }
       }
     } catch (err) {
       setErrors({ form: 'An unexpected error occurred' })
     } finally {
-      setLoading(false)
+      // Don't set loading false immediately if we're doing the 1s delay
+      if (!showOtp || (showOtp && !message)) {
+        setLoading(false)
+      }
     }
   }
 

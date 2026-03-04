@@ -2,6 +2,8 @@ import joblib
 import pandas as pd
 import numpy as np
 from pathlib import Path
+from src.utils.paths import get_models_dir
+
 from collections import Counter
 
 class RPSDetector:
@@ -38,9 +40,8 @@ class RPSDetector:
                 model_name = config_manager.get_active_model('EMG') or "emg_rf"
 
             # Locate model paths relative to project root
-            project_root = Path(__file__).resolve().parent.parent.parent.parent
-            # UPDATED: Use EMG subfolder
-            models_dir = project_root / "frontend" / "public" / "data" / "EMG" / "models"
+            models_dir = get_models_dir('EMG')
+
             
             # If default emg_rf is not found, use a fallback RPS model
             if model_name == "emg_rf" and not (models_dir / "emg_rf.joblib").exists():

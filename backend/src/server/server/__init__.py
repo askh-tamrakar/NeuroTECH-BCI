@@ -7,6 +7,7 @@ from src.server.server.session_manager import SessionManager
 from src.server.server.lsl_service import resolve_lsl_stream, resolve_event_stream, broadcast_data, broadcast_events
 from src.server.server.config_manager import load_config
 from src.feature.detectors.rps_detector import RPSDetector
+from src.utils.paths import PROJECT_ROOT
 import sys
 
 # Import blueprints
@@ -19,15 +20,8 @@ from src.server.server.routes.prediction_routes import prediction_bp
 from src.server.server.routes.audio_routes import audio_bp
 
 # Define Project Root for template folder
-# src/web/server/__init__.py -> ../../../ = root or ../../../../ depending on structure
-# Structure: src/web/server/__init__.py
-# Root: src is parent.parent.parent?
-# file: .../src/web/server/__init__.py
-# parent: .../src/web/server
-# parent.parent: .../src/web
-# parent.parent.parent: .../src
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 TEMPLATES_DIR = PROJECT_ROOT / "frontend" / "dist"
+
 
 def create_app():
     app = Flask(__name__, 
