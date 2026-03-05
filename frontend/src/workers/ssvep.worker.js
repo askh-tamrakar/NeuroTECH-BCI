@@ -163,8 +163,9 @@ function render(elapsed) {
         let isOn = false;
         if (isFlickering && cfg.enabled) {
             const hz = Number(cfg.freq) || 1;
-            const periodMs = 1000 / hz;
-            isOn = (elapsed % periodMs) < (periodMs / 2);
+            // Frame-accurate flicker using sine wave over frame count
+            // This aligns better with monitor refresh cycles
+            isOn = Math.sin(2 * Math.PI * hz * (frameCount / refreshRate)) > 0;
 
             ctx.fillStyle = isOn ? COLORS.ON(brightness) : COLORS.OFF;
             ctx.fillRect(x, y, gridW, gridH);

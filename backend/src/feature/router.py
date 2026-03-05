@@ -208,20 +208,22 @@ class FeatureRouter:
                                     if isinstance(detection_result, str) and detection_result:
                                         self._emit_event(detection_result, ch_idx, sensor_type, features, ts)
                                 elif sensor_type == "EEG":
+                                    # EEG detector now returns (live_event, confirmed_event)
+                                    live_event, confirmed_event = detection_result
+                                    
                                     # 1. Emit Real-time Frequency update (for UI)
-                                    # Parse frequency from event name if it's a TARGET_ string
                                     live_freq = 0.0
-                                    if isinstance(detection_result, str) and detection_result.startswith("TARGET_"):
+                                    if isinstance(live_event, str) and live_event.startswith("TARGET_"):
                                         try:
-                                            num_str = detection_result.replace("TARGET_", "").replace("HZ", "").replace("_", ".")
+                                            num_str = live_event.replace("TARGET_", "").replace("HZ", "").replace("_", ".")
                                             live_freq = float(num_str)
                                         except: pass
                                     
                                     self._emit_event("eeg_prediction", ch_idx, sensor_type, features, ts, extra_data={"frequency": live_freq})
 
                                     # 2. Emit confirmed event
-                                    if detection_result:
-                                        self._emit_event(detection_result, ch_idx, sensor_type, features, ts)
+                                    if confirmed_event:
+                                        self._emit_event(confirmed_event, ch_idx, sensor_type, features, ts)
 
             except Exception as e:
                 log.warn(f"Error: {e}")

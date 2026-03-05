@@ -62,9 +62,7 @@ class EEGFrequencyDetector:
             return None
             
         current_time = time.time()
-        # Apply Debounce
-        if (current_time - self.last_event_ts) * 1000 < self.debounce_ms:
-            return None
+        # Note: Debounce is now handled below to allow real-time results to flow for UI
             
         raw_data = np.array(features["raw_window"])
         if len(raw_data) < self.window_samples:
@@ -105,17 +103,24 @@ class EEGFrequencyDetector:
         best_idx = np.argmax(target_scores)
         
         if max_score < self.rest_threshold:
-            # We treat Rest as a valid state but might return None or "Rest" 
-            # depending on how Router handles it. RPS game needs "Rest".
-            self.last_event_ts = current_time # Update ts so REST respects debounce
-            return "REST"
+            # Check debounce for state transition
+            confirmed = None
+            if (current_time - self.last_event_ts) * 1000 >= self.debounce_ms:
+                self.last_event_ts = current_time
+                confirmed = "REST"
+            return "REST", confirmed
         
         detected_freq = self.target_freqs[best_idx]
         event_name = f"TARGET_{str(detected_freq).replace('.', '_')}HZ"
         
+        # Debounce confirmed target logs/emissions
+        if (current_time - self.last_event_ts) * 1000 < self.debounce_ms:
+            # Return live event but no confirmed event
+            return event_name, None
+
         self.last_event_ts = current_time
         print(f"FBCCA Detected: {event_name} (Score: {max_score:.3f})")
-        return event_name
+        return event_name, event_name
 
     def update_config(self, config: dict):
         self.config = config

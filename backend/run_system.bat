@@ -1,4 +1,4 @@
 @echo off
 echo Starting BCI System...
-python pipeline.py
+I:\miniforge3\python.exe pipeline.py
 pause

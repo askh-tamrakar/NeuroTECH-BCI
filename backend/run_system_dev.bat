@@ -1,4 +1,4 @@
 @echo off
 echo Starting BCI System in DEV mode...
-python pipeline.py --d
+I:\miniforge3\python.exe pipeline.py --d
 pause

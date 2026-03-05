@@ -1,6 +1,8 @@
 {
   "filters": {
     "EEG": {
+      "bandpass_enabled": true,
+      "bandpass_high": 30,
       "filters": [
         {
           "Q": 30,
@@ -13,7 +15,8 @@
           "order": 4,
           "type": "bandpass"
         }
-      ]
+      ],
+      "notch_enabled": true
     },
     "EMG": {
       "bandpass_enabled": true,
@@ -25,6 +28,7 @@
       "order": 4
     },
     "EOG": {
+      "bandpass_enabled": true,
       "cutoff": 10,
       "order": 4,
       "type": "low_pass"
