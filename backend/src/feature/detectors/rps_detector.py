@@ -56,7 +56,7 @@ class RPSDetector:
                 self.model = joblib.load(model_path)
                 self.scaler = joblib.load(scaler_path)
                 if verbose:
-                    print(f"\n{'='*50}\n[RPSDetector] 🔄 MODEL SWITCHED: {model_name}\n{'='*50}\n", flush=True)
+                    print(f"\n{'='*50}\n[RPSDetector] MODEL SWITCHED: {model_name}\n{'='*50}\n", flush=True)
             else:
                 print(f"[WARN] Model {model_name} not found at {model_path}")
                 # Fallback to defaults? or keep previous?

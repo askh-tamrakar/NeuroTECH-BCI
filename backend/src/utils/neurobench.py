@@ -13,6 +13,8 @@ from PySide6 import QtCore, QtWidgets, QtGui
 import pyqtgraph as pg
 import numpy as np
 import socket
+import brainflow
+from brainflow.board_shim import BoardShim, BrainFlowInputParams, BoardIds
 
 # Optional: serial backend
 try:
@@ -96,7 +98,7 @@ class ChannelGenerator:
                 self.ssv_ep_on = False
                 self.ssv_freq = None
 
-    def synth_now(self, t_seconds):
+    def synth_now(self, t_seconds, bg_uv=0.0):
         """Return value at a given continuous time (seconds)."""
         with self.lock:
             role = self.role
@@ -104,7 +106,11 @@ class ChannelGenerator:
             ssv_freq = self.ssv_freq
             scale = self.scale
             events = list(self.events)  # shallow copy
-        val = 0.0
+            
+        # Convert bg_uv (microvolts) to internal "units" 
+        # (Original neurobench scale was approx 1 unit = 330 uV)
+        val = bg_uv / 330.0
+        
         # continuous components
         if role == "EEG":
             # SSVEP if toggled
@@ -112,15 +118,18 @@ class ChannelGenerator:
                 # fundamental + small harmonic
                 val += 0.25 * math.sin(2 * math.pi * ssv_freq * t_seconds)
                 val += 0.08 * math.sin(2 * math.pi * (2 * ssv_freq) * t_seconds)
+            
+            # fallback EEG noise if no background provided
+            if bg_uv == 0.0:
+                val += 0.06 * math.sin(2 * math.pi * 10.0 * t_seconds) + 0.01 * math.sin(2 * math.pi * 0.2 * t_seconds)
                 val += 0.02 * self.random.gauss(0, 1)
-            # background alpha rhythm + slow drift
-            val += 0.06 * math.sin(2 * math.pi * 10.0 * t_seconds) + 0.01 * math.sin(2 * math.pi * 0.2 * t_seconds)
         elif role == "EMG":
-            # noisy baseline
-            noise = self.random.gauss(0, 0.06)
-            env = 0.05 * (1 + 0.5 * math.sin(2 * math.pi * 0.15 * t_seconds))
-            val += env * noise
-        elif role == "EOG":
+            # baseline noise if no background provided
+            if bg_uv == 0.0:
+                noise = self.random.gauss(0, 0.06)
+                env = 0.05 * (1 + 0.5 * math.sin(2 * math.pi * 0.15 * t_seconds))
+                val += env * noise
+        elif role == "EOG" and bg_uv == 0.0:
             val += 0.0  # Clean baseline, actions only
         else:
             val += 0.0
@@ -353,6 +362,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # Bounded queue for plotting to prevent UI freeze if main thread falls behind
         self.plot_queue = queue.Queue(maxsize=1024) 
         self.stream_writer = None
+        self.board = None
         
         print(f"[{datetime.now()}] Building UI...")
         self._build_ui()
@@ -743,6 +753,11 @@ class MainWindow(QtWidgets.QMainWindow):
             port = int(self.port_input.text().strip())
             self.stream_writer = TCPWriter(ip, port, self.sample_rate, self.sample_queue)
             target_str = f"WiFi ({ip}:{port})"
+            
+        params = BrainFlowInputParams()
+        self.board = BoardShim(BoardIds.SYNTHETIC_BOARD, params)
+        self.board.prepare_session()
+        self.board.start_stream()
 
         self.stream_writer.start()
         self.streaming = True
@@ -766,6 +781,14 @@ class MainWindow(QtWidgets.QMainWindow):
             self.stream_writer.join(timeout=0.5)
             self.stream_writer = None
             
+        if self.board:
+            try:
+                self.board.stop_stream()
+                self.board.release_session()
+            except Exception as e:
+                print(f"Error closing board: {e}")
+            self.board = None
+            
         self.streaming = False
         self.btn_start.setEnabled(True)
         self.btn_stop.setEnabled(False)
@@ -773,13 +796,37 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _generator_loop(self):
         """Background loop that produces samples at sample_rate and enqueues them for serial writer."""
-        last_t = time.perf_counter()
         frame = 0
+        bg_vals = [0.0, 0.0]
+        
         while True:
             if self._gen_stop.is_set():
                 break
-            t_target = frame / max(1.0, self.sample_rate)
-            t_now = time.perf_counter()
+
+            # Poll for background noise from BrainFlow if active
+            if self.streaming and self.board:
+                try:
+                    data = self.board.get_board_data()
+                    if data is not None and data.shape[1] > 0:
+                        # Grab latest sample for each channel based on role
+                        for i in range(2):
+                            role = self.ch_gens[i].role
+                            # Map role to synthetic board channels
+                            # Indices are typical for SYNTHETIC_BOARD
+                            if role == "EEG": 
+                                idx = BoardShim.get_eeg_channels(BoardIds.SYNTHETIC_BOARD)[i % 8]
+                            elif role == "EMG":
+                                idx = BoardShim.get_emg_channels(BoardIds.SYNTHETIC_BOARD)[i % 2]
+                            elif role == "EOG":
+                                idx = BoardShim.get_eog_channels(BoardIds.SYNTHETIC_BOARD)[i % 2]
+                            else:
+                                idx = -1
+                            
+                            if idx != -1:
+                                bg_vals[i] = data[idx, -1] # Latest value in uV
+                except Exception:
+                    pass
+
             # Use a monotonic origin per run to feed channel gens
             origin = getattr(self, "_gen_origin", None)
             if origin is None:
@@ -787,50 +834,40 @@ class MainWindow(QtWidgets.QMainWindow):
                 origin = self._gen_origin
             t_seconds = time.perf_counter() - origin
 
-            # synth values for both channels
-            v0 = self.ch_gens[0].synth_now(t_seconds)
-            v1 = self.ch_gens[1].synth_now(t_seconds)
+            # synth values using triggers AND background noise
+            v0 = self.ch_gens[0].synth_now(t_seconds, bg_vals[0])
+            v1 = self.ch_gens[1].synth_now(t_seconds, bg_vals[1])
 
-            # map normalized [-RANGE..RANGE] -> 14-bit ADC
+            # map normalized [-5..5] -> 14-bit ADC (PRECISION FORMAT)
             a0 = int(round(((v0 + DEFAULT_RANGE) / (2.0 * DEFAULT_RANGE)) * ADC_MAX))
             a1 = int(round(((v1 + DEFAULT_RANGE) / (2.0 * DEFAULT_RANGE)) * ADC_MAX))
             
-            # push to plot buffers (scale back to -1..1 for plot)
+            # Ensure physical bounds
+            a0 = max(0, min(ADC_MAX, a0))
+            a1 = max(0, min(ADC_MAX, a1))
+
             self._append_plot(v0, v1)
             
-            # enqueue for writer if streaming
             if self.streaming and self.stream_writer:
                 try:
                     self.sample_queue.put_nowait((a0, a1, time.time()))
                 except queue.Full:
-                    # drop if writer is slow
                     pass
 
-            # if frame % 100 == 0:
-            #     print(f"[{datetime.now()}] Gen loop frame {frame}")
             frame += 1
-            # sleep until next sample
             next_target = origin + frame / max(1.0, self.sample_rate)
             sleep_time = next_target - time.perf_counter()
             if sleep_time > 0:
-                # If sleep_time is large, sleep in small increments to maintain responsiveness
-                # or just sleep if it's small enough.
                 time.sleep(sleep_time)
-            else:
-                # behind — continue without sleeping to catch up
-        # but limit catch-up to avoid freezing if real-time is impossible
-                if frame % 100 == 0:
-                    time.sleep(0.001)
+            elif frame % 100 == 0:
+                time.sleep(0.001)
 
     def _append_plot(self, v0, v1):
         # Enqueue for main thread to handle
         try:
             self.plot_queue.put_nowait((v0, v1))
         except queue.Full:
-            # If main thread gets stuck, drop visual frames rather than blocking or OOM
             pass
-        self.buf1[self.ptr] = v1
-        self.ptr = (self.ptr + 1) % self.plot_len
 
     def log(self, s):
         now = datetime.now().strftime("%H:%M:%S")

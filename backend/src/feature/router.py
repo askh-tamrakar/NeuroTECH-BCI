@@ -36,8 +36,10 @@ from .detectors.rps_detector import RPSDetector
 from .extractors.trigger_extractor import EEGExtractor
 from .detectors.eeg_frequency_detector import EEGFrequencyDetector
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-CONFIG_PATH = PROJECT_ROOT / "config" / "sensor_config.json"
+from src.utils.paths import get_config_dir
+
+CONFIG_DIR = get_config_dir()
+CONFIG_PATH = CONFIG_DIR / "sensor_config.json"
 
 INPUT_STREAM_NAME = "BioSignals-Processed"
 OUTPUT_STREAM_NAME = "BioSignals-Events"
@@ -206,6 +208,18 @@ class FeatureRouter:
                                     if isinstance(detection_result, str) and detection_result:
                                         self._emit_event(detection_result, ch_idx, sensor_type, features, ts)
                                 elif sensor_type == "EEG":
+                                    # 1. Emit Real-time Frequency update (for UI)
+                                    # Parse frequency from event name if it's a TARGET_ string
+                                    live_freq = 0.0
+                                    if isinstance(detection_result, str) and detection_result.startswith("TARGET_"):
+                                        try:
+                                            num_str = detection_result.replace("TARGET_", "").replace("HZ", "").replace("_", ".")
+                                            live_freq = float(num_str)
+                                        except: pass
+                                    
+                                    self._emit_event("eeg_prediction", ch_idx, sensor_type, features, ts, extra_data={"frequency": live_freq})
+
+                                    # 2. Emit confirmed event
                                     if detection_result:
                                         self._emit_event(detection_result, ch_idx, sensor_type, features, ts)
 
@@ -232,6 +246,10 @@ class FeatureRouter:
                 pass
         elif sensor_type == "EOG":
             pass
+        elif sensor_type == "EEG":
+            if event_name == "REST" and last_event == "REST":
+                return
+            # Otherwise, allow repeated TARGET detections (detector has a 500ms internal debounce)
         else:
             if event_name == last_event:
                 return
@@ -258,8 +276,19 @@ class FeatureRouter:
 
 def main():
     router = FeatureRouter()
-    if router.resolve_stream():
-        router.run()
+    log.info(f"Feature Router starting... (watching {CONFIG_PATH})")
+    
+    # Loop until stream is resolved
+    while True:
+        if router.resolve_stream():
+            try:
+                router.run()
+            except Exception as e:
+                log.error(f"Router crash: {e}")
+                time.sleep(2)
+        else:
+            log.warning(f"Waiting for {INPUT_STREAM_NAME} LSL stream...")
+            time.sleep(5)
 
 if __name__ == "__main__":
     main()

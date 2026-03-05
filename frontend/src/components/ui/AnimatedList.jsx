@@ -14,7 +14,7 @@ const AnimatedItem = ({ children, delay = 0, index, onMouseEnter, onClick }) => 
       initial={{ scale: 0.1, opacity: 0.5 }}
       animate={inView ? { scale: 1, opacity: 1 } : { scale: 0.8, opacity: 0 }}
       transition={{ duration: 0.1, delay }}
-      style={{ marginBottom: '1rem', cursor: 'pointer' }}
+      style={{ marginBottom: '1px', cursor: 'pointer' }}
     >
       {children}
     </motion.div>

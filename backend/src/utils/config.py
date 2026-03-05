@@ -380,8 +380,9 @@ class ConfigManager:
 # Global instances - use these throughout the application
 # ============================================================
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-CONFIG_DIR = PROJECT_ROOT / "config"
+from .paths import get_config_dir
+
+CONFIG_DIR = get_config_dir()
 
 # Create global manager
 config_manager = ConfigManager(CONFIG_DIR)

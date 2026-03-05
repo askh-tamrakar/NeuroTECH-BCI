@@ -1,3 +1,6 @@
+import eventlet
+eventlet.monkey_patch()
+
 import sys
 from pathlib import Path
 
@@ -13,7 +16,9 @@ app = create_app()
 def main():
     start_background_threads()
     print("Starting Web Server...")
-    socketio.run(app, host='0.0.0.0', port=5005, allow_unsafe_werkzeug=True)
+    # Eventlet is now patched; socketio.run will automatically pick it up.
+    # We no longer need allow_unsafe_werkzeug as we're not using Werkzeug's server.
+    socketio.run(app, host='0.0.0.0', port=5005, debug=False)
 
 if __name__ == '__main__':
     main()

@@ -5,7 +5,8 @@
   align-items: flex-start;
   justify-content: center;
   gap: 2rem;
-  padding: 2rem;
+  padding-bottom: 2rem;
+  padding-top: 1rem;
   color: var(--text);
   position: relative;
   width: 100%;
@@ -72,13 +73,13 @@
 .scoreboard {
   background: rgba(0, 0, 0, 0.45);
   padding: 12px 24px;
-  border-radius: 16px;
+  border-radius: 10px;
   display: flex;
   gap: 24px;
   align-items: center;
   font-weight: 800;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--primary);
   backdrop-filter: blur(8px);
 }
 

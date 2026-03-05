@@ -1,8 +1,12 @@
 {
+  "active_models": {
+    "EMG": "Neurobench",
+    "EOG": "Neurobench"
+  },
   "channel_mapping": {
     "ch0": {
       "enabled": true,
-      "sensor": "EMG"
+      "sensor": "EOG"
     },
     "ch1": {
       "enabled": true,

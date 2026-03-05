@@ -426,7 +426,7 @@ export default function SessionManagerPanel({
                     {rows.length === 0 && !isTableLoading ? (
                         <div className="absolute inset-0 flex flex-col items-center justify-center text-muted opacity-50 gap-2">
                             <ClipboardX size={60} strokeWidth={1.5} />
-                            <span className="text-2xl">No data available</span>
+                            <span className="text-2xl"> No data available </span>
                         </div>
                     ) : (
                         <div className="relative">
@@ -650,7 +650,7 @@ export default function SessionManagerPanel({
                                                 value={renameInput}
                                                 onChange={e => setRenameInput(e.target.value)}
                                                 onKeyDown={e => { if (e.key === 'Enter') handleRenameSubmit(sessionName, e); if (e.key === 'Escape') setRenamingSession(null); }}
-                                                className="w-full bg-transparent text-text text-sm px-1 outline-none"
+                                                className="w-full bg-transparent text-text text-sm pl-1 outline-none"
                                             />
                                             <div className="flex gap-1 shrink-0">
                                                 <button onClick={(e) => handleRenameSubmit(sessionName, e)} className="text-emerald-500 hover:bg-emerald-500/20 p-1 rounded">
@@ -669,13 +669,13 @@ export default function SessionManagerPanel({
                                     return (
                                         <div
                                             onClick={() => toggleMergeSelection(sessionName)}
-                                            className={`flex justify-between items-center pr-2 py-1 rounded-md cursor-pointer transition-all ${isChecked ? 'bg-accent/10 border border-accent/20' : 'hover:bg-white/5 border border-transparent'}`}
+                                            className={`flex justify-between items-center rounded-md cursor-pointer transition-all ${isChecked ? 'bg-accent/10 border border-accent/20' : 'hover:bg-white/5 border border-transparent'}`}
                                         >
-                                            <div className="flex items-center gap-3 pl-1">
+                                            <div className="flex items-center gap-3 pl-2">
                                                 <div className={`w-4 h-4 rounded flex items-center justify-center transition-all ${isChecked ? 'bg-accent border-accent' : 'bg-transparent border-2 border-muted/50'}`}>
                                                     {isChecked && <Check size={12} className="text-white" />}
                                                 </div>
-                                                <span className={`text-base truncate ${isChecked ? 'font-bold text-accent' : 'text-muted'}`}>
+                                                <span className={`pl-1 ml-2 text-base truncate ${isChecked ? 'font-bold text-accent' : 'text-muted'}`}>
                                                     {cleanName}
                                                 </span>
                                             </div>
@@ -699,7 +699,7 @@ export default function SessionManagerPanel({
                                                 <>
                                                     <button
                                                         onClick={(e) => { e.stopPropagation(); setRenamingSession(sessionName); setRenameInput(cleanName); }}
-                                                        className={`p-0.5 rounded hover:bg-primary/20 hover:text-primary transition-all text-border`}
+                                                        className={`p-0.5 rounded hover:bg-primary/10 hover:text-primary transition-all text-border ${isSelected ? 'text-primary/50' : 'text-border group-hover:text-muted'}`}
                                                         title="Rename Session"
                                                     >
                                                         <Edit2 size={16} />
@@ -708,7 +708,7 @@ export default function SessionManagerPanel({
                                             )}
                                             <button
                                                 onClick={(e) => handleDeleteSessionProxy(sessionName, e)}
-                                                className={`p-0.5 rounded hover:bg-red-500/10 hover:text-red-400 transition-all ${isSelected ? 'text-primary/50' : 'text-border group-hover:text-muted'}`}
+                                                className={`p-0.5 rounded hover:bg-red-500/20 hover:text-red-400 transition-all ${isSelected ? 'text-primary/50' : 'text-border group-hover:text-muted'}`}
                                                 title="Delete Session"
                                             >
                                                 <Trash size={16} />

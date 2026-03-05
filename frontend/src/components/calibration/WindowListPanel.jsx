@@ -52,7 +52,7 @@ export default function WindowListPanel({
     // Track progress of the CURRENT BATCH (Active/Collected) for Auto Mode
     const targetCount = autoLimit || 30;
     const activeCount = recordingCount + processedCount; // Use the calculated counts
-    const progress = Math.min(100, (activeCount / targetCount) * 100);
+    const progress = Math.min(100, (processedCount / targetCount) * 100);
 
     return (
         <div className="flex flex-col h-full bg-[var(--surface)] border-2 border-[var(--border)] rounded-xl overflow-hidden shadow-card animate-in fade-in duration-300">

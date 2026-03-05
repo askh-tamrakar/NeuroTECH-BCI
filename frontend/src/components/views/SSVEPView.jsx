@@ -56,9 +56,12 @@ export default function SSVEPView({ isConnected, wsEvent }) {
             detectedFreq = parseFloat(wsEvent.event);
         } else if (wsEvent.features && wsEvent.features.peak_freq) {
             detectedFreq = wsEvent.features.peak_freq;
+        } else if (wsEvent.event === 'eeg_prediction') {
+            detectedFreq = wsEvent.frequency || 0;
         }
 
-        if (detectedFreq > 0) {
+        // Update real-time frequency display (even if 0, to show it's alive)
+        if (wsEvent.event === 'eeg_prediction' || detectedFreq >= 0) {
             setRealTimeFreq(detectedFreq);
         }
 

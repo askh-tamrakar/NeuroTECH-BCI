@@ -22,7 +22,7 @@ class EEGFrequencyDetector:
         self.target_freqs = eeg_config.get("target_freqs", [6.0, 8.0, 10.0, 12.0, 15.0, 18.0, 20.0])
         self.window_len_sec = eeg_config.get("window_len_sec", 1.0)
         self.num_harmonics = eeg_config.get("num_harmonics", 3)
-        self.rest_threshold = eeg_config.get("rest_threshold", 0.35)
+        self.rest_threshold = eeg_config.get("rest_threshold", 0.15) # Lowered from 0.35 for realistic EEG SNR
         self.debounce_ms = eeg_config.get("debounce_ms", 500)
         
         # FBCCA Settings
@@ -107,6 +107,7 @@ class EEGFrequencyDetector:
         if max_score < self.rest_threshold:
             # We treat Rest as a valid state but might return None or "Rest" 
             # depending on how Router handles it. RPS game needs "Rest".
+            self.last_event_ts = current_time # Update ts so REST respects debounce
             return "REST"
         
         detected_freq = self.target_freqs[best_idx]

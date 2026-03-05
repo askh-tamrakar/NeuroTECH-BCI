@@ -377,51 +377,53 @@ const RPSGame = ({ wsEvent }) => {
         <div className="rps-container overflow-hidden relative">
             <div className="rps-main">
                 {/* Absolute positioning for Title, Scoreboard, and Controls to float them at the top */}
-                <div className="absolute top-8 left-8 right-8 flex justify-between items-start z-20 pointer-events-none">
+                <div className="absolute top-0 left-8 right-0 flex items-start z-20 pointer-events-none">
                     {/* Left side: elements must have pointer-events-auto to be clickable */}
-                    <div className="flex flex-col gap-4 pointer-events-auto">
-                        <div className="rps-title" style={{ marginBottom: 0 }}>NEURO RPS</div>
+                    <div className="flex flex-col gap-40 pointer-events-auto">
+                        <div className="flex flex-col">
+                            <div className="rps-title" style={{ marginBottom: 0 }}>NEURO RPS</div>
 
-                        <div className="top-controls flex flex-wrap" style={{ marginLeft: 0 }}>
-                            <div className="flex items-center gap-2 bg-surface rounded px-2 py-1 border border-white/10 ml-2">
-                                <BrainCircuit size={16} className="text-primary" />
-                                <div className="w-40">
+                            <div className="top-controls flex flex-wrap" style={{ marginLeft: 0 }}>
+                                <div className="flex items-center gap-2 bg-surface rounded px-2 py-1 border border-white/10">
+                                    <BrainCircuit size={16} className="text-primary" />
+                                    <div className="w-40">
+                                        <CustomSelect
+                                            value={selectedModel}
+                                            onChange={(val) => handleModelChange({ target: { value: val } })}
+                                            options={models.map(m => ({ value: m.name, label: m.name }))}
+                                            placeholder="Select Model"
+                                            className="border-none bg-transparent"
+                                        />
+                                    </div>
+                                </div>
+                                <div className="w-32">
                                     <CustomSelect
-                                        value={selectedModel}
-                                        onChange={(val) => handleModelChange({ target: { value: val } })}
-                                        options={models.map(m => ({ value: m.name, label: m.name }))}
-                                        placeholder="Select Model"
-                                        className="border-none bg-transparent"
+                                        value={difficulty}
+                                        onChange={setDifficulty}
+                                        options={[
+                                            { value: 'low', label: 'Low' },
+                                            { value: 'moderate', label: 'Moderate' },
+                                            { value: 'high', label: 'High' }
+                                        ]}
+                                        placeholder="Difficulty"
                                     />
                                 </div>
-                            </div>
-                            <div className="w-32">
-                                <CustomSelect
-                                    value={difficulty}
-                                    onChange={setDifficulty}
-                                    options={[
-                                        { value: 'low', label: 'Low' },
-                                        { value: 'moderate', label: 'Moderate' },
-                                        { value: 'high', label: 'High' }
-                                    ]}
-                                    placeholder="Difficulty"
-                                />
-                            </div>
 
-                            <button className={`mode-btn ${manualMode ? 'active' : ''}`} onClick={toggleManualMode} title="Toggle manual mode">
-                                {manualMode ? 'Manual' : 'Auto'}
-                            </button>
-                            <button
-                                className="flex items-center justify-center p-2 rounded bg-white/5 border border-white/10 hover:bg-white/10 transition-colors ml-2"
-                                onClick={() => {
-                                    setAssetType(prev => prev === 'set1' ? 'set2' : 'set1');
-                                    setGlobalFallbackMode(false); // Reset fallback on type change
-                                    soundHandler.playRPSWarp(); // Play sound on asset type switch
-                                }}
-                                title="Toggle Asset Type"
-                            >
-                                <ImageIcon size={18} className="text-muted hover:text-white transition-colors" />
-                            </button>
+                                <button className={`mode-btn ${manualMode ? 'active' : ''}`} onClick={toggleManualMode} title="Toggle manual mode">
+                                    {manualMode ? 'Manual' : 'Auto'}
+                                </button>
+                                <button
+                                    className="flex items-center justify-center p-2 rounded bg-white/5 border border-white/10 hover:bg-white/10 transition-colors ml-2"
+                                    onClick={() => {
+                                        setAssetType(prev => prev === 'set1' ? 'set2' : 'set1');
+                                        setGlobalFallbackMode(false); // Reset fallback on type change
+                                        soundHandler.playRPSWarp(); // Play sound on asset type switch
+                                    }}
+                                    title="Toggle Asset Type"
+                                >
+                                    <ImageIcon size={18} className="text-muted hover:text-white transition-colors" />
+                                </button>
+                            </div>
                         </div>
 
                         {gameState !== 'waiting' && result && (
@@ -441,10 +443,39 @@ const RPSGame = ({ wsEvent }) => {
                     </div>
 
                     {/* Center Scoreboard using margin auto and position absolute inside the flex container */}
-                    <div className="absolute left-1/2 -translate-x-1/2 top-0 pointer-events-auto">
+                    <div className="absolute left-1/2 -translate-x-1/2 top-[29px] pointer-events-auto">
                         <div className="scoreboard" style={{ position: 'relative', transform: 'none', left: 'auto', top: 'auto' }}>
                             <div>Player: <strong>{score.player}</strong></div>
                             <div>Computer: <strong>{score.computer}</strong></div>
+                        </div>
+                    </div>
+
+                    {/* Right Sidebar */}
+                    <div className="rps-sidebar top-[29px]">
+                        {/* Event Log Panel */}
+                        <div className="w-full h-full flex flex-col bg-surface/30 border border-text/40 rounded-2xl p-6 backdrop-blur-md shadow-2xl">
+                            <div className="text-sm font-bold text-muted uppercase tracking-wider mb-4 flex justify-between items-center pb-3 border-b border-text/40 flex-shrink-0">
+                                <span>Event Log</span>
+                                <span className="text-[11px] opacity-60">Last 15 events</span>
+                            </div>
+                            <div className="space-y-2 font-mono text-base overflow-y-auto flex-1 pr-2 custom-scrollbar">
+                                {eventLogs.length === 0 ? (
+                                    <div className="text-muted/50 italic py-4 text-center">No events received yet...</div>
+                                ) : (
+                                    eventLogs.map((log) => (
+                                        <div key={log.id} className="flex gap-4 py-2 border-b border-white/5 last:border-0 hover:bg-white/5 px-3 rounded text-base">
+                                            <span className="text-muted">{log.time}</span>
+                                            <span className={`font-bold ${log.name === 'ROCK' ? 'text-amber-400' :
+                                                log.name === 'PAPER' ? 'text-blue-400' :
+                                                    log.name === 'SCISSORS' ? 'text-pink-400' : 'text-text'
+                                                }`}>
+                                                {log.name}
+                                            </span>
+                                            <span className="text-muted ml-auto text-xs">{log.channel}</span>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -496,34 +527,6 @@ const RPSGame = ({ wsEvent }) => {
                         {renderCard('computer', computerMove, gameState !== 'waiting')}
                     </div>
 
-                </div>
-            </div>
-
-            <div className="rps-sidebar">
-                {/* Event Log Panel */}
-                <div className="w-full h-full flex flex-col bg-surface/80 border border-white/10 rounded-2xl p-6 backdrop-blur-md shadow-2xl">
-                    <div className="text-sm font-bold text-muted uppercase tracking-wider mb-4 flex justify-between items-center pb-3 border-b border-white/10 flex-shrink-0">
-                        <span>Event Log</span>
-                        <span className="text-[11px] opacity-60">Last 15 events</span>
-                    </div>
-                    <div className="space-y-2 font-mono text-sm overflow-y-auto flex-1 pr-2 custom-scrollbar">
-                        {eventLogs.length === 0 ? (
-                            <div className="text-muted/50 italic py-4 text-center">No events received yet...</div>
-                        ) : (
-                            eventLogs.map((log) => (
-                                <div key={log.id} className="flex gap-4 py-2 border-b border-white/5 last:border-0 hover:bg-white/5 px-3 rounded text-base">
-                                    <span className="text-muted">{log.time}</span>
-                                    <span className={`font-bold ${log.name === 'ROCK' ? 'text-amber-400' :
-                                        log.name === 'PAPER' ? 'text-blue-400' :
-                                            log.name === 'SCISSORS' ? 'text-pink-400' : 'text-text'
-                                        }`}>
-                                        {log.name}
-                                    </span>
-                                    <span className="text-muted ml-auto text-xs">{log.channel}</span>
-                                </div>
-                            ))
-                        )}
-                    </div>
                 </div>
             </div>
         </div>
