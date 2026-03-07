@@ -127,7 +127,7 @@ export default function LiveView({ wsData, wsEvent, config, isPaused, wsUrl }) {
       activeChannels.forEach((chIdx, i) => {
         if (!next[chIdx]) {
           const defaultColor = ['#3b82f6', '#10b981', '#f59e0b', '#a855f7'][i % 4]
-          next[chIdx] = { zoom: 1, manualRange: "", timeWindowMs: defaultTimeWindowMs, color: defaultColor }
+          next[chIdx] = { zoom: 1, manualRange: "", timeWindowMs: defaultTimeWindowMs, color: defaultColor, smoothing: true }
           changed = true
         }
       })
@@ -383,6 +383,7 @@ export default function LiveView({ wsData, wsEvent, config, isPaused, wsUrl }) {
         const currentManual = channelConfig[chIdx]?.manualRange || ""
         const currentTimeWindow = channelConfig[chIdx]?.timeWindowMs || defaultTimeWindowMs
         const currentChColor = channelConfig[chIdx]?.color || ['#3b82f6', '#10b981', '#f59e0b', '#a855f7'][chIdx % 4]
+        const currentSmoothing = channelConfig[chIdx]?.smoothing ?? true
 
         return (
           <div key={chIdx} className="channel-wrapper">
@@ -399,10 +400,12 @@ export default function LiveView({ wsData, wsEvent, config, isPaused, wsUrl }) {
               currentZoom={currentZoom}
               currentManual={currentManual}
               channelIndex={chIdx}
+              smoothing={currentSmoothing}
               onZoomChange={(z) => { updateChannelConfig(chIdx, 'zoom', z); updateChannelConfig(chIdx, 'manualRange', ""); }}
               onRangeChange={(val) => updateChannelConfig(chIdx, 'manualRange', val)}
               onTimeWindowChange={(val) => updateChannelConfig(chIdx, 'timeWindowMs', val)}
               onColorChange={(val) => updateChannelConfig(chIdx, 'color', val)}
+              onSmoothingChange={(val) => updateChannelConfig(chIdx, 'smoothing', val)}
             />
           </div>
         )

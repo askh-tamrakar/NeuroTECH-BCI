@@ -335,10 +335,10 @@ function draw() {
 
     // Draw Signal with Neon Glow and Smoothing
     ctx.strokeStyle = config.lineColor;
-    ctx.lineWidth = 3; // Reduced from 3.5 to match live graph
+    ctx.lineWidth = 3; // 
 
     // Neon Glow - Stronger
-    ctx.shadowBlur = 6; // Reduced from 12 to match live graph
+    ctx.shadowBlur = 8;
     ctx.shadowColor = config.lineColor;
 
     ctx.beginPath();

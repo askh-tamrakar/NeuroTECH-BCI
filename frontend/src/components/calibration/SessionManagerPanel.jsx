@@ -400,7 +400,7 @@ export default function SessionManagerPanel({
                                     setRowFrom('');
                                     setRowTo('');
                                 }}
-                                className="px-2 w-9 flex items-center justify-center text-muted hover:text-white rounded hover:bg-red-500/20 hover:text-red-500 transition-colors h-full"
+                                className="px-2 w-9 flex items-center justify-center text-muted rounded hover:bg-red-500/20 hover:text-red-500 transition-colors h-full"
                                 title="Reset Filters"
                             >
                                 <X size={16} />

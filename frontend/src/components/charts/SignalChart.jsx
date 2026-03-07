@@ -22,11 +22,10 @@ const SignalChart = forwardRef(({
   currentZoom = 1,
   currentManual = "",
   onZoomChange = null,
-  onRangeChange = null,
-  onTimeWindowChange = null,
-  onColorChange = null,
+  onSmoothingChange = null,
   disabled = false,
-  channelIndex = -1
+  channelIndex = -1,
+  smoothing = true
 }, ref) => {
 
   const containerRef = useRef(null)
@@ -68,7 +67,8 @@ const SignalChart = forwardRef(({
                 zoom: currentZoom,
                 manualRange: currentManual,
                 showGrid,
-                channelIndex
+                channelIndex,
+                smoothing
               }
             }
           }, [offscreen]);
@@ -127,11 +127,12 @@ const SignalChart = forwardRef(({
           zoom: currentZoom,
           manualRange: currentManual,
           showGrid,
-          channelIndex
+          channelIndex,
+          smoothing
         }
       });
     }
-  }, [timeWindowMs, color, currentZoom, currentManual, showGrid, currentTheme]);
+  }, [timeWindowMs, color, currentZoom, currentManual, showGrid, currentTheme, smoothing]);
 
   // Sync Annotations
   useEffect(() => {
@@ -250,6 +251,16 @@ const SignalChart = forwardRef(({
           <div className="range-display">
             +/-{rangeDisplay} uV
           </div>
+
+          <div className="separator-small"></div>
+
+          <button
+            onClick={() => onSmoothingChange && onSmoothingChange(!smoothing)}
+            className={`zoom-btn ${smoothing ? 'active' : 'inactive'}`}
+            title="Toggle Line Smoothing"
+          >
+            SMOOTH
+          </button>
         </div>
 
         <div className="chart-stats">

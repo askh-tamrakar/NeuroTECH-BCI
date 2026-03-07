@@ -47,7 +47,8 @@ let config = {
     historyColor: '#3b82f64D',
     showGrid: true,
     channels: 1,
-    themeAxisColor: '#aaaaaa' // New config default
+    themeAxisColor: '#aaaaaa', // New config default
+    smoothing: true
 };
 
 let markedWindows = [];
@@ -343,22 +344,96 @@ function draw() {
 
         ctx.beginPath();
 
-        let lastPx = -1;
+        if (config.smoothing && (endIdx - startIdx) >= 2) {
+            // Centripetal Catmull-Rom Spline Implementation (alpha = 0.5)
+            // This prevents loops and self-intersections when points are close together
+            const getPoint = (i) => {
+                const idx = Math.max(startIdx, Math.min(endIdx, i));
+                return {
+                    x: timeToPx(points[idx].time),
+                    y: valToPy(points[idx].value)
+                };
+            };
 
-        for (let i = startIdx; i <= endIdx; i++) {
-            const p = points[i];
-            const px = timeToPx(p.time);
-            const py = valToPy(p.value);
+            const pStart = getPoint(startIdx);
+            ctx.moveTo(pStart.x, pStart.y);
 
-            // Break path if we jump across the boundary (wrap-around)
-            // or if it's the first point
-            if (i === startIdx || Math.abs(px - lastPx) > plW * 0.5) {
-                ctx.moveTo(px, py);
-            } else {
-                ctx.lineTo(px, py);
+            for (let i = startIdx; i < endIdx; i++) {
+                const p0 = getPoint(i - 1);
+                const p1 = getPoint(i);
+                const p2 = getPoint(i + 1);
+                const p3 = getPoint(i + 2);
+
+                // If px jumps (wrap-around), we must break the spline and start fresh
+                if (Math.abs(p2.x - p1.x) > plW * 0.5) {
+                    ctx.stroke();
+                    ctx.beginPath();
+                    ctx.moveTo(p2.x, p2.y);
+                    continue;
+                }
+
+                // Centripetal Catmull-Rom math
+                const getT = (t, pA, pB) => {
+                    const d = Math.pow(Math.pow(pB.x - pA.x, 2) + Math.pow(pB.y - pA.y, 2), 0.5);
+                    return t + Math.pow(d, 0.5); // alpha = 0.5 for centripetal
+                };
+
+                const t0 = 0;
+                const t1 = getT(t0, p0, p1) || 1e-4;
+                const t2 = getT(t1, p1, p2) || 2e-4;
+                const t3 = getT(t2, p2, p3) || 3e-4;
+
+                const steps = 6;
+                for (let step = 1; step <= steps; step++) {
+                    const t = t1 + (step / steps) * (t2 - t1);
+
+                    const A1 = {
+                        x: (t1 - t) / (t1 - t0) * p0.x + (t - t0) / (t1 - t0) * p1.x,
+                        y: (t1 - t) / (t1 - t0) * p0.y + (t - t0) / (t1 - t0) * p1.y
+                    };
+                    const A2 = {
+                        x: (t2 - t) / (t2 - t1) * p1.x + (t - t1) / (t2 - t1) * p2.x,
+                        y: (t2 - t) / (t2 - t1) * p1.y + (t - t1) / (t2 - t1) * p2.y
+                    };
+                    const A3 = {
+                        x: (t3 - t) / (t3 - t2) * p2.x + (t - t2) / (t3 - t2) * p3.x,
+                        y: (t3 - t) / (t3 - t2) * p2.y + (t - t2) / (t3 - t2) * p3.y
+                    };
+
+                    const B1 = {
+                        x: (t2 - t) / (t2 - t0) * A1.x + (t - t0) / (t2 - t0) * A2.x,
+                        y: (t2 - t) / (t2 - t0) * A1.y + (t - t0) / (t2 - t0) * A2.y
+                    };
+                    const B2 = {
+                        x: (t3 - t) / (t3 - t1) * A2.x + (t - t1) / (t3 - t1) * A3.x,
+                        y: (t3 - t) / (t3 - t1) * A2.y + (t - t1) / (t3 - t1) * A3.y
+                    };
+
+                    const C = {
+                        x: (t2 - t) / (t2 - t1) * B1.x + (t - t1) / (t2 - t1) * B2.x,
+                        y: (t2 - t) / (t2 - t1) * B1.y + (t - t1) / (t2 - t1) * B2.y
+                    };
+
+                    ctx.lineTo(C.x, C.y);
+                }
             }
-            lastPx = px;
+        } else {
+            // Standard lineTo rendering
+            let lastPx = -1;
+            for (let i = startIdx; i <= endIdx; i++) {
+                const p = points[i];
+                const px = timeToPx(p.time);
+                const py = valToPy(p.value);
+
+                if (i === startIdx || Math.abs(px - lastPx) > plW * 0.5) {
+                    ctx.moveTo(px, py);
+                } else {
+                    ctx.lineTo(px, py);
+                }
+                lastPx = px;
+            }
         }
+
         ctx.stroke();
 
         // Reset shadow
@@ -384,11 +459,11 @@ function draw() {
 
     // Draw History Line (faded, but highly visible)
     ctx.globalAlpha = 0.8;
-    drawSegment(startIndex, splitIndex - 1, config.historyColor, 3, false);
+    drawSegment(startIndex, splitIndex - 1, config.historyColor, 3.0, false);
     ctx.globalAlpha = 1.0;
 
     // Draw Active Line
-    drawSegment(splitIndex, points.length - 1, config.color, 3, true);
+    drawSegment(splitIndex, points.length - 1, config.color, 3.0, true);
 
     // Reference Areas (Marked Windows)
     if (markedWindows.length > 0) {
