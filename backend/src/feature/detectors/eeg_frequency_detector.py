@@ -62,7 +62,6 @@ class EEGFrequencyDetector:
             return None
             
         current_time = time.time()
-        # Note: Debounce is now handled below to allow real-time results to flow for UI
             
         raw_data = np.array(features["raw_window"])
         if len(raw_data) < self.window_samples:
@@ -99,28 +98,45 @@ class EEGFrequencyDetector:
         if not target_scores:
             return None
             
-        max_score = max(target_scores)
-        best_idx = np.argmax(target_scores)
+        # EMA Smoothing for scores to prevent continuous bouncing
+        if not hasattr(self, 'score_history') or self.score_history is None:
+            self.score_history = np.array(target_scores)
+        else:
+            alpha = 0.4 # Smoothing factor (lower = smoother, higher = more responsive)
+            self.score_history = alpha * np.array(target_scores) + (1 - alpha) * self.score_history
+            
+        max_score = np.max(self.score_history)
+        best_idx = np.argmax(self.score_history)
         
         if max_score < self.rest_threshold:
-            # Check debounce for state transition
-            confirmed = None
-            if (current_time - self.last_event_ts) * 1000 >= self.debounce_ms:
-                self.last_event_ts = current_time
-                confirmed = "REST"
-            return "REST", confirmed
+            live_event = "REST"
+        else:
+            detected_freq = self.target_freqs[best_idx]
+            live_event = f"TARGET_{str(detected_freq).replace('.', '_')}HZ"
+            
+        # Initialize debounce trackers
+        if not hasattr(self, 'current_stable_target'):
+            self.current_stable_target = live_event
+            self.stable_target_start = current_time
+            self.last_emitted_ts = 0.0
+            
+        # Debounce logic: target must remain stable
+        if live_event != self.current_stable_target:
+            self.current_stable_target = live_event
+            self.stable_target_start = current_time
+            
+        confirmed = None
         
-        detected_freq = self.target_freqs[best_idx]
-        event_name = f"TARGET_{str(detected_freq).replace('.', '_')}HZ"
+        # Check if the signal has been stable long enough
+        if (current_time - self.stable_target_start) * 1000 >= self.debounce_ms:
+            # Emit a confirmed event at most once per debounce_ms for the same stable target
+            if (current_time - self.last_emitted_ts) * 1000 >= self.debounce_ms:
+                confirmed = self.current_stable_target
+                self.last_emitted_ts = current_time
+                if confirmed != "REST":
+                    print(f"FBCCA Confirmed: {confirmed} (Score: {max_score:.3f})")
         
-        # Debounce confirmed target logs/emissions
-        if (current_time - self.last_event_ts) * 1000 < self.debounce_ms:
-            # Return live event but no confirmed event
-            return event_name, None
-
-        self.last_event_ts = current_time
-        print(f"FBCCA Detected: {event_name} (Score: {max_score:.3f})")
-        return event_name, event_name
+        return live_event, confirmed
 
     def update_config(self, config: dict):
         self.config = config

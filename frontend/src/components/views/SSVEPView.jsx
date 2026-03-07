@@ -45,33 +45,35 @@ export default function SSVEPView({ isConnected, wsEvent }) {
     useEffect(() => {
         if (!wsEvent) return;
 
-        let detectedFreq = 0;
-        if (wsEvent.frequency) {
-            detectedFreq = wsEvent.frequency;
+        // 1. Unified Frequency Extraction Logic (for UI feedback)
+        let freqValue = null;
+        if (wsEvent.event === 'eeg_prediction' && wsEvent.frequency !== undefined) {
+            freqValue = wsEvent.frequency;
         } else if (typeof wsEvent.event === 'string' && wsEvent.event.startsWith('TARGET_')) {
-            // Parse FBCCA event (e.g., 'TARGET_10_0HZ' -> 10.0)
             const numStr = wsEvent.event.replace('TARGET_', '').replace('HZ', '').replace('_', '.');
-            detectedFreq = parseFloat(numStr);
-        } else if (wsEvent.event && !isNaN(parseFloat(wsEvent.event))) {
-            detectedFreq = parseFloat(wsEvent.event);
-        } else if (wsEvent.features && wsEvent.features.peak_freq) {
-            detectedFreq = wsEvent.features.peak_freq;
-        } else if (wsEvent.event === 'eeg_prediction') {
-            detectedFreq = wsEvent.frequency || 0;
+            freqValue = parseFloat(numStr);
+        } else if (wsEvent.features?.peak_freq !== undefined) {
+            freqValue = wsEvent.features.peak_freq;
         }
 
-        // Update real-time frequency display (even if 0, to show it's alive)
-        if (wsEvent.event === 'eeg_prediction' || detectedFreq >= 0) {
-            setRealTimeFreq(detectedFreq);
+        // 2. Always update Real-time Frequency display (for smooth gauge feedback)
+        if (freqValue !== null) {
+            setRealTimeFreq(freqValue);
         }
 
-        if (wsEvent.event === 'DETECTION' || detectedFreq > 0) {
+        // 3. Trigger Actions only on CONFIRMED detections
+        // We reject 'eeg_prediction' here to prevent the rapid switching spam in logs/sounds
+        const isConfirmedDetection =
+            (typeof wsEvent.event === 'string' && wsEvent.event.startsWith('TARGET_')) ||
+            wsEvent.event === 'DETECTION';
+
+        if (isConfirmedDetection && freqValue > 0) {
             const closest = configs.reduce((prev, curr) => {
-                return Math.abs(curr.freq - detectedFreq) < Math.abs(prev.freq - detectedFreq) ? curr : prev;
+                return Math.abs(curr.freq - freqValue) < Math.abs(prev.freq - freqValue) ? curr : prev;
             });
 
-            if (Math.abs(closest.freq - detectedFreq) < 0.5) {
-                const msg = `Detected ${detectedFreq.toFixed(1)}Hz -> ${closest.label}`;
+            if (Math.abs(closest.freq - freqValue) < 0.5) {
+                const msg = `Confirmed: ${freqValue.toFixed(1)}Hz -> ${closest.label}`;
                 addLog(msg, 'DETECTION');
                 soundHandler.playSuccess();
 

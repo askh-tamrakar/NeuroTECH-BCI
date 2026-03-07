@@ -1,5 +1,13 @@
+import os
+# Force single-threading for math libraries to prevent eventlet/greenlet thread-switch conflicts
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
+
 import eventlet
-eventlet.monkey_patch()
+eventlet.monkey_patch(all=True)
 
 import sys
 from pathlib import Path

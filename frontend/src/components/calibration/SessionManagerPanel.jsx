@@ -431,7 +431,7 @@ export default function SessionManagerPanel({
                     ) : (
                         <div className="relative">
                             <table className="w-full text-left border-collapse">
-                                <thead className="bg-[var(--header-bg)] sticky top-0 z-10 backdrop-blur-sm">
+                                <thead className="bg-bg/75 sticky top-0 z-10 backdrop-blur-sm">
                                     <tr>
                                         <th className="px-3 py-1.5 text-xs font-bold text-[var(--text-highlight)] uppercase border-b border-[var(--section-border)] w-12">S.No</th>
                                         <th className="px-3 py-1.5 text-xs font-bold text-[var(--text-highlight)] uppercase border-b border-[var(--section-border)] w-24">
@@ -445,14 +445,14 @@ export default function SessionManagerPanel({
                                         {/* Dynamic Feature Headers */}
                                         {rows.length > 0 && rows[0].features && !Array.isArray(rows[0].features) ? (
                                             Object.keys(rows[0].features).map(key => (
-                                                <th key={key} className="px-3 py-1.5 text-xs font-bold text-primary uppercase border-b border-text">
+                                                <th key={key} className="px-3 py-1.5 text-xs font-bold text-primary uppercase border-b border-[var(--section-border)]">
                                                     {key}
                                                 </th>
                                             ))
                                         ) : (
-                                            <th className="px-3 py-1.5 text-xs font-bold text-muted uppercase border-b border-border">Features</th>
+                                            <th className="px-3 py-1.5 text-xs font-bold text-muted uppercase border-b border-[var(--section-border)]">Features</th>
                                         )}
-                                        <th className="pr-1 py-1 text-xs text-left font-bold text-primary uppercase border-b border-text w-10">
+                                        <th className="pr-1 py-1 text-xs text-left font-bold text-primary uppercase border-b border-[var(--section-border)] w-10">
                                             <button
                                                 title="Clear Rows"
                                                 onClick={handleClearSessionData}
