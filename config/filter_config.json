@@ -3,8 +3,6 @@
     "EEG": {
       "bandpass_enabled": true,
       "bandpass_high": 30,
-      "bandpass_low": 0,
-      "cutoff": 1.1,
       "filters": [
         {
           "Q": 30,
@@ -27,15 +25,11 @@
       "cutoff": 20,
       "notch_enabled": true,
       "notch_freq": 50,
-      "order": 4,
-      "type": "high_pass"
+      "order": 4
     },
     "EOG": {
       "bandpass_enabled": true,
-      "bandpass_high": 10,
-      "bandpass_low": 4,
       "cutoff": 10,
-      "notch_enabled": true,
       "order": 4,
       "type": "low_pass"
     }

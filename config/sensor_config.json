@@ -1,16 +1,16 @@
 {
   "active_models": {
     "EMG": "Neurobench",
-    "EOG": "Neurobench"
+    "EOG": "dino-ml"
   },
   "channel_mapping": {
     "ch0": {
       "enabled": true,
-      "sensor": "EOG"
+      "sensor": "EMG"
     },
     "ch1": {
       "enabled": true,
-      "sensor": "EEG"
+      "sensor": "EOG"
     }
   },
   "display": {

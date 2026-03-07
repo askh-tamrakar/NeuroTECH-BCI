@@ -142,6 +142,7 @@ def main():
     parser.add_argument("-b", "--build", action="store_true", help="Build frontend before starting")
     parser.add_argument("-d", "--dev", action="store_true", help="Run in development mode (starts Vite dev server)")
     parser.add_argument("-v", "--verbose", action="store_true", help="Show detailed subprocess logs")
+    parser.add_argument("-s", "--servo", action="store_true", help="Enable Servo Actuator component")
     args = parser.parse_args()
 
     # --- STARTUP BANNER ---
@@ -219,8 +220,19 @@ def main():
             log_system(f" Failed to start Dev Server: {e}", icon=Theme.ERROR)
 
 
+    # Dynamic component addition
+    active_components = list(COMPONENTS)
+    if args.servo:
+        active_components.append({
+            "name": "Servo Actuator",
+            "module": "src.actuation.servo_controller",
+            "color": Theme.FAIL,
+            "ready_pattern": "Connected to StreamManager Relay via TCP.",
+            "success_msg": "Servo Actuator connected to Relay"
+        })
+
     # --- 3. START BACKEND COMPONENTS ---
-    for component in COMPONENTS:
+    for component in active_components:
         name = component["name"]
         log_system(f"Launching {name}...", icon=Theme.LAUNCH)
         
