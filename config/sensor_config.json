@@ -14,11 +14,11 @@
     },
     "ch2": {
       "enabled": true,
-      "sensor": "EOG"
+      "sensor": "EMG"
     },
     "ch3": {
       "enabled": true,
-      "sensor": "EEG"
+      "sensor": "EMG"
     }
   },
   "display": {

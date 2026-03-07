@@ -405,21 +405,35 @@ class StreamManagerApp:
     def _handle_relay_client(self, conn, addr):
         """
         Relays incoming data from Port 6002 to all Port 6000 clients (phones).
+        This port is used by ServoController to send DEG commands.
         """
+        buffer = b""
         try:
             while self.is_running:
                 data = conn.recv(1024)
                 if not data:
                     break
                 
-                # Relay to all raw clients
-                if self.raw_clients:
-                    for r_conn, r_addr in self.raw_clients:
-                        try:
-                            r_conn.sendall(data)
-                        except:
-                            pass
-                            
+                buffer += data
+                
+                # If there's a newline, it's a command like "DEG 90\n"
+                while b'\n' in buffer:
+                    line_end = buffer.find(b'\n')
+                    msg = buffer[:line_end].decode('ascii', errors='ignore').strip()
+                    if msg:
+                        self.log(f"Control: {msg}")
+                    
+                    # Relay the full command including newline to raw clients (ESP32/Arduino)
+                    relay_data = buffer[:line_end+1]
+                    if self.raw_clients:
+                        for r_conn, r_addr in self.raw_clients:
+                            try:
+                                r_conn.sendall(relay_data)
+                            except:
+                                pass
+                    
+                    buffer = buffer[line_end+1:]
+
         except Exception as e:
             self.log(f"Relay Handler Error: {e}")
         finally:

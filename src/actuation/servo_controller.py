@@ -9,13 +9,13 @@ class ServoController:
     def __init__(self, target_ip="127.0.0.1", target_port=6002):
         self.target_ip = target_ip
         self.target_port = target_port
-        self.current_angle = 90
+        self.current_angle = 98
         self.sock = None
         self.inlet = None
         
         # Angle range for the claw
-        self.MIN_ANGLE = 90
-        self.MAX_ANGLE = 180
+        self.MIN_ANGLE = 2  # Fully Open
+        self.MAX_ANGLE = 98 # Fully Closed
 
     def connect_lsl(self):
         print("Looking for BioSignals-Events LSL stream...")
@@ -61,11 +61,11 @@ class ServoController:
         print("\n=== Servo Controller Running ===")
         print(f"Initial Angle: {self.current_angle}")
         print("Controls:")
-        print("  - SingleBlink: +5 deg")
-        print("  - DoubleBlink: -5 deg")
-        print("  - Rock (EMG): Snap to 90 (Closed)")
-        print("  - Paper (EMG): Snap to 180 (Open)")
-        print("  - Scissors (EMG): Snap to 135 (Middle)")
+        print("  - SingleBlink: Increment (Closing)")
+        print("  - DoubleBlink: Decrement (Opening)")
+        print(f"  - Rock (EMG): Snap to {self.MAX_ANGLE} (Closed)")
+        print(f"  - Paper (EMG): Snap to {self.MIN_ANGLE} (Open)")
+        print(f"  - Scissors (EMG): Snap to 45 (Middle)")
         print("===============================\n")
 
         try:
@@ -84,22 +84,22 @@ class ServoController:
                         
                         if event_name == "SingleBlink":
                             new_angle = min(self.MAX_ANGLE, self.current_angle + 5)
-                            print(f"Event: {event_name} -> Incrementing")
+                            print(f"Event: {event_name} -> Closing")
                         
                         elif event_name == "DoubleBlink":
                             new_angle = max(self.MIN_ANGLE, self.current_angle - 5)
-                            print(f"Event: {event_name} -> Decrementing")
+                            print(f"Event: {event_name} -> Opening")
                         
                         elif event_name == "Rock":
-                            new_angle = self.MIN_ANGLE
+                            new_angle = self.MAX_ANGLE
                             print(f"Event: {event_name} -> Snap CLOSED")
                         
                         elif event_name == "Paper":
-                            new_angle = self.MAX_ANGLE
+                            new_angle = self.MIN_ANGLE
                             print(f"Event: {event_name} -> Snap OPEN")
                         
                         elif event_name == "Scissors":
-                            new_angle = 135
+                            new_angle = 45 # Approximate middle for 2-98 range
                             print(f"Event: {event_name} -> Snap MIDDLE")
 
                         # Only send if changed
