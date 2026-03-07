@@ -1,6 +1,6 @@
 {
   "active_models": {
-    "EMG": "anjali",
+    "EMG": "rps",
     "EOG": "dino-ml"
   },
   "channel_mapping": {
@@ -10,7 +10,7 @@
     },
     "ch1": {
       "enabled": true,
-      "sensor": "EOG"
+      "sensor": "EEG"
     },
     "ch2": {
       "enabled": true,

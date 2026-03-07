@@ -275,60 +275,82 @@ class StreamManagerApp:
                 buffer += data
                 
                 # Process buffer
-                while len(buffer) >= req_len:
-                    # Find Sync bytes
-                    if buffer[0] != 0xC7 or buffer[1] != 0x7C:
-                        # Scan forward for Sync1
-                        found = False
-                        for i in range(1, len(buffer) - 1):
-                            if buffer[i] == 0xC7 and buffer[i+1] == 0x7C:
-                                buffer = buffer[i:] # Discard garbage
-                                found = True
-                                break
-                        if not found:
-                            # Keep last byte just in case it's 0xC7
-                            buffer = buffer[-1:] if buffer[-1] == 0xC7 else b""
+                while len(buffer) > 0:
+                    # 1. Check for Binary Packet Sync (0xC7 0x7C)
+                    if len(buffer) >= req_len and buffer[0] == 0xC7 and buffer[1] == 0x7C:
+                        try:
+                            # Parse Packet: [C7][7C][Counter][CH0_H][CH0_L][CH1_H][CH1_L][01]
+                            counter = buffer[2]
+                            ch0_raw = (buffer[3] << 8) | buffer[4]
+                            ch1_raw = (buffer[5] << 8) | buffer[6]
+                            end_byte = buffer[7]
+                            
+                            if end_byte == 0x01:
+                                # Valid Packet -> Convert to uV
+                                ch0_uv = (ch0_raw * scale) - half_vref
+                                ch1_uv = (ch1_raw * scale) - half_vref
+                                
+                                # Push to LSL
+                                self.lsl_stream.push_sample([ch0_uv, ch1_uv])
+                                if self.packet_count % 2560 == 0:
+                                    self.log(f"P: {counter} | {ch0_uv:.2f} uV") 
+                                self.packet_count += 1
+                                
+                            # Consume packet
+                            buffer = buffer[8:]
+                            continue
+                        except Exception as e:
+                            self.log(f"Parse error: {e}")
+                            buffer = buffer[1:]
+                            continue
+
+                    # 2. Check for ASCII Message (Line of text ending with \n)
+                    elif b'\n' in buffer:
+                        line_end = buffer.find(b'\n')
+                        # Check if this line looks like ASCII before current position or between here and next sync
+                        # But simpler: just decode up to \n
+                        try:
+                            msg_data = buffer[:line_end]
+                            # If msg_data contains sync bytes, we might have misaligned. 
+                            # But usually Serial text doesn't contain 0xC7 0x7C.
+                            msg = msg_data.decode('ascii', errors='ignore').strip()
+                            if msg:
+                                self.log(f"Hardware: {msg}")
+                            buffer = buffer[line_end+1:]
+                            continue
+                        except:
+                            buffer = buffer[1:]
+                            continue
+
+                    # 3. Handle Sync Search / Garbage
+                    else:
+                        # Find next Sync or Newline
+                        idx_sync = buffer.find(b'\xC7\x7C')
+                        idx_nl = buffer.find(b'\n')
+                        
+                        # Find the earliest occurrence
+                        found_idx = -1
+                        if idx_sync != -1 and idx_nl != -1:
+                            found_idx = min(idx_sync, idx_nl)
+                        elif idx_sync != -1:
+                            found_idx = idx_sync
+                        elif idx_nl != -1:
+                            found_idx = idx_nl
+                        
+                        if found_idx > 0:
+                            # Some garbage before the next valid entry?
+                            # If it's more than a few bytes, maybe log it or just discard
+                            buffer = buffer[found_idx:]
+                            continue
+                        elif found_idx == 0:
+                            # We are at a sync or newline, but didn't have enough data (if sync)
+                            # or it will be handled by the next loop iteration
                             break
-                    
-                    # Check length again after sync search
-                    if len(buffer) < req_len:
-                        break
-                        
-                    # Parse Packet
-                    # >B(Sync1)B(Sync2)B(Counter)H(CH0)H(CH1)B(End)
-                    # We are at index 0 with 0xC7
-                    
-                    try:
-                        # 0: C7, 1: 7C, 2: Counter, 3-4: CH0, 5-6: CH1, 7: 01
-                        # Struct format: Big endian unsigned shorts for CH0, CH1
-                        # Skip syncs (2 bytes)
-                        # Read Counter (1 byte)
-                        # Read CH0 (2 bytes)
-                        # Read CH1 (2 bytes)
-                        counter = buffer[2]
-                        ch0_raw = (buffer[3] << 8) | buffer[4]
-                        ch1_raw = (buffer[5] << 8) | buffer[6]
-                        end_byte = buffer[7]
-                        
-                        if end_byte == 0x01:
-                            # Valid Packet
-                            # Convert to uV
-                            ch0_uv = (ch0_raw * scale) - half_vref
-                            ch1_uv = (ch1_raw * scale) - half_vref
-                            
-                            # Push to LSL
-                            self.lsl_stream.push_sample([ch0_uv, ch1_uv])
-                            # Optional: Log occasionally?
-                            if self.packet_count % 2560 == 0:
-                                self.log(f"P: {counter} | {ch0_uv:.2f} uV") 
-                            self.packet_count += 1
-                            
-                        # Consume packet
-                        buffer = buffer[8:]
-                        
-                    except Exception as e:
-                        self.log(f"Parse error: {e}")
-                        buffer = buffer[1:] # Skip 1 byte and retry
+                        else:
+                            # Nothing found yet, clear buffer if it gets too large
+                            if len(buffer) > 100:
+                                buffer = buffer[-1:] # Keep last byte in case it's part of sync
+                            break
                         
         except Exception as e:
             self.log(f"Client connection error ({addr}): {e}")

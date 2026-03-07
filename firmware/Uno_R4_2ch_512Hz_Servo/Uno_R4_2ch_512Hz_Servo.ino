@@ -1,5 +1,6 @@
 #include "FspTimer.h"
 #include <Arduino.h>
+#include <Servo.h>
 
 // ===== CONFIGURATION =====
 #define NUM_CHANNELS 2
@@ -24,36 +25,13 @@
 #define SW_1  4
 #define SW_2  7
 
-// ===== SERVO PWM CONSTANTS (100kHz Tick = 10us) =====
-#define SERVO_HZ 50.0
-#define SERVO_PERIOD_TICKS 2000 // 2000 * 10us = 20ms (50Hz)
-#define TICKS_PER_DEG 0.555      // (2000us-1000us)/180 = 5.5us per deg -> approx 0.55 ticks
-#define TICKS_OFFSET 100        // 1000us = 100 ticks
-
 // ===== GLOBALS =====
 uint8_t packetBuffer[PACKET_LEN];  
 volatile bool timerStatus = false;
 volatile bool bufferReady = false;
 
 FspTimer AcqTimer;   // Data Acquisition (512Hz)
-FspTimer ServoTimer; // Servo PWM Generator (100kHz)
-
-volatile int servo_ticks_target = 150; // default 1500us (90 deg)
-volatile int servo_counter = 0;
-
-// ===== SERVO INTERRUPT (100kHz) =====
-// This runs every 10 microseconds. Non-blocking.
-void servoTimerCallback(timer_callback_args_t __attribute((unused)) * p_args) {
-  servo_counter++;
-  
-  if (servo_counter >= SERVO_PERIOD_TICKS) {
-    digitalWrite(SERVO_PIN, HIGH);
-    servo_counter = 0;
-  } 
-  else if (servo_counter == servo_ticks_target) {
-    digitalWrite(SERVO_PIN, LOW);
-  }
-}
+Servo servo;         // Servo object for stable PWM
 
 // ===== ACQUISITION INTERRUPT (512Hz) =====
 void acqTimerCallback(timer_callback_args_t __attribute((unused)) * p_args) {
@@ -103,13 +81,9 @@ void setup() {
   AcqTimer.setup_overflow_irq();
   AcqTimer.open();
 
-  // 2. Setup Servo PWM Timer (100kHz)
-  // Higher frequency for smooth, non-blocking 10us resolution
-  int ch_servo = FspTimer::get_available_timer(type);
-  ServoTimer.begin(TIMER_MODE_PERIODIC, type, ch_servo, 100000.0f, 0.0f, servoTimerCallback);
-  ServoTimer.setup_overflow_irq();
-  ServoTimer.open();
-  ServoTimer.start(); // Servo pulse stream starts now
+  // 2. Setup Servo
+  servo.attach(SERVO_PIN);
+  servo.write(90); // Start at neutral position
 
   analogReadResolution(14);
   updateLEDs(false, false);
@@ -133,9 +107,7 @@ void loop() {
     if (cmd.startsWith("DEG ")) {
       int angle = cmd.substring(4).toInt();
       if (angle >= 0 && angle <= 180) {
-        // Map 0-180 angle to ticks (100 ticks = 1ms, 200 ticks = 2ms)
-        // 100 ticks + angle * 0.555
-        servo_ticks_target = 100 + (int)(angle * 0.555);
+        servo.write(angle);
         Serial.print("ACK_DEG: "); Serial.println(angle);
       }
     } else if (cmd == "START") {
@@ -157,3 +129,4 @@ void loop() {
     digitalWrite(LED_YELLOW_2, LOW);
   }
 }
+
