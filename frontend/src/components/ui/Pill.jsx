@@ -1,6 +1,6 @@
 import React, { useRef, useEffect } from 'react';
 import { gsap } from 'gsap';
-import './PillNav.css';
+import '../../styles/ui/PillNav.css';
 
 const Pill = ({
   label,
@@ -15,6 +15,8 @@ const Pill = ({
   as = 'a',
   pillWidth,
   pillHeight,
+  active,
+  activeHref,
   ...props
 }) => {
   const circleRef = useRef(null);

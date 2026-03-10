@@ -1,4 +1,5 @@
 import React from 'react';
+import { Trash2, Activity, Cpu, Zap, ListOrdered, ListX } from 'lucide-react';
 
 /**
  * WindowListPanel
@@ -7,127 +8,186 @@ import React from 'react';
 export default function WindowListPanel({
     windows = [],
     onDelete,
-    onMarkMissed,
     onHighlight,
     activeSensor,
-    onCalibrate,
-    calibrating = false,
-    calibrationResult = null,
-    autoCalibrateSamples = 20,
-    onAutoCalibrateSamplesChange,
-    running = false,
+    autoLimit = 30,
+    onAutoLimitChange,
+    autoCalibrate = false,
+    onAutoCalibrateChange,
+    onClearSaved,
+    onDeleteAll,
     windowProgress = {}
 }) {
     const stats = {
         total: windows.length,
-        correct: windows.filter(w => w.status === 'correct').length,
-        missed: windows.filter(w => w.status === 'incorrect').length,
+        saved: windows.filter(w => w.status === 'saved' || w.status === 'correct').length,
     };
 
-    // Recommended samples based on sensor
-    const recommendedSamples = {
-        'EOG': 20,
-        'EMG': 30,
-        'EEG': 25
-    }[activeSensor] || 20;
+    // Helper for sparkline
+    const Sparkline = ({ data, color = '#10b981' }) => {
+        if (!data || data.length < 2) return null;
+        const width = 100;
+        const height = 30;
+        const min = Math.min(...data);
+        const max = Math.max(...data);
+        const range = max - min || 1;
 
-    // Calculate progress toward auto-calibration
-    const progress = Math.min(100, (stats.total / autoCalibrateSamples) * 100);
-    const readyToCalibrate = stats.total >= 3 && windows.some(w => w.features);
+        // Downsample for performance if needed
+        const step = Math.ceil(data.length / 50);
+        const points = data.filter((_, i) => i % step === 0).map((v, i, arr) => {
+            const x = (i / (arr.length - 1)) * width;
+            const y = height - ((v - min) / range) * height;
+            return `${x},${y}`;
+        }).join(' ');
+
+        return (
+            <svg width={width} height={height} className="overflow-visible">
+                <polyline points={points} fill="none" stroke={color} strokeWidth="1.5" />
+            </svg>
+        );
+    };
+
+    // Track progress of the CURRENT BATCH (Active/Collected), not total saved history
+    const targetCount = autoLimit || 30;
+    const activeCount = windows.filter(w => w.status === 'recording' || w.status === 'pending' || w.status === 'collected').length;
+    const progress = Math.min(100, (activeCount / targetCount) * 100);
 
     return (
-        <div className="flex flex-col h-full bg-surface border border-border rounded-xl overflow-hidden shadow-card">
-            {/* Header with stats */}
-            <div className="px-5 py-4 border-b border-border bg-bg/50 flex flex-col gap-2">
-                <h3 className="font-bold text-text flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
-                    Calibration Windows
-                </h3>
-                <div className="flex gap-4 text-[10px] font-mono text-muted uppercase tracking-widest">
-                    <span>Total: <span className="text-text">{stats.total}</span></span>
-                    <span>Correct: <span className="text-emerald-400">{stats.correct}</span></span>
-                    <span>Missed: <span className="text-red-400">{stats.missed}</span></span>
+        <div className="flex flex-col h-full bg-surface border-2 border-border rounded-xl overflow-hidden shadow-card animate-in fade-in duration-300">
+            {/* Header with stats and controls */}
+            <div className="px-3 py-3 border-b border-border bg-bg/50 flex flex-col gap-1">
+                <div className="flex justify-between items-center">
+                    <div className="font-bold text-text flex items-center text-[20px] gap-2">
+                        <Activity className="text-primary animate-pulse" size={24} />
+                        Collected Windows
+                    </div>
+
+                    {/* Auto-Calibration/Limit Toggle */}
+                    <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1 bg-bg px-2 py-1 rounded border border-muted">
+                            <span className="text-[12px] font-bold text-muted uppercase">Limit:</span>
+                            <input
+                                type="number"
+                                className="w-8 bg-transparent text-sm font-mono text-center outline-none text-text appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]"
+                                value={autoLimit}
+                                onChange={(e) => onAutoLimitChange?.(Number(e.target.value))}
+                            />
+                        </div>
+                        {/* <div className="h-6 w-[2px] bg-border mx-1"></div> */}
+                        <span className={`text-[14px] pl-1 border-l-2 border-t-2 border-b-2 border-border font-bold uppercase ${autoCalibrate ? 'text-primary' : 'text-muted'}`}>Auto</span>
+                        <button
+                            onClick={() => onAutoCalibrateChange?.(!autoCalibrate)}
+                            className={`w-8 h-4 rounded-full relative transition-colors border-2 border-border ${autoCalibrate ? 'bg-primary' : 'bg-bg'}`}
+                        >
+                            <div className={`absolute top-0.5 bottom-0.5 w-3 rounded-full bg-text shadow transition-all ${autoCalibrate ? 'left-[calc(100%-14px)]' : 'left-0.5'}`} />
+                        </button>
+                    </div>
                 </div>
 
-                {/* Progress bar toward calibration */}
-                <div className="mt-1">
-                    <div className="flex justify-between text-[9px] text-muted mb-1">
-                        <span>Samples: {stats.total}/{autoCalibrateSamples}</span>
-                        <span>{Math.round(progress)}%</span>
+                <div className="flex justify-between items-end">
+                    <div className="flex gap-4 text-[16px] font-mono text-muted uppercase tracking-widest">
+                        <span>Total: <span className="text-text">{stats.total}</span></span>
+                        <span>Processed: <span className="text-blue-400">{activeCount}</span></span>
+                        <span>Saved: <span className="text-emerald-400">{stats.saved}</span></span>
                     </div>
-                    <div className="h-1.5 bg-bg rounded-full overflow-hidden">
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={onDeleteAll}
+                            className="p-1 hover:bg-red-500/10 text-muted hover:text-red-500 rounded transition all"
+                            title="Clear All"
+                        >
+                            <Trash2 size={20} />
+                        </button>
+                    </div>
+                </div>
+
+                {/* Progress Bar (Only visible in Auto mode) */}
+                {autoCalibrate && (
+                    <div className="h-1 w-full bg-bg rounded-full overflow-hidden">
                         <div
-                            className={`h-full transition-all ${progress >= 100 ? 'bg-emerald-500' : 'bg-primary'}`}
+                            className="h-full bg-primary transition-all duration-500 ease-out"
                             style={{ width: `${progress}%` }}
                         />
                     </div>
-                </div>
+                )}
             </div>
 
-            {/* Window list - scrollable */}
-            <div className="h-[280px] overflow-y-auto p-2 space-y-2">
+            <div className="flex-grow min-h-0 flex flex-col overflow-y-auto relative pt-2 no-scrollbar px-2 space-y-2 pb-4">
                 {windows.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-12 text-muted text-sm italic opacity-50">
-                        No windows collected yet
+                    <div className="flex flex-col items-center justify-center h-40 text-muted italic opacity-50 space-y-2">
+                        <ListX size={60} strokeWidth={1.5} />
+                        <span className="text-2xl">No windows collected yet</span>
                     </div>
                 ) : (
-                    windows.map((win) => (
+                    windows.slice().reverse().map((win, index) => (
                         <div
-                            key={win.id}
-                            className={`p-3 rounded-lg border transition-all cursor-pointer group ${win.status === 'correct'
-                                    ? 'bg-emerald-500/5 border-emerald-500/20 hover:border-emerald-500/40'
-                                    : win.status === 'incorrect'
-                                        ? 'bg-red-500/5 border-red-500/20 hover:border-red-500/40'
-                                        : 'bg-bg border-border hover:border-primary/50'
-                                }`}
+                            key={win.id || index}
                             onClick={() => onHighlight?.(win)}
+                            className={`py-1 px-2 flex flex-col gap-0 rounded-lg border transition-all cursor-pointer group hover:translate-x-1 ${(win.status === 'recording' || win.status === 'pending')
+                                ? 'bg-yellow-500/5 border-yellow-500/50 hover:border-yellow-500' // Yellow (Pending)
+                                : (win.status === 'collected')
+                                    ? 'bg-blue-500/5 border-blue-500/50 hover:border-blue-500' // Blue (Ready)
+                                    : (win.status === 'saved' || win.status === 'correct')
+                                        ? 'bg-emerald-500/5 border-emerald-500/50 hover:border-emerald-500' // Green (Saved)
+                                        : (win.status === 'error' || win.status === 'incorrect')
+                                            ? 'bg-red-500/5 border-red-500/50 hover:border-red-500' // Red (Error)
+                                            : 'bg-black/5 border-gray-600 hover:border-black' // Black (Unknown)
+                                }`}
                         >
-                            <div className="flex justify-between items-start mb-2">
-                                <div className="flex flex-col">
+                            <div className="flex justify-between items-center">
+                                <div className="flex flex-col gap-2">
+                                    {/* Class Indicator */}
                                     <span className="font-bold text-sm text-text uppercase">{win.label}</span>
-                                    <span className="text-[10px] text-muted font-mono">
-                                        {(win.endTime - win.startTime).toFixed(0)}ms duration
+
+                                    {/* Status Indicator */}
+                                    <div className="flex items-center gap-1">
+                                        <span className={`w-1.5 h-1.5 rounded-full ${(win.status === 'recording' || win.status === 'pending') ? 'bg-yellow-500' :
+                                            (win.status === 'collected') ? 'bg-blue-500' :
+                                                (win.status === 'saved' || win.status === 'correct') ? 'bg-emerald-500' :
+                                                    (win.status === 'error' || win.status === 'incorrect') ? 'bg-red-500' :
+                                                        'bg-gray-600'
+                                            }`}></span>
+                                        <span className={`text-xs uppercase ${(win.status === 'recording' || win.status === 'pending') ? 'text-yellow-500' :
+                                            (win.status === 'collected') ? 'text-blue-500' :
+                                                (win.status === 'saved' || win.status === 'correct') ? 'text-emerald-500' :
+                                                    (win.status === 'error' || win.status === 'incorrect') ? 'text-red-500' :
+                                                        'text-muted'
+                                            }`}>
+                                            {(win.status === 'recording' || win.status === 'pending') ? 'Recording' :
+                                                (win.status === 'collected') ? 'Ready' :
+                                                    (win.status === 'saved') ? 'Saved' :
+                                                        (win.status === 'correct') ? 'Correct' :
+                                                            (win.status === 'incorrect') ? 'Incorrect' :
+                                                                'Error'}
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <div className="flex flex-col gap-2 content-center">
+                                    {/* Graph */}
+                                    <div className="w-24 h-8 flex items-center">
+                                        <Sparkline data={win.samples} color={
+                                            (win.status === 'recording' || win.status === 'pending') ? '#eab308' :
+                                                (win.status === 'collected') ? '#3b82f6' :
+                                                    (win.status === 'saved' || win.status === 'correct') ? '#10b981' :
+                                                        (win.status === 'error' || win.status === 'incorrect') ? '#ef4444' :
+                                                            '#6b7280'
+                                        } />
+                                    </div>
+                                    <span className="text-xs text-muted font-mono">
+                                        {(win.endTime - win.startTime).toFixed(0)}ms
                                     </span>
                                 </div>
-                                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <button
-                                        onClick={(e) => { e.stopPropagation(); onMarkMissed?.(win.id); }}
-                                        className="p-1 hover:bg-red-500/10 rounded text-red-400 text-xs transition-colors"
-                                        title="Flag as missed signal"
-                                    >
-                                        🚩
-                                    </button>
+
+                                <div className="flex gap-1 opacity-100">
+                                    {/* Trash */}
                                     <button
                                         onClick={(e) => { e.stopPropagation(); onDelete?.(win.id); }}
                                         className="p-1 hover:bg-red-500/10 rounded text-red-400 text-xs transition-colors"
                                         title="Delete window"
                                     >
-                                        🗑️
+                                        <Trash2 size={16} />
                                     </button>
-                                </div>
-                            </div>
-
-                            <div className="flex items-center justify-between mt-2 pt-2 border-t border-border/30">
-                                <div className="flex items-center gap-2">
-                                    <span className={`w-1.5 h-1.5 rounded-full ${win.status === 'correct' ? 'bg-emerald-500' :
-                                            win.status === 'incorrect' ? 'bg-red-500' : 'bg-gray-400'
-                                        }`}></span>
-                                    <span className="text-[10px] text-muted uppercase font-bold">
-                                        Prediction: <span className={win.predictedLabel === win.label ? 'text-emerald-400' : 'text-red-400'}>
-                                            {win.predictedLabel || 'None'}
-                                        </span>
-                                    </span>
-                                </div>
-
-                                <div className="text-[11px] font-mono">
-                                    {(() => {
-                                        const wp = windowProgress?.[win.id];
-                                        if (!wp) return null;
-                                        if (wp.status === 'saving') return <span className="text-yellow-400">Saving…</span>;
-                                        if (wp.status === 'saved') return <span className="text-emerald-400">✓</span>;
-                                        if (wp.status === 'error') return <span className="text-red-400">Error</span>;
-                                        return null;
-                                    })()}
                                 </div>
                             </div>
                         </div>
@@ -135,50 +195,19 @@ export default function WindowListPanel({
                 )}
             </div>
 
-            {/* Calibration Controls */}
-            <div className="p-4 border-t border-border bg-bg/30 space-y-3">
-                {/* Sample count selector */}
-                <div className="flex items-center justify-between">
-                    <label className="text-[10px] text-muted font-mono uppercase">Auto-calibrate at:</label>
-                    <select
-                        value={autoCalibrateSamples}
-                        onChange={(e) => onAutoCalibrateSamplesChange?.(Number(e.target.value))}
-                        className="bg-bg border border-border rounded px-2 py-1 text-xs font-bold outline-none"
-                    >
-                        {[10, 15, 20, 25, 30, 40, 50].map(n => (
-                            <option key={n} value={n}>{n} samples</option>
-                        ))}
-                    </select>
-                </div>
-
-                {/* Calibration result (if any) */}
-                {calibrationResult && (
-                    <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-[10px] font-mono">
-                        <div className="text-emerald-400 font-bold mb-1">✓ Calibration Complete</div>
-                        <div className="flex justify-between text-muted">
-                            <span>Accuracy: {(calibrationResult.accuracy_before * 100).toFixed(0)}% → <span className="text-emerald-400">{(calibrationResult.accuracy_after * 100).toFixed(0)}%</span></span>
-                        </div>
-                    </div>
-                )}
-
-                {/* Calibrate button */}
+            {/* Footer with Append Sample */}
+            <div className="p-2 border-t border-border bg-bg/50">
                 <button
-                    onClick={() => onCalibrate?.()}
-                    disabled={!readyToCalibrate || calibrating}
-                    className={`w-full py-2.5 rounded-lg font-bold text-xs uppercase tracking-wider transition-all ${readyToCalibrate && !calibrating
-                            ? 'bg-primary text-primary-contrast hover:opacity-90 shadow-glow'
-                            : 'bg-muted/20 text-muted cursor-not-allowed'
+                    onClick={onClearSaved}
+                    disabled={autoCalibrate}
+                    className={`w-full py-1 rounded-lg font-bold text-[16px] uppercase tracking-wider transition-all flex items-center justify-center gap-1 ${autoCalibrate
+                        ? 'bg-bg text-muted border border-border cursor-not-allowed opacity-50'
+                        : 'bg-emerald-500 text-white hover:opacity-90 shadow-glow'
                         }`}
                 >
-                    {calibrating ? 'Calibrating...' : `Calibrate Thresholds (${stats.total} samples)`}
+                    Append Sample
                 </button>
-
-                {/* Status line */}
-                <div className="flex items-center justify-between text-[9px] text-muted font-mono">
-                    <span>Recommended: {recommendedSamples}+ samples</span>
-                    {running && <span className="text-yellow-400 animate-pulse">Recording...</span>}
-                </div>
             </div>
-        </div>
+        </div >
     );
 }

@@ -1,69 +1,65 @@
 import React, { useState, useEffect } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useWebSocket } from '../../hooks/useWebSocket'
+import { useTheme } from '../../contexts/ThemeContext'
+import { Github, UserPlus } from 'lucide-react'
 import LiveDashboard from '../views/LiveDashboard'
 import DinoView from '../views/DinoView'
 import SSVEPView from '../views/SSVEPView'
-import TestView from '../views/TestView'
 import RPSGame from '../views/RPSGame'
-import CalibrationView from '../views/CalibrationView'
+import DataCollectionView from '../views/DataCollectionView'
+import MLTrainingView from '../views/MLTrainingView'
+import SettingsView from '../views/SettingsView'
 
 import '../../styles/App.css';
-import themePresets from '../themes/presets';
 import ScrollStack, { ScrollStackItem } from '../ui/ScrollStack';
 import PillNav from '../ui/PillNav';
 import Pill from '../ui/Pill';
-import { ConnectionButton } from '../ui/connection_btn';
+import { ConnectionButton } from '../ui/ConnectionButton';
 
 export default function Dashboard() {
   const { user, logout } = useAuth()
   const [currentPage, setCurrentPage] = useState('live')
   // const [sidebarOpen, setSidebarOpen] = useState(true)
-  const { status, lastMessage, lastConfig, lastEvent, latency, connect, disconnect, sendMessage, currentUrl } = useWebSocket(
-    import.meta.env.VITE_WS_URL || 'ws://localhost:5000'
-  )
+  const wsUrl = 'http://localhost:5005' // Prioritize local development port
+  const { status, lastMessage, lastConfig, lastEvent, latency, connect, disconnect, sendMessage } = useWebSocket(wsUrl)
 
   // WebSocket modal state and preset URLs
   const [wsModalOpen, setWsModalOpen] = useState(false)
-  const [localWs, setLocalWs] = useState(import.meta.env.VITE_WS_URL || 'ws://localhost:5000')
-  const [ngrokWs, setNgrokWs] = useState('')
-  const [theme, setTheme] = React.useState(() => localStorage.getItem('theme') || 'theme-violet');
-  const [navColors, setNavColors] = React.useState({ base: '#000000', pill: '#ffffff', pillText: '#000000', hoverText: '#ffffff' });
+  const [localWs, setLocalWs] = useState(import.meta.env.VITE_WS_URL || wsUrl)
+  const [ngrokWs, setNgrokWs] = useState(import.meta.env.VITE_NGROK_WS_URL || 'wss://squelchingly-thriftier-cecile.ngrok-free.dev')
+
+  const { themes, currentTheme, currentThemeId, setTheme } = useTheme();
   const [authView, setAuthView] = useState(null);
   const isAuthenticated = !!user;
 
-  // Theme management
-  React.useEffect(() => {
-    const root = document.documentElement;
-    const existing = Array.from(root.classList).filter(c => c.startsWith('theme-'));
-    if (existing.length) root.classList.remove(...existing);
-    root.classList.add(theme);
-    localStorage.setItem('theme', theme);
-
-    const cs = getComputedStyle(root);
-    const accent = cs.getPropertyValue('--accent').trim() || '#121212';
-    const text = cs.getPropertyValue('--text').trim() || '#ffffff';
-    setNavColors({ base: accent, pill: text, pillText: accent, hoverText: text });
-  }, [theme]);
+  // Derived nav colors from current theme
+  const navColors = React.useMemo(() => ({
+    base: currentTheme.colors['--accent'],
+    pill: currentTheme.colors['--text'],
+    pillText: currentTheme.colors['--accent'],
+    hoverText: currentTheme.colors['--text']
+  }), [currentTheme]);
 
   // Pill size calculation
   const [pillSize, setPillSize] = React.useState({ width: 0, height: 0 });
   React.useEffect(() => {
+    if (!themes.length) return;
     const canvas = document.createElement('canvas');
     const context = canvas.getContext('2d');
 
     context.font = '16px Inter, sans-serif';
 
     let maxWidth = 0;
-    themePresets.forEach(p => {
-      const metrics = context.measureText(p.label);
+    themes.forEach(p => {
+      const metrics = context.measureText(p.name);
       const w = metrics.width;
       if (w > maxWidth) maxWidth = w;
     });
 
     const paddedWidth = Math.ceil(maxWidth + 60);
     setPillSize({ width: paddedWidth, height: 40 });
-  }, []);
+  }, [themes]);
 
   useEffect(() => {
     connect()
@@ -92,52 +88,53 @@ export default function Dashboard() {
 
 
   const navItems = React.useMemo(() => [
-    { label: 'Live', onClick: () => setCurrentPage('live'), href: '#live' },
+    { label: 'GRAPHS', onClick: () => setCurrentPage('live'), href: '#live' },
     { label: 'Dino', onClick: () => setCurrentPage('dino'), href: '#dino' },
     { label: 'SSVEP', onClick: () => setCurrentPage('ssvep'), href: '#ssvep' },
     { label: 'RPS', onClick: () => setCurrentPage('rps'), href: '#rps' },
-    { label: 'Calibration', onClick: () => setCurrentPage('calibration'), href: '#calibration' },
-    { label: 'Test', onClick: () => setCurrentPage('test'), href: '#test' },
+    { label: 'M. L.', onClick: () => setCurrentPage('ml_training'), href: '#ml_training' },
+    { label: 'Data Collection', onClick: () => setCurrentPage('data_collection'), href: '#data_collection' },
+    { label: 'Settings', onClick: () => setCurrentPage('settings'), href: '#settings' },
     {
       label: 'Theme',
       type: 'pill',
       key: 'theme-dropdown',
       href: '#',
       menu: ({ close }) => (
-        <ScrollStack>
-          {themePresets.map((p) => (
-            <ScrollStackItem key={p.value}>
+        <ScrollStack style={{ '--scroll-stack-width': `${pillSize.width + 78}px` }}>
+          {themes.map((t) => (
+            <ScrollStackItem key={t.id}>
               <Pill
-                label={p.label}
+                label={t.name}
                 activeHref={`#${currentPage}`}
                 pillHeight={42}
                 pillWidth={pillSize.width}
-                active={theme === p.value}
+                active={currentThemeId === t.id}
                 onClick={() => {
-                  setTheme(p.value);
+                  setTheme(t.id);
                   close?.();
                 }}
-                baseColor={p.accent}
-                pillColor={p.text}
-                hoveredTextColor={p.text}
-                pillTextColor={p.accent}
+                baseColor={t.colors['--accent']}
+                pillColor={t.colors['--text']}
+                hoveredTextColor={t.colors['--text']}
+                pillTextColor={t.colors['--accent']}
               />
             </ScrollStackItem>
           ))}
         </ScrollStack>
       )
     }
-  ], [theme, pillSize.width]);
+  ], [themes, currentThemeId, pillSize.width, currentPage]);
 
   return (
     <div className="app-root">
       {/* Navigation */}
-      <div className="topbar" style={{ zIndex: 50 }}>
-        <div className="topbar-inner container">
+      <div className="header" style={{ zIndex: 50 }}>
+        <div className="header-inner container">
           <div className="flex items-center gap-3">
-            <div className="relative group">
-              <div className="absolute inset-0 bg-primary/20 blur-lg rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-              <video muted autoPlay loop playsInline preload="auto" aria-label="logo animation" className="w-10 h-10 relative z-10 rounded-lg border border-border bg-black object-cover">
+            <div className="relative group cursor-pointer" onClick={logout} title="Click to Logout">
+              <div className="absolute inset-0 bg-primary/20 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+              <video muted autoPlay loop playsInline preload="auto" aria-label="logo animation" className="w-24 h-16 relative z-10 rounded-lg border border-border bg-black object-cover">
                 <source src="/Resources/brain_animation.mp4" type="video/mp4" />
               </video>
             </div>
@@ -164,14 +161,15 @@ export default function Dashboard() {
               </div>
             )}
             <div className="headline flex flex-col">
-              <div className="headline-line main">NeuroTECH
+              <div className="headline-line main">
+                NeuroTECH
                 <br />
                 <div className="headline-line sub">BCI Dashboard</div>
               </div>
             </div>
           </div>
 
-          <nav className="nav">
+          <nav className="nav shrink-0">
             <div className="backdrop-blur-sm bg-surface/50 border border-white/5 rounded-full p-1">
               <PillNav
                 items={navItems}
@@ -186,41 +184,59 @@ export default function Dashboard() {
               />
             </div>
           </nav>
-          <ConnectionButton
-            status={status}
-            latency={latency}
-            connect={connect}
-            disconnect={disconnect}
-          />
+          <div className="w-[180px] flex justify-end shrink-0">
+            <ConnectionButton
+              status={status}
+              latency={latency}
+              connect={connect}
+              disconnect={disconnect}
+            />
+          </div>
         </div>
       </div>
 
       {/* Main Content Area */}
-      <div className="container" style={{ flex: 1, padding: '24px 0', overflowY: 'auto' }}>
-        {currentPage === 'live' && <LiveDashboard wsData={lastMessage} wsConfig={lastConfig} wsEvent={lastEvent} sendMessage={sendMessage} />}
-        {currentPage === 'dino' && <DinoView wsData={lastMessage} wsEvent={lastEvent} isPaused={false} />}
-        {currentPage === 'ssvep' && <SSVEPView />}
-        {currentPage === 'test' && <TestView wsData={lastMessage} wsEvent={lastEvent} config={lastConfig} />}
-        {currentPage === 'rps' && <RPSGame wsEvent={lastEvent} />}
-        {currentPage === 'calibration' && <CalibrationView wsData={lastMessage} wsEvent={lastEvent} config={lastConfig} />}
+      <div className="scrollbar-thin scrollbar-thumb-border hover:scrollbar-thumb-primary/50 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']" style={{ flex: 1, padding: '0px 0px', overflowY: 'auto' }}>
+
+        {/* Helper to determine if we need spacers (non-full-screen pages need them to clear fixed header/footer) */}
+        {(() => {
+          const FULL_SCREEN_PAGES = ['live', 'dino'];
+          const showSpacers = !FULL_SCREEN_PAGES.includes(currentPage);
+
+          return (
+            <>
+              {showSpacers && <div className="h-[94px] shrink-0" />}
+
+              {currentPage === 'live' && <LiveDashboard wsData={lastMessage} wsConfig={lastConfig} wsEvent={lastEvent} sendMessage={sendMessage} />}
+              {currentPage === 'dino' && <DinoView isConnected={!!lastMessage} wsEvent={lastEvent} isPaused={false} />}
+              {currentPage === 'ssvep' && <SSVEPView isConnected={!!lastMessage} wsEvent={lastEvent} />}
+              {currentPage === 'rps' && <RPSGame wsEvent={lastEvent} />}
+              {currentPage === 'data_collection' && <DataCollectionView wsData={lastMessage} wsEvent={lastEvent} config={lastConfig} />}
+              {currentPage === 'ml_training' && <MLTrainingView />}
+              {currentPage === 'settings' && <SettingsView latency={latency} />}
+
+              {showSpacers && <div className="h-[35px] shrink-0" />}
+            </>
+          );
+        })()}
       </div>
 
       {/* Footer */}
-      {/* <div className="footer">
-        NeuroKeys: BCI Typing Project •{' '}
-        <a onClick={() => setAuthView('signup')} className="muted" href="#signup" rel="noreferrer">
+      <div className="footer">
+        <span className="flex items-center gap-1">NeuroTECH - A BCI Project </span>  •  {' '}
+        <a onClick={() => setAuthView('signup')} className="muted flex items-center gap-1" href="#signup" rel="noreferrer">
           Sign Up
         </a>
-        {' '} •{' '}
+        {' '} • {' '}
         <a
-          className="muted"
-          href="https://github.com/askh-tamrakar/NeuroKeys-BCI_Typing_Project"
+          className="muted flex items-center gap-1"
+          href="https://github.com/askh-tamrakar/NeuroTECH-BCI"
           target="_blank"
           rel="noreferrer"
         >
           GitHub
         </a>
-      </div> */}
+      </div>
     </div>
   );
 }

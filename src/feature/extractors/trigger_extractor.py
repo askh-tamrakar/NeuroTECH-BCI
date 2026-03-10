@@ -12,9 +12,10 @@ class EEGExtractor:
         self.channel_index = channel_index
         self.sr = sr
         
-        # Window settings
-        self.buffer_size = 512 
-        self.stride = 64
+        # Window settings for SSVEP
+        # 1.0 second window, 100ms stride for "snappy" detection
+        self.buffer_size = int(sr * 1.0) 
+        self.stride = int(sr * 0.1)
         
         self.buffer = collections.deque(maxlen=self.buffer_size)
         self.sample_count = 0
@@ -50,7 +51,8 @@ class EEGExtractor:
         freqs, psd = signal.welch(data, self.sr, nperseg=len(data))
         
         features = {
-            "timestamp": self.sample_count / self.sr
+            "timestamp": self.sample_count / self.sr,
+            "raw_window": data.tolist() # CCA needs the raw time-domain signal
         }
         
         total_power = 0

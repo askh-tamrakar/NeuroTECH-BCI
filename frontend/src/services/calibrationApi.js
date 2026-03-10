@@ -45,8 +45,8 @@ export const CalibrationApi = {
                 channel_mapping: {},
                 features: {
                     EMG: { Rock: { rms: [400, 800] }, Rest: { rms: [0, 200] } },
-                    EOG: { blink: { threshold: 0.5 } },
-                    EEG: { target_10Hz: { power: 10 } }
+                    EOG: { SingleBlink: { threshold: 0.5 }, DoubleBlink: { threshold: 1.0 } },
+                    EEG: { profiles: { Concentration: { power: 10 }, Relaxation: { power: 5 } } }
                 },
                 filters: {},
                 sampling_rate: 250
@@ -148,14 +148,15 @@ export const CalibrationApi = {
      * @param {string} sensorType
      * @param {{action: string, channel?: number, samples: number[], timestamps?: number[]}} windowPayload
      */
-    async sendWindow(sensorType, windowPayload) {
+    async sendWindow(sensorType, windowPayload, sessionName = null) {
         try {
             const body = {
                 sensor: sensorType,
                 action: windowPayload.action,
                 channel: windowPayload.channel,
                 samples: windowPayload.samples,
-                timestamps: windowPayload.timestamps
+                timestamps: windowPayload.timestamps,
+                session_name: sessionName // Pass session name
             };
 
             const resp = await fetch('/api/window', {
@@ -172,6 +173,38 @@ export const CalibrationApi = {
             return resp.json();
         } catch (err) {
             console.error('[CalibrationApi] sendWindow error', err);
+            throw err;
+        }
+    },
+
+    /**
+     * Send a single window for PREDICTION only (Test Mode).
+     * @param {string} sensorType 
+     * @param {{action: string, samples: number[]}} windowPayload 
+     */
+    async sendPredictionWindow(sensorType, windowPayload) {
+        try {
+            const body = {
+                sensor: sensorType,
+                action: windowPayload.action, // Used as ground truth label or empty
+                label: windowPayload.action,
+                samples: windowPayload.samples
+            };
+
+            const resp = await fetch('/api/prediction/window/predict', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+
+            if (!resp.ok) {
+                const txt = await resp.text();
+                throw new Error(`Prediction error: ${resp.status} ${txt}`);
+            }
+
+            return resp.json();
+        } catch (err) {
+            console.error('[CalibrationApi] sendPredictionWindow error', err);
             throw err;
         }
     },
@@ -206,5 +239,67 @@ export const CalibrationApi = {
             console.error('[CalibrationApi] Error getting recording:', error);
             throw error;
         }
+    },
+
+    /**
+     * Start EMG recording for a specific label.
+     * @param {number} label - 0=Rest, 1=Rock, 2=Paper, 3=Scissors
+     */
+    async startEmgRecording(label) {
+        try {
+            const response = await fetch('/api/emg/start', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ label })
+            });
+            return response.json();
+        } catch (error) {
+            console.error('[CalibrationApi] Error starting EMG recording:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * Stop EMG recording.
+     */
+    async stopEmgRecording() {
+        try {
+            const response = await fetch('/api/emg/stop', { method: 'POST' });
+            return response.json();
+        } catch (error) {
+            console.error('[CalibrationApi] Error stopping EMG recording:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * Get EMG recording status and counts.
+     */
+    async getEmgStatus() {
+        try {
+            const response = await fetch('/api/emg/status');
+            if (!response.ok) return null;
+            return response.json();
+        } catch (error) {
+            console.error('[CalibrationApi] Error getting EMG status:', error);
+            return null;
+        }
+    },
+
+    /**
+     * Toggle real-time prediction for a sensor.
+     * @param {string} sensorType 
+     * @param {boolean} isActive 
+     */
+    async togglePrediction(sensorType, isActive) {
+        if (sensorType !== 'EMG' && sensorType !== 'EOG') return;
+        const action = isActive ? 'start' : 'stop';
+        try {
+            const response = await fetch(`/api/${sensorType.toLowerCase()}/predict/${action}`, { method: 'POST' });
+            return response.json();
+        } catch (error) {
+            console.error(`[CalibrationApi] Error toggling ${sensorType} prediction:`, error);
+        }
     }
 };
+

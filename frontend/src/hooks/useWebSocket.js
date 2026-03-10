@@ -1,16 +1,13 @@
 /**
- * useWebSocket.js - FIXED VERSION
+ * useWebSocket.js - OFFLINE CAPABLE VERSION
  * 
- * Critical fixes:
- * 1. Guard all socketRef.current operations with null checks
- * 2. Clear ping timer BEFORE nullifying socketRef
- * 3. Guard sendMessage with socket.connected check
- * 4. Prevent timer firing after disconnect
+ * Uses 'socket.io-client' npm package instead of CDN for offline support.
  */
 
 import { useState, useEffect, useRef } from 'react'
+import { io } from 'socket.io-client'
 
-export function useWebSocket(url = 'http://localhost:5000') {
+export function useWebSocket(url = 'http://localhost:1972') {
   const [status, setStatus] = useState('disconnected')
   const [lastMessage, setLastMessage] = useState(null)
   const [lastConfig, setLastConfig] = useState(null)
@@ -32,225 +29,220 @@ export function useWebSocket(url = 'http://localhost:5000') {
       return
     }
 
-    console.log(`🔌 Connecting to WebSocket: ${endpoint}`)
+    console.log(`🔌 Connecting to WebSocket: ${endpoint} (Offline Mode)`)
     setStatus('connecting')
     setCurrentUrl(endpoint)
 
-    const script = document.createElement('script')
-    script.src = 'https://cdn.socket.io/4.5.4/socket.io.min.js'
-
-    script.onload = () => {
-      const io = window.io
-      if (!io) {
-        console.error('❌ Socket.IO library failed to load')
-        setStatus('error')
-        return
-      }
-
+    try {
+      // Connect directly using the imported 'io' function
       socketRef.current = io(endpoint, {
         reconnection: true,
-        reconnectionDelay: 1000,
-        reconnectionDelayMax: 5000,
-        reconnectionAttempts: 5,
+        timeout: 10000,
         transports: ['websocket', 'polling']
       })
 
-      // === CONNECTION EVENT ===
-      socketRef.current.on('connect', () => {
-        console.log('✅ WebSocket connected')
-        setStatus('connected')
+      setupSocketListeners()
 
-        // CRITICAL FIX: Only start ping if socket still exists
-        if (socketRef.current) {
-          pingTimer.current = setInterval(() => {
-            // CRITICAL FIX: Guard emit operation
-            if (socketRef.current?.connected) {
-              lastPingTime.current = performance.now()
-              socketRef.current.emit('ping')
+    } catch (e) {
+      console.error('❌ Failed to initialize Socket.IO:', e)
+      setStatus('error')
+    }
+  }
+
+  const setupSocketListeners = () => {
+    if (!socketRef.current) return
+
+    // === CONNECTION EVENT ===
+    socketRef.current.on('connect', () => {
+      console.log('✅ WebSocket connected')
+      setStatus('connected')
+
+      if (socketRef.current) {
+        pingTimer.current = setInterval(() => {
+          if (socketRef.current?.connected) {
+            lastPingTime.current = performance.now()
+            socketRef.current.emit('ping')
+          }
+        }, 500)
+      }
+    })
+
+    // === DISCONNECTION EVENT ===
+    socketRef.current.on('disconnect', () => {
+      console.log('❌ WebSocket disconnected')
+      setStatus('disconnected')
+      setLatency(0)
+
+      if (pingTimer.current) {
+        clearInterval(pingTimer.current)
+        pingTimer.current = null
+      }
+    })
+
+    // === ERROR EVENT ===
+    socketRef.current.on('error', (error) => {
+      console.error('❌ WebSocket error:', error)
+      setStatus('disconnected')
+    })
+
+    // === CONNECTION ERROR (Failed to connect) ===
+    socketRef.current.on('connect_error', (err) => {
+      console.warn('⚠️ Connection failed:', err.message)
+      setStatus('disconnected')
+    })
+
+    // === PONG EVENT (latency measurement) ===
+    socketRef.current.on('pong', () => {
+      if (socketRef.current?.connected) {
+        const now = performance.now()
+        const latencyMs = Math.round(now - lastPingTime.current)
+        setLatency(latencyMs)
+      }
+    })
+
+    // === DATA EVENTS ===
+
+    // Batch Listener
+    // No throttling for batch data to prevent data loss. The backend controls the rate (approx 30Hz).
+    socketRef.current.on('bio_data_batch', (batchData) => {
+      if (!batchData || !batchData.samples || batchData.samples.length === 0) return
+
+      // Optimized parsing: Avoid try-catch block for clean data to reduce V8 deopt
+      // Only wrap critical parts or assume backend data shape is mostly correct.
+
+      const lastSample = batchData.samples[batchData.samples.length - 1]
+
+      // Fast path reconstruction
+      const rawPayload = {
+        stream_name: batchData.stream_name,
+        // We only strictly need channels/timestamp for 'lastMessage' consumers (non-LiveView)
+        // LiveView uses _batch directly.
+        channels: lastSample.channels,
+        sample_rate: batchData.sample_rate,
+        sample_count: lastSample.sample_count,
+        timestamp: lastSample.timestamp,
+        _batch: batchData.samples
+      }
+
+      setLastMessage({
+        // Avoid JSON.stringify if not strictly needed by consumers, but useWebSocket contract implies string 'data'
+        data: JSON.stringify(rawPayload),
+        timestamp: Date.now(),
+        raw: rawPayload
+      })
+    })
+
+    let lastUpdate = 0
+    socketRef.current.on('bio_data_update', (data) => {
+      try {
+        // Throttle updates to ~30Hz (33ms)
+        const now = Date.now()
+        if (now - lastUpdate < 33) return
+        lastUpdate = now
+
+        // Handle NEW LSL format
+        if (data.stream_name && data.channels && typeof data.channels === 'object') {
+          const channels = data.channels
+          const normalized = {}
+
+          Object.entries(channels).forEach(([idx, ch]) => {
+            if (typeof ch === 'object') {
+              normalized[idx] = {
+                value: ch.value ?? 0,
+                sensor: ch.type || ch.label || 'UNKNOWN',
+                label: ch.label,
+                timestamp: ch.timestamp
+              }
+            } else {
+              normalized[idx] = {
+                value: ch,
+                sensor: 'UNKNOWN'
+              }
             }
-          }, 500)
-        }
-      })
+          })
 
-      // === DISCONNECTION EVENT ===
-      socketRef.current.on('disconnect', () => {
-        console.log('❌ WebSocket disconnected')
-        setStatus('disconnected')
-        setLatency(0)
-
-        // CRITICAL FIX: Clear timer BEFORE nullifying socket
-        if (pingTimer.current) {
-          clearInterval(pingTimer.current)
-          pingTimer.current = null
-        }
-      })
-
-      // === ERROR EVENT ===
-      socketRef.current.on('error', (error) => {
-        console.error('❌ WebSocket error:', error)
-        setStatus('error')
-      })
-
-      // === PONG EVENT (latency measurement) ===
-      socketRef.current.on('pong', () => {
-        // CRITICAL FIX: Guard before using
-        if (socketRef.current?.connected) {
-          const now = performance.now()
-          const latencyMs = Math.round(now - lastPingTime.current)
-          setLatency(latencyMs)
-          console.log(`📊 Latency: ${latencyMs}ms`)
-        }
-      })
-
-      // === DATA EVENTS ===
-      // === DATA EVENTS ===
-      socketRef.current.on('bio_data_batch', (batchData) => {
-        try {
-          if (!batchData || !batchData.samples || batchData.samples.length === 0) return
-
-          // compatibility: use last sample for simple views
-          const lastSample = batchData.samples[batchData.samples.length - 1]
-
-          // Normalize channels for legacy consumers
-          // ... (normalization logic similar to bio_data_update but typically already formatted by python)
-          // Python sends: {0: {label:..., value:..., timestamp:...}} which matches NEW LSL format in bio_data_update hook
-
-          const rawPayload = {
-            stream_name: batchData.stream_name,
-            channels: lastSample.channels,
-            sample_rate: batchData.sample_rate,
-            sample_count: lastSample.sample_count,
-            timestamp: lastSample.timestamp,
-            // Attach FULL BATCH for LiveView
-            _batch: batchData.samples
+          let timestamp = data.timestamp || Date.now()
+          if (timestamp < 10000000000) {
+            timestamp = timestamp * 1000 // Convert to milliseconds
           }
 
           setLastMessage({
-            data: JSON.stringify(rawPayload),
+            data: JSON.stringify(data),
             timestamp: Date.now(),
-            raw: rawPayload
-          })
-        } catch (e) {
-          console.warn('⚠️ Failed to parse bio_data_batch:', e)
-        }
-      })
-
-      socketRef.current.on('bio_data_update', (data) => {
-        try {
-          // Handle NEW LSL format (from fixed web_server.py)
-          if (data.stream_name && data.channels && typeof data.channels === 'object') {
-            const channels = data.channels
-            const normalized = {}
-
-            // Convert channels object: {0: {...}, 1: {...}}
-            Object.entries(channels).forEach(([idx, ch]) => {
-              if (typeof ch === 'object') {
-                normalized[idx] = {
-                  value: ch.value ?? 0,
-                  sensor: ch.type || ch.label || 'UNKNOWN',
-                  label: ch.label,
-                  timestamp: ch.timestamp // CRITICAL: Preserve per-channel timestamp
-                }
-              } else {
-                normalized[idx] = {
-                  value: ch,
-                  sensor: 'UNKNOWN'
-                }
-              }
-            })
-
-            // Handle timestamp conversion (LSL uses seconds)
-            let timestamp = data.timestamp || Date.now()
-            if (timestamp < 10000000000) {
-              timestamp = timestamp * 1000 // Convert to milliseconds
+            raw: {
+              timestamp,
+              channels: normalized,
+              sample_rate: data.sample_rate,
+              num_channels: data.channel_count,
+              stream_name: data.stream_name,
+              sample_count: data.sample_count
             }
-
-            setLastMessage({
-              data: JSON.stringify(data),
-              timestamp: Date.now(),
-              raw: {
-                timestamp,
-                channels: normalized,
-                sample_rate: data.sample_rate,
-                num_channels: data.channel_count,
-                stream_name: data.stream_name,
-                sample_count: data.sample_count
-              }
-            })
-          }
-          // Handle OLD format (backward compatibility)
-          else if (data.channels) {
-            setLastMessage({
-              data: JSON.stringify(data),
-              timestamp: Date.now(),
-              raw: data
-            })
-          }
-        } catch (e) {
-          console.warn('⚠️ Failed to parse bio_data_update:', e)
+          })
         }
-      })
-
-      // === ALTERNATIVE DATA EVENT ===
-      socketRef.current.on('signal_update', (data) => {
-        try {
-          if (data.channels) {
-            setLastMessage({
-              data: JSON.stringify(data),
-              timestamp: Date.now(),
-              raw: data
-            })
-          }
-        } catch (e) {
-          console.warn('⚠️ Failed to parse signal_update:', e)
+        else if (data.channels) {
+          setLastMessage({
+            data: JSON.stringify(data),
+            timestamp: Date.now(),
+            raw: data
+          })
         }
-      })
+      } catch (e) {
+        console.warn('⚠️ Failed to parse bio_data_update:', e)
+      }
+    })
 
-      // === CONFIG UPDATE EVENT ===
-      socketRef.current.on('config_updated', (data) => {
-        console.log('🔄 Config updated from server:', data)
-        if (data && data.config) {
-          setLastConfig(data.config)
+    // === ALTERNATIVE DATA EVENT ===
+    socketRef.current.on('signal_update', (data) => {
+      try {
+        if (data.channels) {
+          setLastMessage({
+            data: JSON.stringify(data),
+            timestamp: Date.now(),
+            raw: data
+          })
         }
-      })
+      } catch (e) {
+        console.warn('⚠️ Failed to parse signal_update:', e)
+      }
+    })
 
-      // === EVENT STREAM ===
-      socketRef.current.on('bio_event', (eventData) => {
-        console.log('⚡ Bio Event:', eventData)
-        setLastEvent(eventData)
-      })
+    // === CONFIG UPDATE EVENT ===
+    socketRef.current.on('config_updated', (data) => {
+      console.log('🔄 Config updated from server:', data)
+      if (data && data.config) {
+        setLastConfig(data.config)
+      }
+    })
 
-      // === STATUS EVENTS ===
-      socketRef.current.on('status', (data) => {
-        console.log('📊 Server status:', data)
-      })
+    // === EVENT STREAM ===
+    socketRef.current.on('bio_event', (eventData) => {
+      // console.log('⚡ Bio Event:', eventData)
+      setLastEvent(eventData)
+    })
 
-      socketRef.current.on('response', (data) => {
-        console.log('📨 Server response:', data)
-      })
-    }
+    socketRef.current.on('emg_prediction', (data) => {
+      // console.log('🧠 Prediction:', data) // Optional logging
+      setLastEvent({ type: 'emg_prediction', ...data })
+    })
 
-    script.onerror = () => {
-      console.error('❌ Failed to load Socket.IO library')
-      setStatus('error')
-    }
+    // === STATUS EVENTS ===
+    socketRef.current.on('status', (data) => {
+      console.log('📊 Server status:', data)
+    })
 
-    document.head.appendChild(script)
+    socketRef.current.on('response', (data) => {
+      console.log('📨 Server response:', data)
+    })
   }
 
-  /**
-   * CRITICAL FIX: Proper disconnect with cleanup
-   */
   const disconnect = () => {
     console.log('🔌 Disconnecting...')
 
-    // CRITICAL: Clear timer BEFORE disconnecting
     if (pingTimer.current) {
       clearInterval(pingTimer.current)
       pingTimer.current = null
     }
 
-    // Then disconnect socket
     if (socketRef.current) {
       socketRef.current.disconnect()
       socketRef.current = null
@@ -262,11 +254,7 @@ export function useWebSocket(url = 'http://localhost:5000') {
     console.log('✅ Disconnected')
   }
 
-  /**
-   * CRITICAL FIX: Guard sendMessage with connection check
-   */
   const sendMessage = (data) => {
-    // CRITICAL: Check both socket existence AND connected status
     if (!socketRef.current || !socketRef.current.connected) {
       console.warn('⚠️ WebSocket not connected, cannot send message:', data)
       return false
@@ -282,9 +270,6 @@ export function useWebSocket(url = 'http://localhost:5000') {
     }
   }
 
-  /**
-   * Request server status
-   */
   const requestStatus = () => {
     if (socketRef.current?.connected) {
       socketRef.current.emit('request_status')
@@ -292,9 +277,6 @@ export function useWebSocket(url = 'http://localhost:5000') {
     }
   }
 
-  /**
-   * CRITICAL: Cleanup on unmount
-   */
   useEffect(() => {
     return () => {
       disconnect()

@@ -29,7 +29,8 @@ export default function TimeSeriesZoomChart({
     mode = 'realtime',
     scannerX = null,
     scannerValue = null,
-    yDomain = null // optional external Y domain: [min, max]
+    yDomain = null, // optional external Y domain: [min, max]
+    curveType = "monotone" // default to monotone, but allow override (e.g. 'linear')
 }) {
     // Zoom and Pan state
     const [left, setLeft] = useState('dataMin');
@@ -114,8 +115,8 @@ export default function TimeSeriesZoomChart({
     };
 
     return (
-        <div className="flex flex-col h-full bg-surface border border-border mt-1 rounded-xl overflow-hidden shadow-sm">
-            <div className="px-4 py-2 border-b border-border bg-bg/30 flex justify-between items-center">
+        <div className="flex flex-col h-full bg-surface border border-muted rounded-xl overflow-hidden shadow-sm">
+            <div className="px-4 py-2 border-b border-muted bg-bg/30 flex justify-between items-center">
                 <h4 className="text-sm font-bold text-text flex items-center gap-2">
                     <span className="w-1.5 h-4 rounded-full" style={{ backgroundColor: color }}></span>
                     {title}
@@ -132,7 +133,7 @@ export default function TimeSeriesZoomChart({
                 </div>
             </div>
 
-            <div className="flex-grow p-2 select-none" style={{ height }}>
+            <div className="flex-grow p-2 select-none" style={height === '100%' ? {} : { height }}>
                 <ResponsiveContainer width="100%" height="100%">
                     <LineChart
                         data={data}
@@ -217,16 +218,16 @@ export default function TimeSeriesZoomChart({
                         {data && data.some(d => d.future !== undefined) ? (
                             <>
                                 <Line
-                                    type="monotone"
+                                    type={curveType}
                                     dataKey="value"
                                     stroke={color}
                                     dot={false}
-                                    strokeWidth={2}
+                                    strokeWidth={1.5}
                                     isAnimationActive={false}
                                     connectNulls
                                 />
                                 <Line
-                                    type="monotone"
+                                    type={curveType}
                                     dataKey="future"
                                     stroke={hexToRgba(color, 0.35)}
                                     dot={false}
@@ -237,11 +238,11 @@ export default function TimeSeriesZoomChart({
                             </>
                         ) : (
                             <Line
-                                type="monotone"
+                                type={curveType}
                                 dataKey="value"
                                 stroke={color}
                                 dot={false}
-                                strokeWidth={2}
+                                strokeWidth={1.5}
                                 isAnimationActive={false}
                                 connectNulls
                             />
