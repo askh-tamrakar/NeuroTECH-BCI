@@ -59,17 +59,31 @@ function connect(url) {
         const samplingRate = batchData.sample_rate || 250;
         const sampleIntervalMs = 1000 / samplingRate;
 
-        // Linear interpolation for timestamps to ensure smoothness
-        let endTs = Date.now();
-        if (lastTs === 0) lastTs = endTs - (totalSamples * sampleIntervalMs);
-
-        const targetStartTs = Math.max(lastTs, endTs - (totalSamples * sampleIntervalMs));
-        const actualBatchDuration = endTs - targetStartTs;
-        const interval = totalSamples > 0 ? actualBatchDuration / totalSamples : sampleIntervalMs;
+        // We assume backend provides `sample.timestamp` in seconds (epoch) or relative time
+        // The most robust way to ensure no backwards overlaps is to trust the sample count
+        // and strictly increment by sampleIntervalMs from the last known valid timestamp.
+        
+        let batchStartTs = 0;
+        
+        if (lastTs === 0) {
+             batchStartTs = Date.now() - (totalSamples * sampleIntervalMs);
+        } else {
+             // To prevent frontend clocks from drifting too far from reality,
+             // slowly pull lastTs towards Date.now() if it drifts too far
+             const now = Date.now();
+             const expectedStart = now - (totalSamples * sampleIntervalMs);
+             
+             // If we are more than 500ms behind or somehow ahead of now, hard reset
+             if (Math.abs(lastTs - expectedStart) > 500) {
+                 batchStartTs = expectedStart;
+             } else {
+                 batchStartTs = lastTs; // Strict continuous sequence
+             }
+        }
 
         const interpolatedSamples = samples.map((sample, idx) => {
-            const ts = targetStartTs + (idx * interval);
-            lastTs = ts + interval;
+            const ts = batchStartTs + (idx * sampleIntervalMs);
+            lastTs = ts + sampleIntervalMs;
             return {
                 ...sample,
                 timestamp: ts

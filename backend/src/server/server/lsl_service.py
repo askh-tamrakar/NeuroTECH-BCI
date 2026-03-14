@@ -182,47 +182,50 @@ def broadcast_data(socketio):
                 continue
 
         try:
-            sample, ts = state.inlet.pull_sample(timeout=1.0)
+            samples, timestamps = state.inlet.pull_chunk(timeout=0.0, max_samples=1024)
 
-            if sample is not None and len(sample) == state.num_channels:
-                state.sample_count += 1
+            if samples:
+                for sample, ts in zip(samples, timestamps):
+                    if len(sample) == state.num_channels:
+                        state.sample_count += 1
 
-                channels_data = {}
-                for ch_idx in range(state.num_channels):
-                    ch_mapping = state.channel_mapping.get(ch_idx, {})
-                    channels_data[ch_idx] = {
-                        "label": ch_mapping.get("label", f"ch{ch_idx}"),
-                        "type": ch_mapping.get("type", "UNKNOWN"),
-                        "value": float(sample[ch_idx]),
-                        "timestamp": ts
-                    }
+                        channels_data = {}
+                        for ch_idx in range(state.num_channels):
+                            ch_mapping = state.channel_mapping.get(ch_idx, {})
+                            channels_data[ch_idx] = {
+                                "label": ch_mapping.get("label", f"ch{ch_idx}"),
+                                "type": ch_mapping.get("type", "UNKNOWN"),
+                                "value": float(sample[ch_idx]),
+                                "timestamp": ts
+                            }
 
-                batch_buffer.append({
-                    "channels": channels_data,
-                    "timestamp": ts,
-                    "sample_count": state.sample_count
-                })
-                
-                # --- RECORDING & PREDICTION hooks ---
-                if hasattr(state, 'session') and state.session:
-                    eog_vals = []
-                    emg_vals = []
-                    
-                    for ch_idx, data in channels_data.items():
-                        stype = data['type'].upper()
-                        if stype == 'EOG':
-                            eog_vals.append(data['value'])
-                        elif stype == 'EMG':
-                            emg_vals.append(data['value'])
-                    
-                    if state.session.is_recording:
-                         if state.session.recording_type == 'EMG' and emg_vals:
-                             state.session.add_sample('EMG', emg_vals if len(emg_vals) > 1 else emg_vals[0])
-                         elif state.session.recording_type == 'EOG' and eog_vals:
-                             state.session.add_sample('EOG', eog_vals if len(eog_vals) > 1 else eog_vals[0])
+                        batch_buffer.append({
+                            "channels": channels_data,
+                            "timestamp": ts,
+                            "sample_count": state.sample_count
+                        })
+                        
+                        # --- RECORDING & PREDICTION hooks ---
+                        if hasattr(state, 'session') and state.session:
+                            eog_vals = []
+                            emg_vals = []
+                            
+                            for ch_idx, data in channels_data.items():
+                                stype = data['type'].upper()
+                                if stype == 'EOG':
+                                    eog_vals.append(data['value'])
+                                elif stype == 'EMG':
+                                    emg_vals.append(data['value'])
+                            
+                            if state.session.is_recording:
+                                 if state.session.recording_type == 'EMG' and emg_vals:
+                                     state.session.add_sample('EMG', emg_vals if len(emg_vals) > 1 else emg_vals[0])
+                                 elif state.session.recording_type == 'EOG' and eog_vals:
+                                     state.session.add_sample('EOG', eog_vals if len(eog_vals) > 1 else eog_vals[0])
 
                 now = time.time()
-                if now - last_batch_time >= BATCH_INTERVAL and len(batch_buffer) > 0:
+                # Batch send either if enough time passed or if batch is getting large to avoid latency
+                if (now - last_batch_time >= BATCH_INTERVAL) and len(batch_buffer) > 0:
                     
                     batch_payload = {
                         "stream_name": RAW_STREAM_NAME,
@@ -238,14 +241,11 @@ def broadcast_data(socketio):
                     batch_buffer = []
                     last_batch_time = now
 
-                    if state.sample_count % 2560 == 0:
-                         pass # Suppress overly verbose 2560 samples broads log to make events visible
-                         # print(f"✅ {state.sample_count} samples broadcast")
-            
-            # Explicit thread yield
-            socketio.sleep(0.001)
+            # Explicit thread yield. Using 0.01 (10ms) is friendlier to eventlet
+            # and prevents CPU pegging, while pull_chunk handles the buffering.
+            socketio.sleep(0.01)
 
         except Exception as e:
             if "timeout" not in str(e).lower():
                 print(f"⚠️  Error broadcasting: {e}", flush=True)
-            socketio.sleep(0.001)
+            socketio.sleep(0.01)

@@ -135,8 +135,14 @@ class RPSDetector:
         
         # Determine if this instant frame is "Active" (valid gesture) or "Rest"
         is_confident = confidence > self.confidence_threshold
-        is_active = is_confident and label in ['Rock', 'Paper', 'Scissors']
-        is_rest = is_confident and label == 'Rest'
+        # Force a return to rest if we are not confident in an active gesture
+        if not is_confident or label not in ['Rock', 'Paper', 'Scissors']:
+             is_active = False
+             is_rest = True
+             label = 'Rest' # Override label to ensure state resets
+        else:
+             is_active = True
+             is_rest = False
         
         # State Machine
         if is_active:

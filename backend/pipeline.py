@@ -1,5 +1,6 @@
 import subprocess
 import sys
+import os
 import argparse
 import time
 import signal
@@ -166,7 +167,11 @@ def main():
     print()
 
     frontend_dir = (Path(__file__).parent.parent / "frontend").resolve()
+    # Use generic 'python' if in the correct environment, otherwise sys.executable
     python_exe = sys.executable
+    
+    # Diagnostic log for interpreter
+    log_system(f"Using Python Interpreter: {Theme.DIM}{python_exe}{Theme.RESET}", icon=Theme.INFO)
 
     # --- 1. BUILD PHASE (Optional) ---
     if args.build:
@@ -248,7 +253,8 @@ def main():
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            cwd=str(Path(__file__).parent)
+            cwd=str(Path(__file__).parent),
+            env=os.environ.copy() # Explicitly pass env to ensure Drive mappings are inherited
         )
         
         proc.name = name

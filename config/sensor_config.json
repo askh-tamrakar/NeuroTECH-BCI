@@ -1,6 +1,6 @@
 {
   "active_models": {
-    "EMG": "Neurobench",
+    "EMG": "all",
     "EOG": "dino-ml"
   },
   "channel_mapping": {

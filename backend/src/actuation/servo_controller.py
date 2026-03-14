@@ -10,14 +10,14 @@ class ServoController:
     def __init__(self, target_ip="127.0.0.1", target_port=6002):
         self.target_ip = target_ip
         self.target_port = target_port
-        self.current_angle = 98
+        self.current_angle = 97
         self.sock: Optional[socket.socket] = None
         self.inlet: Optional[StreamInlet] = None
         
         # Angle range for the claw
-        self.MIN_ANGLE = 2  # Fully Open
+        self.MIN_ANGLE = 1     # Fully Open
         self.MIDDLE_ANGLE = 48 # Approximate middle
-        self.MAX_ANGLE = 98 # Fully Closed
+        self.MAX_ANGLE = 97    # Fully Closed
 
     def connect_lsl(self):
         print("Looking for BioSignals-Events LSL stream...")

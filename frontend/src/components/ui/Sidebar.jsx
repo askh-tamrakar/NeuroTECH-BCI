@@ -93,7 +93,7 @@ export default function Sidebar({
                     <Cpu size={32} className="text-primary animate-pulse" />
                     <span style={{ letterSpacing: '2.3px' }}>Controls</span>
                 </h2>
-                <p className="text-base text-muted">LSL Stream Configuration</p>
+                <p className="text-base text-muted"> LSL Stream Configuration </p>
             </div>
 
             <div className="p-4 space-y-8">
@@ -113,15 +113,17 @@ export default function Sidebar({
                             setIsPaused(!isPaused);
                         }}
 
-                        className={`w-full py-3 font-bold transition-all flex items-center justify-center gap-2 ${isPaused
-                            ? 'bg-accent/10 text-accent hover:bg-accent/20'
-                            : 'bg-primary/10 text-primary hover:bg-primary/20'
+                        className={`w-full py-3 font-bold transition-all gap-2 ${isPaused
+                            ? 'bg-red-400/5 text-red-400 hover:bg-red-400/10'
+                            : 'bg-emerald-400/5 text-emerald-400 hover:bg-emerald-400/10'
                             }`}
                     >
-                        {isPaused ? <Play size={20} className="fill-current pulse" style={{ color: "#ef4444" }} /> : <Pause size={20} className="fill-current pulse" style={{ color: "#10b981" }} />}
-                        {isPaused
-                            ? <span className="text-red-400">STREAM PAUSED</span>
-                            : <span className="text-emerald-400">STREAMING</span>}
+                        <span className='flex flex-row justify-evenly'>
+                            {isPaused ? <Play size={20} className="fill-current pulse" style={{ color: "#ef4444" }} /> : <Pause size={20} className="fill-current pulse" style={{ color: "#10b981" }} />}
+                            {isPaused
+                                ? <span className="text-red-400 hover:text-red-500">STREAM PAUSED</span>
+                                : <span className="text-emerald-400 hover:text-emerald-500">STREAMING</span>}
+                        </span>
                     </button>
                 </ElectricBorder>
 

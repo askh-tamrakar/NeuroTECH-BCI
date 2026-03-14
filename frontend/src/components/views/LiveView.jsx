@@ -52,11 +52,11 @@ export default function LiveView({ wsData, wsEvent, config, isPaused, wsUrl }) {
     worker.onmessage = (e) => {
       const { type, payload } = e.data;
       if (type === 'EVENT') {
-        if (payload.event === 'BLINK') {
-          const ts = payload.timestamp ? payload.timestamp * 1000 : Date.now();
+        if (payload.event === 'SingleBlink' || payload.event === 'DoubleBlink') {
+          const ts = Date.now();
           setAnnotations(prev => [
             ...prev,
-            { x: ts, label: 'BLINK', color: '#ef4444', channel: payload.channel }
+            { x: ts, label: payload.event === 'DoubleBlink' ? 'DBL-BLINK' : 'BLINK', color: '#ef4444', channel: payload.channel }
           ].slice(-20));
         }
       }
@@ -127,7 +127,7 @@ export default function LiveView({ wsData, wsEvent, config, isPaused, wsUrl }) {
       activeChannels.forEach((chIdx, i) => {
         if (!next[chIdx]) {
           const defaultColor = ['#3b82f6', '#10b981', '#f59e0b', '#a855f7'][i % 4]
-          next[chIdx] = { zoom: 1, manualRange: "", timeWindowMs: defaultTimeWindowMs, color: defaultColor, smoothing: true }
+          next[chIdx] = { zoom: 1, manualRange: "", timeWindowMs: defaultTimeWindowMs, color: defaultColor }
           changed = true
         }
       })
@@ -405,7 +405,6 @@ export default function LiveView({ wsData, wsEvent, config, isPaused, wsUrl }) {
               onRangeChange={(val) => updateChannelConfig(chIdx, 'manualRange', val)}
               onTimeWindowChange={(val) => updateChannelConfig(chIdx, 'timeWindowMs', val)}
               onColorChange={(val) => updateChannelConfig(chIdx, 'color', val)}
-              onSmoothingChange={(val) => updateChannelConfig(chIdx, 'smoothing', val)}
             />
           </div>
         )
