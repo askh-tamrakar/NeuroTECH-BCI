@@ -113,8 +113,8 @@ class EMGFilterProcessor:
                 if self.bp_enabled: self.zi_bp = np.zeros(max(len(self.a_bp), len(self.b_bp)) - 1)
                 if self.envelope_enabled: self.zi_env = np.zeros(max(len(self.a_env), len(self.b_env)) - 1)
 
-    def process_sample(self, val: float) -> float:
-        """Process a single sample value."""
+    def process_sample(self, val: float) -> tuple[float, float]:
+        """Process a single sample value. Returns (raw_filtered, enveloped)"""
         # 1. High Pass
         out, self.zi_hp = lfilter(self.b_hp, self.a_hp, [val], zi=self.zi_hp)
         out = out[0]
@@ -130,12 +130,13 @@ class EMGFilterProcessor:
              out = filtered[0]
 
         # 4. Envelope
+        out_env = out
         if self.envelope_enabled and self.zi_env is not None:
             # Rectify
             rectified = abs(out)
             # Low Pass
             enveloped, self.zi_env = lfilter(self.b_env, self.a_env, [rectified], zi=self.zi_env)
-            out = enveloped[0]
+            out_env = enveloped[0]
 
-        return float(out)
+        return float(out), float(out_env)
 

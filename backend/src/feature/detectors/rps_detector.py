@@ -75,8 +75,12 @@ class RPSDetector:
              
         try:
             # 1. Prepare Feature Vector (Must match training order)
-            # ['rms', 'mav', 'var', 'wl', 'peak', 'range', 'iemg', 'entropy', 'energy', 'kurtosis', 'skewness', 'ssc', 'wamp']
-            feature_cols = ['rms', 'mav', 'var', 'wl', 'peak', 'range', 'iemg', 'entropy', 'energy', 'kurtosis', 'skewness', 'ssc', 'wamp']
+            feature_cols = [
+                'rms', 'mav', 'var', 'iemg', 
+                'wl', 'zc', 'ssc', 
+                'mean_freq', 'median_freq', 'spectral_entropy',
+                'd_rms', 'd_mav'
+            ]
             
             row = []
             for col in feature_cols:
@@ -111,7 +115,7 @@ class RPSDetector:
             label_map = {0: 'Rest', 1: 'Rock', 2: 'Paper', 3: 'Scissors'}
             
             if isinstance(pred_label_int, str):
-                 pred_label_str = pred_label_int
+                 pred_label_str = pred_label_int.capitalize()
             else:
                  pred_label_str = label_map.get(int(pred_label_int), 'Unknown')
 
@@ -124,12 +128,12 @@ class RPSDetector:
                 self._last_err_time = time.time()
             return "Error", 0.0
 
-    def detect(self, features: dict) -> tuple[str, str | None]:
+    def detect(self, features: dict) -> tuple[str, str | None, float]:
         """
         Stateful detection logic:
         - If Rest -> Resolve any pending candidates.
         - If Gesture -> Add to candidates.
-        Returns: (InstantLabel, ConfirmedLabel or None)
+        Returns: (InstantLabel, ConfirmedLabel or None, InstantConfidence)
         """
         label, confidence = self.predict_instant(features)
         
@@ -151,7 +155,7 @@ class RPSDetector:
                 self.candidates = []
             
             self.candidates.append(label)
-            return label, None # Don't emit confirmed move yet, but return instant label
+            return label, None, confidence
             
         elif is_rest:
             if self.collecting_candidates:
@@ -162,18 +166,18 @@ class RPSDetector:
                     
                     self.collecting_candidates = False
                     self.candidates = []
-                    # Return (InstantLabel, ConfirmedLabel)
-                    return label, most_common
+                    # Return (InstantLabel, ConfirmedLabel, Confidence)
+                    return label, most_common, confidence
                 else:
                     self.collecting_candidates = False
-                    return label, "Rest"
+                    return label, "Rest", confidence
             else:
-                return label, "Rest"
+                return label, "Rest", confidence
                 
         else:
-            return label, None
+            return label, None, confidence
             
-        return None
+        return None, None, 0.0
 
     def update_config(self, config: dict):
         self.config = config

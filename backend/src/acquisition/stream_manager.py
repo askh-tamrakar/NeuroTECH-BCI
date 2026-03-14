@@ -46,14 +46,15 @@ class StreamManagerApp:
             try:
                 # Load Dynamic Mapping from Config
                 mapping = config_manager.get_channel_mapping()
-                num_channels = 2 # Hardcoded to 2 based on 8-byte packet protocol
+                self.channel_count = 2 # Hardware upgraded to 1KHz dual channel (A0 and A2)
+                num_channels = self.channel_count
                 
                 channel_types = []
                 channel_labels = []
                 
                 for i in range(num_channels):
                     ch_info = mapping.get(f"ch{i}", {})
-                    sensor = ch_info.get("sensor", "UNKNOWN")
+                    sensor = ch_info.get("sensor", "EMG")
                     channel_types.append(sensor)
                     channel_labels.append(f"{sensor}_{i}")
                 
@@ -62,7 +63,7 @@ class StreamManagerApp:
                     channel_types=channel_types,
                     channel_labels=channel_labels,
                     channel_count=num_channels,
-                    nominal_srate=512
+                    nominal_srate=1000
                 )
                 self.log(f"✅ LSL Stream 'BioSignals-Raw-uV' created ({', '.join(channel_labels)}).")
 
@@ -70,13 +71,26 @@ class StreamManagerApp:
                 print(f"Created stream 'BioSignals-Events'", flush=True)
                 self.log("✅ LSL Stream 'BioSignals-Events' reported ready.")
 
+                # Determine processed channels layout
+                processed_types = []
+                processed_labels = []
+                for i in range(num_channels):
+                    ch_info = mapping.get(f"ch{i}", {})
+                    sensor = ch_info.get("sensor", "EMG")
+                    if sensor == "EMG":
+                        processed_types.extend(["EMG_RAW", "EMG_ENV"])
+                        processed_labels.extend([f"EMG_RAW_{i}", f"EMG_ENV_{i}"])
+                    else:
+                        processed_types.append(sensor)
+                        processed_labels.append(f"{sensor}_{i}_filt")
+                
                 # Initialize Processed Stream
                 self.lsl_processed = LSLStreamer(
                     "BioSignals-Processed",
-                    channel_types=channel_types,
-                    channel_labels=[f"{label}_filt" for label in channel_labels],
-                    channel_count=num_channels,
-                    nominal_srate=512
+                    channel_types=processed_types,
+                    channel_labels=processed_labels,
+                    channel_count=len(processed_labels),
+                    nominal_srate=1000
                 )
                 self.log(f"✅ LSL Stream 'BioSignals-Processed' created.")
 
@@ -254,11 +268,11 @@ class StreamManagerApp:
             
     def _handle_client(self, conn, addr):
         """
-        Reads 8-byte packets:
-        [Sync1(0xC7)][Sync2(0x7C)][Counter][CH0_H][CH0_L][CH1_H][CH1_L][End(0x01)]
+        Reads 1KHz packets:
+        [Sync1(0xC7)][Sync2(0x7C)][Timestamp (4)][CH0..CHN_Vals (256 * N * 2)][End(0x01)]
         """
         buffer = b""
-        req_len = 8
+        req_len = 2 + 4 + (256 * self.channel_count * 2) + 1
         
         # For ADC -> uV
         vref = 3300.0
@@ -293,37 +307,32 @@ class StreamManagerApp:
                     if len(buffer) < req_len:
                         break
                         
-                    # Parse Packet
-                    # >B(Sync1)B(Sync2)B(Counter)H(CH0)H(CH1)B(End)
-                    # We are at index 0 with 0xC7
-                    
                     try:
-                        # 0: C7, 1: 7C, 2: Counter, 3-4: CH0, 5-6: CH1, 7: 01
-                        # Struct format: Big endian unsigned shorts for CH0, CH1
-                        # Skip syncs (2 bytes)
-                        # Read Counter (1 byte)
-                        # Read CH0 (2 bytes)
-                        # Read CH1 (2 bytes)
-                        counter = buffer[2]
-                        ch0_raw = (buffer[3] << 8) | buffer[4]
-                        ch1_raw = (buffer[5] << 8) | buffer[6]
-                        end_byte = buffer[7]
+                        end_byte = buffer[req_len - 1]
                         
                         if end_byte == 0x01:
                             # Valid Packet
+                            import struct
+                            unpacked = struct.unpack_from(f"<I{256 * self.channel_count}H", buffer, 2)
+                            ts = unpacked[0]
+                            samples_raw = unpacked[1:]
                             # Convert to uV
-                            ch0_uv = (ch0_raw * scale) - half_vref
-                            ch1_uv = (ch1_raw * scale) - half_vref
+                            samples_uv = [(val * scale) - half_vref for val in samples_raw]
                             
-                            # Push to LSL
-                            self.lsl_stream.push_sample([ch0_uv, ch1_uv])
+                            # Push to LSL Processed Stream (List of Lists for push_chunk)
+                            if self.channel_count == 1:
+                                chunk_data = [[val] for val in samples_uv]
+                            else:
+                                chunk_data = [samples_uv[i:i + self.channel_count] for i in range(0, len(samples_uv), self.channel_count)]
+                            self.lsl_stream.push_chunk(chunk_data)
+                            
                             # Optional: Log occasionally?
-                            if self.packet_count % 2560 == 0:
-                                self.log(f"P: {counter} | {ch0_uv:.2f} uV") 
+                            if self.packet_count % 10 == 0:
+                                self.log(f"P: {self.packet_count} (256 samples x {self.channel_count} CH) | {samples_uv[0]:.2f} uV") 
                             self.packet_count += 1
                             
                         # Consume packet
-                        buffer = buffer[8:]
+                        buffer = buffer[req_len:]
                         
                     except Exception as e:
                         self.log(f"Parse error: {e}")

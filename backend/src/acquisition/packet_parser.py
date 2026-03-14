@@ -6,44 +6,50 @@ import numpy as np
 
 @dataclass
 class Packet:
-    counter: int
-    ch0_raw: int
-    ch1_raw: int
-    timestamp: datetime
-
-    def to_dict(self):
-        return asdict(self)
-
+    timestamp_ms: int
+    ch0_raw: np.ndarray
 
 class PacketParser:
-    def __init__(self, packet_len: int = 8):
+    def __init__(self, packet_len: int = 519):
         self.packet_len = packet_len
-        # Format: B (Sync1), B (Sync2), B (Counter), >H (CH0), >H (CH1), B (End)
-        # We skip sync bytes and end byte for speed
-        self._struct_fmt = ">BHH" # Counter, CH0, CH1
+        # Format: B (Sync1), B (Sync2), <I (Timestamp), 256x <H (CH0 samples), B (End)
+        self._struct_fmt = "<I256H" # Timestamp, 256 samples
 
     def parse(self, packet_bytes: bytes) -> Packet:
         if not packet_bytes or len(packet_bytes) != self.packet_len:
             raise ValueError(f"Invalid packet length")
         
-        # Unpack starting from index 2 (counter)
-        counter, ch0, ch1 = struct.unpack_from(self._struct_fmt, packet_bytes, 2)
-        return Packet(counter=int(counter), ch0_raw=int(ch0), ch1_raw=int(ch1), timestamp=datetime.now())
+        # Unpack starting from index 2 (skip sync bytes)
+        unpacked = struct.unpack_from(self._struct_fmt, packet_bytes, 2)
+        timestamp_ms = unpacked[0]
+        ch0_vals = np.array(unpacked[1:], dtype=np.uint16)
+        
+        return Packet(timestamp_ms=timestamp_ms, ch0_raw=ch0_vals)
 
     def parse_batch(self, batch_bytes: List[bytes]) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         Parse a list of byte packets into numpy arrays for speed.
-        Returns (counters, ch0_raw, ch1_raw)
+        Returns (timestamps, ch0_raw, ch1_raw)
+        ch1_raw is returned as zeros for backwards compatibility.
         """
-        n = len(batch_bytes)
-        counters = np.zeros(n, dtype=np.uint8)
-        ch0_raw = np.zeros(n, dtype=np.uint16)
-        ch1_raw = np.zeros(n, dtype=np.uint16)
+        n_packets = len(batch_bytes)
+        n_samples = n_packets * 256
+        
+        timestamps = np.zeros(n_samples, dtype=np.uint32)
+        ch0_raw = np.zeros(n_samples, dtype=np.uint16)
+        ch1_raw = np.zeros(n_samples, dtype=np.uint16)
 
-        for i, pkt in enumerate(batch_bytes):
-            c, r0, r1 = struct.unpack_from(self._struct_fmt, pkt, 2)
-            counters[i] = c
-            ch0_raw[i] = r0
-            ch1_raw[i] = r1
+        idx = 0
+        for pkt in batch_bytes:
+            unpacked = struct.unpack_from(self._struct_fmt, pkt, 2)
+            ts = unpacked[0]
+            vals = unpacked[1:]
+            
+            # Since all 256 samples happened roughly over the last 256ms,
+            # we fill the timestamp array with same timestamp or interpolated.
+            # Using same timestamp for the chunk is simplest backward-compatible.
+            timestamps[idx:idx+256] = ts
+            ch0_raw[idx:idx+256] = vals
+            idx += 256
 
-        return counters, ch0_raw, ch1_raw
+        return timestamps, ch0_raw, ch1_raw

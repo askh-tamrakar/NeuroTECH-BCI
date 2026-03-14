@@ -50,29 +50,21 @@ class DatabaseManager:
         conn.close()
 
     def _create_emg_table(self, cursor, table_name):
+        # We use TEXT for features to store JSON, enabling flexible feature changes
         cursor.execute(f'''
             CREATE TABLE IF NOT EXISTS {table_name} (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                rms REAL NOT NULL,
-                mav REAL NOT NULL,
-                var REAL NOT NULL,
-                wl REAL NOT NULL,
-                peak REAL NOT NULL,
-                range REAL NOT NULL,
-                iemg REAL NOT NULL,
-                entropy REAL NOT NULL,
-                energy REAL NOT NULL,
-                kurtosis REAL NOT NULL,
-                skewness REAL NOT NULL,
-                ssc REAL NOT NULL,
-                wamp REAL NOT NULL,
-                label INTEGER NOT NULL,
+                window_id INTEGER PRIMARY KEY AUTOINCREMENT,
                 session_id TEXT,
+                gesture_label TEXT NOT NULL,
+                features TEXT NOT NULL,
+                confidence REAL,
+                source TEXT DEFAULT 'training',
+                corrected_label TEXT,
                 timestamp REAL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
-        cursor.execute(f'CREATE INDEX IF NOT EXISTS idx_{table_name}_label ON {table_name}(label)')
+        cursor.execute(f'CREATE INDEX IF NOT EXISTS idx_{table_name}_label ON {table_name}(gesture_label)')
 
     def _create_eog_table(self, cursor, table_name):
         cursor.execute(f'''
@@ -334,16 +326,25 @@ class DatabaseManager:
             for row in rows:
                 r_dict = dict(row)
                 item = {
-                    "id": r_dict.get('id'),
-                    "label": r_dict.get('label'),
-                    "timestamp": r_dict.get('timestamp')
+                    "id": r_dict.get('window_id', r_dict.get('id')),
+                    "label": r_dict.get('gesture_label', r_dict.get('label')),
+                    "timestamp": r_dict.get('timestamp'),
+                    "confidence": r_dict.get('confidence', 1.0),
+                    "source": r_dict.get('source', 'training')
                 }
                 
-                # Collect remaining columns as features for display
-                excluded = {'id', 'label', 'session_id', 'timestamp', 'created_at'}
-                features = {k: v for k, v in r_dict.items() if k not in excluded}
-                
-                item['features'] = features
+                if 'features' in r_dict and isinstance(r_dict['features'], str):
+                    import json
+                    try:
+                        item['features'] = json.loads(r_dict['features'])
+                    except:
+                        item['features'] = {}
+                else:
+                    # Legacy support
+                    excluded = {'id', 'window_id', 'label', 'gesture_label', 'session_id', 'timestamp', 'created_at', 'features', 'confidence', 'source', 'corrected_label'}
+                    features = {k: v for k, v in r_dict.items() if k not in excluded}
+                    item['features'] = features
+                    
                 results.append(item)
                 
             conn.close()
@@ -388,22 +389,18 @@ class DatabaseManager:
             return False
 
     # --- EMG Methods ---
-    def insert_window(self, features: Dict[str, float], label: int, session_id: str = None, table_name: str = "emg_windows") -> bool:
+    def insert_window(self, features: Dict[str, float], label: int, session_id: str = None, 
+                      confidence: float = 1.0, source: str = 'training', table_name: str = "emg_windows") -> bool:
         try:
+            import json
             conn = self.connect('EMG')
             cursor = conn.cursor()
             cursor.execute(f'''
                 INSERT INTO {table_name} (
-                    rms, mav, var, wl, peak, range, iemg, entropy, energy, kurtosis, skewness, ssc, wamp,
-                    label, session_id, timestamp
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    session_id, gesture_label, features, confidence, source, timestamp
+                ) VALUES (?, ?, ?, ?, ?, ?)
             ''', (
-                features.get('rms', 0), features.get('mav', 0),
-                features.get('var', 0), features.get('wl', 0), features.get('peak', 0),
-                features.get('range', 0), features.get('iemg', 0), features.get('entropy', 0),
-                features.get('energy', 0), features.get('kurtosis', 0), features.get('skewness', 0),
-                features.get('ssc', 0), features.get('wamp', 0),
-                label, session_id, features.get('timestamp', 0)
+                session_id, str(label), json.dumps(features), confidence, source, features.get('timestamp', 0)
             ))
             conn.commit()
             conn.close()
@@ -416,13 +413,20 @@ class DatabaseManager:
         try:
             conn = self.connect('EMG')
             cursor = conn.cursor()
-            cursor.execute(f'SELECT label, COUNT(*) FROM {table_name} GROUP BY label')
+            # check if table has gesture_label or old label column
+            cursor.execute(f"PRAGMA table_info({table_name})")
+            columns = [c[1] for c in cursor.fetchall()]
+            label_col = "gesture_label" if "gesture_label" in columns else "label"
+            
+            cursor.execute(f'SELECT {label_col}, COUNT(*) FROM {table_name} GROUP BY {label_col}')
             rows = cursor.fetchall()
             counts = { "0": 0, "1": 0, "2": 0, "3": 0 }
             for l, c in rows: counts[str(l)] = c
             conn.close()
             return counts
-        except: return { "0": 0, "1": 0, "2": 0, "3": 0 }
+        except Exception as e:
+            print(f"Count Error: {e}")
+            return { "0": 0, "1": 0, "2": 0, "3": 0 }
         
     def clear_table(self, sensor_type: str, table_name: str):
         try:

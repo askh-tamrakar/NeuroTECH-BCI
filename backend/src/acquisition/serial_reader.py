@@ -17,7 +17,7 @@ class SerialPacketReader:
         self, 
         port: str, 
         baud: int = 230400, 
-        packet_len: int = 8,
+        packet_len: int = 519,
         sync1: int = 0xC7, 
         sync2: int = 0x7C, 
         end_byte: int = 0x01,

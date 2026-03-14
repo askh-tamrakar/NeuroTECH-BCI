@@ -3,6 +3,7 @@ import WorkerTimeSeriesChart from '../charts/WorkerTimeSeriesChart';
 import WindowListPanel from '../calibration/WindowListPanel';
 import ConfigPanel from '../calibration/ConfigPanel';
 import SessionManagerPanel from '../calibration/SessionManagerPanel';
+import AutoCalibrationWizard from '../calibration/AutoCalibrationWizard';
 import { CalibrationApi } from '../../services/calibrationApi';
 import CustomSelect from '../ui/CustomSelect';
 import { useSettings } from '../../contexts/SettingsContext';
@@ -47,6 +48,7 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
     const [highlightedWindow, setHighlightedWindow] = useState(null); // New: for inspection
     const [targetLabel, setTargetLabel] = useState('Rock'); // e.g., 'Rock', 'Paper', etc.
 
+    const [wizardActive, setWizardActive] = useState(false);
     const [totalPredictedCount, setTotalPredictedCount] = useState(0);
 
     // Worker Instances
@@ -986,6 +988,13 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                             >
                                 {isCalibrating ? <><Square size={16} fill="currentColor" /> STOP</> : <><Play size={16} fill="currentColor" /> START COLLECTION</>}
                             </button>
+                            <button
+                                onClick={() => setWizardActive(true)}
+                                disabled={isCalibrating}
+                                className={`w-full py-2 mt-2 rounded-lg font-bold text-sm uppercase tracking-widest transition-all shadow-md active:translate-y-0 flex items-center justify-center gap-2 bg-accent/20 text-accent hover:bg-accent/30 border border-accent/30 disabled:opacity-50 disabled:cursor-not-allowed`}
+                            >
+                                <Brain size={16} fill="currentColor" /> AUTO SEQUENCE
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -1138,6 +1147,21 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                     />
                 </div>
             </div>
+
+            <AutoCalibrationWizard
+                isActive={wizardActive}
+                onClose={() => setWizardActive(false)}
+                sensor={activeSensor}
+                labels={activeSensor === 'EMG' ? ['Rock', 'Paper', 'Scissors', 'Rest'] : activeSensor === 'EOG' ? ['SingleBlink', 'DoubleBlink', 'Rest'] : ['Target 1', 'Target 2']}
+                targetCount={10}
+                onStartRecording={handleStartCalibration}
+                onStopRecording={handleStopCalibration}
+                setTargetLabel={setTargetLabel}
+                setAutoLimit={setAutoLimit}
+                readyCount={readyWindowsRef.current.length}
+                isRecording={isCalibrating}
+            />
+
         </div>
     );
 }

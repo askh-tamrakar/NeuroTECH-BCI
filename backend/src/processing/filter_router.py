@@ -441,12 +441,14 @@ class FilterRouter:
                                 if processor:
                                     # ✅ Channel has processor - apply it
                                     filtered_val = processor.process_sample(raw_val)
+                                    if isinstance(filtered_val, tuple):
+                                        processed_sample.extend(filtered_val)
+                                    else:
+                                        processed_sample.append(filtered_val)
                                 else:
                                     # ✅ Channel disabled or unmapped - pass through
                                     # print(f"[Router] [WARNING] Channel {ch_idx} disabled or unmapped - passing through")
-                                    filtered_val = raw_val
-                                
-                                processed_sample.append(filtered_val)
+                                    processed_sample.append(raw_val)
                             
                             # ✅ Push ALL channels to Stream Manager
                             if self.stream_connected and self.stream_socket:

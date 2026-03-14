@@ -109,12 +109,17 @@ class FeatureRouter:
         log.debug(f"Created Event Outlet: {OUTPUT_STREAM_NAME}")
 
     def parse_channels(self, info):
-        # Simplistic parsing - relying on config mostly, but let's see what stream says
-        # Ideally, reading the layout from the StreamInfo desc if available
-        # But we will rely on strict index mapping from config for now as requested
         self.num_channels = info.channel_count()
-        # For logging
-        self.channel_labels = [f"ch{i}" for i in range(self.num_channels)]
+        self.channel_labels = []
+        
+        try:
+            ch_desc = info.desc().child("channels")
+            ch = ch_desc.child("channel")
+            for _ in range(self.num_channels):
+                self.channel_labels.append(ch.child_value("label"))
+                ch = ch.next_sibling()
+        except:
+            self.channel_labels = [f"ch{i}" for i in range(self.num_channels)]
 
     def configure_pipeline(self):
         """
@@ -182,11 +187,40 @@ class FeatureRouter:
                 sample, ts = self.inlet.pull_sample(timeout=0.1)
 
                 if sample:
-                    # Route to pipeline
+                    # Aggregate sample data by physical channel
+                    sensor_data = {}
                     for ch_idx, val in enumerate(sample):
-                        if ch_idx in self.pipeline:
-                            extractor, detector, sensor_type = self.pipeline[ch_idx]
-                            features = extractor.process(val)
+                        label = self.channel_labels[ch_idx] if ch_idx < len(self.channel_labels) else f"ch{ch_idx}"
+                        
+                        # Parse label (e.g., EMG_RAW_0, EMG_ENV_0, EOG_1_filt)
+                        parts = label.split('_')
+                        if len(parts) >= 3 and parts[0] == "EMG":
+                            phys_idx = int(parts[2])
+                            sub_type = parts[1] # RAW or ENV
+                            if phys_idx not in sensor_data:
+                                sensor_data[phys_idx] = {}
+                            sensor_data[phys_idx][sub_type] = val
+                        elif len(parts) >= 2:
+                            # e.g. EOG_1_filt -> parts[1] is 1
+                            try:
+                                phys_idx = int(parts[1])
+                                sensor_data[phys_idx] = val
+                            except ValueError:
+                                sensor_data[ch_idx] = val
+                        else:
+                            sensor_data[ch_idx] = val
+                            
+                    # Route to pipeline
+                    for phys_idx, val in sensor_data.items():
+                        if phys_idx in self.pipeline:
+                            extractor, detector, sensor_type = self.pipeline[phys_idx]
+                            
+                            # val might be a float (EOG/EEG) or a dict (EMG: {'RAW': x, 'ENV': y})
+                            if sensor_type == "EMG" and isinstance(val, dict):
+                                # Pass both to EMG extractor
+                                features = extractor.process(val.get("RAW", 0.0), val.get("ENV", 0.0))
+                            else:
+                                features = extractor.process(val)
                             
                             if features:
                                 # Feature Extractor produced a window -> Run Detector
@@ -194,19 +228,39 @@ class FeatureRouter:
                                 
                                 # Process based on sensor type
                                 if sensor_type == "EMG":
-                                    instant_label, confirmed_label = detection_result
+                                    instant_label, confirmed_label, instant_confidence = detection_result
                                     
+                                    # Adaptive Learning: Save highly confident natural gestures
+                                    if instant_label not in ["Rest", "Unknown", "Error"] and instant_confidence > 0.90:
+                                        # Only save once every few frames to avoid flooding
+                                        state_key = f"{phys_idx}_{sensor_type}_adaptive"
+                                        last_adaptive_ts = self.last_event_time.get(state_key, 0)
+                                        if ts - last_adaptive_ts > 0.5: # Max 2 samples per second per gesture
+                                            from src.database.db_manager import db_manager
+                                            # Label int mapping
+                                            label_map = {'Rest': 0, 'Rock': 1, 'Paper': 2, 'Scissors': 3}
+                                            label_int = label_map.get(instant_label, 0)
+                                            # Save to DB
+                                            db_manager.insert_window(
+                                                features=features, 
+                                                label=label_int, 
+                                                session_id="continuous", 
+                                                confidence=instant_confidence, 
+                                                source="adaptive"
+                                            )
+                                            self.last_event_time[state_key] = ts
+
                                     # 1. Emit Real-time Prediction (Instant Feedback)
                                     # We emit this every frame for the UI
-                                    self._emit_event("emg_prediction", ch_idx, sensor_type, features, ts, extra_data={"label": instant_label})
+                                    self._emit_event("emg_prediction", phys_idx, sensor_type, features, ts, extra_data={"label": instant_label})
                                     
                                     # 2. Emit Confirmed Gesture (Game Move)
                                     if confirmed_label:
-                                        self._emit_event(confirmed_label, ch_idx, sensor_type, features, ts)
+                                        self._emit_event(confirmed_label, phys_idx, sensor_type, features, ts)
                                         
                                 elif sensor_type == "EOG":
                                     if isinstance(detection_result, str) and detection_result:
-                                        self._emit_event(detection_result, ch_idx, sensor_type, features, ts)
+                                        self._emit_event(detection_result, phys_idx, sensor_type, features, ts)
                                 elif sensor_type == "EEG":
                                     # EEG detector now returns (live_event, confirmed_event)
                                     live_event, confirmed_event = detection_result
@@ -219,11 +273,11 @@ class FeatureRouter:
                                             live_freq = float(num_str)
                                         except: pass
                                     
-                                    self._emit_event("eeg_prediction", ch_idx, sensor_type, features, ts, extra_data={"frequency": live_freq})
+                                    self._emit_event("eeg_prediction", phys_idx, sensor_type, features, ts, extra_data={"frequency": live_freq})
 
                                     # 2. Emit confirmed event
                                     if confirmed_event:
-                                        self._emit_event(confirmed_event, ch_idx, sensor_type, features, ts)
+                                        self._emit_event(confirmed_event, phys_idx, sensor_type, features, ts)
 
             except Exception as e:
                 log.warn(f"Error: {e}")

@@ -61,7 +61,12 @@ ACTIVE_MODEL_NAMES = {
 def get_feature_cols(sensor):
     sensor = sensor.upper()
     if sensor == 'EMG':
-        return ['rms', 'mav', 'var', 'wl', 'peak', 'range', 'iemg', 'entropy', 'energy', 'kurtosis', 'skewness', 'ssc', 'wamp']
+        return [
+            'rms', 'mav', 'var', 'iemg', 
+            'wl', 'zc', 'ssc', 
+            'mean_freq', 'median_freq', 'spectral_entropy',
+            'd_rms', 'd_mav'
+        ]
     elif sensor == 'EOG':
         # EOG features from BlinkExtractor
         return ['duration_ms', 'max_amplitude', 'min_amplitude', 'peak_to_peak', 'variance', 'kurtosis', 'skewness', 'entropy', 'activity_sum']
@@ -120,6 +125,21 @@ def train_model(sensor, n_estimators=100, max_depth=None, min_impurity_decrease=
 
     if df.empty:
         return {"error": "Database is empty. Collect data first."}
+
+    # Normalize JSON format and column renames for EMG
+    if sensor == 'EMG':
+        if 'features' in df.columns:
+            def safe_parse(val):
+                if isinstance(val, str) and val.startswith('{'):
+                    try: return json.loads(val)
+                    except: return {}
+                return {}
+            
+            parsed_df = df['features'].apply(safe_parse).apply(pd.Series)
+            df = df.join(parsed_df)
+        
+        if 'gesture_label' in df.columns:
+            df = df.rename(columns={'gesture_label': 'label'})
 
     # Prepare Features and Labels
     feature_cols = get_feature_cols(sensor)
@@ -382,6 +402,21 @@ def evaluate_saved_model(sensor='EMG', table_name=None, model_name=None):
 
     if df.empty:
          return {**base_response, "warning": f"Table {table_name} is empty."}
+
+    # Normalize JSON format and column renames for EMG
+    if sensor == 'EMG':
+        if 'features' in df.columns:
+            def safe_parse(val):
+                if isinstance(val, str) and val.startswith('{'):
+                    try: return json.loads(val)
+                    except: return {}
+                return {}
+            
+            parsed_df = df['features'].apply(safe_parse).apply(pd.Series)
+            df = df.join(parsed_df)
+        
+        if 'gesture_label' in df.columns:
+            df = df.rename(columns={'gesture_label': 'label'})
 
     # Prepare Features
     missing_cols = [c for c in feature_cols if c not in df.columns]

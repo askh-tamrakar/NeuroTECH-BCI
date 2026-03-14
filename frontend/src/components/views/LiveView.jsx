@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react'
 import SignalChart from '../charts/SignalChart'
 import { DataService } from '../../services/DataService'
-import { Radio, Square, Settings2, Wifi, Circle, Play, Pause, Save, Trash2, Check, X } from 'lucide-react'
+import { Radio, Square, Settings2, Wifi, Circle, Play, Pause, Save, Trash2, Check, X, Code } from 'lucide-react'
+import FirmwareViewerModal from '../ui/FirmwareViewerModal'
 import '../../styles/live/LiveView.css'
 
 export default function LiveView({ wsData, wsEvent, config, isPaused, wsUrl }) {
@@ -34,6 +35,7 @@ export default function LiveView({ wsData, wsEvent, config, isPaused, wsUrl }) {
   const [isSaving, setIsSaving] = useState(false)
   const [isConfirmationPending, setIsConfirmationPending] = useState(false)
   const [annotations, setAnnotations] = useState([])
+  const [isFirmwareOpen, setIsFirmwareOpen] = useState(false)
 
   // Channels are 0 and 1
   const activeChannels = [0, 1];
@@ -364,8 +366,15 @@ export default function LiveView({ wsData, wsEvent, config, isPaused, wsUrl }) {
           </div>
         </div>
 
-        <div className="flex flex-row gap-2">
-          <div className="mode-indicator">
+        <div className="flex flex-row gap-2 items-center">
+          <button 
+            onClick={() => setIsFirmwareOpen(true)}
+            className="flex items-center gap-2 px-3 py-1.5 bg-bg/50 border border-border hover:bg-primary/20 hover:border-primary/50 text-muted hover:text-primary transition-all rounded-lg text-[10px] font-bold uppercase tracking-wider h-full"
+            title="Arduino Firmware Source"
+          >
+            <Code size={16} /> Firmware
+          </button>
+          <div className="mode-indicator h-full flex items-center">
             <span className="text-primary font-bold flex items-center gap-2 w-auto"><Settings2 size={16} /> MODE:</span>
             INDEPENDENT SCALING
             <span className='separator'></span>
@@ -373,6 +382,8 @@ export default function LiveView({ wsData, wsEvent, config, isPaused, wsUrl }) {
           </div>
         </div>
       </div>
+
+      <FirmwareViewerModal isOpen={isFirmwareOpen} onClose={() => setIsFirmwareOpen(false)} />
 
       {Array.from({ length: numChannels }).map((_, chIdx) => {
         // Render all channels up to numChannels (2)

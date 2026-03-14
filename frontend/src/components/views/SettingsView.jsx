@@ -26,8 +26,11 @@ import {
   ArrowRight,
   ArrowLeft,
   Power,
-  ToggleRight
+  ToggleRight,
+  Terminal,
+  Download
 } from 'lucide-react'
+import FirmwareViewerModal from '../ui/FirmwareViewerModal'
 import { useSettings } from '../../contexts/SettingsContext'
 import { soundHandler } from '../../handlers/SoundHandler'
 import { Music, Volume2, Upload, VolumeX } from 'lucide-react'
@@ -81,6 +84,9 @@ export default function SettingsView({ latency = 0 }) {
 
   // Telemetry state
   const [fps, setFps] = useState(0);
+
+  // Firmware Modal state
+  const [isFirmwareModalOpen, setIsFirmwareModalOpen] = useState(false);
 
   useEffect(() => {
     let frameCount = 0;
@@ -535,6 +541,34 @@ export default function SettingsView({ latency = 0 }) {
               </div>
             </div>
 
+          </section>
+
+          {/* Firmware Download */}
+          <section className="space-y-4">
+            <h2 className="text-2xl font-black text-text flex items-center gap-4 uppercase tracking-tighter">
+              <Terminal size={32} className="text-primary" />
+              Hardware Integration
+            </h2>
+            <div className="card p-8 bg-surface space-y-8 rounded-[2rem] border-2 shadow-xl">
+              <div className="flex items-center justify-between p-6 bg-bg rounded-[1.5rem] border-2 border-border shadow-inner">
+                <div className="flex items-center gap-6">
+                  <div className="p-5 bg-primary/20 text-primary rounded-xl transition-all">
+                    <Download size={32} />
+                  </div>
+                  <div>
+                    <h4 className="text-xl font-black uppercase tracking-tighter">Arduino Firmware</h4>
+                    <p className="text-sm text-muted">View and download Neuromodulation source code</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setIsFirmwareModalOpen(true)}
+                  className="px-6 py-3 bg-primary text-primary-contrast rounded-xl font-black uppercase tracking-widest hover:scale-105 active:scale-95 transition-all shadow-glow"
+                >
+                  Manage Firmware
+                </button>
+              </div>
+            </div>
+            <FirmwareViewerModal isOpen={isFirmwareModalOpen} onClose={() => setIsFirmwareModalOpen(false)} />
           </section>
 
           {/* Audio & Soundscapes */}
