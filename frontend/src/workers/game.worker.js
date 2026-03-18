@@ -437,31 +437,29 @@ function updatePhysics(deltaTime) {
 
 // --- Drawing ---
 
-// Colors (Hardcoded equivalent of CSS variables for simplicity, or we can pass theme in settings)
+// Colors (defaults — will be overridden by theme via SETTINGS/COLORS message)
 const COLORS = {
-    bg: '#ffffff', // Theme agnostic default, will try to pass from main if needed
+    bg: '#ffffff',
     surface: '#f3f4f6',
     text: '#111827',
     primary: '#3b82f6',
     border: '#e5e7eb',
     muted: '#9ca3af',
     accent: '#3b82f6',
-    bushLight: '#a7f3d0', // Very light green
-    bush: '#4ade80',  // Light green
-    bushDark: '#16a34a', // Darker green
-    berry: '#ef4444', // Red berry
-    day: '#ffffff',   // Default Day
-    night: '#000000', // Default Night
+    bushLight: '#a7f3d0',
+    bush: '#4ade80',
+    bushDark: '#16a34a',
+    berry: '#ef4444',
+    day: '#ffffff',
+    night: '#000000',
     treeDay: '#2ecc71',
     treeNight: '#0e1512',
-    cloudDay: '#cccccc', // Neutral Grey Default
-    cloudNight: '#444444', // Neutral Dark Grey Default
+    cloudDay: '#cccccc',
+    cloudNight: '#444444',
     sunDay: '#F1C40F',
     sunNight: '#D35400',
     moonDay: '#ffffff',
-    moonDay: '#ffffff',
     moonNight: '#CFE9DB',
-    // Semantic Defaults
     dinoDay: '#2C2C2C',
     dinoNight: '#ffffff',
     obstacleDay: '#5D4037',
@@ -471,9 +469,8 @@ const COLORS = {
     groundLineDay: '#5D4037',
     groundLineNight: '#8D6E63',
     skyDay: '#f8fafc',
-    skyDay: '#f8fafc',
     skyNight: '#0f172a',
-    obstacleBorder: '#e5e7eb' // Default
+    obstacleBorder: '#e5e7eb'
 };
 
 
@@ -500,6 +497,57 @@ function drawBlockyCircle(cx, cy, size, color, pixelSize = 4) {
             }
         }
     }
+}
+
+// Cyberpunk background: dark fill + perspective grid + neon horizon + stars
+function drawCyberpunkBackground(width, height) {
+    const groundY = height - SETTINGS.GROUND_OFFSET;
+    const horizonY = groundY * 0.62;
+
+    ctx.fillStyle = '#020308';
+    ctx.fillRect(0, 0, width, height);
+
+    const gridCyan = 'rgba(0, 243, 255, 0.075)';
+    const gridCyanBright = 'rgba(0, 243, 255, 0.18)';
+    ctx.lineWidth = 1;
+
+    for (let i = 0; i <= 14; i++) {
+        const t = i / 14;
+        const gy = horizonY + (groundY - horizonY) * (t * t);
+        ctx.beginPath();
+        ctx.strokeStyle = (i === 14) ? gridCyanBright : gridCyan;
+        ctx.moveTo(0, gy); ctx.lineTo(width, gy);
+        ctx.stroke();
+    }
+
+    const vpX = width / 2;
+    for (let i = 0; i <= 24; i++) {
+        const bx = (i / 24) * width;
+        ctx.beginPath();
+        ctx.strokeStyle = gridCyan;
+        ctx.moveTo(vpX, horizonY); ctx.lineTo(bx, groundY);
+        ctx.stroke();
+    }
+
+    const hg = ctx.createLinearGradient(0, horizonY - 28, 0, horizonY + 28);
+    hg.addColorStop(0, 'rgba(255, 0, 255, 0)');
+    hg.addColorStop(0.5, 'rgba(255, 0, 255, 0.22)');
+    hg.addColorStop(1, 'rgba(0, 243, 255, 0)');
+    ctx.fillStyle = hg;
+    ctx.fillRect(0, horizonY - 28, width, 56);
+
+    if (stars.length > 0) {
+        const now = Date.now();
+        stars.forEach(star => {
+            const flicker = Math.sin(now / 300 + star.blinkOffset) * 0.3 + 0.7;
+            ctx.globalAlpha = 0.45 * flicker;
+            ctx.fillStyle = '#c0e8ff';
+            const s = Math.max(1, Math.ceil(star.size * 0.65));
+            ctx.fillRect(Math.floor(star.x % width), Math.floor(star.y * (horizonY / (height / 2))), s, s);
+        });
+        ctx.globalAlpha = 1.0;
+    }
+    COLORS.bg = '#020308';
 }
 
 function drawSky(width, height) {
@@ -892,7 +940,6 @@ function draw() {
         // Ground
         ctx.fillStyle = CURRENT_COLORS.ground;
         ctx.fillRect(0, Math.floor(groundY), width, height - groundY);
-        // Draw the main line
         ctx.fillStyle = CURRENT_COLORS.groundLine;
         ctx.fillRect(0, Math.floor(groundY), width, 4);
 

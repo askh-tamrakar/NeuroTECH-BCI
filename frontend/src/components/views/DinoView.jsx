@@ -7,7 +7,7 @@ import {
     ScanEye, SlidersHorizontal, ArrowUp, Pause, Play, Trash2, Wifi, WifiOff, Save, Skull, Trophy, Keyboard, Eye,
     Gamepad2, Globe, Sparkles, Atom, Ruler, Settings, RotateCcw, ScrollText, Timer, Weight, MoveVertical,
     MoveHorizontal, Maximize, ArrowDownToLine, Grid, Sun, Moon, Cloud, Star, TreePine, Leaf, Hand,
-    Layers, Zap, Clock, ChevronDown, Activity, Target, Radio, Signal, Circle
+    Layers, Zap, Clock, ChevronDown, ChevronLeft, ChevronRight, Activity, Target, Radio, Signal, Circle
 } from 'lucide-react'
 import { soundHandler } from '../../handlers/SoundHandler'
 
@@ -22,6 +22,7 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
     )
     const [eyeState, setEyeState] = useState('open') // open, blink, double-blink
     const [showSettings, setShowSettings] = useState(false)
+    const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
     const [models, setModels] = useState([]) // EOG Models
 
     // Game settings (easy mode default)
@@ -90,12 +91,17 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
     const [savedMessage, setSavedMessage] = useState('')
 
 
-    // --- Event Logging System ---
+    // --- Event Logging System (100ms debounce prevents duplicate fires) ---
     const [eventLogs, setEventLogs] = useState([])
+    const lastLogRef = useRef({ text: '', time: 0 })
     const logEvent = (msg, type = 'info') => {
+        const now = Date.now()
+        // Deduplicate: skip if same message within 100ms
+        if (lastLogRef.current.text === msg && now - lastLogRef.current.time < 100) return
+        lastLogRef.current = { text: msg, time: now }
         const time = new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })
         setEventLogs(prev => [{
-            id: Date.now() + Math.random(),
+            id: now + Math.random(),
             time,
             text: msg,
             type
@@ -759,6 +765,16 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
 
     return (
         <div className="dino-container">
+            {/* Sidebar Toggle Floating Button */}
+            <button
+                className={`sidebar-toggle-btn ${isSidebarCollapsed ? 'collapsed' : ''}`}
+                onClick={() => setIsSidebarCollapsed(c => !c)}
+                title={isSidebarCollapsed ? 'Expand Controls' : 'Collapse Controls'}
+                style={{ right: isSidebarCollapsed ? 0 : 'clamp(14rem, 20vw, 22rem)' }}
+            >
+                {isSidebarCollapsed ? <ChevronLeft size={18} /> : <ChevronRight size={18} />}
+            </button>
+
             <div className="dino-game-wrapper">
                 {/* Main game area */}
                 <div className="game-main-area">
@@ -872,7 +888,7 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
                 </div>
 
                 {/* Right Sidebar */}
-                <div className="game-sidebar pr-1.5">
+                <div className={`game-sidebar ${isSidebarCollapsed ? 'collapsed' : ''} pr-1.5`}>
                     <div className="shrink-0" style={{ height: '85px' }} />
                     {/* Camera Panel */}
                     <CameraPanel initialCameraOn={false} />
