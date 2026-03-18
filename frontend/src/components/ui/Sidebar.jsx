@@ -2,10 +2,12 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
     ChevronDown, ChevronUp, Minus, Plus, Filter, Zap,
     Waves, Sliders, Cpu, Power, ArrowRightLeft, Check, Play,
-    Pause, ListOrdered, Timer, Activity, CheckCircle, Network
+    Pause, ListOrdered, Timer, Activity, CheckCircle, Network,
+    ChevronLeft, ChevronRight, Menu, Square
 } from 'lucide-react';
 import ElectricBorder from './ElectricBorder';
 import CustomSelect from './CustomSelect';
+import ElasticSlider from './ElasticSlider';
 import { soundHandler } from '../../handlers/SoundHandler';
 export default function Sidebar({
     config,
@@ -13,7 +15,9 @@ export default function Sidebar({
     isPaused,
     setIsPaused,
     onSave,
-    className = ''
+    className = '',
+    isCollapsed = false,
+    onToggle
 }) {
     // Safety check to prevent crash if config is not yet loaded
     if (!config) return null;
@@ -85,147 +89,183 @@ export default function Sidebar({
     }
 
     return (
-        <aside className={`w-80 bg-surface/80 backdrop-blur-md border-r border-border h-full flex flex-col overflow-y-auto overflow-x-hidden [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none'] ${className}`}>
+        <aside className={`
+            ${isCollapsed ? 'w-16' : 'w-80'} 
+            bg-surface/80 backdrop-blur-md border-r border-border h-full flex flex-col transition-all duration-300 ease-in-out
+            overflow-y-auto overflow-x-hidden [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none'] 
+            ${className}
+        `}>
             <div className="h-[94px] shrink-0" />
 
-            <div className="p-4 border-b border-border">
-                <h2 className="text-3xl font-bold text-text mb-1 flex items-center gap-3">
-                    <Cpu size={32} className="text-primary animate-pulse" />
-                    <span style={{ letterSpacing: '2.3px' }}>Controls</span>
-                </h2>
-                <p className="text-base text-muted">LSL Stream Configuration</p>
+            <div className={`p-4 border-b border-border flex items-center justify-between ${isCollapsed ? 'flex-col gap-4' : ''}`}>
+                {!isCollapsed ? (
+                    <>
+                        <div>
+                            <h2 className="text-3xl font-bold text-text mb-1 flex items-center gap-3">
+                                <Cpu size={32} className="text-primary animate-pulse" />
+                                <span style={{ letterSpacing: '2.3px' }}>Controls</span>
+                            </h2>
+                            <p className="text-base text-muted">LSL Stream Configuration</p>
+                        </div>
+                        <button
+                            onClick={onToggle}
+                            className="p-2 hover:bg-white/10 rounded-full transition-colors"
+                            title="Collapse Sidebar"
+                        >
+                            <ChevronLeft size={24} />
+                        </button>
+                    </>
+                ) : (
+                    <>
+                        <button
+                            onClick={onToggle}
+                            className="p-2 hover:bg-white/10 rounded-full transition-colors mb-2"
+                            title="Expand Sidebar"
+                        >
+                            <Menu size={24} className="text-primary" />
+                        </button>
+                        <div className="flex flex-col items-center gap-6 mt-4">
+                            <Cpu size={24} className="text-primary animate-pulse" />
+                            <div className="w-px h-8 bg-border" />
+                        </div>
+                    </>
+                )}
             </div>
 
-            <div className="p-4 space-y-8">
+            <div className={`p-4 space-y-8 ${isCollapsed ? 'items-center flex flex-col px-0' : ''}`}>
 
-                {/* Stream Control */}
-                <ElectricBorder
-                    color={isPaused ? "#ef4444" : "#10b981"}
-                    speed={isPaused ? .5 : 1.1}
-                    chaos={isPaused ? .025 : .035}
-                    thickness={2}
-                    borderRadius={12}
+                {!isCollapsed && (
+                    <>
+                        {/* Stream Control */}
+                        <ElectricBorder
+                            color={isPaused ? "#ef4444" : "#10b981"}
+                            speed={isPaused ? .5 : 1.1}
+                            chaos={isPaused ? .025 : .035}
+                            thickness={2}
+                            borderRadius={12}
 
-                >
-                    <button
-                        onClick={() => {
-                            soundHandler.playToggle(!isPaused);
-                            setIsPaused(!isPaused);
-                        }}
+                        >
+                            <button
+                                onClick={() => {
+                                    soundHandler.playToggle(!isPaused);
+                                    setIsPaused(!isPaused);
+                                }}
 
-                        className={`w-full py-3 font-bold transition-all flex items-center justify-center gap-2 ${isPaused
-                            ? 'bg-accent/10 text-accent hover:bg-accent/20'
-                            : 'bg-primary/10 text-primary hover:bg-primary/20'
-                            }`}
-                    >
-                        {isPaused ? <Play size={20} className="fill-current pulse" style={{ color: "#ef4444" }} /> : <Pause size={20} className="fill-current pulse" style={{ color: "#10b981" }} />}
-                        {isPaused
-                            ? <span className="text-red-400">STREAM PAUSED</span>
-                            : <span className="text-emerald-400">STREAMING</span>}
-                    </button>
-                </ElectricBorder>
+                                className={`w-full py-3 font-bold transition-all flex items-center justify-center gap-2 ${isPaused
+                                    ? 'bg-accent/10 text-accent hover:bg-accent/20 shadow-[0_0_15px_rgba(239,68,68,0.2)]'
+                                    : 'bg-primary/10 text-primary hover:bg-primary/20 shadow-[0_0_15px_rgba(16,185,129,0.2)]'
+                                    } rounded-lg`}
+                            >
+                                {isPaused ? <Play size={20} className="fill-current pulse" style={{ color: "#ef4444" }} /> : <Pause size={20} className="fill-current pulse" style={{ color: "#10b981" }} />}
+                                {isPaused
+                                    ? <span className="text-red-400">STREAM PAUSED</span>
+                                    : <span className="text-emerald-400">STREAMING</span>}
+                            </button>
+                        </ElectricBorder>
 
 
 
-                {/* Channel Mapping */}
-                <section>
-                    <h3 className="text-sm font-bold text-muted uppercase tracking-wider mb-4 flex items-center gap-2"><Network size={16} /> Channel Mapping</h3>
+                        {/* Channel Mapping */}
+                        <section>
+                            <h3 className="text-sm font-bold text-muted uppercase tracking-wider mb-4 flex items-center gap-2"><Network size={16} /> Channel Mapping</h3>
 
-                    {/* Channel 0 */}
-                    <div className="mb-3">
-                        <div className="flex justify-between items-center mb-1">
-                            <label className="text-xs font-medium text-text flex items-center gap-1"><Activity size={14} className="text-primary" /> Graph 1</label>
-                            <label className={`text-[10px] flex items-center gap-1 cursor-pointer ${config.channel_mapping?.ch0?.enabled !== false ? 'text-primary' : 'text-red-500'}`}>
-                                <input
-                                    type="checkbox"
-                                    checked={config.channel_mapping?.ch0?.enabled !== false}
-                                    onChange={(e) => handleChannelToggle('ch0', e.target.checked)}
-                                    className="accent-primary hidden"
+                            {/* Channel 0 */}
+                            <div className="mb-3">
+                                <div className="flex justify-between items-center mb-1">
+                                    <label className="text-xs font-medium text-text flex items-center gap-1"><Activity size={14} className="text-primary" /> Graph 1</label>
+                                    <label className={`text-[10px] flex items-center gap-1 cursor-pointer ${config.channel_mapping?.ch0?.enabled !== false ? 'text-primary' : 'text-red-500'}`}>
+                                        <input
+                                            type="checkbox"
+                                            checked={config.channel_mapping?.ch0?.enabled !== false}
+                                            onChange={(e) => handleChannelToggle('ch0', e.target.checked)}
+                                            className="accent-primary hidden"
+                                        />
+                                        <Power size={14} className={config.channel_mapping?.ch0?.enabled !== false ? "stroke-2" : ""} />
+                                        {config.channel_mapping?.ch0?.enabled !== false ? 'ON' : 'OFF'}
+                                    </label>
+                                </div>
+                                <SensorSelector
+                                    value={getSensorTypeForChannel('ch0')}
+                                    onChange={(val) => handleChannelMapping('ch0', val)}
+                                    disabled={config.channel_mapping?.ch0?.enabled === false}
                                 />
-                                <Power size={14} className={config.channel_mapping?.ch0?.enabled !== false ? "stroke-2" : ""} />
-                                {config.channel_mapping?.ch0?.enabled !== false ? 'ON' : 'OFF'}
-                            </label>
-                        </div>
-                        <SensorSelector
-                            value={getSensorTypeForChannel('ch0')}
-                            onChange={(val) => handleChannelMapping('ch0', val)}
-                            disabled={config.channel_mapping?.ch0?.enabled === false}
-                        />
-                    </div>
+                            </div>
 
-                    {/* Channel 1 */}
-                    <div className="mb-4">
-                        <div className="flex justify-between items-center mb-1">
-                            <label className="text-xs font-medium text-text flex items-center gap-1"><Activity size={14} className="text-emerald-500" /> Graph 2</label>
-                            <label className={`text-[10px] flex items-center gap-1 cursor-pointer ${config.channel_mapping?.ch1?.enabled !== false ? 'text-primary' : 'text-red-500'}`}>
-                                <input
-                                    type="checkbox"
-                                    checked={config.channel_mapping?.ch1?.enabled !== false}
-                                    onChange={(e) => handleChannelToggle('ch1', e.target.checked)}
-                                    className="accent-primary hidden"
+                            {/* Channel 1 */}
+                            <div className="mb-4">
+                                <div className="flex justify-between items-center mb-1">
+                                    <label className="text-xs font-medium text-text flex items-center gap-1"><Activity size={14} className="text-emerald-500" /> Graph 2</label>
+                                    <label className={`text-[10px] flex items-center gap-1 cursor-pointer ${config.channel_mapping?.ch1?.enabled !== false ? 'text-primary' : 'text-red-500'}`}>
+                                        <input
+                                            type="checkbox"
+                                            checked={config.channel_mapping?.ch1?.enabled !== false}
+                                            onChange={(e) => handleChannelToggle('ch1', e.target.checked)}
+                                            className="accent-primary hidden"
+                                        />
+                                        <Power size={14} className={config.channel_mapping?.ch1?.enabled !== false ? "stroke-2" : ""} />
+                                        {config.channel_mapping?.ch1?.enabled !== false ? 'ON' : 'OFF'}
+                                    </label>
+                                </div>
+                                <SensorSelector
+                                    value={getSensorTypeForChannel('ch1')}
+                                    onChange={(val) => handleChannelMapping('ch1', val)}
+                                    disabled={config.channel_mapping?.ch1?.enabled === false}
                                 />
-                                <Power size={14} className={config.channel_mapping?.ch1?.enabled !== false ? "stroke-2" : ""} />
-                                {config.channel_mapping?.ch1?.enabled !== false ? 'ON' : 'OFF'}
-                            </label>
-                        </div>
-                        <SensorSelector
-                            value={getSensorTypeForChannel('ch1')}
-                            onChange={(val) => handleChannelMapping('ch1', val)}
-                            disabled={config.channel_mapping?.ch1?.enabled === false}
-                        />
-                    </div>
+                            </div>
 
 
 
-                    <MapButton onSave={onSave} />
-                </section>
+                            <MapButton onSave={onSave} />
+                        </section>
 
-                {/* SENSOR-BASED FILTERS (Not Channel-Based) */}
-                <section className="space-y-6">
-                    <h3 className="text-sm font-bold text-muted uppercase tracking-wider flex items-center gap-2"><Filter size={16} /> Signal Filters</h3>
+                        {/* SENSOR-BASED FILTERS (Not Channel-Based) */}
+                        <section className="space-y-6">
+                            <h3 className="text-sm font-bold text-muted uppercase tracking-wider flex items-center gap-2"><Filter size={16} /> Signal Filters</h3>
 
-                    {/* EMG FILTER (applies to all EMG channels) */}
-                    <FilterSection
-                        sensorType="EMG"
-                        filterConfig={getFilterConfig('EMG')}
-                        onFilterChange={handleSensorFilterChange}
-                        colorClass="text-primary"
-                        accentColor="primary"
-                        channelsUsingThis={
-                            (getSensorTypeForChannel('ch0') === 'EMG' ? ['ch0'] : [])
-                                .concat(getSensorTypeForChannel('ch1') === 'EMG' ? ['ch1'] : [])
-                        }
-                        onSave={onSave}
-                    />
+                            {/* EMG FILTER (applies to all EMG channels) */}
+                            <FilterSection
+                                sensorType="EMG"
+                                filterConfig={getFilterConfig('EMG')}
+                                onFilterChange={handleSensorFilterChange}
+                                colorClass="text-primary"
+                                accentColor="primary"
+                                channelsUsingThis={
+                                    (getSensorTypeForChannel('ch0') === 'EMG' ? ['ch0'] : [])
+                                        .concat(getSensorTypeForChannel('ch1') === 'EMG' ? ['ch1'] : [])
+                                }
+                                onSave={onSave}
+                            />
 
-                    {/* EOG FILTER (applies to all EOG channels) */}
-                    <FilterSection
-                        sensorType="EOG"
-                        filterConfig={getFilterConfig('EOG')}
-                        onFilterChange={handleSensorFilterChange}
-                        colorClass="text-emerald-500"
-                        accentColor="emerald"
-                        channelsUsingThis={
-                            (getSensorTypeForChannel('ch0') === 'EOG' ? ['ch0'] : [])
-                                .concat(getSensorTypeForChannel('ch1') === 'EOG' ? ['ch1'] : [])
-                        }
-                        onSave={onSave}
-                    />
+                            {/* EOG FILTER (applies to all EOG channels) */}
+                            <FilterSection
+                                sensorType="EOG"
+                                filterConfig={getFilterConfig('EOG')}
+                                onFilterChange={handleSensorFilterChange}
+                                colorClass="text-emerald-500"
+                                accentColor="emerald"
+                                channelsUsingThis={
+                                    (getSensorTypeForChannel('ch0') === 'EOG' ? ['ch0'] : [])
+                                        .concat(getSensorTypeForChannel('ch1') === 'EOG' ? ['ch1'] : [])
+                                }
+                                onSave={onSave}
+                            />
 
-                    {/* EEG FILTER (applies to all EEG channels) */}
-                    <FilterSection
-                        sensorType="EEG"
-                        filterConfig={getFilterConfig('EEG')}
-                        onFilterChange={handleSensorFilterChange}
-                        colorClass="text-orange-500"
-                        accentColor="orange"
-                        channelsUsingThis={
-                            (getSensorTypeForChannel('ch0') === 'EEG' ? ['ch0'] : [])
-                                .concat(getSensorTypeForChannel('ch1') === 'EEG' ? ['ch1'] : [])
-                        }
-                        onSave={onSave}
-                    />
-                </section>
+                            {/* EEG FILTER (applies to all EEG channels) */}
+                            <FilterSection
+                                sensorType="EEG"
+                                filterConfig={getFilterConfig('EEG')}
+                                onFilterChange={handleSensorFilterChange}
+                                colorClass="text-orange-500"
+                                accentColor="orange"
+                                channelsUsingThis={
+                                    (getSensorTypeForChannel('ch0') === 'EEG' ? ['ch0'] : [])
+                                        .concat(getSensorTypeForChannel('ch1') === 'EEG' ? ['ch1'] : [])
+                                }
+                                onSave={onSave}
+                            />
+                        </section>
+                    </>
+                )}
             </div>
 
             <div className="h-[30px] shrink-0" />
@@ -405,48 +445,47 @@ function FilterSection({
 
             {/* HIGH-PASS FILTER CUTOFF */}
             <div className="space-y-1 pt-2 border-t border-border/30">
-                <label className="text-[10px] text-muted flex justify-between items-center">
+                <label className="text-[10px] text-muted flex justify-between items-center mb-1">
                     <span className="flex items-center gap-1"><Sliders size={10} /> High-Pass Cutoff</span>
                     <span className={colorClass} style={{ fontWeight: 'bold' }}>
                         {filterConfig.cutoff || 1} Hz
                     </span>
                 </label>
-                <input
-                    type="range"
-                    min="0.1"
-                    max="200"
-                    step="0.1"
-                    value={filterConfig.cutoff || 1}
-                    onChange={(e) => onFilterChange(sensorType, 'cutoff', Number(e.target.value))}
-                    className={`w-full accent-${accentColor}-500 h-1 bg-bg rounded-lg cursor-pointer`}
-                />
-                <div className="flex justify-between text-[10px] text-muted font-mono">
-                    <span>0.1 Hz</span>
-                    <span>200 Hz</span>
+                <div className="px-1">
+                    <ElasticSlider
+                        defaultValue={filterConfig.cutoff || 1}
+                        startingValue={0.1}
+                        maxValue={200}
+                        stepSize={0.1}
+                        onChange={(val) => onFilterChange(sensorType, 'cutoff', val)}
+                        leftIcon={<Minus size={12} className="text-muted" />}
+                        rightIcon={<Plus size={12} className="text-muted" />}
+                        className="h-6"
+                    />
                 </div>
             </div>
 
             {/* FILTER ORDER */}
             {filterConfig.order && (
                 <div className="space-y-1 pt-2 border-t border-border/30">
-                    <label className="text-[10px] text-muted flex justify-between">
+                    <label className="text-[10px] text-muted flex justify-between mb-1">
                         <span className="flex items-center gap-1"><ListOrdered size={10} /> Filter Order</span>
                         <span className={colorClass} style={{ fontWeight: 'bold' }}>
                             {filterConfig.order}
                         </span>
                     </label>
-                    <input
-                        type="range"
-                        min="1"
-                        max="8"
-                        step="1"
-                        value={filterConfig.order || 4}
-                        onChange={(e) => onFilterChange(sensorType, 'order', Number(e.target.value))}
-                        className={`w-full accent-${accentColor}-500 h-1 bg-bg rounded-lg cursor-pointer`}
-                    />
-                    <div className="flex justify-between text-[10px] text-muted font-mono">
-                        <span>1st</span>
-                        <span>8th</span>
+                    <div className="px-1">
+                        <ElasticSlider
+                            defaultValue={filterConfig.order || 4}
+                            startingValue={1}
+                            maxValue={8}
+                            stepSize={1}
+                            isStepped={true}
+                            onChange={(val) => onFilterChange(sensorType, 'order', val)}
+                            leftIcon={<Minus size={12} className="text-muted" />}
+                            rightIcon={<Plus size={12} className="text-muted" />}
+                            className="h-6"
+                        />
                     </div>
                 </div>
             )}

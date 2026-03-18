@@ -1,13 +1,13 @@
 .live-view-container {
   width: 100%;
-  height: 100%;
+  height: calc(100vh - 40px); /* 100vh minus footer approx */
   display: flex;
   flex-direction: column;
   gap: 1rem;
-  padding: 0rem 1rem 0rem 1rem;
+  padding: 0 1rem;
   background-color: var(--bg);
-  border-radius: 0.5rem;
-  overflow: hidden; /* Hide overflow to prevent scrolling */
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 /* Scrollbar styles removed as they are no longer needed on main container */
@@ -199,11 +199,12 @@
 }
 
 .channel-wrapper {
-  min-height: 0; /* Important for scrollable content inside flex items if needed, or just to allow shrinking */
+  flex: 1; /* Allow each chart to take equal space */
+  min-height: 200px;
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
-  overflow: hidden; /* Ensure chart stays within bounds */
+  overflow: hidden;
 }
 
 .channel-header {
@@ -259,11 +260,30 @@
   font-weight: 700;
 }
 
+/* Professional Button Styles */
+button {
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+button:active {
+  transform: scale(0.97);
+}
+
+.shadow-glow {
+  box-shadow: 0 0 15px rgba(var(--primary-rgb), 0.3);
+}
+
+.shadow-glow-green {
+  text-shadow: 0 0 8px rgba(16, 185, 129, 0.6);
+}
+
+.shadow-glow-red {
+  text-shadow: 0 0 8px rgba(239, 68, 68, 0.6);
+}
+
 @keyframes pulse {
-  0%, 100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: .5;
-  }
+  0% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(1.05); }
+  100% { opacity: 1; transform: scale(1); }
 }

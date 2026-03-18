@@ -266,8 +266,8 @@ export default function LiveView({ wsData, wsEvent, config, isPaused, wsUrl }) {
 
   return (
     <div className="live-view-container">
-      <div className="h-[94px] shrink-0" />
-      <div className="controls-container flex flex-row justify-between">
+      {/* Spacer removed - using padding in container or specific component spacing */}
+      <div className="controls-container flex flex-row justify-between flex-wrap gap-4 mt-4">
         <div className="flex flex-row gap-4 items-center">
           <div className="record-controls flex items-center gap-2">
             {!isRecording && !isConfirmationPending && (
@@ -326,7 +326,7 @@ export default function LiveView({ wsData, wsEvent, config, isPaused, wsUrl }) {
             {isSaving && <div className="saving-indicator ml-2">SAVING...</div>}
           </div>
 
-          <div className="w-[1px] h-6 bg-border mx-1" />
+          <div className="w-[1px] h-6 bg-border mx-1 hidden sm:block" />
 
           {/* CHANNEL SELECTOR */}
           <div className="flex items-center gap-2 bg-surface/50 p-1 rounded-lg border border-border px-3">
@@ -369,7 +369,12 @@ export default function LiveView({ wsData, wsEvent, config, isPaused, wsUrl }) {
             <span className="text-primary font-bold flex items-center gap-2 w-auto"><Settings2 size={16} /> MODE:</span>
             INDEPENDENT SCALING
             <span className='separator'></span>
-            <div className="flex items-center gap-2"><span className="text-purple-400 flex items-center gap-1"><Wifi size={16} /> Stream</span>: {wsData?.raw?.stream_name || 'Disconnected'}</div>
+            <div className="flex items-center gap-2">
+              <span className="text-purple-400 flex items-center gap-1"><Wifi size={16} /> Stream</span>: 
+              <span className={wsData?.raw?.stream_name ? "text-emerald-400 font-bold shadow-glow-green" : "text-red-400 font-bold shadow-glow-red"}>
+                {wsData?.raw?.stream_name || 'Disconnected'}
+              </span>
+            </div>
           </div>
         </div>
       </div>

@@ -53,10 +53,12 @@ export default function LiveDashboard({ wsData, wsConfig, wsEvent, sendMessage, 
         // alert("Configuration saved and synced!")
     }
 
+    const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
+
     if (loading) return <div className="loading-screen">Loading Config...</div>
 
     return (
-        <div className="dashboard-container">
+        <div className={`dashboard-container ${isSidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
             {/* Fixed Sidebar */}
             <Sidebar
                 config={config}
@@ -65,6 +67,8 @@ export default function LiveDashboard({ wsData, wsConfig, wsEvent, sendMessage, 
                 setIsPaused={setIsPaused}
                 onSave={handleManualSave}
                 className="sidebar-fixed"
+                isCollapsed={isSidebarCollapsed}
+                onToggle={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
             />
 
             {/* Main Content Area */}
