@@ -266,8 +266,8 @@ export default function LiveView({ wsData, wsEvent, config, isPaused, wsUrl }) {
 
   return (
     <div className="live-view-container">
-      {/* Spacer removed - using padding in container or specific component spacing */}
-      <div className="controls-container flex flex-row justify-between flex-wrap gap-4 mt-4">
+      <div className="h-[94px] shrink-0" />
+      <div className="controls-container flex flex-row justify-between flex-wrap gap-4">
         <div className="flex flex-row gap-4 items-center">
           <div className="record-controls flex items-center gap-2">
             {!isRecording && !isConfirmationPending && (
