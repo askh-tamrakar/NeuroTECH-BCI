@@ -768,7 +768,7 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
             {/* Sidebar Toggle Floating Button */}
             <button
                 className={`sidebar-toggle-btn ${isSidebarCollapsed ? 'collapsed' : ''}`}
-                onClick={() => setIsSidebarCollapsed(c => !c)}
+                onPointerDown={() => setIsSidebarCollapsed(c => !c)}
                 title={isSidebarCollapsed ? 'Expand Controls' : 'Collapse Controls'}
                 style={{ right: isSidebarCollapsed ? 0 : 'clamp(14rem, 20vw, 22rem)' }}
             >
@@ -785,7 +785,7 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
                                 EOG Dino Game
                             </h2>
                             <button
-                                onClick={() => setShowSettings(!showSettings)}
+                                onPointerDown={() => setShowSettings(!showSettings)}
                                 className={`tuner-button ${showSettings ? 'active' : 'inactive'}`}
                             >
                                 <SlidersHorizontal /> Tuner
