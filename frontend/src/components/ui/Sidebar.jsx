@@ -125,7 +125,13 @@ export default function Sidebar({
                             <Menu size={24} className="text-primary" />
                         </button>
                         <div className="flex flex-col items-center gap-6 mt-4">
-                            <Cpu size={24} className="text-primary animate-pulse" />
+                            <Cpu size={24} className="text-primary animate-pulse" title="Controls" />
+                            <button onClick={onToggle} title="Channel Mapping" className="hover:text-primary transition-colors group">
+                                <Network size={20} className="text-muted group-hover:text-primary" />
+                            </button>
+                            <button onClick={onToggle} title="Signal Filters" className="hover:text-primary transition-colors group">
+                                <Filter size={20} className="text-muted group-hover:text-primary" />
+                            </button>
                             <div className="w-px h-8 bg-border" />
                         </div>
                     </>
