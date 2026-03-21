@@ -764,7 +764,7 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
     }
 
     return (
-        <div className="dino-container">
+        <div className="dino-container pt-[96px]">
             {/* Sidebar Toggle Floating Button */}
             <button
                 className={`sidebar-toggle-btn ${isSidebarCollapsed ? 'collapsed' : ''}`}
@@ -889,7 +889,6 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
 
                 {/* Right Sidebar */}
                 <div className={`game-sidebar ${isSidebarCollapsed ? 'collapsed' : ''} pr-1.5`}>
-                    <div className="shrink-0" style={{ height: '85px' }} />
                     {/* Camera Panel */}
                     <CameraPanel initialCameraOn={false} />
 
