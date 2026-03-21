@@ -883,7 +883,7 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
     }, [currentYDomain, activeChannelIndex, customLineColor, currentTheme]);
 
     return (
-        <div className="flex flex-col h-[calc(100dvh-120px)] bg-bg text-text animate-in fade-in duration-500 overflow-hidden">
+        <div className="flex flex-col h-screen pt-[96px] pb-2 bg-bg text-text animate-in fade-in duration-500 overflow-hidden">
 
             {/* TOP ROW: SIDEBAR + CHART (50%) */}
             <div className="h-[50%] flex-none flex min-h-0 px-2 pb-2 pt-2 gap-2">
