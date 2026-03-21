@@ -374,159 +374,141 @@ const RPSGame = ({ wsEvent }) => {
     };
 
     return (
-        <div className="rps-container overflow-hidden relative">
-            <div className="rps-main">
-                {/* Absolute positioning for Title, Scoreboard, and Controls to float them at the top */}
-                <div className="absolute top-0 left-8 right-0 flex items-start z-20 pointer-events-none">
-                    {/* Left side: elements must have pointer-events-auto to be clickable */}
-                    <div className="flex flex-col gap-40 pointer-events-auto">
-                        <div className="flex flex-col">
-                            <div className="rps-title" style={{ marginBottom: 0 }}>NEURO RPS</div>
-
-                            <div className="top-controls flex flex-wrap" style={{ marginLeft: 0 }}>
-                                <div className="flex items-center gap-2 bg-surface rounded px-2 py-1 border border-white/10">
-                                    <BrainCircuit size={16} className="text-primary" />
-                                    <div className="w-40">
-                                        <CustomSelect
-                                            value={selectedModel}
-                                            onChange={(val) => handleModelChange({ target: { value: val } })}
-                                            options={models.map(m => ({ value: m.name, label: m.name }))}
-                                            placeholder="Select Model"
-                                            className="border-none bg-transparent"
-                                        />
-                                    </div>
-                                </div>
-                                <div className="w-32">
-                                    <CustomSelect
-                                        value={difficulty}
-                                        onChange={setDifficulty}
-                                        options={[
-                                            { value: 'low', label: 'Low' },
-                                            { value: 'moderate', label: 'Moderate' },
-                                            { value: 'high', label: 'High' }
-                                        ]}
-                                        placeholder="Difficulty"
-                                    />
-                                </div>
-
-                                <button className={`mode-btn ${manualMode ? 'active' : ''}`} onClick={toggleManualMode} title="Toggle manual mode">
-                                    {manualMode ? 'Manual' : 'Auto'}
-                                </button>
-                                <button
-                                    className="flex items-center justify-center p-2 rounded bg-white/5 border border-white/10 hover:bg-white/10 transition-colors ml-2"
-                                    onClick={() => {
-                                        setAssetType(prev => prev === 'set1' ? 'set2' : 'set1');
-                                        setGlobalFallbackMode(false); // Reset fallback on type change
-                                        soundHandler.playRPSWarp(); // Play sound on asset type switch
-                                    }}
-                                    title="Toggle Asset Type"
-                                >
-                                    <ImageIcon size={18} className="text-muted hover:text-white transition-colors" />
-                                </button>
+        <div className="rps-container overflow-hidden pt-[94px] pb-[35px] relative h-full flex flex-col w-full">
+            {/* Top Area: Header, Controls, Scoreboard */}
+            <div className="rps-header flex flex-col md:flex-row items-center justify-between w-full px-4 md:px-8 py-2 md:py-4 z-20 gap-4 shrink-0">
+                <div className="flex flex-col gap-2">
+                    <div className="rps-title m-0 text-3xl md:text-4xl text-center md:text-left">NEURO RPS</div>
+                    
+                    <div className="top-controls flex flex-wrap justify-center md:justify-start">
+                        {/* Models, difficulty, mode buttons */}
+                        <div className="flex items-center gap-2 bg-surface rounded px-2 py-1 border border-white/10 mb-2 md:mb-0">
+                            <BrainCircuit size={16} className="text-primary" />
+                            <div className="w-32 md:w-40">
+                                <CustomSelect
+                                    value={selectedModel}
+                                    onChange={(val) => handleModelChange({ target: { value: val } })}
+                                    options={models.map(m => ({ value: m.name, label: m.name }))}
+                                    placeholder="Select Model"
+                                    className="border-none bg-transparent"
+                                />
                             </div>
                         </div>
-
-                        {gameState !== 'waiting' && result && (
-                            <div className="result-overlay-side animate-in slide-in-from-left duration-500">
-                                <div className={`result-text-side ${result.toLowerCase()}`}>
-                                    {result === 'TIE' ? (
-                                        <>IT'S A<br />TIE</>
-                                    ) : (
-                                        <>YOU<br />{result}!</>
-                                    )}
-                                </div>
-                                <div className="text-muted mt-2 font-mono tracking-widest text-lg">
-                                    RESETTING IN {countdown}...
-                                </div>
-                            </div>
-                        )}
-                    </div>
-
-                    {/* Center Scoreboard using margin auto and position absolute inside the flex container */}
-                    <div className="absolute left-1/2 -translate-x-1/2 top-[29px] pointer-events-auto">
-                        <div className="scoreboard" style={{ position: 'relative', transform: 'none', left: 'auto', top: 'auto' }}>
-                            <div>Player: <strong>{score.player}</strong></div>
-                            <div>Computer: <strong>{score.computer}</strong></div>
+                        <div className="w-28 md:w-32 mr-2">
+                            <CustomSelect
+                                value={difficulty}
+                                onChange={setDifficulty}
+                                options={[
+                                    { value: 'low', label: 'Low' },
+                                    { value: 'moderate', label: 'Moderate' },
+                                    { value: 'high', label: 'High' }
+                                ]}
+                                placeholder="Difficulty"
+                            />
                         </div>
-                    </div>
 
-                    {/* Right Sidebar */}
-                    <div className="rps-sidebar top-[29px]">
-                        {/* Event Log Panel */}
-                        <div className="w-full h-full flex flex-col bg-surface/30 border border-text/40 rounded-2xl p-6 backdrop-blur-md shadow-2xl">
-                            <div className="text-sm font-bold text-muted uppercase tracking-wider mb-4 flex justify-between items-center pb-3 border-b border-text/40 flex-shrink-0">
-                                <span>Event Log</span>
-                                <span className="text-[11px] opacity-60">Last 15 events</span>
-                            </div>
-                            <div className="space-y-2 font-mono text-base overflow-y-auto flex-1 pr-2 custom-scrollbar">
-                                {eventLogs.length === 0 ? (
-                                    <div className="text-muted/50 italic py-4 text-center">No events received yet...</div>
-                                ) : (
-                                    eventLogs.map((log) => (
-                                        <div key={log.id} className="flex gap-4 py-2 border-b border-white/5 last:border-0 hover:bg-white/5 px-3 rounded text-base">
-                                            <span className="text-muted">{log.time}</span>
-                                            <span className={`font-bold ${log.name === 'ROCK' ? 'text-amber-400' :
-                                                log.name === 'PAPER' ? 'text-blue-400' :
-                                                    log.name === 'SCISSORS' ? 'text-pink-400' : 'text-text'
-                                                }`}>
-                                                {log.name}
-                                            </span>
-                                            <span className="text-muted ml-auto text-xs">{log.channel}</span>
-                                        </div>
-                                    ))
-                                )}
-                            </div>
-                        </div>
+                        <button className={`mode-btn ${manualMode ? 'active' : ''}`} onClick={toggleManualMode} title="Toggle manual mode">
+                            {manualMode ? 'Manual' : 'Auto'}
+                        </button>
+                        <button
+                            className="flex items-center justify-center p-2 rounded bg-white/5 border border-white/10 hover:bg-white/10 transition-colors ml-2"
+                            onClick={() => {
+                                setAssetType(prev => prev === 'set1' ? 'set2' : 'set1');
+                                setGlobalFallbackMode(false);
+                                soundHandler.playRPSWarp();
+                            }}
+                            title="Toggle Asset Type"
+                        >
+                            <ImageIcon size={18} className="text-muted hover:text-white transition-colors" />
+                        </button>
                     </div>
                 </div>
 
-                <div className="rps-main">
-                    {/* Status Text and Play Button shifted down */}
-                    <div className="status-text mt-8" style={{ minHeight: '60px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1.5rem' }}>
-                        {gameState === 'idle' ? (
-                            <button
-                                onClick={handlePlay}
-                                className="px-8 py-2 bg-primary text-primary-contrast rounded-xl font-bold text-lg shadow-lg hover:scale-105 transition-transform animate-in zoom-in duration-300"
-                            >
-                                PLAY
-                            </button>
-                        ) : (
-                            <button
-                                onClick={() => {
-                                    setGameState('idle');
-                                    togglePrediction(false);
-                                }}
-                                className="px-6 py-2 bg-red-600/90 hover:bg-red-500 text-white rounded-xl font-bold text-lg shadow-lg hover:scale-105 transition-transform animate-in zoom-in duration-300"
-                            >
-                                STOP
-                            </button>
-                        )}
-
-                        {gameState === 'waiting' && !manualMode && (
-                            <span className="pulse">
-                                {currentPrediction === 'REST' || currentPrediction === 'UNKNOWN'
-                                    ? "Waiting for Player Gesture..."
-                                    : "Recording Gesture..."}
-                            </span>
-                        )}
-                        {gameState === 'waiting_for_rest' && !manualMode && <span className="animate-pulse text-yellow-400">Release Gesture...</span>}
-                        {gameState === 'waiting' && manualMode && <span className="pulse">Manual Mode: press <strong>R</strong>/<strong>P</strong>/<strong>S</strong></span>}
-                        {gameState !== 'waiting' && gameState !== 'waiting_for_rest' && gameState !== 'idle' && (
-                            <span className="animate-in fade-in zoom-in duration-300">
-                                {manualMode ? "Round Complete" : "Result Received"}
-                            </span>
-                        )}
+                <div className="scoreboard-container flex flex-col items-center">
+                    <div className="scoreboard relative transform-none left-auto top-auto" style={{ margin: 0 }}>
+                        <div>Player: <strong>{score.player}</strong></div>
+                        <div>Computer: <strong>{score.computer}</strong></div>
                     </div>
+                    {gameState !== 'waiting' && result && (
+                        <div className="mt-2 text-center animate-in slide-in-from-top duration-300">
+                             <div className="text-muted font-mono tracking-widest text-sm md:text-lg">
+                                 RESETTING IN {countdown}...
+                             </div>
+                        </div>
+                    )}
+                </div>
+                {/* Result overlay empty spacer for balance if needed */}
+                <div className="hidden lg:block w-[180px]"></div>
+            </div>
 
-                    <div className="cards-row">
-                        {renderCard('player', playerMove, !!playerMove)}
+            {/* Middle: Game Arena */}
+            <div className="rps-arena flex-1 flex flex-col items-center justify-center relative w-full px-4 overflow-hidden">
+                <div className="status-text shrink-0" style={{ minHeight: '60px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1rem' }}>
+                    {gameState === 'idle' ? (
+                        <button
+                            onClick={handlePlay}
+                            className="px-6 md:px-8 py-2 bg-primary text-primary-contrast rounded-xl font-bold text-lg shadow-lg hover:scale-105 transition-transform animate-in zoom-in duration-300"
+                        >
+                            PLAY
+                        </button>
+                    ) : (
+                        <button
+                            onClick={() => {
+                                setGameState('idle');
+                                togglePrediction(false);
+                            }}
+                            className="px-4 md:px-6 py-2 bg-red-600/90 hover:bg-red-500 text-white rounded-xl font-bold text-lg shadow-lg hover:scale-105 transition-transform animate-in zoom-in duration-300"
+                        >
+                            STOP
+                        </button>
+                    )}
 
-                        <div className="vs-badge">VS</div>
+                    {gameState === 'waiting' && !manualMode && (
+                        <span className="pulse text-sm md:text-base">
+                            {currentPrediction === 'REST' || currentPrediction === 'UNKNOWN'
+                                ? "Waiting for Gesture"
+                                : "Recording..."}
+                        </span>
+                    )}
+                    {gameState === 'waiting_for_rest' && !manualMode && <span className="animate-pulse text-yellow-400 text-sm md:text-base">Release Gesture...</span>}
+                    {gameState === 'waiting' && manualMode && <span className="pulse text-sm md:text-base">Manual Mode: press <strong>R</strong>/<strong>P</strong>/<strong>S</strong></span>}
+                    {gameState !== 'waiting' && gameState !== 'waiting_for_rest' && gameState !== 'idle' && (
+                        <span className="animate-in fade-in zoom-in duration-300 text-sm md:text-base">
+                            {result === 'TIE' ? "IT'S A TIE" : `YOU ${result}!`}
+                        </span>
+                    )}
+                </div>
 
-                        {/* Computer hidden until revealed */}
-                        {renderCard('computer', computerMove, gameState !== 'waiting')}
-                    </div>
+                <div className="cards-row flex flex-row items-center justify-center gap-2 md:gap-12 w-full mt-4 md:mt-12 shrink-0">
+                    {renderCard('player', playerMove, !!playerMove)}
+                    <div className="vs-badge shrink-0">VS</div>
+                    {renderCard('computer', computerMove, gameState !== 'waiting')}
+                </div>
+            </div>
 
+            {/* Mobile/Desktop Event Log */}
+            <div className="rps-event-log w-full md:w-80 md:w-[320px] h-40 md:h-auto md:absolute md:right-4 md:top-32 md:bottom-24 md:max-h-[60vh] shrink-0 md:bg-transparent bg-surface/50 border-t md:border border-white/10 md:rounded-2xl z-20 flex flex-col transition-all">
+                <div className="text-xs md:text-sm font-bold text-muted uppercase tracking-wider mb-2 md:mb-4 flex justify-between items-center pb-2 border-b border-text/40 px-4 md:px-6 pt-2 md:pt-6 flex-shrink-0">
+                    <span>Event Log</span>
+                    <span className="text-[10px] md:text-[11px] opacity-60">Last 15</span>
+                </div>
+                <div className="space-y-1 md:space-y-2 font-mono text-xs md:text-base overflow-y-auto flex-1 px-4 md:px-6 pb-2 md:pb-6 custom-scrollbar">
+                    {eventLogs.length === 0 ? (
+                        <div className="text-muted/50 italic py-2 md:py-4 text-center">No events...</div>
+                    ) : (
+                        eventLogs.map((log) => (
+                            <div key={log.id} className="flex gap-2 md:gap-4 py-1 md:py-2 border-b border-white/5 last:border-0 hover:bg-white/5 px-2 md:px-3 rounded">
+                                <span className="text-muted hidden md:inline">{log.time}</span>
+                                <span className={`font-bold ${log.name === 'ROCK' ? 'text-amber-400' :
+                                    log.name === 'PAPER' ? 'text-blue-400' :
+                                        log.name === 'SCISSORS' ? 'text-pink-400' : 'text-text'
+                                    }`}>
+                                    {log.name}
+                                </span>
+                                <span className="text-muted ml-auto text-[10px] md:text-xs">{log.channel}</span>
+                            </div>
+                        ))
+                    )}
                 </div>
             </div>
         </div>

@@ -202,7 +202,7 @@ export default function Dashboard() {
 
         {/* Helper to determine if we need spacers (non-full-screen pages need them to clear fixed header/footer) */}
         {(() => {
-          const FULL_SCREEN_PAGES = ['live', 'dino'];
+          const FULL_SCREEN_PAGES = ['live', 'dino', 'rps'];
           const showSpacers = !FULL_SCREEN_PAGES.includes(currentPage);
 
           return (
