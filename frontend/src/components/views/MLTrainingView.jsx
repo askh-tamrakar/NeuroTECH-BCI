@@ -654,64 +654,60 @@ export default function MLTrainingView() {
 
 
     return (
-        <div className="font-sans w-full h-[calc(100vh-120px)] p-4 flex flex-col items-stretch overflow-hidden">
+        <div className="font-sans w-full h-screen pt-[96px] pb-2 px-4 flex flex-col items-stretch overflow-hidden">
             {/* ERROR DISPLAY */}
             {error && <div className="w-full bg-red-900/20 border border-red-500 text-red-200 py-2 rounded mb-4 flex justify-between items-center shrink-0 text-sm px-4">
                 <span><strong>Error:</strong> {error}</span>
                 <button onClick={() => setError(null)} className="underline">Dismiss</button>
             </div>}
 
-            {/* CONTENT scrollable container */}
-            <div className="flex-1 w-full min-h-0 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']">
-                <div className="h-full min-h-[800px] grid grid-cols-12 grid-rows-6 gap-4 pb-2">
-                    {/* LEFT SIDEBAR CONTROLS (Span 3) - NOW CONTAINS ACCURACY & FEATURES TOO */}
-                    <div className="col-span-12 lg:col-span-3 row-span-6 flex flex-col gap-4">
-                        {/* 1. CONTROLS */}
-                        <div className="shrink-0">
-                            <ControlPanel
-                                onTrain={handleTrain}
-                                loading={loading}
-                                evalLoading={evalLoading}
-                                sessions={availableSessions}
-                                selectedSession={selectedSession}
-                                onSessionSelect={setSelectedSession}
-                                onRefreshSessions={fetchSessions}
-                                activeTab={activeTab}
-                                setActiveTab={setActiveTab}
-                                modelName={trainModelNameInput}
-                                setModelName={setTrainModelNameInput}
-                            />
-                        </div>
-
-                        {/* 2. ACCURACY - SPLIT PANEL */}
-                        <div className="shrink-0 h-64">
-                            <SplitAccuracyCard
-                                accuracy={(activeResult || activeEvalResult)?.accuracy}
-                                n_samples={(activeResult || activeEvalResult)?.n_samples}
-                                source={(activeResult || activeEvalResult)?.source}
-                                models={models}
-                                selectedModelName={selectedModelName}
-                                onSelectModel={handleLoadModel}
-                                onDeleteModel={handleDeleteModel}
-                            />
-                        </div>
-
-                        {/* 3. TOP FEATURES */}
-                        {(activeResult || activeEvalResult)?.feature_importances && (
-                            <div className="flex-1 flex-grow-4 min-h-0">
-                                <FeatureImportanceCard importances={(activeResult || activeEvalResult).feature_importances} />
-                            </div>
-                        )}
+            {/* CONTENT - non-scrolling, fills available height */}
+            <div className="flex-1 w-full min-h-0 grid grid-cols-12 gap-3 pb-2">
+                {/* LEFT SIDEBAR CONTROLS (Span 3) */}
+                <div className="col-span-12 lg:col-span-3 flex flex-col gap-3 overflow-y-auto [&::-webkit-scrollbar]:hidden [scrollbar-width:none]">
+                    {/* 1. CONTROLS */}
+                    <div className="shrink-0">
+                        <ControlPanel
+                            onTrain={handleTrain}
+                            loading={loading}
+                            evalLoading={evalLoading}
+                            sessions={availableSessions}
+                            selectedSession={selectedSession}
+                            onSessionSelect={setSelectedSession}
+                            onRefreshSessions={fetchSessions}
+                            activeTab={activeTab}
+                            setActiveTab={setActiveTab}
+                            modelName={trainModelNameInput}
+                            setModelName={setTrainModelNameInput}
+                        />
                     </div>
 
-                    {/* MAIN BENTO GRID (Span 9) */}
+                    {/* 2. ACCURACY - SPLIT PANEL */}
+                    <div className="shrink-0 h-52">
+                        <SplitAccuracyCard
+                            accuracy={(activeResult || activeEvalResult)?.accuracy}
+                            n_samples={(activeResult || activeEvalResult)?.n_samples}
+                            source={(activeResult || activeEvalResult)?.source}
+                            models={models}
+                            selectedModelName={selectedModelName}
+                            onSelectModel={handleLoadModel}
+                            onDeleteModel={handleDeleteModel}
+                        />
+                    </div>
+
+                    {/* 3. TOP FEATURES */}
+                    {(activeResult || activeEvalResult)?.feature_importances && (
+                        <div className="flex-1 min-h-0">
+                            <FeatureImportanceCard importances={(activeResult || activeEvalResult).feature_importances} />
+                        </div>
+                    )}
+                    </div>
+
+                    {/* MAIN AREA (Span 9) - flex column layout */}
                     {(activeResult || activeEvalResult) ? (
                         <>
-                            {/* TOP ROW: Hyperparams + Confusion Matrix */}
-
-                            {/* BOTTOM ROW: Tree Viz */}
-                            {/* Tree Viz (Span 9, Row 4) - Extended full width */}
-                            <div className="col-span-12 md:col-span-9 row-span-4">
+                            {/* Tree Viz - takes most of the right space */}
+                            <div className="col-span-12 md:col-span-9 h-[55%]">
                                 <DecisionTreeCard
                                     structure={(activeResult || activeEvalResult).tree_structure}
                                     treeIndex={treeIndex}
@@ -720,16 +716,16 @@ export default function MLTrainingView() {
                                     loading={loading || treeLoading}
                                 />
                             </div>
-                            {/* Hyperparameters (Span 3, Row 2) - Replaces old Accuracy spot */}
-                            <div className="col-span-12 md:col-span-3 row-span-2">
+                            {/* Hyperparameters */}
+                            <div className="col-span-12 md:col-span-3 h-[45%]">
                                 <HyperparametersCard
                                     params={activeParams}
                                     onChange={handleParamChange}
                                 />
                             </div>
 
-                            {/* Confusion Matrix (Span 6, Row 2) - Replaces old Features spot */}
-                            <div className="col-span-12 md:col-span-6 row-span-2">
+                            {/* Confusion Matrix */}
+                            <div className="col-span-12 md:col-span-9 h-[45%]">
                                 <ConfusionMatrixCard
                                     matrix={(activeResult || activeEvalResult).confusion_matrix}
                                     labels={(activeResult || activeEvalResult).labels || []}
@@ -739,8 +735,7 @@ export default function MLTrainingView() {
                             </div>
                         </>
                     ) : (
-                        <div className="col-span-12 lg:col-span-9 row-span-6 card border-2 border-dashed border-[var(--border)] rounded-xl flex flex-col items-center justify-center text-[var(--muted)] bg-[var(--surface)]/50">
-                            {/* Empty state showing Hyperparams Card as preview/setup if desired, or just empty */}
+                        <div className="col-span-12 lg:col-span-9 card border-2 border-dashed border-[var(--border)] rounded-xl flex flex-col items-center justify-center text-[var(--muted)] bg-[var(--surface)]/50">
                             <div className="text-center">
                                 <div className="text-6xl mb-6 opacity-20 flex justify-center"><PieChart className="w-24 h-24" /></div>
                                 <p className="text-lg font-medium">Model workspace empty</p>
@@ -748,7 +743,6 @@ export default function MLTrainingView() {
                             </div>
                         </div>
                     )}
-                </div>
             </div>
         </div>
     );
