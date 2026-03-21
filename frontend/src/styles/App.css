@@ -90,9 +90,11 @@
   left: 0;
   width: 100%;
   z-index: 50;
-  background: transparent;
-  border-bottom: none;
-  box-shadow: none;
+  background: color-mix(in srgb, var(--bg) 70%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 40%, transparent);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.18), 0 1px 0 color-mix(in srgb, var(--primary) 10%, transparent);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   transition: all 0.3s ease;
 }
 
