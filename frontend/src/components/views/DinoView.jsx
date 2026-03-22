@@ -7,7 +7,7 @@ import {
     ScanEye, SlidersHorizontal, ArrowUp, Pause, Play, Trash2, Wifi, WifiOff, Save, Skull, Trophy, Keyboard, Eye,
     Gamepad2, Globe, Sparkles, Atom, Ruler, Settings, RotateCcw, ScrollText, Timer, Weight, MoveVertical,
     MoveHorizontal, Maximize, ArrowDownToLine, Grid, Sun, Moon, Cloud, Star, TreePine, Leaf, Hand,
-    Layers, Zap, Clock, ChevronDown, ChevronLeft, ChevronRight, Activity, Target, Radio, Signal, Circle
+    Layers, Zap, Clock, ChevronDown, ChevronLeft, ChevronRight, Activity, Target, Radio, Signal, Circle, Camera
 } from 'lucide-react'
 import { soundHandler } from '../../handlers/SoundHandler'
 
@@ -889,8 +889,40 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
 
                 {/* Right Sidebar */}
                 <div className={`game-sidebar ${isSidebarCollapsed ? 'collapsed' : ''} pr-1.5`}>
-                    {/* Camera Panel */}
-                    <CameraPanel initialCameraOn={false} />
+                    {/* Collapsed Icons Only State */}
+                    {isSidebarCollapsed && (
+                        <div className="flex flex-col items-center gap-6 mt-2 w-full animate-fade-in shrink-0 h-full">
+                            <button onClick={() => setIsSidebarCollapsed(false)} className="w-[42px] h-[42px] flex items-center justify-center rounded-xl bg-surface border border-border text-muted hover:text-primary hover:border-primary/50 transition-all shadow-sm shrink-0 group relative" title="Camera">
+                                <Camera size={20} />
+                                <div className="absolute left-14 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Camera Panel</div>
+                            </button>
+                            <button onClick={() => setIsSidebarCollapsed(false)} className="w-[42px] h-[42px] flex items-center justify-center rounded-xl bg-surface border border-border text-muted hover:text-primary hover:border-primary/50 transition-all shadow-sm shrink-0 group relative" title="Controls">
+                                <Gamepad2 size={20} />
+                                <div className="absolute left-14 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Controls & Method</div>
+                            </button>
+                            <button onClick={() => setIsSidebarCollapsed(false)} className="w-[42px] h-[42px] flex items-center justify-center rounded-xl bg-surface border border-border text-muted hover:text-primary hover:border-primary/50 transition-all shadow-sm relative shrink-0 group" title="Event Log">
+                                <ScrollText size={20} />
+                                {eventLogs.length > 0 && <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-primary rounded-full animate-pulse blur-[1px] shadow-[0_0_8px_var(--primary)]"></span>}
+                                <div className="absolute left-14 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Event Log</div>
+                            </button>
+                            <button onClick={() => { setIsSidebarCollapsed(false); setShowSettings(true); }} className="w-[42px] h-[42px] flex items-center justify-center rounded-xl bg-surface border border-border text-muted hover:text-primary hover:border-primary/50 transition-all shadow-sm shrink-0 group relative" title="Settings">
+                                <Settings size={20} />
+                                <div className="absolute left-14 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Game Constants</div>
+                            </button>
+                            <div className="flex-1" />
+                            <div className="flex flex-col gap-2 w-full items-center border-t border-border pt-4 pb-4 shrink-0">
+                               <button onClick={() => setIsSidebarCollapsed(false)} className={`w-[42px] h-[42px] flex items-center justify-center rounded-full border transition-all shadow-sm group relative ${isConnected ? 'bg-green-500/10 border-green-500/30 text-green-500' : 'bg-red-500/10 border-red-500/30 text-red-500'}`} title={isConnected ? "Sensor Connected" : "Sensor Disconnected"}>
+                                  {isConnected ? <Wifi size={18} /> : <WifiOff size={18} />}
+                                  <div className="absolute right-14 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Sensor Status</div>
+                               </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Full Panels Wrapper */}
+                    <div className={`flex flex-col gap-[clamp(0.75rem,1.5vh,1.5rem)] w-full h-full transition-opacity duration-200 ${isSidebarCollapsed ? 'opacity-0 h-0 hidden' : 'opacity-100'}`}>
+                        {/* Camera Panel */}
+                        <CameraPanel initialCameraOn={false} />
 
                     {/* Eye Controls Panel */}
                     <div className="card bg-surface border border-border shadow-card rounded-2xl p-4 " style={{ flexShrink: 0 }}>
@@ -1114,7 +1146,7 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
                             </div>
                         </div>
                     )}
-                    <div className="spacer-footer-dino" />
+                    </div>
                 </div>
             </div>
         </div>
