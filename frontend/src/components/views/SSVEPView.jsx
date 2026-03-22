@@ -160,11 +160,45 @@ export default function SSVEPView({ isConnected, wsEvent }) {
 
             {/* Right Sidebar Container */}
             <div
-                className={`transition-all duration-500 ease-in-out border-l border-border bg-surface flex flex-col h-full overflow-hidden ${showSidebar ? 'w-96 opacity-100 translate-x-0' : 'w-0 opacity-0 translate-x-full border-none'
+                className={`transition-all duration-500 ease-in-out border-l border-border bg-surface flex flex-col h-full relative overflow-hidden ${showSidebar ? 'w-96' : 'w-[4.5rem]'
                     }`}
             >
+                {/* Collapsed Icons Only State */}
+                {!showSidebar && (
+                    <div className="flex flex-col items-center gap-6 mt-16 w-full animate-fade-in shrink-0 h-full">
+                        <button onClick={() => setShowSidebar(true)} className="w-[42px] h-[42px] flex items-center justify-center rounded-xl bg-surface border border-border text-muted hover:text-primary hover:border-primary/50 transition-all shadow-sm shrink-0 group relative" title="SSVEP Setup">
+                            <Settings size={20} />
+                            <div className="absolute right-14 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">SSVEP Setup</div>
+                        </button>
+                        <button onClick={() => setShowSidebar(true)} className="w-[42px] h-[42px] flex items-center justify-center rounded-xl bg-surface border border-border text-muted hover:text-primary hover:border-primary/50 transition-all shadow-sm shrink-0 group relative" title="Signal">
+                            <Activity size={20} />
+                            <div className="absolute right-14 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Signal Frequency</div>
+                        </button>
+                        <button onClick={() => setShowSidebar(true)} className="w-[42px] h-[42px] flex items-center justify-center rounded-xl bg-surface border border-border text-muted hover:text-primary hover:border-primary/50 transition-all shadow-sm relative shrink-0 group" title="System Activity">
+                            <History size={20} />
+                            {logs.length > 0 && <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-primary rounded-full animate-pulse blur-[1px] shadow-[0_0_8px_var(--primary)]"></span>}
+                            <div className="absolute right-14 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">System Activity</div>
+                        </button>
+                        <button onClick={() => setShowSidebar(true)} className="w-[42px] h-[42px] flex items-center justify-center rounded-xl bg-surface border border-border text-muted hover:text-primary hover:border-primary/50 transition-all shadow-sm shrink-0 group relative" title="Global Actions">
+                            {globalRunning ? <Square size={20} className="text-red-500" /> : <Play size={20} className="text-green-500" />}
+                            <div className="absolute right-14 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Global Actions</div>
+                        </button>
+                        <button onClick={() => setShowSidebar(true)} className="w-[42px] h-[42px] flex items-center justify-center rounded-xl bg-surface border border-border text-muted hover:text-primary hover:border-primary/50 transition-all shadow-sm shrink-0 group relative" title="Targets">
+                            <Monitor size={20} />
+                            <div className="absolute right-14 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Targets Settings</div>
+                        </button>
+                        <div className="flex-1" />
+                        <div className="flex flex-col gap-2 w-full items-center border-t border-border pt-4 pb-4 shrink-0">
+                           <button onClick={() => setShowSidebar(true)} className={`w-[42px] h-[42px] flex items-center justify-center rounded-full border transition-all shadow-sm group relative ${isConnected ? 'bg-green-500/10 border-green-500/30 text-green-500' : 'bg-red-500/10 border-red-500/30 text-red-500'}`} title={isConnected ? "Sensor Connected" : "Sensor Disconnected"}>
+                              {isConnected ? <Zap size={18} /> : <Power size={18} />}
+                              <div className="absolute right-14 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Sensor Status</div>
+                           </button>
+                        </div>
+                    </div>
+                )}
+
                 {/* Fixed Container */}
-                <div className="flex-grow flex flex-col overflow-hidden p-4 gap-3 font-mono">
+                <div className={`flex-grow flex flex-col overflow-hidden p-4 gap-3 font-mono transition-opacity duration-200 w-96 shrink-0 ${!showSidebar ? 'opacity-0 h-0 hidden' : 'opacity-100'}`}>
 
                     {/* Header */}
                     <div className="flex items-center justify-between shrink-0">

@@ -894,20 +894,20 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
                         <div className="flex flex-col items-center gap-6 mt-2 w-full animate-fade-in shrink-0 h-full">
                             <button onClick={() => setIsSidebarCollapsed(false)} className="w-[42px] h-[42px] flex items-center justify-center rounded-xl bg-surface border border-border text-muted hover:text-primary hover:border-primary/50 transition-all shadow-sm shrink-0 group relative" title="Camera">
                                 <Camera size={20} />
-                                <div className="absolute left-14 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Camera Panel</div>
+                                <div className="absolute right-14 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Camera Panel</div>
                             </button>
                             <button onClick={() => setIsSidebarCollapsed(false)} className="w-[42px] h-[42px] flex items-center justify-center rounded-xl bg-surface border border-border text-muted hover:text-primary hover:border-primary/50 transition-all shadow-sm shrink-0 group relative" title="Controls">
                                 <Gamepad2 size={20} />
-                                <div className="absolute left-14 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Controls & Method</div>
+                                <div className="absolute right-14 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Controls & Method</div>
                             </button>
                             <button onClick={() => setIsSidebarCollapsed(false)} className="w-[42px] h-[42px] flex items-center justify-center rounded-xl bg-surface border border-border text-muted hover:text-primary hover:border-primary/50 transition-all shadow-sm relative shrink-0 group" title="Event Log">
                                 <ScrollText size={20} />
                                 {eventLogs.length > 0 && <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-primary rounded-full animate-pulse blur-[1px] shadow-[0_0_8px_var(--primary)]"></span>}
-                                <div className="absolute left-14 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Event Log</div>
+                                <div className="absolute right-14 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Event Log</div>
                             </button>
                             <button onClick={() => { setIsSidebarCollapsed(false); setShowSettings(true); }} className="w-[42px] h-[42px] flex items-center justify-center rounded-xl bg-surface border border-border text-muted hover:text-primary hover:border-primary/50 transition-all shadow-sm shrink-0 group relative" title="Settings">
                                 <Settings size={20} />
-                                <div className="absolute left-14 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Game Constants</div>
+                                <div className="absolute right-14 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Game Constants</div>
                             </button>
                             <div className="flex-1" />
                             <div className="flex flex-col gap-2 w-full items-center border-t border-border pt-4 pb-4 shrink-0">
