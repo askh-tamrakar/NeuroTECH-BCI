@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { BrainCircuit, Activity, ImageIcon } from 'lucide-react';
+import { BrainCircuit, Activity, ImageIcon, Menu, ChevronLeft, Gamepad2, Settings, History, ScrollText, Zap } from 'lucide-react';
 import { soundHandler } from '../../handlers/SoundHandler';
 import CustomSelect from '../ui/CustomSelect';
 import '../../styles/views/RPSGame.css';
@@ -102,6 +102,7 @@ const RPSGame = ({ wsEvent }) => {
     // Visual asset mode
     const [assetType, setAssetType] = useState('set1'); // 'set1', 'set2', 'emoji'
     const [globalFallbackMode, setGlobalFallbackMode] = useState(false);
+    const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
     // Difficulty for computer move randomness: 'low' (repeats sometimes), 'moderate' (avoid repeats), 'high' (fully random)
     const [difficulty, setDifficulty] = useState('moderate');
@@ -337,20 +338,23 @@ const RPSGame = ({ wsEvent }) => {
         const isWinner = result === 'WIN' && type === 'player' || result === 'LOSE' && type === 'computer';
         const isLoser = result === 'LOSE' && type === 'player' || result === 'WIN' && type === 'computer';
 
-        let boxClass = 'card-box';
+        let boxClass = 'card-box relative transition-shadow duration-300';
         
-        // Add red glow specifically for the player card
-        if (type === 'player') {
-            boxClass += ' shadow-[0_0_30px_rgba(239,68,68,0.4)] border-red-500/40 relative';
-        } else if (type === 'computer') {
-            // Add cyan/primary glow for the computer card
-            boxClass += ' shadow-[0_0_30px_rgba(0,243,255,0.3)] border-primary/40 relative';
+        if (revealed && result) {
+            if (isWinner) {
+                boxClass += ' winner shadow-[0_0_35px_rgba(16,185,129,0.5)] border-green-500/50';
+            } else if (isLoser) {
+                boxClass += ' loser shadow-[0_0_35px_rgba(239,68,68,0.5)] border-red-500/50';
+            } else {
+                // TIE
+                boxClass += ' shadow-[0_0_30px_rgba(0,243,255,0.3)] border-primary/40';
+            }
+        } else {
+            // Reset / Idle state
+            boxClass += ' shadow-[0_0_30px_rgba(0,243,255,0.3)] border-primary/40';
         }
 
-        if (revealed && result) {
-            if (isWinner) boxClass += ' winner';
-            if (isLoser) boxClass += ' loser';
-        } else if (type === 'computer' && !revealed) {
+        if (type === 'computer' && !revealed) {
             // active state?
         }
 
@@ -383,141 +387,221 @@ const RPSGame = ({ wsEvent }) => {
     };
 
     return (
-        <div className="rps-container overflow-hidden pt-[94px] pb-[35px] relative h-full flex flex-col w-full">
-            {/* Top Area: Header, Controls, Scoreboard */}
-            <div className="rps-header flex flex-col md:flex-row items-center justify-between w-full px-4 md:px-8 py-2 md:py-4 z-20 gap-4 shrink-0">
-                <div className="flex flex-col gap-2">
-                    <div className="rps-title m-0 text-3xl md:text-4xl text-center md:text-left">NEURO RPS</div>
+        <div className="rps-container overflow-hidden pt-[94px] pb-[35px] relative h-full flex flex-row-reverse w-full">
+            
+            {/* Main Game Area */}
+            <div className="flex-1 flex flex-col items-center justify-start h-full overflow-hidden w-full relative">
+                
+                {/* Header (Title, Scoreboard) */}
+                <div className="rps-header flex items-start justify-between w-full px-4 md:px-8 py-2 md:py-4 z-20 shrink-0 relative">
+                    {/* Title on left */}
+                    <div className="rps-title m-0 text-3xl md:text-4xl text-left w-1/3">NEURO RPS</div>
                     
-                    <div className="top-controls flex flex-wrap justify-center md:justify-start">
-                        {/* Models, difficulty, mode buttons */}
-                        <div className="flex items-center gap-2 bg-surface rounded px-2 py-1 border border-white/10 mb-2 md:mb-0">
-                            <BrainCircuit size={16} className="text-primary" />
-                            <div className="w-32 md:w-40">
-                                <CustomSelect
-                                    value={selectedModel}
-                                    onChange={(val) => handleModelChange({ target: { value: val } })}
-                                    options={models.map(m => ({ value: m.name, label: m.name }))}
-                                    placeholder="Select Model"
-                                    className="border-none bg-transparent"
-                                />
-                            </div>
+                    {/* Centered Scoreboard */}
+                    <div className="scoreboard-container flex flex-col items-center pt-2 absolute left-1/2 -translate-x-1/2 pointer-events-none">
+                        <div className="scoreboard transform-none left-auto top-auto pointer-events-auto" style={{ margin: 0 }}>
+                            <div>Player: <strong>{score.player}</strong></div>
+                            <div>Computer: <strong>{score.computer}</strong></div>
                         </div>
-                        <div className="w-28 md:w-32 mr-2">
+                        {gameState !== 'waiting' && result && (
+                            <div className="mt-2 text-center animate-in slide-in-from-top duration-300">
+                                 <div className="text-muted font-mono tracking-widest text-sm md:text-lg">
+                                     RESETTING IN {countdown}...
+                                 </div>
+                            </div>
+                        )}
+                    </div>
+                    
+                    {/* Right spacer for balance */}
+                    <div className="w-1/3"></div>
+                </div>
+
+                {/* Arena */}
+                <div className="rps-arena flex-1 flex flex-col items-center justify-center relative w-full px-4 overflow-hidden md:mb-8">
+                    <div className="status-text shrink-0" style={{ minHeight: '60px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1rem' }}>
+                        {gameState === 'idle' ? (
+                            <button
+                                onClick={handlePlay}
+                                className="px-6 md:px-8 py-2 bg-primary text-primary-contrast rounded-xl font-bold text-lg shadow-lg hover:scale-105 transition-transform animate-in zoom-in duration-300"
+                            >
+                                PLAY
+                            </button>
+                        ) : (
+                            <button
+                                onClick={() => {
+                                    setGameState('idle');
+                                    togglePrediction(false);
+                                }}
+                                className="px-4 md:px-6 py-2 bg-red-600/90 hover:bg-red-500 text-white rounded-xl font-bold text-lg shadow-lg hover:scale-105 transition-transform animate-in zoom-in duration-300"
+                            >
+                                STOP
+                            </button>
+                        )}
+
+                        {gameState === 'waiting' && !manualMode && (
+                            <span className="pulse text-sm md:text-base">
+                                {currentPrediction === 'REST' || currentPrediction === 'UNKNOWN'
+                                    ? "Waiting for Gesture"
+                                    : "Recording..."}
+                            </span>
+                        )}
+                        {gameState === 'waiting_for_rest' && !manualMode && <span className="animate-pulse text-yellow-400 text-sm md:text-base">Release Gesture...</span>}
+                        {gameState === 'waiting' && manualMode && <span className="pulse text-sm md:text-base">Manual Mode: press <strong>R</strong>/<strong>P</strong>/<strong>S</strong></span>}
+                        {gameState !== 'waiting' && gameState !== 'waiting_for_rest' && gameState !== 'idle' && (
+                            <span className="animate-in fade-in zoom-in duration-300 text-sm md:text-base">
+                                {result === 'TIE' ? "IT'S A TIE" : `YOU ${result}!`}
+                            </span>
+                        )}
+                    </div>
+
+                    <div className="cards-row flex flex-row items-center justify-center gap-2 md:gap-12 w-full mt-4 md:mt-12 shrink-0">
+                        {renderCard('player', playerMove, !!playerMove)}
+                        <div className="vs-badge shrink-0">VS</div>
+                        {renderCard('computer', computerMove, gameState !== 'waiting')}
+                    </div>
+                </div>
+            </div>
+
+            {/* Left Sidebar Container */}
+            <div className={`transition-all duration-300 ease-in-out border-r border-border bg-surface/80 backdrop-blur-md flex flex-col h-full relative ${!isSidebarCollapsed ? 'w-80 overflow-y-auto overflow-x-hidden' : 'w-[4.5rem] overflow-visible'} [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']`}>
+                
+                {/* Collapsed State Icons */}
+                {isSidebarCollapsed && (
+                    <div className="flex flex-col items-center gap-6 mt-4 w-full animate-fade-in shrink-0 h-full">
+                        <button onClick={() => setIsSidebarCollapsed(false)} className="p-2 hover:bg-white/10 rounded-full transition-colors mb-2" title="Expand Sidebar">
+                            <Menu size={24} className="text-primary" />
+                        </button>
+                        <Gamepad2 size={24} className="text-primary animate-pulse" title="RPS Game Setup" />
+
+                        <button onClick={() => setIsSidebarCollapsed(false)} title="Model Settings" className="hover:text-primary transition-colors group relative mt-2">
+                            <BrainCircuit size={20} className="text-muted group-hover:text-primary" />
+                            <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Model Settings</div>
+                        </button>
+
+                        <button onClick={() => setIsSidebarCollapsed(false)} title="Visual Options" className="hover:text-primary transition-colors group relative mt-2">
+                            <ImageIcon size={20} className="text-muted group-hover:text-primary" />
+                            <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Visual Options</div>
+                        </button>
+
+                        <button onClick={() => setIsSidebarCollapsed(false)} title="Event Log" className="hover:text-primary transition-colors group relative mt-2">
+                            <History size={20} className="text-muted group-hover:text-primary" />
+                            {eventLogs.length > 0 && <span className="absolute -top-1 -right-1 w-2 h-2 bg-primary rounded-full animate-pulse blur-[1px]"></span>}
+                            <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Event Log</div>
+                        </button>
+                    </div>
+                )}
+
+                {/* Expanded Container */}
+                <div className={`flex-grow flex flex-col p-4 gap-4 font-mono transition-opacity duration-300 min-w-[320px] w-80 shrink-0 ${isSidebarCollapsed ? 'opacity-0 h-0 hidden' : 'opacity-100'}`}>
+                    {/* Header */}
+                    <div className="flex items-center justify-between shrink-0 mb-2">
+                        <div>
+                            <h2 className="text-2xl font-bold text-text mb-1 flex items-center gap-3">
+                                <Gamepad2 size={28} className="text-primary animate-pulse" />
+                                <span style={{ letterSpacing: '2.3px' }}>Controls</span>
+                            </h2>
+                            <p className="text-xs text-muted">RPS Settings</p>
+                        </div>
+                        <button
+                            onClick={() => setIsSidebarCollapsed(true)}
+                            className="p-2 hover:bg-white/10 rounded-full transition-colors"
+                            title="Collapse Sidebar"
+                        >
+                            <ChevronLeft size={24} />
+                        </button>
+                    </div>
+
+                    {/* Model Settings */}
+                    <div className="flex flex-col gap-3 shrink-0 bg-bg/30 p-3 rounded-xl border border-border/50 mt-2">
+                        <div className="flex flex-col space-y-2">
+                            <label className="text-sm font-bold text-muted uppercase tracking-widest flex items-center gap-2 mb-1">
+                                <BrainCircuit size={16} className="text-primary" /> AI Model
+                            </label>
+                            <CustomSelect
+                                value={selectedModel}
+                                onChange={(val) => handleModelChange({ target: { value: val } })}
+                                options={models.map(m => ({ value: m.name, label: m.name }))}
+                                placeholder="Select Model"
+                            />
+                        </div>
+                        <div className="flex flex-col space-y-2 pt-3 border-t border-border/30">
+                            <label className="text-sm font-bold text-muted uppercase tracking-widest mb-1 flex items-center gap-2">
+                                <Settings size={16} /> Computer Level
+                            </label>
                             <CustomSelect
                                 value={difficulty}
                                 onChange={setDifficulty}
                                 options={[
-                                    { value: 'low', label: 'Low' },
-                                    { value: 'moderate', label: 'Moderate' },
-                                    { value: 'high', label: 'High' }
+                                    { value: 'low', label: 'Low Prediction' },
+                                    { value: 'moderate', label: 'Balanced' },
+                                    { value: 'high', label: 'Highly Random' }
                                 ]}
                                 placeholder="Difficulty"
                             />
                         </div>
-
-                        <button className={`mode-btn ${manualMode ? 'active' : ''}`} onClick={toggleManualMode} title="Toggle manual mode">
-                            {manualMode ? 'Manual' : 'Auto'}
-                        </button>
-                        <button
-                            className="flex items-center justify-center p-2 rounded bg-white/5 border border-white/10 hover:bg-white/10 transition-colors ml-2"
-                            onClick={() => {
-                                setAssetType(prev => prev === 'set1' ? 'set2' : 'set1');
-                                setGlobalFallbackMode(false);
-                                soundHandler.playRPSWarp();
-                            }}
-                            title="Toggle Asset Type"
-                        >
-                            <ImageIcon size={18} className="text-muted hover:text-white transition-colors" />
-                        </button>
                     </div>
-                </div>
 
-                <div className="scoreboard-container flex flex-col items-center">
-                    <div className="scoreboard relative transform-none left-auto top-auto" style={{ margin: 0 }}>
-                        <div>Player: <strong>{score.player}</strong></div>
-                        <div>Computer: <strong>{score.computer}</strong></div>
-                    </div>
-                    {gameState !== 'waiting' && result && (
-                        <div className="mt-2 text-center animate-in slide-in-from-top duration-300">
-                             <div className="text-muted font-mono tracking-widest text-sm md:text-lg">
-                                 RESETTING IN {countdown}...
-                             </div>
+                    {/* Visual & Modes */}
+                    <div className="flex flex-col gap-3 shrink-0 bg-bg/30 p-3 rounded-xl border border-border/50">
+                        <div className="flex items-center justify-between">
+                            <label className="text-sm font-bold text-muted uppercase tracking-widest flex items-center gap-2">
+                                <Activity size={16} /> Input Mode
+                            </label>
+                            <button className={`mode-btn ${manualMode ? 'active' : ''}`} onClick={toggleManualMode} title="Toggle manual mode">
+                                {manualMode ? 'Manual' : 'Sensor'}
+                            </button>
                         </div>
-                    )}
-                </div>
-                {/* Result overlay empty spacer for balance if needed */}
-                <div className="hidden lg:block w-[180px]"></div>
-            </div>
-
-            {/* Middle: Game Arena */}
-            <div className="rps-arena flex-1 flex flex-col items-center justify-center relative w-full px-4 overflow-hidden">
-                <div className="status-text shrink-0" style={{ minHeight: '60px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1rem' }}>
-                    {gameState === 'idle' ? (
-                        <button
-                            onClick={handlePlay}
-                            className="px-6 md:px-8 py-2 bg-primary text-primary-contrast rounded-xl font-bold text-lg shadow-lg hover:scale-105 transition-transform animate-in zoom-in duration-300"
-                        >
-                            PLAY
-                        </button>
-                    ) : (
-                        <button
-                            onClick={() => {
-                                setGameState('idle');
-                                togglePrediction(false);
-                            }}
-                            className="px-4 md:px-6 py-2 bg-red-600/90 hover:bg-red-500 text-white rounded-xl font-bold text-lg shadow-lg hover:scale-105 transition-transform animate-in zoom-in duration-300"
-                        >
-                            STOP
-                        </button>
-                    )}
-
-                    {gameState === 'waiting' && !manualMode && (
-                        <span className="pulse text-sm md:text-base">
-                            {currentPrediction === 'REST' || currentPrediction === 'UNKNOWN'
-                                ? "Waiting for Gesture"
-                                : "Recording..."}
-                        </span>
-                    )}
-                    {gameState === 'waiting_for_rest' && !manualMode && <span className="animate-pulse text-yellow-400 text-sm md:text-base">Release Gesture...</span>}
-                    {gameState === 'waiting' && manualMode && <span className="pulse text-sm md:text-base">Manual Mode: press <strong>R</strong>/<strong>P</strong>/<strong>S</strong></span>}
-                    {gameState !== 'waiting' && gameState !== 'waiting_for_rest' && gameState !== 'idle' && (
-                        <span className="animate-in fade-in zoom-in duration-300 text-sm md:text-base">
-                            {result === 'TIE' ? "IT'S A TIE" : `YOU ${result}!`}
-                        </span>
-                    )}
-                </div>
-
-                <div className="cards-row flex flex-row items-center justify-center gap-2 md:gap-12 w-full mt-4 md:mt-12 shrink-0">
-                    {renderCard('player', playerMove, !!playerMove)}
-                    <div className="vs-badge shrink-0">VS</div>
-                    {renderCard('computer', computerMove, gameState !== 'waiting')}
-                </div>
-            </div>
-
-            {/* Mobile/Desktop Event Log */}
-            <div className="rps-event-log w-full md:w-80 md:w-[320px] h-40 md:h-auto md:absolute md:right-4 md:top-32 md:bottom-24 md:max-h-[60vh] shrink-0 md:bg-transparent bg-surface/50 border-t md:border border-white/10 md:rounded-2xl z-20 flex flex-col transition-all">
-                <div className="text-xs md:text-sm font-bold text-muted uppercase tracking-wider mb-2 md:mb-4 flex justify-between items-center pb-2 border-b border-text/40 px-4 md:px-6 pt-2 md:pt-6 flex-shrink-0">
-                    <span>Event Log</span>
-                    <span className="text-[10px] md:text-[11px] opacity-60">Last 15</span>
-                </div>
-                <div className="space-y-1 md:space-y-2 font-mono text-xs md:text-base overflow-y-auto flex-1 px-4 md:px-6 pb-2 md:pb-6 custom-scrollbar">
-                    {eventLogs.length === 0 ? (
-                        <div className="text-muted/50 italic py-2 md:py-4 text-center">No events...</div>
-                    ) : (
-                        eventLogs.map((log) => (
-                            <div key={log.id} className="flex gap-2 md:gap-4 py-1 md:py-2 border-b border-white/5 last:border-0 hover:bg-white/5 px-2 md:px-3 rounded">
-                                <span className="text-muted hidden md:inline">{log.time}</span>
-                                <span className={`font-bold ${log.name === 'ROCK' ? 'text-amber-400' :
-                                    log.name === 'PAPER' ? 'text-blue-400' :
-                                        log.name === 'SCISSORS' ? 'text-pink-400' : 'text-text'
-                                    }`}>
-                                    {log.name}
+                        <div className="flex items-center justify-between pt-3 border-t border-border/30">
+                            <label className="text-sm font-bold text-muted uppercase tracking-widest flex items-center gap-2">
+                                <ImageIcon size={16} /> Assets
+                            </label>
+                            <button
+                                className="flex items-center justify-center px-3 py-1.5 rounded-lg bg-surface border border-border hover:bg-white/10 transition-colors shadow-sm"
+                                onClick={() => {
+                                    setAssetType(prev => prev === 'set1' ? 'set2' : 'set1');
+                                    setGlobalFallbackMode(false);
+                                    soundHandler.playRPSWarp();
+                                }}
+                                title="Toggle Asset Type"
+                            >
+                                <span className="text-xs font-bold text-primary mr-2 uppercase tracking-wide">
+                                    {assetType === 'set1' ? 'Classic' : 'Variant'}
                                 </span>
-                                <span className="text-muted ml-auto text-[10px] md:text-xs">{log.channel}</span>
+                                <ImageIcon size={16} className="text-primary" />
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Event Log */}
+                    <div className="flex flex-col flex-grow min-h-[0] border border-border/50 rounded-xl bg-bg/10 mt-2 p-1">
+                        <div className="flex flex-col h-full overflow-hidden">
+                            <div className="text-xs font-bold text-muted uppercase tracking-wider mb-2 flex justify-between items-center pb-2 border-b border-white/10 px-3 pt-2 shrink-0">
+                                <span className="flex items-center gap-2"><History size={14} /> Log History</span>
+                                <span className="text-[10px] opacity-60">Last 15</span>
                             </div>
-                        ))
-                    )}
+                            <div className="space-y-1 font-mono text-xs overflow-y-auto flex-1 px-3 pb-2 custom-scrollbar">
+                                {eventLogs.length === 0 ? (
+                                    <div className="text-muted/50 italic py-2 text-center">Awaiting data...</div>
+                                ) : (
+                                    eventLogs.map((log) => (
+                                        <div key={log.id} className="flex flex-col justify-center py-1.5 border-b border-lightest/5 last:border-0 hover:bg-white/5 px-2 rounded group">
+                                            <div className="flex justify-between items-center w-full">
+                                                <span className={`font-bold ${log.name === 'ROCK' ? 'text-amber-400' :
+                                                    log.name === 'PAPER' ? 'text-blue-400' :
+                                                        log.name === 'SCISSORS' ? 'text-pink-400' : 'text-text'
+                                                    }`}>
+                                                    {log.name}
+                                                </span>
+                                                <span className="text-muted text-[10px] group-hover:text-white/60 transition-colors">{log.time}</span>
+                                            </div>
+                                            <span className="text-muted/40 text-[9px] truncate">{log.channel || 'System Event'}</span>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
                 </div>
             </div>
         </div>
