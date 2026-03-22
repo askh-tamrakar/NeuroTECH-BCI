@@ -656,16 +656,18 @@ export default function MLTrainingView() {
     return (
         <div className="font-sans w-full h-screen pt-[96px] pb-2 px-4 flex flex-col items-stretch overflow-hidden">
             {/* ERROR DISPLAY */}
-            {error && <div className="w-full bg-red-900/20 border border-red-500 text-red-200 py-2 rounded mb-4 flex justify-between items-center shrink-0 text-sm px-4">
+            {error && <div className="w-full bg-red-900/20 border border-red-500 text-red-200 py-2 rounded mb-4 flex justify-between items-center shrink-0 text-sm px-4 shadow-sm z-50">
                 <span><strong>Error:</strong> {error}</span>
-                <button onClick={() => setError(null)} className="underline">Dismiss</button>
+                <button onClick={() => setError(null)} className="underline hover:text-white">Dismiss</button>
             </div>}
 
-            {/* CONTENT - non-scrolling, fills available height */}
-            <div className="flex-1 w-full min-h-0 grid grid-cols-12 gap-3 pb-2">
-                {/* LEFT SIDEBAR CONTROLS (Span 3) */}
-                <div className="col-span-12 lg:col-span-3 flex flex-col gap-3 overflow-y-auto [&::-webkit-scrollbar]:hidden [scrollbar-width:none]">
-                    {/* 1. CONTROLS */}
+            {/* CONTENT - non-scrolling, flex row layout to prevent overlap */}
+            <div className="flex-1 w-full min-h-0 flex flex-col lg:flex-row gap-4 pb-2">
+                
+                {/* LEFT SIDEBAR CONTROLS (35% width) */}
+                <div className="w-full lg:w-[35%] flex flex-col gap-4 h-full overflow-y-auto [&::-webkit-scrollbar]:hidden [scrollbar-width:none]">
+                    
+                    {/* 1. CONTROLS (Training Data Box) */}
                     <div className="shrink-0">
                         <ControlPanel
                             onTrain={handleTrain}
@@ -682,8 +684,8 @@ export default function MLTrainingView() {
                         />
                     </div>
 
-                    {/* 2. ACCURACY - SPLIT PANEL */}
-                    <div className="shrink-0 h-52">
+                    {/* 2. ACCURACY & SAVED MODELS - Increased height */}
+                    <div className="shrink-0 h-64 lg:h-[22rem]">
                         <SplitAccuracyCard
                             accuracy={(activeResult || activeEvalResult)?.accuracy}
                             n_samples={(activeResult || activeEvalResult)?.n_samples}
@@ -697,35 +699,37 @@ export default function MLTrainingView() {
 
                     {/* 3. TOP FEATURES */}
                     {(activeResult || activeEvalResult)?.feature_importances && (
-                        <div className="flex-1 min-h-0">
+                        <div className="flex-1 min-h-[200px]">
                             <FeatureImportanceCard importances={(activeResult || activeEvalResult).feature_importances} />
                         </div>
                     )}
-                    </div>
+                </div>
 
-                    {/* MAIN AREA (Span 9) - flex column layout */}
+                {/* RIGHT MAIN AREA (65% width) */}
+                <div className="w-full lg:w-[65%] h-full flex flex-col min-h-0 gap-4">
                     {(activeResult || activeEvalResult) ? (
                         <>
-                            {/* Tree Viz - takes most of the right space */}
-                            <div className="col-span-12 md:col-span-9 h-[55%]">
-                                <DecisionTreeCard
-                                    structure={(activeResult || activeEvalResult).tree_structure}
-                                    treeIndex={treeIndex}
-                                    totalTrees={activeParams.n_estimators}
-                                    onTreeChange={fetchTree}
-                                    loading={loading || treeLoading}
-                                />
-                            </div>
-                            {/* Hyperparameters */}
-                            <div className="col-span-12 md:col-span-3 h-[45%]">
-                                <HyperparametersCard
-                                    params={activeParams}
-                                    onChange={handleParamChange}
-                                />
+                            {/* Top row: Tree (2/3) + Hyperparameters (1/3) */}
+                            <div className="flex-1 flex flex-col md:flex-row gap-4 min-h-0">
+                                <div className="w-full md:w-[65%] h-full">
+                                    <DecisionTreeCard
+                                        structure={(activeResult || activeEvalResult).tree_structure}
+                                        treeIndex={treeIndex}
+                                        totalTrees={activeParams.n_estimators}
+                                        onTreeChange={fetchTree}
+                                        loading={loading || treeLoading}
+                                    />
+                                </div>
+                                <div className="w-full md:w-[35%] h-full">
+                                    <HyperparametersCard
+                                        params={activeParams}
+                                        onChange={handleParamChange}
+                                    />
+                                </div>
                             </div>
 
-                            {/* Confusion Matrix */}
-                            <div className="col-span-12 md:col-span-9 h-[45%]">
+                            {/* Bottom row: Confusion Matrix */}
+                            <div className="h-[40%] min-h-[250px] shrink-0 w-full">
                                 <ConfusionMatrixCard
                                     matrix={(activeResult || activeEvalResult).confusion_matrix}
                                     labels={(activeResult || activeEvalResult).labels || []}
@@ -735,14 +739,15 @@ export default function MLTrainingView() {
                             </div>
                         </>
                     ) : (
-                        <div className="col-span-12 lg:col-span-9 card border-2 border-dashed border-[var(--border)] rounded-xl flex flex-col items-center justify-center text-[var(--muted)] bg-[var(--surface)]/50">
-                            <div className="text-center">
-                                <div className="text-6xl mb-6 opacity-20 flex justify-center"><PieChart className="w-24 h-24" /></div>
-                                <p className="text-lg font-medium">Model workspace empty</p>
-                                <p className="text-sm opacity-70">Train a new model or load an existing one from the sidebar.</p>
+                        <div className="flex-1 card border-2 border-dashed border-[var(--border)] rounded-xl flex flex-col items-center justify-center text-[var(--muted)] bg-[var(--surface)]/50 shadow-sm transition-all hover:bg-[var(--surface)]/80">
+                            <div className="text-center p-8">
+                                <div className="text-6xl mb-6 opacity-40 flex justify-center text-[var(--primary)]"><PieChart className="w-24 h-24 animate-pulse" /></div>
+                                <p className="text-2xl font-bold text-[var(--text)] tracking-wider mb-2">Model Workspace Empty</p>
+                                <p className="text-sm opacity-70">Train a new model or load an existing one from the Training Data sidebar.</p>
                             </div>
                         </div>
                     )}
+                </div>
             </div>
         </div>
     );
