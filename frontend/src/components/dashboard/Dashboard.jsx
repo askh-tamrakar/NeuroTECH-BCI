@@ -16,6 +16,7 @@ import ScrollStack, { ScrollStackItem } from '../ui/ScrollStack';
 import PillNav from '../ui/PillNav';
 import Pill from '../ui/Pill';
 import { ConnectionButton } from '../ui/ConnectionButton';
+import Brain3D from '../ui/3d_Brain';
 
 export default function Dashboard() {
   const { user, logout } = useAuth()
@@ -133,45 +134,41 @@ export default function Dashboard() {
       {/* Navigation */}
       <div className="header" style={{ zIndex: 50 }}>
         <div className="header-inner">
-          <div className="flex items-center gap-3">
-            <div className="relative group cursor-pointer" onClick={() => setCurrentPage('live')} title="Back to Terminal">
-              <div className="absolute inset-0 bg-primary/20 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-              <video muted autoPlay loop playsInline preload="auto" aria-label="logo animation" className="w-24 h-16 relative z-10 rounded-lg border border-border bg-black object-cover">
-                <source src="/Resources/brain_animation.mp4" type="video/mp4" />
-              </video>
-            </div>
+          <div className="cursor-pointer m-0 p-0 flex-shrink-0 relative z-20" onClick={() => setCurrentPage('live')} title="Back to Terminal">
+            <Brain3D />
+          </div>
 
-            {/* WebSocket connect modal */}
-            {wsModalOpen && (
-              <div className="fixed inset-0 z-60 flex items-start justify-center bg-black/40" style={{ paddingTop: '96px' }}>
-                <div className="bg-surface rounded-lg p-6 w-96">
-                  <h3 className="text-sm font-bold text-muted uppercase tracking-wider mb-4">WebSocket Connection</h3>
-                  <div className="mb-2">
-                    <label className="text-xs font-medium text-text block mb-1">Local WS URL</label>
-                    <input className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-sm outline-none focus:border-primary/50" value={localWs} onChange={e => setLocalWs(e.target.value)} />
-                  </div>
-                  <div className="mb-2">
-                    <label className="text-xs font-medium text-text block mb-1">Ngrok WS URL</label>
-                    <input className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-sm outline-none focus:border-primary/50" value={ngrokWs} onChange={e => setNgrokWs(e.target.value)} />
-                  </div>
-                  <div className="flex gap-2 mt-4">
-                    <button className="w-full py-2 bg-primary text-primary-contrast rounded-lg font-bold text-sm shadow-glow hover:opacity-90 active:scale-95 transition-all" onClick={() => { connect(localWs); setWsModalOpen(false) }}>Connect Local</button>
-                    <button className="w-full py-2 bg-primary text-primary-contrast rounded-lg font-bold text-sm shadow-glow hover:opacity-90 active:scale-95 transition-all" onClick={() => { connect(ngrokWs); setWsModalOpen(false) }}>Connect Ngrok</button>
-                    <button className="w-full py-2 bg-muted text-muted-contrast rounded-lg font-bold text-sm shadow-glow hover:opacity-90 active:scale-95 transition-all" onClick={() => setWsModalOpen(false)}>Close</button>
-                  </div>
-                </div>
-              </div>
-            )}
-            <div className="headline flex flex-col">
-              <div className="headline-line main">
-                NeuroTECH
-                <br />
-                <div className="headline-line sub">BCI Dashboard</div>
-              </div>
+          <div className="headline flex flex-col flex-grow">
+            <div className="headline-line main">
+              NeuroTECH
+              <br />
+              <div className="headline-line sub">BCI Dashboard</div>
             </div>
           </div>
 
-          <nav className="nav shrink-0">
+          {/* WebSocket connect modal */}
+          {wsModalOpen && (
+            <div className="fixed inset-0 z-60 flex items-start justify-center bg-black/40" style={{ paddingTop: '96px' }}>
+              <div className="bg-surface rounded-lg p-6 w-96">
+                <h3 className="text-sm font-bold text-muted uppercase tracking-wider mb-4">WebSocket Connection</h3>
+                <div className="mb-2">
+                  <label className="text-xs font-medium text-text block mb-1">Local WS URL</label>
+                  <input className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-sm outline-none focus:border-primary/50" value={localWs} onChange={e => setLocalWs(e.target.value)} />
+                </div>
+                <div className="mb-2">
+                  <label className="text-xs font-medium text-text block mb-1">Ngrok WS URL</label>
+                  <input className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-sm outline-none focus:border-primary/50" value={ngrokWs} onChange={e => setNgrokWs(e.target.value)} />
+                </div>
+                <div className="flex gap-2 mt-4">
+                  <button className="w-full py-2 bg-primary text-primary-contrast rounded-lg font-bold text-sm shadow-glow hover:opacity-90 active:scale-95 transition-all" onClick={() => { connect(localWs); setWsModalOpen(false) }}>Connect Local</button>
+                  <button className="w-full py-2 bg-primary text-primary-contrast rounded-lg font-bold text-sm shadow-glow hover:opacity-90 active:scale-95 transition-all" onClick={() => { connect(ngrokWs); setWsModalOpen(false) }}>Connect Ngrok</button>
+                  <button className="w-full py-2 bg-muted text-muted-contrast rounded-lg font-bold text-sm shadow-glow hover:opacity-90 active:scale-95 transition-all" onClick={() => setWsModalOpen(false)}>Close</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <nav className="nav absolute left-1/2 -translate-x-1/2 shrink-0 z-10 hidden lg:block">
             <div className="backdrop-blur-sm bg-surface/50 border border-white/5 rounded-full p-1">
               <PillNav
                 items={navItems}

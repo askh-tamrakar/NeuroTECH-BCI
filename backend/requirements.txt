@@ -14,3 +14,4 @@ PySide6>=6.6.0
 scikit-learn>=1.4.0
 scipy>=1.12.0
 Werkzeug>=3.0.0
+pynput>=1.7.7

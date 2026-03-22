@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react'
 import SignalChart from '../charts/SignalChart'
 import { DataService } from '../../services/DataService'
-import { Radio, Square, Settings2, Wifi, Circle, Play, Pause, Save, Trash2, Check, X } from 'lucide-react'
+import { Radio, Square, Settings2, Wifi, Circle, Play, Pause, Save, Trash2, Check, X, Cpu } from 'lucide-react'
+import FirmwareModal from '../modals/FirmwareModal'
 import '../../styles/live/LiveView.css'
 
 export default function LiveView({ wsData, wsEvent, config, isPaused, wsUrl }) {
@@ -34,6 +35,7 @@ export default function LiveView({ wsData, wsEvent, config, isPaused, wsUrl }) {
   const [isSaving, setIsSaving] = useState(false)
   const [isConfirmationPending, setIsConfirmationPending] = useState(false)
   const [annotations, setAnnotations] = useState([])
+  const [isFirmwareModalOpen, setIsFirmwareModalOpen] = useState(false)
 
   // Channels are 0 and 1
   const activeChannels = [0, 1];
@@ -276,8 +278,8 @@ export default function LiveView({ wsData, wsEvent, config, isPaused, wsUrl }) {
                 disabled={isSaving || recordingChannels.length === 0}
                 className="record-btn idle"
               >
-                <Radio size={16} />
-                <span>REC</span>
+                <Radio size={22} />
+                <span className='text-[16px]'>REC</span>
               </button>
             )}
 
@@ -287,38 +289,38 @@ export default function LiveView({ wsData, wsEvent, config, isPaused, wsUrl }) {
                   onClick={stopRecording}
                   className="record-btn recording"
                 >
-                  <Square size={16} fill="currentColor" />
-                  <span>STOP ({recordingTime}s)</span>
+                  <Square size={22} fill="currentColor" />
+                  <span className='text-[16px]'>STOP ({recordingTime}s)</span>
                 </button>
 
                 <button
                   onClick={togglePause}
                   className={`record-btn ${isPausedRecording ? 'idle' : 'paused-btn'}`}
                 >
-                  {isPausedRecording ? <Play size={16} fill="currentColor" /> : <Pause size={16} fill="currentColor" />}
-                  <span>{isPausedRecording ? 'RESUME' : 'PAUSE'}</span>
+                  {isPausedRecording ? <Play size={22} fill="currentColor" /> : <Pause size={22} fill="currentColor" />}
+                  <span className='text-[16px]'>{isPausedRecording ? 'RESUME' : 'PAUSE'}</span>
                 </button>
               </>
             )}
 
             {isConfirmationPending && (
               <div className="confirm-group">
-                <span className="text-[10px] font-bold text-muted uppercase tracking-wider mr-2">Keep Session ({recordingTime}s)?</span>
+                <span className="text-[14px] font-bold text-muted uppercase tracking-wider mr-2">Keep Session ({recordingTime}s)?</span>
                 <button
                   onClick={saveRecording}
                   disabled={isSaving}
                   className="save-btn"
                 >
-                  <Save size={14} />
-                  SAVE
+                  <Save size={18} />
+                  <span className='text-[12px]'>SAVE</span>
                 </button>
                 <button
                   onClick={discardRecording}
                   disabled={isSaving}
                   className="discard-btn"
                 >
-                  <Trash2 size={14} />
-                  DISCARD
+                  <Trash2 size={18} />
+                  <span className='text-[12px]'>DISCARD</span>
                 </button>
               </div>
             )}
@@ -326,11 +328,11 @@ export default function LiveView({ wsData, wsEvent, config, isPaused, wsUrl }) {
             {isSaving && <div className="saving-indicator ml-2">SAVING...</div>}
           </div>
 
-          <div className="w-[1px] h-6 bg-border mx-1" />
+          <div className="w-[2px] h-6 bg-border" />
 
           {/* CHANNEL SELECTOR */}
           <div className="flex items-center gap-2 bg-surface/50 p-1 rounded-lg border border-border px-3">
-            <span className="text-[10px] font-bold text-muted uppercase tracking-wider">Channels</span>
+            <span className="text-[14px] font-bold text-muted uppercase tracking-wider">Channels</span>
             <div className="flex gap-1.5">
               {Array.from({ length: numChannels }).map((_, chNum) => {
                 const chKey = `ch${chNum}`;
@@ -347,7 +349,7 @@ export default function LiveView({ wsData, wsEvent, config, isPaused, wsUrl }) {
                           : [...prev, chNum].sort()
                       )
                     }}
-                    className={`px-2 py-0.5 rounded text-[11px] font-bold transition-all border ${isSelected
+                    className={`px-2 py-0.5 rounded text-[12px] font-bold transition-all border ${isSelected
                       ? 'bg-primary text-white border-primary shadow-sm'
                       : 'bg-bg text-muted border-border hover:text-text'
                       }`}
@@ -359,17 +361,28 @@ export default function LiveView({ wsData, wsEvent, config, isPaused, wsUrl }) {
             </div>
           </div>
 
+          <div className="w-[2px] h-6 bg-border" />
+
+          <button
+            onClick={() => setIsFirmwareModalOpen(true)}
+            className="px-3 py-1.5 bg-bg/50 border border-border rounded-lg text-[14px] font-bold text-muted hover:text-text hover:bg-surface/50 transition-all flex items-center gap-2"
+            title="Download Firmware"
+          >
+            <Cpu size={20} className="text-primary" />
+            FIRMWARE
+          </button>
+
           <div>
             {isRecording && <div className="recording-status">● RECORDING IN PROGRESS</div>}
           </div>
         </div>
 
         <div className="flex flex-row gap-2">
-          <div className="mode-indicator">
-            <span className="text-primary font-bold flex items-center gap-2 w-auto"><Settings2 size={16} /> MODE:</span>
+          <div className="mode-indicator ">
+            <span className="text-[16px] text-primary font-bold flex items-center gap-2 w-auto"><Settings2 size={22} /> MODE:</span>
             INDEPENDENT SCALING
             <span className='separator'></span>
-            <div className="flex items-center gap-2"><span className="text-purple-400 flex items-center gap-1"><Wifi size={16} /> Stream</span>: {wsData?.raw?.stream_name || 'Disconnected'}</div>
+            <div className="flex items-center gap-2"><span className="text-[16px] text-purple-400 flex items-center gap-1"><Wifi size={22} /> Stream</span>: {wsData?.raw?.stream_name || 'Disconnected'}</div>
           </div>
         </div>
       </div>
@@ -409,6 +422,11 @@ export default function LiveView({ wsData, wsEvent, config, isPaused, wsUrl }) {
           </div>
         )
       })}
+
+      <FirmwareModal
+        isOpen={isFirmwareModalOpen}
+        onClose={() => setIsFirmwareModalOpen(false)}
+      />
     </div>
   )
 }

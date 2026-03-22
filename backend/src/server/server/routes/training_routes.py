@@ -81,6 +81,11 @@ def api_train_emg():
         )
         if "error" in result:
              return jsonify(result), 400
+             
+        # Update Web Server's RPSDetector explicitly since train_model doesn't have access to state
+        if state.rps_detector:
+             state.rps_detector.load_model(model_name, verbose=False)
+             
         return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)}), 500

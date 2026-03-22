@@ -447,6 +447,21 @@ export default function MLTrainingView() {
             if (res.ok) {
                 const data = await res.json();
                 setModels(data);
+                
+                // Auto-load first model if none is active
+                if (data.length > 0) {
+                    const activeModel = data.find(m => m.active);
+                    if (activeModel) {
+                        if (!selectedModelName || selectedModelName !== activeModel.name) {
+                            setSelectedModelName(activeModel.name);
+                        }
+                    } else if (!selectedModelName) {
+                        const firstModel = data[0].name;
+                        // Avoid infinite loops by checking if we already selected it
+                        setSelectedModelName(firstModel);
+                        handleLoadModel(firstModel);
+                    }
+                }
             }
         } catch (e) {
             console.error("Failed to list models", e);

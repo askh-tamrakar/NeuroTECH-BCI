@@ -42,7 +42,6 @@ class RPSDetector:
             # Locate model paths relative to project root
             models_dir = get_models_dir('EMG')
 
-            
             # If default emg_rf is not found, use a fallback RPS model
             if model_name == "emg_rf" and not (models_dir / "emg_rf.joblib").exists():
                  model_name = "rps" # rps.joblib is one of the available models
@@ -58,9 +57,33 @@ class RPSDetector:
                 if verbose:
                     print(f"\n{'='*50}\n[RPSDetector] MODEL SWITCHED: {model_name}\n{'='*50}\n", flush=True)
             else:
-                print(f"[WARN] Model {model_name} not found at {model_path}")
-                # Fallback to defaults? or keep previous?
-                pass
+                if verbose:
+                    print(f"[WARN] Model {model_name} not found at {model_path}. Attempting to auto-load first available model...")
+                
+                # Auto-load the most recently modified model
+                available_models = list(models_dir.glob("*.joblib"))
+                models_only = [p for p in available_models if not p.name.endswith("_scaler.joblib")]
+                if models_only:
+                    models_only.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+                    first_model = models_only[0].stem
+                    model_path = models_dir / f"{first_model}.joblib"
+                    scaler_path = models_dir / f"{first_model}_scaler.joblib"
+                    if model_path.exists() and scaler_path.exists():
+                        self.model = joblib.load(model_path)
+                        self.scaler = joblib.load(scaler_path)
+                        if verbose:
+                            print(f"\n{'='*50}\n[RPSDetector] MODEL AUTO-LOADED FALLBACK: {first_model}\n{'='*50}\n", flush=True)
+                        
+                        # Update config to reflect backend fallback load!
+                        try:
+                            from src.utils.config import config_manager
+                            config_manager.set_active_model('EMG', first_model)
+                        except Exception as ce:
+                            print(f"[WARN] Failed to update config manager with auto-loaded model: {ce}")
+                    else:
+                        if verbose: print("[ERROR] Found a model but its scaler is missing.")
+                else:
+                    if verbose: print("[WARN] No fallback models available.")
                 
         except Exception as e:
             print(f"[ERROR] Error loading model {model_name}: {e}")

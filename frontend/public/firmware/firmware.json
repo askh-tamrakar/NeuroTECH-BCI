@@ -1,0 +1,49 @@
+{
+  "firmwares": [
+    {
+      "id": "uno-r4-standard",
+      "name": "Standard BCI",
+      "board": "UNO R4 WiFi/Minima",
+      "version": "1.0.0",
+      "date": "2024-03-08",
+      "description": "Core 6-channel biosignal acquisition firmware. 500Hz sampling rate, 14-bit resolution, binary packet protocol.",
+      "file": "Uno-R4.ino"
+    },
+    {
+      "id": "uno-r4-2ch-512hz",
+      "name": "High Speed 2CH",
+      "board": "UNO R4",
+      "version": "1.1.0",
+      "date": "2024-03-08",
+      "description": "Optimized for EEG/EMG with 2 channels at 512Hz. Features status LED animations and hardware switch support.",
+      "file": "Uno_R4_2ch_512Hz.ino"
+    },
+    {
+      "id": "uno-r4-servo",
+      "name": "BCI + Servo PWM",
+      "board": "UNO R4",
+      "version": "1.2.0",
+      "date": "2024-03-08",
+      "description": "Stable 512Hz acquisition with concurrent high-stability Servo control for prosthetic applications.",
+      "file": "Uno_R4_2ch_512Hz_Servo.ino"
+    },
+    {
+      "id": "rps-arduino",
+      "name": "RPS Game Logic",
+      "board": "Standard Arduino",
+      "version": "1.0.1",
+      "date": "2024-03-08",
+      "description": "Stand-alone Rock Paper Scissors game firmware with serial interface for direct hardware play.",
+      "file": "RockPaperScissors.ino"
+    },
+    {
+      "id": "biosignal-dashboard-new",
+      "name": "Bio-Gesture Logic",
+      "board": "UNO R4",
+      "version": "2.0.0",
+      "date": "2024-03-08",
+      "description": "Advanced firmware with on-device gesture detection (EMG/EEG/EOG) and auto-switching dashboard modes.",
+      "file": "Uno_R4_new.ino"
+    }
+  ]
+}

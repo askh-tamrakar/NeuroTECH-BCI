@@ -37,13 +37,16 @@ export default function ElasticSlider({
 function Slider({ defaultValue, startingValue, maxValue, isStepped, stepSize, leftIcon, rightIcon, onChange }) {
     const [value, setValue] = useState(defaultValue);
     const sliderRef = useRef(null);
+    const isDragging = useRef(false);
     const [region, setRegion] = useState('middle');
     const clientX = useMotionValue(0);
     const overflow = useMotionValue(0);
     const scale = useMotionValue(1);
 
     useEffect(() => {
-        setValue(defaultValue);
+        if (!isDragging.current) {
+            setValue(defaultValue);
+        }
     }, [defaultValue]);
 
     useMotionValueEvent(clientX, 'change', latest => {
@@ -89,11 +92,13 @@ function Slider({ defaultValue, startingValue, maxValue, isStepped, stepSize, le
     };
 
     const handlePointerDown = e => {
+        isDragging.current = true;
         handlePointerMove(e);
         e.currentTarget.setPointerCapture(e.pointerId);
     };
 
     const handlePointerUp = () => {
+        isDragging.current = false;
         animate(overflow, 0, { type: 'spring', bounce: 0.5 });
     };
 

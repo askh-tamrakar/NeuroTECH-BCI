@@ -1,6 +1,6 @@
 // SignalChart.jsx
 import React, { useEffect, useRef, useImperativeHandle, forwardRef, useState } from 'react'
-import { ChartSpline, ZoomIn, ArrowUpDown, ArrowDown, ArrowUp, Sigma, Clock, Minus, Plus, Activity } from 'lucide-react'
+import { ChartSpline, ZoomIn, ArrowUpDown, ArrowDown, ArrowUp, Sigma, Clock, Minus, Plus, Activity, ChevronUp, ChevronDown } from 'lucide-react'
 import ElasticSlider from '../ui/ElasticSlider'
 import { useTheme } from '../../contexts/ThemeContext'
 import '../../styles/live/SignalChart.css'
@@ -9,6 +9,54 @@ const DEFAULT_PALETTE = [
   '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6',
   '#06b6d4', '#f97316', '#06d6a0'
 ]
+
+const getPrevGoodRange = (val) => {
+  if (val <= 1) return 1;
+  const target = val * 0.98; // 2% reduction leeway
+  let power = Math.floor(Math.log10(target));
+  let fraction = target / Math.pow(10, power);
+
+  if (fraction < 1.0) {
+    power -= 1;
+    fraction = target / Math.pow(10, power);
+  }
+
+  let niceFraction;
+  if (fraction >= 10.0) niceFraction = 10.0;
+  else if (fraction >= 7.5) niceFraction = 7.5;
+  else if (fraction >= 5.0) niceFraction = 5.0;
+  else if (fraction >= 4.0) niceFraction = 4.0;
+  else if (fraction >= 3.0) niceFraction = 3.0;
+  else if (fraction >= 2.5) niceFraction = 2.5;
+  else if (fraction >= 2.0) niceFraction = 2.0;
+  else if (fraction >= 1.5) niceFraction = 1.5;
+  else if (fraction >= 1.25) niceFraction = 1.25;
+  else niceFraction = 1.0;
+
+  return parseFloat((niceFraction * Math.pow(10, power)).toPrecision(15));
+};
+
+const getNextGoodRange = (val) => {
+  if (val <= 0) return 1;
+  const padded = val * 1.02; // 2% padding margin
+  const power = Math.floor(Math.log10(padded));
+  const fraction = padded / Math.pow(10, power);
+
+  let niceFraction;
+  if (fraction <= 1.0) niceFraction = 1.0;
+  else if (fraction <= 1.25) niceFraction = 1.25;
+  else if (fraction <= 1.5) niceFraction = 1.5;
+  else if (fraction <= 2.0) niceFraction = 2.0;
+  else if (fraction <= 2.5) niceFraction = 2.5;
+  else if (fraction <= 3.0) niceFraction = 3.0;
+  else if (fraction <= 4.0) niceFraction = 4.0;
+  else if (fraction <= 5.0) niceFraction = 5.0;
+  else if (fraction <= 7.5) niceFraction = 7.5;
+  else niceFraction = 10.0;
+
+  // Format to avoid floating point precision issues
+  return parseFloat((niceFraction * Math.pow(10, power)).toPrecision(15));
+};
 
 const SignalChart = forwardRef(({
   graphNo,
@@ -22,6 +70,9 @@ const SignalChart = forwardRef(({
   currentZoom = 1,
   currentManual = "",
   onZoomChange = null,
+  onTimeWindowChange = null,
+  onRangeChange = null,
+  onColorChange = null,
   disabled = false,
   channelIndex = -1
 }, ref) => {
@@ -32,6 +83,7 @@ const SignalChart = forwardRef(({
   const isTransferred = useRef(false)
 
   const [stats, setStats] = useState({ min: 0, max: 0, mean: 0 })
+  const [autoScaledRange, setAutoScaledRange] = useState(null)
   const { currentTheme } = useTheme() || {};
 
   // Initialize Worker
@@ -63,7 +115,7 @@ const SignalChart = forwardRef(({
                 color,
                 themeAxisColor: getComputedStyle(document.documentElement).getPropertyValue('--muted').trim() || '#aaaaaa',
                 zoom: currentZoom,
-                manualRange: currentManual,
+                manualRange: autoScaledRange || currentManual,
                 showGrid,
                 channelIndex
               }
@@ -122,13 +174,13 @@ const SignalChart = forwardRef(({
           color,
           themeAxisColor: getComputedStyle(document.documentElement).getPropertyValue('--muted').trim() || '#aaaaaa',
           zoom: currentZoom,
-          manualRange: currentManual,
+          manualRange: autoScaledRange || currentManual,
           showGrid,
           channelIndex
         }
       });
     }
-  }, [timeWindowMs, color, currentZoom, currentManual, showGrid, currentTheme]);
+  }, [timeWindowMs, color, currentZoom, currentManual, autoScaledRange, showGrid, currentTheme]);
 
   // Sync Annotations
   useEffect(() => {
@@ -172,8 +224,29 @@ const SignalChart = forwardRef(({
     }
   }));
 
-  const yDomainRaw = parseFloat(currentManual);
-  let rangeDisplay = isNaN(yDomainRaw) ? (1500 / currentZoom).toFixed(0) : yDomainRaw.toFixed(0);
+  // Clear auto-scaled range if manual config changes
+  useEffect(() => {
+    setAutoScaledRange(null);
+  }, [currentManual, currentZoom]);
+
+  const effectiveRangeStr = autoScaledRange || currentManual;
+  const yDomainRaw = parseFloat(effectiveRangeStr);
+  let rangeDisplay = isNaN(yDomainRaw) ? Math.round(1500 / currentZoom).toString() : yDomainRaw.toString();
+
+  // Auto-range adjusting logic based on absolute maximum of signal
+  useEffect(() => {
+    // We only want to AUTO EXPAND. We do not shrink if max < range.
+    const absMax = Math.max(Math.abs(stats.min), Math.abs(stats.max));
+    const currentR = parseFloat(rangeDisplay);
+
+    // ONLY auto-scale if the user hasn't explicitly zoomed in or set a manual range
+    if (!isNaN(currentR) && absMax > currentR && currentZoom === 1 && !currentManual) {
+      const nextRange = getNextGoodRange(absMax);
+      if (nextRange > currentR) {
+        setAutoScaledRange(nextRange.toString());
+      }
+    }
+  }, [stats.min, stats.max, rangeDisplay, currentZoom, currentManual]);
 
   return (
     <div className={`signal-chart-container ${disabled ? 'signal-chart-disabled' : ''}`}>
@@ -198,10 +271,14 @@ const SignalChart = forwardRef(({
           {title}
         </h3>
 
-        <div className="channel-controls">
-          <div className="time-window-control">
-            <span className="control-label"><Clock size={24} /> Time</span>
-            <div className="w-64">
+        {/* Middle: Controls Box */}
+        <div className="flex items-center gap-6">
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 text-muted">
+              <Clock size={18} />
+              <span className="text-xs font-bold uppercase tracking-wider">Time</span>
+            </div>
+            <div className="w-48">
               <ElasticSlider
                 defaultValue={(timeWindowMs || 10000) / 1000}
                 startingValue={1}
@@ -209,66 +286,96 @@ const SignalChart = forwardRef(({
                 stepSize={1}
                 isStepped={true}
                 onChange={(val) => onTimeWindowChange && onTimeWindowChange(val * 1000)}
-                leftIcon={<Minus size={18} className="text-muted" />}
-                rightIcon={<Plus size={18} className="text-muted" />}
-                className="w-full h-6"
+                leftIcon={<Minus size={16} className="text-muted" />}
+                rightIcon={<Plus size={16} className="text-muted" />}
+                className="w-full h-5"
               />
             </div>
           </div>
 
-          <div className="zoom-controls">
-            <span className="control-label flex items-center gap-1"><ZoomIn size={24} /> ZOOM</span>
-            {[1, 2, 3, 5, 10, 25, 50].map(z => (
-              <button
-                key={z}
-                onClick={() => onZoomChange && onZoomChange(z)}
-                className={`zoom-btn ${currentZoom === z && !currentManual ? 'active' : 'inactive'}`}
-              >
-                {z}x
-              </button>
-            ))}
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 text-muted">
+              <ZoomIn size={18} />
+              <span className="text-xs font-bold uppercase tracking-wider">Zoom</span>
+            </div>
+            <div className="flex gap-1.5 bg-bg/50 p-1.5 rounded-lg">
+              {[1, 2, 5, 10, 20, 50].map((z) => (
+                <button
+                  key={z}
+                  onClick={() => onZoomChange && onZoomChange(z)}
+                  className={`px-2.5 py-1 rounded text-xs font-bold transition-all border ${currentZoom === z
+                    ? 'bg-primary text-white border-primary shadow-sm'
+                    : 'bg-bg text-muted border-border hover:text-text hover:border-muted/50'
+                    }`}
+                >
+                  {z}x
+                </button>
+              ))}
+            </div>
           </div>
 
-          <div className="separator-small"></div>
-
-          <div className="range-input-container">
-            <span className="control-label flex items-center gap-1"><ArrowUpDown size={24} /> RANGE</span>
-            <input
-              type="number"
-              placeholder="+/-"
-              value={currentManual}
-              onChange={(e) => onRangeChange && onRangeChange(e.target.value)}
-              className="range-input"
-            />
-          </div>
-
-          <div className="separator-small"></div>
-
-          <div className="range-display">
-            +/-{rangeDisplay} uV
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 text-muted">
+              <ArrowUpDown size={18} />
+              <span className="text-xs font-bold uppercase tracking-wider">Range</span>
+            </div>
+            <div className="flex items-center bg-bg/50 border border-border rounded-lg overflow-hidden focus-within:border-primary transition-colors h-8">
+              <input
+                type="number"
+                value={currentManual}
+                placeholder={Math.round(1500 / currentZoom).toString()}
+                onChange={(e) => onRangeChange && onRangeChange(e.target.value)}
+                className="w-14 bg-transparent px-0 py-1 text-[16px] font-mono font-bold text-primary focus:outline-none text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              />
+              <div className="text-[16px] font-bold text-muted pointer-events-none pr-2">uV</div>
+              <div className="flex flex-col border-l border-border h-full">
+                <button
+                  onClick={() => {
+                    const val = parseFloat(currentManual) || Math.round(1500 / currentZoom);
+                    onRangeChange && onRangeChange(getNextGoodRange(val).toString());
+                  }}
+                  className="flex-1 flex items-center justify-center px-1.5 hover:bg-muted/10 text-muted hover:text-text transition-colors border-b border-border outline-none focus:outline-none"
+                >
+                  <ChevronUp size={14} strokeWidth={4} />
+                </button>
+                <button
+                  onClick={() => {
+                    const val = parseFloat(currentManual) || Math.round(1500 / currentZoom);
+                    onRangeChange && onRangeChange(getPrevGoodRange(val).toString());
+                  }}
+                  className="flex-1 flex items-center justify-center px-1.5 hover:bg-muted/10 text-muted hover:text-text transition-colors outline-none focus:outline-none"
+                >
+                  <ChevronDown size={14} strokeWidth={4} />
+                </button>
+              </div>
+            </div>
           </div>
         </div>
 
-        <div className="chart-stats">
-          <div className="stat-item">
-            <span className="stat-label-chart"><ArrowDown size={18} /> Min</span>
-            <span className="stat-value">{stats.min.toFixed(2)}</span>
+        {/* Right: Stats Box */}
+        <div className="flex items-center gap-4 pl-4 border-l border-border">
+          <div className="range-display text-[16px] font-bold text-muted tabular-nums">
+            +/-{rangeDisplay} uV
           </div>
-          <div className="stat-separator"></div>
-          <div className="stat-item">
-            <span className="stat-label-chart"><ArrowUp size={18} /> Max</span>
-            <span className="stat-value">{stats.max.toFixed(2)}</span>
-          </div>
-          <div className="stat-separator"></div>
-          <div className="stat-item">
-            <span className="stat-label-chart"><Sigma size={18} /> Mean</span>
-            <span className="stat-value">{stats.mean.toFixed(2)}</span>
+          <div className="chart-stats flex gap-5">
+            <div className="stat-item flex items-center gap-0.25">
+              <span className="stat-label-chart flex items-center gap-1 text-xs text-muted"><ArrowDown size={18} /> Min</span>
+              <span className="stat-value text-sm font-mono font-bold">{stats.min.toFixed(2)}</span>
+            </div>
+            <div className="stat-item flex items-center gap-0.25">
+              <span className="stat-label-chart flex items-center gap-1 text-xs text-muted"><ArrowUp size={18} /> Max</span>
+              <span className="stat-value text-sm font-mono font-bold">{stats.max.toFixed(2)}</span>
+            </div>
+            <div className="stat-item flex items-center gap-0.25">
+              <span className="stat-label-chart flex items-center gap-1 text-xs text-muted"><Sigma size={18} /> Mean</span>
+              <span className="stat-value text-sm font-mono font-bold">{stats.mean.toFixed(2)}</span>
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="chart-area" style={{ minHeight: 0, overflow: 'hidden', position: 'relative' }} ref={containerRef}>
-        <canvas ref={canvasRef} style={{ width: '100%', height: '100%', display: 'block' }} />
+      <div className="chart-area" style={{ minHeight: 0, overflow: 'hidden', position: 'relative', margin: 0, padding: 0 }} ref={containerRef}>
+        <canvas ref={canvasRef} style={{ width: '100%', height: '100%', display: 'block', margin: 0, padding: 0 }} />
 
         {/* Centered Static Labels Overlay */}
         <div style={{

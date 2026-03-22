@@ -1,8 +1,4 @@
 {
-  "active_models": {
-    "EMG": "all",
-    "EOG": "dino-ml"
-  },
   "channel_mapping": {
     "ch0": {
       "enabled": true,
@@ -10,7 +6,7 @@
     },
     "ch1": {
       "enabled": true,
-      "sensor": "EOG"
+      "sensor": "EEG"
     }
   },
   "display": {

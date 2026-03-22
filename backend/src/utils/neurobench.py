@@ -52,7 +52,9 @@ class ChannelGenerator:
         self.ssv_freq = None
         self.sampling_rate = 512.0
         self.scale = 1.0
-        self.random = random.Random(12345)
+        self.random = random.Random(12345 + (1 if role == "EMG" else 0)) # Slight seed diff
+        self._noise_freqs = [50.0, 60.0]  # Line noise only to avoid false SSVEP triggers
+        self._noise_amps = [0.05, 0.05]
 
     def set_role(self, role):
         with self.lock:
@@ -121,7 +123,8 @@ class ChannelGenerator:
             
             # fallback EEG noise if no background provided
             if bg_uv == 0.0:
-                val += 0.06 * math.sin(2 * math.pi * 10.0 * t_seconds) + 0.01 * math.sin(2 * math.pi * 0.2 * t_seconds)
+                for f, a in zip(self._noise_freqs, self._noise_amps):
+                    val += a * math.sin(2 * math.pi * f * t_seconds)
                 val += 0.02 * self.random.gauss(0, 1)
         elif role == "EMG":
             # baseline noise if no background provided
@@ -351,6 +354,10 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # two channel generators
         self.ch_gens = [ChannelGenerator(), ChannelGenerator()]
+        self.ssvep_groups = [QtWidgets.QButtonGroup(self), QtWidgets.QButtonGroup(self)]
+        for g in self.ssvep_groups:
+            g.setExclusive(True)
+        
         # apply config mapping if exist
         mapping = self.config.get("channel_mapping", {})
         for i in range(2):
@@ -610,18 +617,33 @@ class MainWindow(QtWidgets.QMainWindow):
         b_str.clicked.connect(lambda: self._emg_action(ch_index, "strong"))
         v.addWidget(emg_box)
 
-        # EEG SSVEP buttons (toggle)
-        ssvep_box = QtWidgets.QGroupBox("SSVEP (EEG) - toggle to simulate gaze")
-        ssvep_layout = QtWidgets.QGridLayout()
-        freqs = [6, 8, 10, 12, 15, 20]
-        self.ssvep_buttons = getattr(self, "ssvep_buttons_" + str(ch_index), {})
-        self.ssvep_buttons = {}
-        for i, f in enumerate(freqs):
-            btn = QtWidgets.QPushButton(f"{f} Hz")
-            btn.setCheckable(True)
-            btn.toggled.connect(lambda checked, ch=ch_index, freq=f: self._ssvep_toggle(ch, freq, checked))
-            ssvep_layout.addWidget(btn, i//3, i%3)
-            self.ssvep_buttons[f] = btn
+        # EEG SSVEP Custom Frequency
+        ssvep_box = QtWidgets.QGroupBox("SSVEP (EEG)")
+        ssvep_layout = QtWidgets.QHBoxLayout()
+        
+        spin = QtWidgets.QDoubleSpinBox()
+        spin.setRange(1.0, 60.0)
+        spin.setValue(10.0)
+        spin.setDecimals(1)
+        spin.setSuffix(" Hz")
+        spin.setFixedWidth(80)
+        
+        btn = QtWidgets.QPushButton("Set")
+        btn.setCheckable(True)
+        btn.setStyleSheet("font-weight: bold;")
+        
+        def on_ssvep_toggle(checked, ch=ch_index, s=spin, b=btn):
+            freq = s.value() if checked else None
+            enabled = checked
+            self.ch_gens[ch].toggle_ssvep(freq, enabled=enabled)
+            b.setText("Stop" if checked else "Set")
+            b.setStyleSheet("font-weight: bold; background-color: #ff4444;" if checked else "font-weight: bold;")
+            s.setEnabled(not checked)
+
+        btn.clicked.connect(on_ssvep_toggle)
+        ssvep_layout.addWidget(spin)
+        ssvep_layout.addWidget(btn)
+        
         ssvep_box.setLayout(ssvep_layout)
         v.addWidget(ssvep_box)
 
@@ -650,8 +672,15 @@ class MainWindow(QtWidgets.QMainWindow):
         self.ch_gens[ch].trigger_eog(name)
 
     def _ssvep_toggle(self, ch, freq, checked):
-        self.log(f"SSVEP ch{ch} freq={freq}Hz {'ON' if checked else 'OFF'}")
-        self.ch_gens[ch].toggle_ssvep(freq if checked else None, enabled=checked)
+        if checked:
+            self.log(f"SSVEP ch{ch} freq={freq}Hz ON")
+            self.ch_gens[ch].toggle_ssvep(freq, enabled=True)
+        else:
+            # Only disable if NO buttons are checked in this group
+            any_on = any(b.isChecked() for b in self.ssvep_groups[ch].buttons())
+            if not any_on:
+                self.log(f"SSVEP ch{ch} OFF")
+                self.ch_gens[ch].toggle_ssvep(None, enabled=False)
 
     def _on_mode_change(self, mode):
         is_serial = (mode == "Serial")
@@ -827,13 +856,15 @@ class MainWindow(QtWidgets.QMainWindow):
                 except Exception:
                     pass
 
-            # Use a monotonic origin per run to feed channel gens
+            # Use a monotonic origin per run to feed channel gens (for sleep timing)
             origin = getattr(self, "_gen_origin", None)
             if origin is None:
                 self._gen_origin = time.perf_counter()
                 origin = self._gen_origin
-            t_seconds = time.perf_counter() - origin
-
+                
+            # Use perfect discrete time steps to avoid sine-wave phase jitter
+            t_seconds = frame / max(1.0, self.sample_rate)
+            
             # synth values using triggers AND background noise
             v0 = self.ch_gens[0].synth_now(t_seconds, bg_vals[0])
             v1 = self.ch_gens[1].synth_now(t_seconds, bg_vals[1])

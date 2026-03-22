@@ -170,9 +170,12 @@ class FeatureRouter:
                     current_vhash = config_manager.get_config_version_hash()
                     if current_vhash != self.last_config_vhash:
                         log.info(f"Config changed — reloading pipeline...")
-                        self.config = load_config()
-                        self.configure_pipeline()
-                        self.last_config_vhash = current_vhash
+                        try:
+                            self.config = load_config()
+                            self.configure_pipeline()
+                            self.last_config_vhash = current_vhash
+                        except Exception as e:
+                            log.error(f"Failed to reload pipeline: {e}")
                     
                     self.detection_active = config_manager.get_detection_state()
                     last_check_time = time.time()

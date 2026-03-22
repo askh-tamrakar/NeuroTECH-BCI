@@ -41,7 +41,6 @@ class EOGMLDetector:
             # Locate model paths relative to project root
             models_dir = get_models_dir('EOG')
 
-            
             # If default eog_rf is not found, use dino-ml which is the available EOG model
             if model_name == "eog_rf" and not (models_dir / "eog_rf.joblib").exists():
                  model_name = "dino-ml"
@@ -61,11 +60,34 @@ class EOGMLDetector:
                     missing = []
                     if not model_path.exists(): missing.append(f"Model ({model_path.name})")
                     if not scaler_path.exists(): missing.append(f"Scaler ({scaler_path.name})")
-                    print(f"[ERROR] Model files missing for {model_name}: {', '.join(missing)}")
-                    print(f"               Searched in: {models_dir}")
-                # We can choose to keep previous model or set to None
-                # self.model = None 
-                pass
+                    print(f"[WARN] Model files missing for {model_name}: {', '.join(missing)}")
+                    print(f"       Searched in: {models_dir}")
+                    print(f"[INFO] Attempting to auto-load first available model...")
+                
+                # Auto-load the most recently modified model
+                available_models = list(models_dir.glob("*.joblib"))
+                models_only = [p for p in available_models if not p.name.endswith("_scaler.joblib")]
+                if models_only:
+                    models_only.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+                    first_model = models_only[0].stem
+                    model_path = models_dir / f"{first_model}.joblib"
+                    scaler_path = models_dir / f"{first_model}_scaler.joblib"
+                    if model_path.exists() and scaler_path.exists():
+                        self.model = joblib.load(model_path)
+                        self.scaler = joblib.load(scaler_path)
+                        if verbose:
+                            print(f"\n{'='*50}\n[EOGMLDetector] MODEL AUTO-LOADED FALLBACK: {first_model}\n{'='*50}\n", flush=True)
+                        
+                        # Update config to reflect backend fallback load!
+                        try:
+                            from src.utils.config import config_manager
+                            config_manager.set_active_model('EOG', first_model)
+                        except Exception as ce:
+                            print(f"[WARN] Failed to update config manager with auto-loaded model: {ce}")
+                    else:
+                        if verbose: print("[ERROR] Found a model but its scaler is missing.")
+                else:
+                    if verbose: print("[WARN] No fallback models available.")
                 
         except Exception as e:
             print(f"[FATAL] Error loading model {model_name}: {e}")
