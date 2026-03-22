@@ -226,9 +226,31 @@ export default function SSVEPView({ isConnected, wsEvent }) {
                         </button>
                     </div>
 
-                    <div className="flex items-center justify-between shrink-0 border-t border-border/50 pt-2">
+                    <div className="flex items-center justify-between shrink-0 border-t border-border/50 pt-2 pb-2">
                         <h4 className="text-xs font-bold text-muted uppercase tracking-widest">Global State</h4>
                         <div className={`w-3 h-3 rounded-full animate-pulse ${globalRunning ? 'bg-green-500 shadow-[0_0_10px_#22c55e]' : 'bg-red-500'}`} />
+                    </div>
+
+                    {/* Global Actions */}
+                    <div className="grid grid-cols-2 gap-2 shrink-0">
+                        <button
+                            onClick={globalRunning ? stopFlicker : startFlicker}
+                            className={`w-full py-2.5 rounded-xl text-base font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-2 border-2 ${globalRunning
+                                ? 'bg-red-500/10 border-red-500/50 text-red-500 hover:bg-red-500/20'
+                                : 'bg-green-500/10 border-green-500/50 text-green-500 hover:bg-green-500/20 shadow-glow'
+                                }`}
+                        >
+                            {globalRunning ? <><Square size={18} /> Stop</> : <><Play size={18} /> Start</>}
+                        </button>
+
+                        {!globalRunning && (
+                            <button
+                                onClick={runProtocol}
+                                className="w-full py-2.5 bg-primary/10 border-2 border-primary/50 text-primary rounded-xl text-base font-bold uppercase tracking-widest hover:bg-primary/20 transition-all flex items-center justify-center gap-2 shadow-glow"
+                            >
+                                <Zap size={18} /> Protocol
+                            </button>
+                        )}
                     </div>
 
                     {/* Config Settings */}
@@ -328,27 +350,7 @@ export default function SSVEPView({ isConnected, wsEvent }) {
                         </div>
                     </div>
 
-                    {/* Global Actions */}
-                    <div className="grid grid-cols-2 gap-2 shrink-0">
-                        <button
-                            onClick={globalRunning ? stopFlicker : startFlicker}
-                            className={`w-full py-2.5 rounded-xl text-base font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-2 border-2 ${globalRunning
-                                ? 'bg-red-500/10 border-red-500/50 text-red-500 hover:bg-red-500/20'
-                                : 'bg-green-500/10 border-green-500/50 text-green-500 hover:bg-green-500/20 shadow-glow'
-                                }`}
-                        >
-                            {globalRunning ? <><Square size={18} /> Stop</> : <><Play size={18} /> Start</>}
-                        </button>
-
-                        {!globalRunning && (
-                            <button
-                                onClick={runProtocol}
-                                className="w-full py-2.5 bg-primary/10 border-2 border-primary/50 text-primary rounded-xl text-base font-bold uppercase tracking-widest hover:bg-primary/20 transition-all flex items-center justify-center gap-2"
-                            >
-                                <Zap size={18} /> Protocol
-                            </button>
-                        )}
-                    </div>
+                    {/* Removed Global Actions (moved up) */}
 
                     {/* Target Settings - DECREASED HEIGHT, fixed size instead of flex-grow */}
                     <div className="flex flex-col flex-1 min-h-[0] overflow-hidden border border-border/50 rounded-xl bg-bg/10">
