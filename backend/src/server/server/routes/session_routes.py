@@ -163,9 +163,7 @@ def api_emg_start():
 @session_bp.route('/api/emg/stop', methods=['POST'])
 def api_emg_stop():
     # Capture table name BEFORE stopping
-    target_table = state.session.current_table_name or "emg_windows"
-    
-    state.session.is_recording = False # Stop adding samples
+    target_table = state.session.stop_recording() or "emg_windows"
     # We allow processing the buffer now
     # Process and save collected data to DB
     try:
@@ -211,7 +209,7 @@ def api_emg_stop():
             if num_samples < window_size:
                 continue
                 
-            for i in range(0, num_samples - window_size, step_size):
+            for i in range(0, num_samples - window_size + 1, step_size):
                 window = raw_data[i : i + window_size]
                 
                 # Extract features
@@ -263,7 +261,12 @@ def api_emg_status():
 def api_emg_clear():
     state.session.clear_data('EMG')
     try:
-        db_manager.connect('EMG').execute("DELETE FROM emg_windows").connection.commit()
+        conn = db_manager.connect('EMG')
+        try:
+            conn.execute("DELETE FROM emg_windows")
+            conn.commit()
+        finally:
+            conn.close()
     except Exception as e:
         print(f"Failed to clear DB: {e}")
     return jsonify({"status": "cleared"})
@@ -298,8 +301,7 @@ def api_eog_start():
 
 @session_bp.route('/api/eog/stop', methods=['POST'])
 def api_eog_stop():
-    target_table = state.session.current_table_name or "eog_windows"
-    state.session.is_recording = False 
+    target_table = state.session.stop_recording() or "eog_windows"
     
     # Process and save EOG data
     try:
@@ -324,7 +326,7 @@ def api_eog_stop():
             window_size = int(sr * 0.6) # 600ms to capture full blink
             step_size = int(window_size * 0.5)
             
-            for i in range(0, len(raw_data) - window_size, step_size):
+            for i in range(0, len(raw_data) - window_size + 1, step_size):
                 window = raw_data[i : i + window_size]
                 
                 # Extract
@@ -356,8 +358,12 @@ def api_eog_clear():
 
 @session_bp.route('/api/eog/predict/<action>', methods=['POST'])
 def api_eog_predict_toggle(action):
+    from src.server.server.config_manager import set_detection_state
+
     if action == 'start':
         state.session.prediction_active['EOG'] = True
+        set_detection_state(True)
     elif action == 'stop':
         state.session.prediction_active['EOG'] = False
+        set_detection_state(False)
     return jsonify({"status": "ok", "predicting": state.session.prediction_active['EOG']})

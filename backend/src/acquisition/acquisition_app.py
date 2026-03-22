@@ -165,7 +165,7 @@ class AcquisitionApp:
             import urllib.request
             import urllib.error
             
-            url = "http://localhost:5000/api/config"
+            url = "http://localhost:5005/api/config"
             with urllib.request.urlopen(url, timeout=0.5) as response:
                 if response.status == 200:
                     data = json.loads(response.read().decode())
@@ -308,7 +308,7 @@ class AcquisitionApp:
                 # Let's construct the facade object to push
                 facade = config_manager.get_all_configs()
                 
-                url = "http://localhost:5000/api/config"
+                url = "http://localhost:5005/api/config"
                 req = urllib.request.Request(
                     url,
                     data=json.dumps(facade).encode('utf-8'),
@@ -349,7 +349,7 @@ class AcquisitionApp:
                     # Don't interrupt if we are actively recording/streaming to avoid jitter
                     # (optional trade-off)
                     
-                    url = "http://localhost:5000/api/config"
+                    url = "http://localhost:5005/api/config"
                     # Short timeout to avoid blocking threads for long
                     with urllib.request.urlopen(url, timeout=0.2) as response:
                         if response.status == 200:

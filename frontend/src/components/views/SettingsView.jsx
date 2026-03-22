@@ -69,7 +69,7 @@ export default function SettingsView({ latency = 0 }) {
 
   // Local settings state
   const [apiUrl, setApiUrl] = useState(() => localStorage.getItem('api_url') || 'http://localhost:8000')
-  const [wsUrl, setWsUrl] = useState(() => localStorage.getItem('ws_url') || 'ws://localhost:1972')
+  const [wsUrl, setWsUrl] = useState(() => localStorage.getItem('ws_url') || 'ws://localhost:5005')
   const [useMock, setUseMock] = useState(() => localStorage.getItem('use_mock') === 'true')
 
   // Editor state

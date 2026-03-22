@@ -45,12 +45,10 @@ class SessionManager:
             self.data_store[sensor_type][label] = []
             
     def stop_recording(self):
-        # We don't reset table name here immediately because we need it for saving
-        # Logic: stop_recording flag, but keep table name until save is done?
-        # Actually API calls stop_recording() then saves using state? 
-        # No, api_emg_stop calls stop_recording() at start.
-        # We should return the table name before resetting.
-        pass # Allow API to access state before reset
+        # Mark recording as stopped but keep session/table metadata until the
+        # caller finishes post-processing and persists the buffered windows.
+        self.is_recording = False
+        return self.current_table_name
         
     def reset_recording_state(self):
         self.is_recording = False

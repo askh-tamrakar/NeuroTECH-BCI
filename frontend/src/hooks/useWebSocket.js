@@ -7,7 +7,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { io } from 'socket.io-client'
 
-export function useWebSocket(url = 'http://localhost:1972') {
+export function useWebSocket(url = 'http://localhost:5005') {
   const [status, setStatus] = useState('disconnected')
   const [lastMessage, setLastMessage] = useState(null)
   const [lastConfig, setLastConfig] = useState(null)

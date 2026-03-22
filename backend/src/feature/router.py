@@ -121,6 +121,7 @@ class FeatureRouter:
         Instantiate extractors for channels based on config.
         """
         self.extractors = {}
+        self.pipeline = {}
         mapping = self.config.get("channel_mapping", {})
         
         log.info(f"Configuring features for {self.num_channels} channels...")
@@ -132,7 +133,7 @@ class FeatureRouter:
                 if not info.get("enabled", True):
                     continue
                     
-                sensor = info.get("sensor", "UNKNOWN")
+                sensor = str(info.get("sensor", "UNKNOWN")).upper()
                 
                 if sensor == "EOG":
                     eog_method = self.config.get("features", {}).get("EOG", {}).get("detection_method", "Threshold")
@@ -192,6 +193,11 @@ class FeatureRouter:
                             features = extractor.process(val)
                             
                             if features:
+                                # Keep feature extraction hot for UI/recording, but gate actual detection
+                                # and confirmed event emission on the shared detection state.
+                                if not self.detection_active:
+                                    continue
+
                                 # Feature Extractor produced a window -> Run Detector
                                 detection_result = detector.detect(features)
                                 

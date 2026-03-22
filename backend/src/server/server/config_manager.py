@@ -12,7 +12,7 @@ FEATURE_CONFIG_PATH = CONFIG_DIR / "feature_config.json"
 DEFAULT_SR = 512
 
 def load_config() -> dict:
-    """Load config from sensor_config.json and filter_config.json, returning a merged view."""
+    """Load config from sensor, filter, and feature JSON files."""
     defaults = {
         "sampling_rate": DEFAULT_SR,
         "channel_mapping": {
@@ -83,6 +83,16 @@ def load_config() -> dict:
         except Exception as e:
             print(f"⚠️  Error loading filter config: {e}")
 
+    # 3. Load Feature Config
+    if FEATURE_CONFIG_PATH.exists():
+        try:
+            with open(FEATURE_CONFIG_PATH) as f:
+                feature_cfg = json.load(f)
+            if isinstance(feature_cfg, dict):
+                merged['features'] = feature_cfg
+        except Exception as e:
+            print(f"Error loading feature config: {e}")
+
     return merged
 
 
@@ -121,7 +131,6 @@ def save_config(config: dict) -> bool:
         
         print(f"💾 Sensor config saved to {CONFIG_PATH}")
         state.config = config
-        return True
         return True
     except Exception as e:
         print(f"❌ Error saving config: {e}")

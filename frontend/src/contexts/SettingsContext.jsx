@@ -14,7 +14,7 @@ export const useSettings = () => {
 const DEFAULT_SETTINGS = {
     general: {
         apiUrl: 'http://localhost:8000',
-        wsUrl: 'ws://localhost:1972',
+        wsUrl: 'ws://localhost:5005',
         useMock: false,
     },
     dino: {

@@ -1,9 +1,15 @@
 {
   "filters": {
     "EEG": {
-      "bandpass_enabled": false,
-      "bandpass_high": 40,
-      "notch_enabled": false
+      "bandpass_enabled": true,
+      "bandpass_high": 30,
+      "notch_enabled": true
+    },
+    "EOG": {
+      "bandpass_enabled": true,
+      "bandpass_high": 8,
+      "bandpass_low": 0.4,
+      "notch_enabled": true
     }
   }
 }
