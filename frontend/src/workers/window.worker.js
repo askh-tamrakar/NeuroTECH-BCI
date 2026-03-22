@@ -61,6 +61,10 @@ self.onmessage = function (e) {
         case 'WINDOW_COLLECTED':
             handleWindowCollected(payload);
             break;
+        case 'MARK_WINDOWS_SAVING':
+            markedWindows = markedWindows.map(w => payload.includes(w.id) ? { ...w, status: 'saving' } : w);
+            notifyWindowsUpdate();
+            break;
         case 'DELETE_WINDOW':
             markedWindows = markedWindows.filter(w => w.id !== payload);
             notifyWindowsUpdate();

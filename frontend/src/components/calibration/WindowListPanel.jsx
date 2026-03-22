@@ -129,11 +129,13 @@ export default function WindowListPanel({
                                 ? 'bg-yellow-500/5 border-yellow-500/50 hover:border-yellow-500' // Yellow (Pending)
                                 : (win.status === 'collected')
                                     ? 'bg-blue-500/5 border-blue-500/50 hover:border-blue-500' // Blue (Ready)
-                                    : (win.status === 'saved' || win.status === 'correct')
-                                        ? 'bg-emerald-500/5 border-emerald-500/50 hover:border-emerald-500' // Green (Saved)
-                                        : (win.status === 'error' || win.status === 'incorrect')
-                                            ? 'bg-red-500/5 border-red-500/50 hover:border-red-500' // Red (Error)
-                                            : 'bg-black/5 border-gray-600 hover:border-black' // Black (Unknown)
+                                    : (win.status === 'saving')
+                                        ? 'bg-purple-500/5 border-purple-500/50 hover:border-purple-500' // Purple (Saving)
+                                        : (win.status === 'saved' || win.status === 'correct')
+                                            ? 'bg-emerald-500/5 border-emerald-500/50 hover:border-emerald-500' // Green (Saved)
+                                            : (win.status === 'error' || win.status === 'incorrect')
+                                                ? 'bg-red-500/5 border-red-500/50 hover:border-red-500' // Red (Error)
+                                                : 'bg-black/5 border-gray-600 hover:border-black' // Black (Unknown)
                                 }`}
                         >
                             <div className="flex justify-between items-center">
@@ -145,22 +147,25 @@ export default function WindowListPanel({
                                     <div className="flex items-center gap-1">
                                         <span className={`w-1.5 h-1.5 rounded-full ${(win.status === 'recording' || win.status === 'pending') ? 'bg-yellow-500' :
                                             (win.status === 'collected') ? 'bg-blue-500' :
-                                                (win.status === 'saved' || win.status === 'correct') ? 'bg-emerald-500' :
-                                                    (win.status === 'error' || win.status === 'incorrect') ? 'bg-red-500' :
-                                                        'bg-gray-600'
+                                                (win.status === 'saving') ? 'bg-purple-500 animate-pulse' :
+                                                    (win.status === 'saved' || win.status === 'correct') ? 'bg-emerald-500' :
+                                                        (win.status === 'error' || win.status === 'incorrect') ? 'bg-red-500' :
+                                                            'bg-gray-600'
                                             }`}></span>
                                         <span className={`text-xs uppercase ${(win.status === 'recording' || win.status === 'pending') ? 'text-yellow-500' :
                                             (win.status === 'collected') ? 'text-blue-500' :
-                                                (win.status === 'saved' || win.status === 'correct') ? 'text-emerald-500' :
-                                                    (win.status === 'error' || win.status === 'incorrect') ? 'text-red-500' :
-                                                        'text-[var(--text-secondary)]'
+                                                (win.status === 'saving') ? 'text-purple-500' :
+                                                    (win.status === 'saved' || win.status === 'correct') ? 'text-emerald-500' :
+                                                        (win.status === 'error' || win.status === 'incorrect') ? 'text-red-500' :
+                                                            'text-[var(--text-secondary)]'
                                             }`}>
                                             {(win.status === 'recording' || win.status === 'pending') ? 'Recording' :
                                                 (win.status === 'collected') ? 'Ready' :
-                                                    (win.status === 'saved') ? 'Saved' :
-                                                        (win.status === 'correct') ? 'Correct' :
-                                                            (win.status === 'incorrect') ? 'Incorrect' :
-                                                                'Error'}
+                                                    (win.status === 'saving') ? 'Saving...' :
+                                                        (win.status === 'saved') ? 'Saved' :
+                                                            (win.status === 'correct') ? 'Correct' :
+                                                                (win.status === 'incorrect') ? 'Incorrect' :
+                                                                    'Error'}
                                         </span>
                                     </div>
                                 </div>
@@ -171,9 +176,10 @@ export default function WindowListPanel({
                                         <Sparkline data={win.samples} color={
                                             (win.status === 'recording' || win.status === 'pending') ? '#eab308' :
                                                 (win.status === 'collected') ? '#3b82f6' :
-                                                    (win.status === 'saved' || win.status === 'correct') ? '#10b981' :
-                                                        (win.status === 'error' || win.status === 'incorrect') ? '#ef4444' :
-                                                            '#6b7280'
+                                                    (win.status === 'saving') ? '#a855f7' :
+                                                        (win.status === 'saved' || win.status === 'correct') ? '#10b981' :
+                                                            (win.status === 'error' || win.status === 'incorrect') ? '#ef4444' :
+                                                                '#6b7280'
                                         } />
                                     </div>
                                     <span className="text-xs text-[var(--text-secondary)] font-mono">
