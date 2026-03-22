@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { BrainCircuit, Activity, ImageIcon, Menu, ChevronLeft, Gamepad2, Settings, History, ScrollText, Zap } from 'lucide-react';
+import { BrainCircuit, Activity, ImageIcon, Menu, ChevronLeft, Gamepad2, Settings, History, ScrollText, Zap, Trophy } from 'lucide-react';
 import { soundHandler } from '../../handlers/SoundHandler';
 import CustomSelect from '../ui/CustomSelect';
 import '../../styles/views/RPSGame.css';
@@ -113,6 +113,7 @@ const RPSGame = ({ wsEvent }) => {
 
     // Stats
     const [score, setScore] = useState({ player: 0, computer: 0 });
+    const [matchWinner, setMatchWinner] = useState(null);
 
     // Refs for logic
     const computerMoveRef = useRef(null);
@@ -162,6 +163,17 @@ const RPSGame = ({ wsEvent }) => {
             togglePrediction(false);
         }
     }, [pickComputerMove, manualMode]);
+
+    const resetMatch = useCallback(() => {
+        setScore({ player: 0, computer: 0 });
+        setMatchWinner(null);
+        setPlayerMove(null);
+        setResult(null);
+        processingRef.current = false;
+        pickComputerMove();
+        setGameState('idle');
+        togglePrediction(false);
+    }, [pickComputerMove]);
 
     // Connect on mount
     useEffect(() => {
@@ -267,8 +279,8 @@ const RPSGame = ({ wsEvent }) => {
     }, [wsEvent, gameState, manualMode]);
 
     const handlePlayerMove = (pMove) => {
-        // prevent double-processing
-        if (processingRef.current) return;
+        // prevent double-processing or moving if match is over
+        if (processingRef.current || matchWinner) return;
         processingRef.current = true;
         const cMove = computerMoveRef.current || MOVES[Math.floor(Math.random() * MOVES.length)];
 
@@ -276,7 +288,14 @@ const RPSGame = ({ wsEvent }) => {
         setComputerMove(cMove); // Ensure it's set in state for rendering
         soundHandler.playRPSMove(); // Play sound on move selection
 
-        determineWinner(pMove, cMove);
+        const matchEnded = determineWinner(pMove, cMove);
+        
+        if (matchEnded) {
+            setGameState('match_over');
+            togglePrediction(false); // Disable gesture recognition if game over
+            return; // Skip auto reset to let them see the celebration
+        }
+
         setGameState('revealed');
 
         // Auto reset after 3 seconds
@@ -295,7 +314,7 @@ const RPSGame = ({ wsEvent }) => {
     // Manual UI helpers
     const onManualMove = (move) => {
         // Only allow when waiting and not currently processing
-        if (gameState !== 'waiting' || processingRef.current) return;
+        if (gameState !== 'waiting' || processingRef.current || matchWinner) return;
         handlePlayerMove(move);
     };
 
@@ -307,7 +326,7 @@ const RPSGame = ({ wsEvent }) => {
     // Keyboard handling: map R / P / S to moves when in manual mode
     useEffect(() => {
         const onKeyDown = (ev) => {
-            if (!manualMode) return;
+            if (!manualMode || matchWinner) return;
             const k = ev.key.toLowerCase();
             if (k === 'r') onManualMove('ROCK');
             if (k === 'p') onManualMove('PAPER');
@@ -316,21 +335,33 @@ const RPSGame = ({ wsEvent }) => {
 
         window.addEventListener('keydown', onKeyDown);
         return () => window.removeEventListener('keydown', onKeyDown);
-    }, [manualMode, gameState]);
+    }, [manualMode, gameState, matchWinner]);
 
     const determineWinner = (p, c) => {
+        let endMatch = false;
         if (p === c) {
             setResult('TIE');
             soundHandler.playRPSMove(); // Play sound for tie
         } else if (WIN_CONDITIONS[p] === c) {
             setResult('WIN');
-            setScore(prev => ({ ...prev, player: prev.player + 1 }));
+            setScore(prev => {
+                const newScore = prev.player + 1;
+                if (newScore >= 5) setMatchWinner('player');
+                return { ...prev, player: newScore };
+            });
+            if (score.player + 1 >= 5) endMatch = true;
             soundHandler.playRPSWin(); // Play sound for win
         } else {
             setResult('LOSE');
-            setScore(prev => ({ ...prev, computer: prev.computer + 1 }));
+            setScore(prev => {
+                const newScore = prev.computer + 1;
+                if (newScore >= 5) setMatchWinner('computer');
+                return { ...prev, computer: newScore };
+            });
+            if (score.computer + 1 >= 5) endMatch = true;
             soundHandler.playRPSLose(); // Play sound for lose
         }
+        return endMatch;
     };
 
     // Helper for rendering card
@@ -418,6 +449,26 @@ const RPSGame = ({ wsEvent }) => {
 
                 {/* Arena */}
                 <div className="rps-arena flex-1 flex flex-col items-center justify-center relative w-full px-4 overflow-hidden md:mb-8">
+                    
+                    {/* Celebration Overlay */}
+                    {matchWinner && (
+                        <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm animate-in fade-in duration-500">
+                            <div className="flex flex-col items-center p-8 bg-surface border border-primary/50 rounded-2xl shadow-[0_0_50px_rgba(0,243,255,0.3)] animate-in zoom-in duration-700 delay-150">
+                                <Trophy size={64} className={`mb-4 ${matchWinner === 'player' ? 'text-green-400' : 'text-red-400'} animate-bounce`} />
+                                <h2 className="text-4xl md:text-5xl font-black mb-2 uppercase tracking-widest text-center" style={{ textShadow: '0 4px 20px rgba(0,0,0,0.5)' }}>
+                                    {matchWinner === 'player' ? 'You Win!' : 'Computer Wins!'}
+                                </h2>
+                                <p className="text-muted text-lg font-mono mb-8 uppercase tracking-widest">Match Over</p>
+                                <button
+                                    onClick={resetMatch}
+                                    className="px-8 py-3 bg-primary text-primary-contrast rounded-xl font-bold text-xl shadow-[0_0_20px_rgba(0,243,255,0.4)] hover:scale-105 transition-transform"
+                                >
+                                    Play Again
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
                     <div className="status-text shrink-0" style={{ minHeight: '60px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1rem' }}>
                         {gameState === 'idle' ? (
                             <button
@@ -571,6 +622,14 @@ const RPSGame = ({ wsEvent }) => {
                             </button>
                         </div>
                     </div>
+
+                    {/* Match Controls */}
+                    <button
+                        onClick={resetMatch}
+                        className="flex items-center justify-center gap-2 w-full py-3 mt-2 rounded-xl bg-red-500/10 border border-red-500/30 text-red-500 font-bold uppercase tracking-widest hover:bg-red-500/20 hover:border-red-500/50 transition-all shrink-0"
+                    >
+                        Reset Match
+                    </button>
 
                     {/* Event Log */}
                     <div className="flex flex-col flex-grow min-h-[0] border border-border/50 rounded-xl bg-bg/10 mt-2 p-1">
