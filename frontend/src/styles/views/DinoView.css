@@ -115,7 +115,7 @@
 
 .dino-game-wrapper {
     display: flex;
-    flex-direction: row;
+    flex-direction: row-reverse;
     height: 100%;
     width: 100%;
     overflow: hidden;
@@ -382,7 +382,7 @@
     flex-direction: column;
     gap: clamp(0.75rem, 1.5vh, 1.5rem);
     padding: clamp(0.5rem, 1vh, 1rem) clamp(0.5rem, 1vw, 0.75rem);
-    border-left: 1px solid rgba(0, 243, 255, 0.15);
+    border-right: 1px solid rgba(0, 243, 255, 0.15);
     background-color: color-mix(in srgb, var(--surface, #0a0a12) 95%, transparent);
     transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1),
         min-width 0.4s cubic-bezier(0.4, 0, 0.2, 1),
@@ -397,46 +397,15 @@
 }
 
 .game-sidebar.collapsed {
-    width: clamp(4rem, 6vw, 5.5rem);
-    min-width: clamp(4rem, 6vw, 5.5rem);
+    width: 4.5rem;
+    min-width: 4.5rem;
     padding: clamp(0.5rem, 1vh, 1rem) 0.5rem;
     opacity: 1;
     pointer-events: auto;
-    border-left: 1px solid rgba(0, 243, 255, 0.15);
+    border-right: 1px solid rgba(0, 243, 255, 0.15);
 }
 
-/* Sidebar Toggle Button */
-.sidebar-toggle-btn {
-    position: fixed;
-    right: clamp(14rem, 20vw, 22rem);
-    top: 50%;
-    transform: translateY(-50%);
-    z-index: 200;
-    background: var(--primary, #00f3ff);
-    color: var(--bg, #020308);
-    border: none;
-    border-radius: 999px 0 0 999px;
-    padding: clamp(0.6rem, 1.2vh, 1rem) clamp(0.3rem, 0.5vw, 0.5rem);
-    cursor: pointer;
-    box-shadow: -4px 0 16px rgba(0, 243, 255, 0.4);
-    transition:
-        right 0.4s cubic-bezier(0.4, 0, 0.2, 1),
-        box-shadow 0.2s ease,
-        padding 0.2s ease;
-    display: flex;
-    align-items: center;
-    font-weight: 700;
-}
-
-.sidebar-toggle-btn.collapsed {
-    right: clamp(4rem, 6vw, 5.5rem);
-    border-radius: 999px 0 0 999px;
-}
-
-.sidebar-toggle-btn:hover {
-    padding-left: clamp(0.5rem, 0.8vw, 0.75rem);
-    box-shadow: -6px 0 22px rgba(0, 243, 255, 0.6);
-}
+/* Sidebar Toggle Button removed - now integrated in header */
 
 /* ==========================================
    Sidebar Card Components

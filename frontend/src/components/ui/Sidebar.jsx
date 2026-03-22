@@ -90,9 +90,9 @@ export default function Sidebar({
 
     return (
         <aside className={`
-            ${isCollapsed ? 'w-16' : 'w-80'} 
+            ${isCollapsed ? 'w-[4.5rem] overflow-visible' : 'w-80 overflow-y-auto overflow-x-hidden'} 
             bg-surface/80 backdrop-blur-md border-r border-border h-full flex flex-col transition-all duration-300 ease-in-out
-            overflow-y-auto overflow-x-hidden [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none'] 
+            [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none'] 
             ${className}
         `}>
             <div className="h-[94px] shrink-0" />
@@ -124,13 +124,15 @@ export default function Sidebar({
                         >
                             <Menu size={24} className="text-primary" />
                         </button>
-                        <div className="flex flex-col items-center gap-6 mt-4">
+                        <div className="flex flex-col items-center gap-8 mt-4">
                             <Cpu size={24} className="text-primary animate-pulse" title="Controls" />
-                            <button onClick={onToggle} title="Channel Mapping" className="hover:text-primary transition-colors group">
+                            <button onClick={onToggle} title="Channel Mapping" className="hover:text-primary transition-colors group relative">
                                 <Network size={20} className="text-muted group-hover:text-primary" />
+                                <div className="absolute left-14 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Channel Mapping</div>
                             </button>
-                            <button onClick={onToggle} title="Signal Filters" className="hover:text-primary transition-colors group">
+                            <button onClick={onToggle} title="Signal Filters" className="hover:text-primary transition-colors group relative">
                                 <Filter size={20} className="text-muted group-hover:text-primary" />
+                                <div className="absolute left-14 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Signal Filters</div>
                             </button>
                             <div className="w-px h-8 bg-border" />
                         </div>

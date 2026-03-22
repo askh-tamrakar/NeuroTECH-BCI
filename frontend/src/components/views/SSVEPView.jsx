@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Settings, Play, Square, Activity, MousePointer2, Keyboard, Sun, Monitor, Power, Zap, Trash2, History } from 'lucide-react';
+import { Settings, Play, Square, Activity, MousePointer2, Keyboard, Sun, Monitor, Power, Zap, Trash2, History, Menu, ChevronLeft } from 'lucide-react';
 import SSVEPStimulus from './ssvep/SSVEPStimulus';
 import { soundHandler } from '../../handlers/SoundHandler';
 
@@ -121,7 +121,7 @@ export default function SSVEPView({ isConnected, wsEvent }) {
     };
 
     return (
-        <div className="w-full flex bg-black overflow-hidden relative h-[calc(100vh-129px)]">
+        <div className="w-full flex flex-row-reverse bg-black overflow-hidden relative h-[calc(100vh-129px)]">
             {/* Main Stimulus View */}
             <div className={`flex-grow flex flex-col items-center justify-center relative transition-all duration-300 ${showSidebar ? 'pr-0' : 'pr-0'}`}>
                 <SSVEPStimulus
@@ -158,59 +158,83 @@ export default function SSVEPView({ isConnected, wsEvent }) {
                 )}
             </div>
 
-            {/* Right Sidebar Container */}
+            {/* Left Sidebar Container (visually left via row-reverse) */}
             <div
-                className={`transition-all duration-500 ease-in-out border-l border-border bg-surface flex flex-col h-full relative overflow-hidden ${showSidebar ? 'w-96' : 'w-[4.5rem]'
-                    }`}
+                className={`transition-all duration-300 ease-in-out border-r border-border bg-surface/80 backdrop-blur-md flex flex-col h-full relative ${showSidebar ? 'w-80 overflow-y-auto overflow-x-hidden' : 'w-[4.5rem] overflow-visible'} [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']`}
             >
                 {/* Collapsed Icons Only State */}
                 {!showSidebar && (
-                    <div className="flex flex-col items-center gap-6 mt-16 w-full animate-fade-in shrink-0 h-full">
-                        <button onClick={() => setShowSidebar(true)} className="w-[42px] h-[42px] flex items-center justify-center rounded-xl bg-surface border border-border text-muted hover:text-primary hover:border-primary/50 transition-all shadow-sm shrink-0 group relative" title="SSVEP Setup">
-                            <Settings size={20} />
-                            <div className="absolute right-14 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">SSVEP Setup</div>
+                    <div className="flex flex-col items-center gap-6 mt-4 w-full animate-fade-in shrink-0 h-full">
+                        <button
+                            onClick={() => setShowSidebar(true)}
+                            className="p-2 hover:bg-white/10 rounded-full transition-colors mb-2"
+                            title="Expand Sidebar"
+                        >
+                            <Menu size={24} className="text-primary" />
                         </button>
-                        <button onClick={() => setShowSidebar(true)} className="w-[42px] h-[42px] flex items-center justify-center rounded-xl bg-surface border border-border text-muted hover:text-primary hover:border-primary/50 transition-all shadow-sm shrink-0 group relative" title="Signal">
-                            <Activity size={20} />
-                            <div className="absolute right-14 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Signal Frequency</div>
+                        <Settings size={24} className="text-primary animate-pulse" title="SSVEP Setup" />
+                        
+                        <button onClick={() => setShowSidebar(true)} title="Signal" className="hover:text-primary transition-colors group relative">
+                            <Activity size={20} className="text-muted group-hover:text-primary" />
+                            <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Signal Frequency</div>
                         </button>
-                        <button onClick={() => setShowSidebar(true)} className="w-[42px] h-[42px] flex items-center justify-center rounded-xl bg-surface border border-border text-muted hover:text-primary hover:border-primary/50 transition-all shadow-sm relative shrink-0 group" title="System Activity">
-                            <History size={20} />
-                            {logs.length > 0 && <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-primary rounded-full animate-pulse blur-[1px] shadow-[0_0_8px_var(--primary)]"></span>}
-                            <div className="absolute right-14 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">System Activity</div>
+                        
+                        <button onClick={() => setShowSidebar(true)} title="System Activity" className="hover:text-primary transition-colors group relative">
+                            <History size={20} className="text-muted group-hover:text-primary" />
+                            {logs.length > 0 && <span className="absolute -top-1 -right-1 w-2 h-2 bg-primary rounded-full animate-pulse blur-[1px]"></span>}
+                            <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">System Activity</div>
                         </button>
-                        <button onClick={() => setShowSidebar(true)} className="w-[42px] h-[42px] flex items-center justify-center rounded-xl bg-surface border border-border text-muted hover:text-primary hover:border-primary/50 transition-all shadow-sm shrink-0 group relative" title="Global Actions">
+                        
+                        <button onClick={() => setShowSidebar(true)} title="Global Actions" className="hover:text-primary transition-colors group relative">
                             {globalRunning ? <Square size={20} className="text-red-500" /> : <Play size={20} className="text-green-500" />}
-                            <div className="absolute right-14 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Global Actions</div>
+                            <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Global Actions</div>
                         </button>
-                        <button onClick={() => setShowSidebar(true)} className="w-[42px] h-[42px] flex items-center justify-center rounded-xl bg-surface border border-border text-muted hover:text-primary hover:border-primary/50 transition-all shadow-sm shrink-0 group relative" title="Targets">
-                            <Monitor size={20} />
-                            <div className="absolute right-14 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Targets Settings</div>
+                        
+                        <button onClick={() => setShowSidebar(true)} title="Targets" className="hover:text-primary transition-colors group relative">
+                            <Monitor size={20} className="text-muted group-hover:text-primary" />
+                            <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Targets Settings</div>
                         </button>
+                        
                         <div className="flex-1" />
                         <div className="flex flex-col gap-2 w-full items-center border-t border-border pt-4 pb-4 shrink-0">
                            <button onClick={() => setShowSidebar(true)} className={`w-[42px] h-[42px] flex items-center justify-center rounded-full border transition-all shadow-sm group relative ${isConnected ? 'bg-green-500/10 border-green-500/30 text-green-500' : 'bg-red-500/10 border-red-500/30 text-red-500'}`} title={isConnected ? "Sensor Connected" : "Sensor Disconnected"}>
                               {isConnected ? <Zap size={18} /> : <Power size={18} />}
-                              <div className="absolute right-14 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Sensor Status</div>
+                              <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Sensor Status</div>
                            </button>
                         </div>
                     </div>
                 )}
 
                 {/* Fixed Container */}
-                <div className={`flex-grow flex flex-col overflow-hidden p-4 gap-3 font-mono transition-opacity duration-200 w-96 shrink-0 ${!showSidebar ? 'opacity-0 h-0 hidden' : 'opacity-100'}`}>
+                <div className={`flex-grow flex flex-col overflow-hidden p-4 gap-3 font-mono transition-opacity duration-300 w-80 shrink-0 ${!showSidebar ? 'opacity-0 h-0 hidden' : 'opacity-100'}`}>
 
                     {/* Header */}
-                    <div className="flex items-center justify-between shrink-0">
-                        <h3 className="text-lg font-bold text-primary flex items-center gap-2">
-                            <Settings size={20} /> SSVEP SETUP
-                        </h3>
+                    <div className="flex items-center justify-between shrink-0 mb-2">
+                        <div>
+                            <h2 className="text-2xl font-bold text-text mb-1 flex items-center gap-3">
+                                <Settings size={28} className="text-primary animate-pulse" />
+                                <span style={{ letterSpacing: '2.3px' }}>Controls</span>
+                            </h2>
+                            <p className="text-xs text-muted">SSVEP Protocol</p>
+                        </div>
+                        <button
+                            onClick={() => setShowSidebar(false)}
+                            className="p-2 hover:bg-white/10 rounded-full transition-colors"
+                            title="Collapse Sidebar"
+                        >
+                            <ChevronLeft size={24} />
+                        </button>
+                    </div>
+
+                    <div className="flex items-center justify-between shrink-0 border-t border-border/50 pt-2">
+                        <h4 className="text-xs font-bold text-muted uppercase tracking-widest">Global State</h4>
                         <div className={`w-3 h-3 rounded-full animate-pulse ${globalRunning ? 'bg-green-500 shadow-[0_0_10px_#22c55e]' : 'bg-red-500'}`} />
                     </div>
 
                     {/* Config Settings */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 shrink-0 bg-bg/30 p-2 rounded-xl border border-border/50">
-                        <div className="space-y-1">
+                    <div className="flex flex-col gap-4 shrink-0 bg-bg/30 p-3 rounded-xl border border-border/50">
+                        {/* Brightness */}
+                        <div className="space-y-2">
                             <div className="flex items-center justify-between text-sm font-bold text-muted uppercase tracking-widest">
                                 <span className="flex items-center gap-1"><Sun size={16} /> Brightness</span>
                                 <span className="text-primary">{Math.round(brightness * 100)}%</span>
@@ -222,10 +246,12 @@ export default function SSVEPView({ isConnected, wsEvent }) {
                                 step="0.05"
                                 value={brightness}
                                 onChange={(e) => setBrightness(parseFloat(e.target.value))}
-                                className="w-full accent-primary h-1 bg-bg rounded-lg appearance-none cursor-pointer"
+                                className="w-full accent-primary h-1.5 bg-bg rounded-lg appearance-none cursor-pointer"
                             />
                         </div>
-                        <div className="flex items-center justify-between">
+                        
+                        {/* Refresh Rate */}
+                        <div className="flex items-center justify-between border-t border-border/30 pt-3">
                             <label className="text-sm font-bold text-muted uppercase tracking-widest flex items-center gap-1">
                                 <Monitor size={16} /> Refresh Rate
                             </label>
@@ -391,17 +417,8 @@ export default function SSVEPView({ isConnected, wsEvent }) {
                 </div>
             </div>
 
-            {/* View Toggle Button */}
-            <button
-                onClick={() => setShowSidebar(!showSidebar)}
-                className={`absolute top-4 right-4 z-50 p-2.5 rounded-full border border-primary/20 bg-surface/80 backdrop-blur-md shadow-glow hover:bg-primary/10 transition-all ${!showSidebar ? 'rotate-180' : ''
-                    }`}
-                title={showSidebar ? "Hide Controls" : "Show Controls"}
-            >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-primary">
-                    <path d="M9 18l6-6-6-6" />
-                </svg>
-            </button>
+            
+            {/* View Toggle Button Removed - Moved inside Sidebar */}
         </div>
     );
 }
