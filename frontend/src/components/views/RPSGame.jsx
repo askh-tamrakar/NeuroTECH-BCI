@@ -338,6 +338,15 @@ const RPSGame = ({ wsEvent }) => {
         const isLoser = result === 'LOSE' && type === 'player' || result === 'WIN' && type === 'computer';
 
         let boxClass = 'card-box';
+        
+        // Add red glow specifically for the player card
+        if (type === 'player') {
+            boxClass += ' shadow-[0_0_30px_rgba(239,68,68,0.4)] border-red-500/40 relative';
+        } else if (type === 'computer') {
+            // Add cyan/primary glow for the computer card
+            boxClass += ' shadow-[0_0_30px_rgba(0,243,255,0.3)] border-primary/40 relative';
+        }
+
         if (revealed && result) {
             if (isWinner) boxClass += ' winner';
             if (isLoser) boxClass += ' loser';
