@@ -29,7 +29,8 @@ import {
   ToggleRight,
   Menu,
   ChevronLeft,
-  Activity
+  Activity,
+  UserPlus
 } from 'lucide-react'
 import { useSettings } from '../../contexts/SettingsContext'
 import { soundHandler } from '../../handlers/SoundHandler'
@@ -74,7 +75,7 @@ export default function SettingsView({ latency = 0 }) {
   const [apiUrl, setApiUrl] = useState(() => localStorage.getItem('api_url') || 'http://localhost:8000')
   const [wsUrl, setWsUrl] = useState(() => localStorage.getItem('ws_url') || 'ws://localhost:1972')
   const [useMock, setUseMock] = useState(() => localStorage.getItem('use_mock') === 'true')
-  const [activeSection, setActiveSection] = useState('appearance');
+  const [activeSection, setActiveSection] = useState('account');
 
   // Editor state
   const [isEditingName, setIsEditingName] = useState(false);
@@ -316,6 +317,8 @@ export default function SettingsView({ latency = 0 }) {
       {/* ── SIDEBAR ── */}
       <aside className="w-[66px] bg-surface/30 border-r border-border flex flex-col items-center py-4 gap-1 shrink-0 z-20">
         {[
+          { id: 'account', icon: UserPlus, label: 'Account' },
+          { divider: true },
           { id: 'appearance', icon: Palette, label: 'Style' },
           { id: 'connectivity', icon: Globe, label: 'Link' },
           { divider: true },
@@ -347,7 +350,8 @@ export default function SettingsView({ latency = 0 }) {
       </aside>
 
       {/* ── MAIN ── */}
-      <main className="flex-1 overflow-y-auto px-5 py-6 flex flex-col gap-5 min-w-0 custom-scrollbar">
+      <main className="flex-1 overflow-y-auto px-5 py-6 flex flex-col items-center min-w-0 custom-scrollbar">
+        <div className="w-full max-w-[900px] flex flex-col gap-6">
         {/* APPEARANCE */}
         {activeSection === 'appearance' && (
           <div className="flex flex-col gap-4 animate-fade-in">
@@ -688,12 +692,18 @@ export default function SettingsView({ latency = 0 }) {
              </div>
           </div>
         )}
-      </main>
-
-      {/* ── RIGHT RAIL ── */}
-      <aside className="w-[260px] shrink-0 p-6 pl-0 flex flex-col gap-[14px] overflow-y-auto custom-scrollbar">
-        
-        {/* Profile */}
+        {/* ACCOUNT */}
+        {activeSection === 'account' && (
+          <div className="flex flex-col gap-4 animate-fade-in w-full">
+             <div className="flex items-start justify-between gap-3">
+               <div>
+                 <h2 className="text-[26px] font-bold tracking-tight text-text">Account Overview</h2>
+                 <p className="text-[14px] text-muted mt-1">Manage local operator settings and review current link credentials</p>
+               </div>
+             </div>
+             
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mt-2">
+               {/* Profile */}
         <div className="bg-surface/50 border border-border rounded-2xl p-[18px]">
           <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-surface to-bg border border-border-hi flex items-center justify-center text-[18px] font-extrabold text-primary mb-3 shadow-[0_4px_10px_rgba(0,0,0,0.2)]">
             {user?.avatarUrl ? <img src={user.avatarUrl} alt="Avatar" className="w-full h-full rounded-xl object-cover" /> : (user?.name?.charAt(0).toUpperCase() || 'U')}
@@ -707,8 +717,8 @@ export default function SettingsView({ latency = 0 }) {
             </button>
           )}
         </div>
-
-        {/* Quick Info */}
+               
+               {/* Quick Info */}
         <div className="bg-surface/50 border border-border rounded-2xl overflow-hidden shadow-lg">
           <div className="px-4 py-[11px] border-b border-border">
              <span className="text-[11px] font-bold tracking-[0.1em] uppercase text-muted flex items-center gap-2">
@@ -732,8 +742,13 @@ export default function SettingsView({ latency = 0 }) {
              <span className="text-[13px] font-bold truncate max-w-[100px]">{wsUrl}</span>
           </div>
         </div>
+             </div>
+          </div>
+        )}
 
-      </aside>
+        </div>
+      </main>
+
     </div>
   )
 }
