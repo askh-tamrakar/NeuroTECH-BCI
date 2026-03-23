@@ -60,7 +60,7 @@ def predict_window():
             
         # 1. Extract Features
         # Assuming EMG for now as per request "prediction/emg/emg.db"
-        sr = state.config.get('sampling_rate', 512) if state.config else 512
+        sr = state.config.get('sampling_rate', 1000) if state.config else 1000
         features = extract_emg_features(samples, sr)
         
         # 2. Predict (Stateless)

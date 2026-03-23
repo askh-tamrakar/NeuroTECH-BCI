@@ -46,6 +46,15 @@ class BlinkExtractor:
         Process a single sample. 
         Returns a feature dictionary if a blink candidate window is finished, else None.
         """
+        if not np.isfinite(sample_val) or abs(sample_val) > 1e6:
+            # Drop obviously unstable filtered output and reset collection state so
+            # one bad filter burst cannot cascade into repeated false candidates.
+            self.is_collecting = False
+            self.candidate_window = []
+            self.silence_samples_count = 0
+            self.baseline = 0.0
+            return None
+
         self.current_idx += 1
         
         # Update baseline (very slow moving average)

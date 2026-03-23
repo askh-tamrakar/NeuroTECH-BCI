@@ -55,7 +55,7 @@ class CalibrationManager:
                 clean[k] = v
         return clean
 
-    def extract_features(self, sensor: str, samples: List[float], sr: int = 512) -> Dict[str, Any]:
+    def extract_features(self, sensor: str, samples: List[float], sr: int = 1000) -> Dict[str, Any]:
         """
         Route feature extraction to the appropriate static method.
         """
@@ -157,7 +157,7 @@ class CalibrationManager:
 
         # 3. Extract Features
         config = config_manager.get_all_configs()
-        sr = config.get('sampling_rate', 512)
+        sr = config.get('sampling_rate', 1000)
         
         features = self.extract_features(sensor, samples, sr)
         

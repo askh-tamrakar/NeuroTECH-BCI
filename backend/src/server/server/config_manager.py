@@ -9,7 +9,7 @@ CONFIG_DIR = get_config_dir()
 CONFIG_PATH = CONFIG_DIR / "sensor_config.json"
 FILTER_CONFIG_PATH = CONFIG_DIR / "filter_config.json"
 FEATURE_CONFIG_PATH = CONFIG_DIR / "feature_config.json"
-DEFAULT_SR = 512
+DEFAULT_SR = 1000
 
 def load_config() -> dict:
     """Load config from sensor, filter, and feature JSON files."""

@@ -20,13 +20,13 @@ import sys
 LABELS_MAP = {
     'EMG': [0, 1, 2, 3],
     'EOG': [0, 1, 2],
-    'EEG': [0, 1, 2] # Placeholder for EEG labels (e.g. Low, Med, High Focus)
+    'EEG': [0, 1, 2, 3, 4, 5, 6]
 }
 
 DISPLAY_LABELS = {
     'EMG': {0: 'Rest', 1: 'Rock', 2: 'Paper', 3: 'Scissors'},
     'EOG': {0: 'DoubleBlink', 1: 'SingleBlink', 2: 'Rest'},
-    'EEG': {0: 'Class 0', 1: 'Class 1', 2: 'Class 2'}
+    'EEG': {0: 'Rest', 1: 'Target 1', 2: 'Target 2', 3: 'Target 3', 4: 'Target 4', 5: 'Target 5', 6: 'Target 6'}
 }
 
 # Add project root to sys.path to allow imports from src
@@ -66,8 +66,12 @@ def get_feature_cols(sensor):
         # EOG features from BlinkExtractor
         return ['duration_ms', 'max_amplitude', 'min_amplitude', 'peak_to_peak', 'variance', 'kurtosis', 'skewness', 'entropy', 'activity_sum']
     elif sensor == 'EEG':
-         # EEG features from EEGExtractor
-         return ['bp_delta', 'bp_theta', 'bp_alpha', 'bp_beta', 'bp_gamma', 'rel_delta', 'rel_theta', 'rel_alpha', 'rel_beta', 'rel_gamma', 'mean', 'std', 'max', 'min']
+         return [
+             'score_1', 'score_2', 'score_3', 'score_4', 'score_5', 'score_6',
+             'max_score', 'second_max_score', 'score_ratio', 'score_mean', 'score_std',
+             'dominant_freq', 'target_frequency',
+             'bp_alpha', 'bp_beta', 'bp_gamma', 'mean', 'std'
+         ]
     return []
 
 def get_model_paths(sensor, model_name):

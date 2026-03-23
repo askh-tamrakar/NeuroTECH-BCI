@@ -5,6 +5,13 @@ from src.server.server.extensions import socketio
 
 config_bp = Blueprint('config', __name__)
 
+def deep_update(target, source):
+    for k, v in source.items():
+        if isinstance(v, dict) and k in target and isinstance(target[k], dict):
+            deep_update(target[k], v)
+        else:
+            target[k] = v
+
 @config_bp.route('/api/config', methods=['GET'])
 def api_get_config():
     """Get current configuration."""
@@ -15,27 +22,26 @@ def api_get_config():
 def api_save_config():
     """Save configuration to disk."""
     try:
-        config = request.get_json()
-        if not config:
+        new_config = request.get_json()
+        if not new_config:
             return jsonify({"error": "No config provided"}), 400
 
-        # Validate structure
-        if "channel_mapping" not in config:
-            config["channel_mapping"] = load_config().get("channel_mapping", {})
+        current_config = load_config()
+        deep_update(current_config, new_config)
 
         # Save to disk
-        success = save_config(config)
+        success = save_config(current_config)
         
         # Broadcast to all connected clients
         socketio.emit('config_updated', {
             "status": "saved",
-            "config": config
+            "config": current_config
         })
 
         return jsonify({
             "status": "ok",
             "saved": success,
-            "config": config
+            "config": current_config
         })
     except Exception as e:
         print(f"❌ Error saving config: {e}")

@@ -9,7 +9,7 @@ sys.path.append(str(PROJECT_ROOT / "src"))
 from feature.extractors.blink_extractor import BlinkExtractor
 
 def test_final():
-    sr = 512
+    sr = 1000
     config = {"features": {"EOG": {"amp_threshold": 300.0}}}
     
     with open("verify_final_report.txt", "w", encoding="utf-8") as f:

@@ -5,11 +5,9 @@
   },
   "channel_mapping": {
     "ch0": {
-      "enabled": true,
       "sensor": "EMG"
     },
     "ch1": {
-      "enabled": true,
       "sensor": "EOG"
     }
   },
@@ -19,5 +17,11 @@
     "timeWindowMs": 10000
   },
   "num_channels": 2,
-  "sampling_rate": 512
+  "sampling_rate": 1000.0,
+  "baud": 230400,
+  "serial_port": "",
+  "connection_mode": "WiFi",
+  "target_ip": "172.29.111.237",
+  "target_port": 6000,
+  "binary": true
 }

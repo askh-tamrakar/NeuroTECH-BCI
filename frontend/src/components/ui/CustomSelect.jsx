@@ -10,7 +10,9 @@ export default function CustomSelect({
     disabled = false,
     placeholder = "Select...",
     className = "",
-    triggerClassName = ""
+    triggerClassName = "",
+    direction = "down",
+    onOpenChange
 }) {
     const [isOpen, setIsOpen] = useState(false);
     const containerRef = useRef(null);
@@ -25,6 +27,12 @@ export default function CustomSelect({
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
+
+    useEffect(() => {
+        if (onOpenChange) {
+            onOpenChange(isOpen);
+        }
+    }, [isOpen]);
 
     const handleSelect = (optionValue) => {
         if (!disabled) {
@@ -65,11 +73,11 @@ export default function CustomSelect({
             <AnimatePresence>
                 {isOpen && (
                     <motion.div
-                        initial={{ opacity: 0, y: -5, scale: 0.98 }}
+                        initial={{ opacity: 0, y: direction === "up" ? 5 : -5, scale: 0.98 }}
                         animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: -5, scale: 0.98 }}
+                        exit={{ opacity: 0, y: direction === "up" ? 5 : -5, scale: 0.98 }}
                         transition={{ duration: 0.15, ease: "easeOut" }}
-                        className="absolute left-0 right-0 top-full mt-1 z-50 bg-surface border border-border rounded-lg shadow-xl overflow-hidden max-h-60 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']"
+                        className={`absolute left-0 right-0 ${direction === "up" ? "bottom-full mb-1" : "top-full mt-1"} z-50 bg-bg/95 backdrop-blur-md border border-border/50 rounded-lg shadow-[0_8px_30px_rgba(0,0,0,0.5)] overflow-hidden max-h-60 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']`}
                     >
                         <div className="py-1">
                             {options.map((option) => {

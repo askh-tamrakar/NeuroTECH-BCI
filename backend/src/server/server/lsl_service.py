@@ -2,6 +2,8 @@ import time
 import json
 import collections
 import numpy as np
+from scipy.signal import butter, filtfilt, welch, detrend
+from sklearn.cross_decomposition import CCA
 from scipy import stats as scipy_stats
 from src.server.server.state import state
 from src.server.server.config_manager import load_config
@@ -21,13 +23,136 @@ RAW_STREAM_NAME = "BioSignals-Processed"
 EVENT_STREAM_NAME = "BioSignals-Events"
 
 # Helper for features
-def extract_emg_features(samples: list, sr: int = 512) -> dict:
+def extract_emg_features(samples: list, sr: int = 1000) -> dict:
     """Extract EMG features matching RPSExtractor."""
     return RPSExtractor.extract_features(samples, sr)
 
-def extract_eog_features(samples: list, sr: int = 512) -> dict:
+def extract_eog_features(samples: list, sr: int = 1000) -> dict:
     """Extract EOG blink features matching BlinkExtractor (Smart Crop)."""
     return BlinkExtractor.extract_features_smart(samples, sr)
+
+def _generate_ssvep_reference(freq: float, sr: int, num_samples: int, num_harmonics: int) -> np.ndarray:
+    t = np.arange(num_samples) / float(sr)
+    refs = []
+    for harmonic in range(1, num_harmonics + 1):
+        refs.append(np.sin(2 * np.pi * freq * harmonic * t))
+        refs.append(np.cos(2 * np.pi * freq * harmonic * t))
+    return np.array(refs).T
+
+def extract_eeg_features(samples: list, sr: int = 1000, target_freqs: list | None = None) -> dict:
+    """
+    Extract SSVEP-oriented EEG features suitable for later LDA training.
+    Keeps legacy band-power features for compatibility while adding
+    per-target correlation scores and summary statistics.
+    """
+    data = np.asarray(samples, dtype=float).flatten()
+    if data.size == 0:
+        return {}
+
+    cfg = state.config or load_config()
+    eeg_cfg = cfg.get("features", {}).get("EEG", {})
+    freqs = target_freqs or eeg_cfg.get("target_freqs", [8, 10, 12, 15, 18, 20])
+    freqs = [float(f) for f in freqs[:6]]
+    num_harmonics = int(eeg_cfg.get("num_harmonics", 4))
+
+    detrended = detrend(data)
+    std = float(np.std(detrended))
+    if std > 1e-8:
+        normalized = (detrended - np.mean(detrended)) / std
+    else:
+        normalized = detrended - np.mean(detrended)
+
+    bandpassed = normalized
+    try:
+        b, a = butter(4, [6, 60], btype='bandpass', fs=sr)
+        bandpassed = filtfilt(b, a, normalized)
+    except Exception:
+        pass
+
+    try:
+        bn, an = butter(2, [49, 51], btype='bandstop', fs=sr)
+        bandpassed = filtfilt(bn, an, bandpassed)
+    except Exception:
+        pass
+
+    freqs_psd, psd = welch(bandpassed, sr, nperseg=min(len(bandpassed), max(256, len(bandpassed))))
+
+    def band_power(low: float, high: float) -> float:
+        idx = np.logical_and(freqs_psd >= low, freqs_psd <= high)
+        if not np.any(idx):
+            return 0.0
+        return float(np.sum(psd[idx]))
+
+    bp_delta = band_power(0.5, 4)
+    bp_theta = band_power(4, 8)
+    bp_alpha = band_power(8, 13)
+    bp_beta = band_power(13, 30)
+    bp_gamma = band_power(30, min(60, sr / 2 - 1))
+    total_power = bp_delta + bp_theta + bp_alpha + bp_beta + bp_gamma
+
+    cca = CCA(n_components=1)
+    score_values = []
+
+    filter_bands = [(6, 60), (12, 60), (18, 60), (24, 60)]
+    weights = [1.0, 0.7, 0.4, 0.2]
+
+    for target_freq in freqs:
+        ref = _generate_ssvep_reference(target_freq, sr, len(bandpassed), num_harmonics)
+        weighted_score = 0.0
+
+        for (low, high), weight in zip(filter_bands, weights):
+            try:
+                b_sub, a_sub = butter(4, [low, min(high, sr / 2 - 1)], btype='bandpass', fs=sr)
+                filtered = filtfilt(b_sub, a_sub, bandpassed).reshape(-1, 1)
+                cca.fit(filtered, ref)
+                x_score, y_score = cca.transform(filtered, ref)
+                corr = np.corrcoef(x_score[:, 0], y_score[:, 0])[0, 1]
+                if np.isfinite(corr):
+                    weighted_score += weight * float(corr ** 2)
+            except Exception:
+                continue
+
+        score_values.append(max(0.0, weighted_score))
+
+    padded_scores = list(score_values[:6]) + [0.0] * max(0, 6 - len(score_values))
+    scores_arr = np.asarray(padded_scores, dtype=float)
+    sorted_scores = np.sort(scores_arr)
+    max_score = float(sorted_scores[-1]) if sorted_scores.size else 0.0
+    second_max = float(sorted_scores[-2]) if sorted_scores.size > 1 else 0.0
+    dominant_idx = int(np.argmax(scores_arr)) if scores_arr.size else 0
+    dominant_freq = float(freqs[dominant_idx]) if freqs else 0.0
+
+    feature_map = {
+        "bp_delta": float(bp_delta),
+        "bp_theta": float(bp_theta),
+        "bp_alpha": float(bp_alpha),
+        "bp_beta": float(bp_beta),
+        "bp_gamma": float(bp_gamma),
+        "rel_delta": float(bp_delta / total_power) if total_power > 0 else 0.0,
+        "rel_theta": float(bp_theta / total_power) if total_power > 0 else 0.0,
+        "rel_alpha": float(bp_alpha / total_power) if total_power > 0 else 0.0,
+        "rel_beta": float(bp_beta / total_power) if total_power > 0 else 0.0,
+        "rel_gamma": float(bp_gamma / total_power) if total_power > 0 else 0.0,
+        "mean": float(np.mean(bandpassed)),
+        "std": float(np.std(bandpassed)),
+        "max": float(np.max(bandpassed)),
+        "min": float(np.min(bandpassed)),
+        "score_1": float(padded_scores[0]),
+        "score_2": float(padded_scores[1]),
+        "score_3": float(padded_scores[2]),
+        "score_4": float(padded_scores[3]),
+        "score_5": float(padded_scores[4]),
+        "score_6": float(padded_scores[5]),
+        "max_score": max_score,
+        "second_max_score": second_max,
+        "score_ratio": float(max_score / second_max) if second_max > 1e-8 else float(max_score),
+        "score_mean": float(np.mean(scores_arr)) if scores_arr.size else 0.0,
+        "score_std": float(np.std(scores_arr)) if scores_arr.size else 0.0,
+        "dominant_freq": dominant_freq,
+        "sample_count": int(len(data)),
+    }
+
+    return feature_map
 
 
 def create_channel_mapping(lsl_info) -> dict:

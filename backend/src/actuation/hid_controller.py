@@ -82,12 +82,12 @@ class HIDController:
                 # Passive detection: allow LSL event, but ignore HID action if disabled
                 if not t.get("enabled", True):
                     log.info(f"Target {event_hz}Hz detected but is DISABLED. Ignoring hardware action.")
-                    return None, None
+                    continue
                 
                 mode = t.get("controlType", "Keyboard") # Default to Keyboard for compatibility
                 if mode == "None":
                     log.warning(f"Target {event_hz}Hz set to 'None', ignoring.")
-                    return None, None
+                    continue
                     
                 log.info(f"Match found for {event_hz} Hz ({mode}): {t}")
                 if mode == "Keyboard":
@@ -122,6 +122,10 @@ class HIDController:
                     self.mouse.click(Button.right, 1)
                 elif val == "Double Click":
                     self.mouse.click(Button.left, 2)
+                elif val == "Scroll Up":
+                    self.mouse.scroll(0, 2)
+                elif val == "Scroll Down":
+                    self.mouse.scroll(0, -2)
         except Exception as e:
             log.error(f"Action Error: {e}")
 

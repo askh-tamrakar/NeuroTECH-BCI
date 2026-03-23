@@ -73,6 +73,13 @@ COMPONENTS = [
         "success_msg": "Feature Router connected and processing"
     },
     {
+        "name": "HID Controller",
+        "module": "src.actuation.hid_controller",
+        "color": Theme.DIM,
+        "ready_pattern": "Connected to Event Stream",
+        "success_msg": "HID Controller connected and ready"
+    },
+    {
         "name": "Web Server",
         "module": "src.server.web_server",
         "color": Theme.WARNING,

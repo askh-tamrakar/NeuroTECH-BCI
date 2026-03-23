@@ -12,7 +12,7 @@ def reproduce_issue():
     print("=== Reproducing RPSExtractor Issue ===")
     
     # Simulate a window of all zeros
-    window = [0.0] * 512
+    window = [0.0] * 1000
     
     features = RPSExtractor.extract_features(window)
     print("Features for all zeros:")

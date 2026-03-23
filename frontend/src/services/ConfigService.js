@@ -1,6 +1,6 @@
 const CONFIG_KEY = 'biosignals-config'
 const CONFIG_DEFAULTS = {
-    sampling_rate: 512,
+    sampling_rate: 1000,
     channel_mapping: {
         ch0: {
             sensor: 'EMG',

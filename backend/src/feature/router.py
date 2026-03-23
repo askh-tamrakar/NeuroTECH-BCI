@@ -59,7 +59,7 @@ def load_config():
 class FeatureRouter:
     def __init__(self):
         self.config = load_config()
-        self.sr = self.config.get("sampling_rate", 512)
+        self.sr = self.config.get("sampling_rate", 1000)
         
         self.inlet = None
         self.outlet = None

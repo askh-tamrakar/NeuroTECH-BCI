@@ -1,18 +1,13 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react'
 import SignalChart from '../charts/SignalChart'
-import { DataService } from '../../services/DataService'
-import { Radio, Square, Settings2, Wifi, Circle, Play, Pause, Save, Trash2, Check, X, Cpu } from 'lucide-react'
-import FirmwareModal from '../modals/FirmwareModal'
+import { Radio, Square, Play, Pause, Save, Trash2, Cpu, Settings2, Wifi } from 'lucide-react'
 import '../../styles/live/LiveView.css'
 
-export default function LiveView({ wsData, wsEvent, config, isPaused, wsUrl }) {
+export default function LiveView({ wsData, wsEvent, config, isPaused, wsUrl, recordState, recordHandlers }) {
   const defaultTimeWindowMs = config?.display?.timeWindowMs || 10000
-  const samplingRate = config?.sampling_rate || 250
   const showGrid = config?.display?.showGrid ?? true
   const channelMapping = config?.channel_mapping || {}
   const numChannels = 2
-
-
 
   // Channel Configuration State (Zoom & Range)
   const [channelConfig, setChannelConfig] = useState(() => {
@@ -23,19 +18,7 @@ export default function LiveView({ wsData, wsEvent, config, isPaused, wsUrl }) {
   // Refs for direct worker communication
   const chartRefs = useRef({});
 
-  // Recording State
-  const [isRecording, setIsRecording] = useState(false)
-  const [isPausedRecording, setIsPausedRecording] = useState(false)
-  const [recordingStartTime, setRecordingStartTime] = useState(null)
-  const [lastPauseTime, setLastPauseTime] = useState(null)
-  const [totalPausedDuration, setTotalPausedDuration] = useState(0)
-  const [recordingTime, setRecordingTime] = useState(0)
-  const [recordedData, setRecordedData] = useState([])
-  const [recordingChannels, setRecordingChannels] = useState([0, 1])
-  const [isSaving, setIsSaving] = useState(false)
-  const [isConfirmationPending, setIsConfirmationPending] = useState(false)
   const [annotations, setAnnotations] = useState([])
-  const [isFirmwareModalOpen, setIsFirmwareModalOpen] = useState(false)
 
   // Channels are 0 and 1
   const activeChannels = [0, 1];
@@ -66,24 +49,33 @@ export default function LiveView({ wsData, wsEvent, config, isPaused, wsUrl }) {
 
     worker.postMessage({ type: 'CONNECT', payload: { url: wsUrl } });
 
+
     return () => {
       console.log('[LiveView] Terminating DataWorker...');
       worker.terminate();
     };
   }, [wsUrl]);
 
+  // Sync Pause State to DataWorker (so it stops processing/broadcasting)
+  useEffect(() => {
+    if (dataWorkerRef.current) {
+      dataWorkerRef.current.postMessage({ type: 'SET_PAUSED', payload: isPaused });
+    }
+  }, [isPaused]);
+
+
   // Recording Logic - separate effect that listens to the existing worker
   useEffect(() => {
-    if (!dataWorkerRef.current || !isRecording || isPausedRecording) return;
+    if (!dataWorkerRef.current || !recordState?.isRecording || recordState?.isPausedRecording) return;
 
     const handleMessage = (e) => {
       const { type, payload } = e.data;
-      if (type === 'UI_UPDATE' && !isPaused) {
+      if (type === 'UI_UPDATE') {
         const { lastSample } = payload;
-        if (lastSample && lastSample.channels) {
+        if (lastSample && lastSample.channels && recordState?.recordedDataRef) {
           const recordPoint = { timestamp: lastSample.timestamp, channels: {} };
           let hasData = false;
-          recordingChannels.forEach(chNum => {
+          recordState.recordingChannels.forEach(chNum => {
             const chObj = lastSample.channels[chNum] || lastSample.channels[`ch${chNum}`] || lastSample.channels[String(chNum)];
             const val = typeof chObj === 'number' ? chObj : (chObj?.value);
 
@@ -93,7 +85,11 @@ export default function LiveView({ wsData, wsEvent, config, isPaused, wsUrl }) {
             }
           });
           if (hasData) {
-            setRecordedData(prev => [...prev.slice(-10000), recordPoint]);
+            recordState.recordedDataRef.current.push(recordPoint);
+            // Cap recording point memory to prevent extreme memory bloat (e.g. ~10 mins per channel at high frequency)
+            if (recordState.recordedDataRef.current.length > 50000) {
+              recordState.recordedDataRef.current = recordState.recordedDataRef.current.slice(-50000);
+            }
           }
         }
       }
@@ -102,23 +98,7 @@ export default function LiveView({ wsData, wsEvent, config, isPaused, wsUrl }) {
     const worker = dataWorkerRef.current;
     worker.addEventListener('message', handleMessage);
     return () => worker.removeEventListener('message', handleMessage);
-  }, [isRecording, isPausedRecording, recordingChannels, isPaused]);
-
-  // Update recording timer
-  useEffect(() => {
-    let interval = null
-    if (isRecording && !isPausedRecording) {
-      interval = setInterval(() => {
-        const now = Date.now()
-        const elapsed = now - recordingStartTime - totalPausedDuration
-        setRecordingTime(Math.floor(elapsed / 1000))
-      }, 1000)
-    } else if (!isRecording && !isConfirmationPending) {
-      setRecordingTime(0)
-    }
-    return () => clearInterval(interval)
-  }, [isRecording, isPausedRecording, recordingStartTime, totalPausedDuration, isConfirmationPending])
-
+  }, [recordState?.isRecording, recordState?.isPausedRecording, recordState?.recordingChannels]);
   // Process Websocket Data - REMOVED (Handled by DataWorker -> BroadcastChannel -> SignalWorker)
 
 
@@ -162,162 +142,60 @@ export default function LiveView({ wsData, wsEvent, config, isPaused, wsUrl }) {
     return () => clearInterval(interval);
   }, [])
 
-  const startRecording = () => {
-    setRecordedData([])
-    setRecordingStartTime(Date.now())
-    setTotalPausedDuration(0)
-    setIsRecording(true)
-    setIsPausedRecording(false)
-    setIsConfirmationPending(false)
-  }
-
-  const togglePause = () => {
-    if (!isPausedRecording) {
-      setIsPausedRecording(true)
-      setLastPauseTime(Date.now())
-    } else {
-      const pausedAt = lastPauseTime || Date.now()
-      setTotalPausedDuration(prev => prev + (Date.now() - pausedAt))
-      setIsPausedRecording(false)
-      setLastPauseTime(null)
-    }
-  }
-
-  const stopRecording = () => {
-    setIsRecording(false)
-    setIsPausedRecording(false)
-    setIsConfirmationPending(true)
-  }
-
-  const discardRecording = () => {
-    setRecordedData([])
-    setIsConfirmationPending(false)
-    setRecordingTime(0)
-  }
-
-  const saveRecording = async () => {
-    setIsSaving(true)
-    try {
-      const now = new Date()
-      const day = String(now.getDate()).padStart(2, '0')
-      const month = String(now.getMonth() + 1).padStart(2, '0')
-      const year = now.getFullYear()
-      const hours = String(now.getHours()).padStart(2, '0')
-      const mins = String(now.getMinutes()).padStart(2, '0')
-      const secs = String(now.getSeconds()).padStart(2, '0')
-
-      // Group recording channels by sensor type
-      const sensorsToRecord = {};
-      recordingChannels.forEach(chNum => {
-        const sensorType = channelMapping[`ch${chNum}`]?.sensor || 'DATA';
-        if (!sensorsToRecord[sensorType]) sensorsToRecord[sensorType] = [];
-        sensorsToRecord[sensorType].push(chNum);
-      });
-
-      const sensorTypes = Object.keys(sensorsToRecord);
-      if (sensorTypes.length === 0) {
-        setIsSaving(false);
-        setRecordedData([]);
-        setIsConfirmationPending(false);
-        return;
-      }
-
-      const savePromises = sensorTypes.map(async (sensorType) => {
-        const channelsForThisSensor = sensorsToRecord[sensorType];
-        const filename = `${sensorType}__${day}-${month}-${year}__${hours}-${mins}-${secs}.csv`
-
-        // Filter recordedData to only include channels for THIS sensor
-        const filteredData = recordedData.map(point => {
-          const filteredPoint = { timestamp: point.timestamp, channels: {} };
-          let hasDataForSensor = false;
-          channelsForThisSensor.forEach(chNum => {
-            if (point.channels[`ch${chNum}`] !== undefined) {
-              filteredPoint.channels[`ch${chNum}`] = point.channels[`ch${chNum}`];
-              hasDataForSensor = true;
-            }
-          });
-          return hasDataForSensor ? filteredPoint : null;
-        }).filter(Boolean);
-
-        if (filteredData.length === 0) return;
-
-        const payload = {
-          metadata: {
-            sensorType,
-            channels: channelsForThisSensor,
-            samplingRate,
-            startTime: recordingStartTime,
-            endTime: Date.now(),
-            duration: recordingTime
-          },
-          data: filteredData
-        }
-
-        return DataService.saveSession(filename, payload, sensorType)
-      });
-
-      await Promise.all(savePromises);
-      setIsConfirmationPending(false);
-      setRecordedData([]);
-    } catch (err) {
-      console.error('Failed to save multi-sensor session:', err)
-    } finally {
-      setIsSaving(false)
-    }
-  }
-
+  // (Recording action handlers moved to LiveDashboard.jsx)
+  
   return (
-    <div className="live-view-container">
-      <div className="h-[94px] shrink-0" />
-      <div className="controls-container flex flex-row justify-between">
-        <div className="flex flex-row gap-4 items-center">
+    <div className="live-view-container !pt-[94px] !pb-[35px]">
+      {/* Top Controls Bar - Desktop Only */}
+      <div className="controls-container hidden lg:flex ml-4 mr-4 mt-4 items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
           <div className="record-controls flex items-center gap-2">
-            {!isRecording && !isConfirmationPending && (
+            {!recordState?.isRecording && !recordState?.isConfirmationPending && (
               <button
-                onClick={startRecording}
-                disabled={isSaving || recordingChannels.length === 0}
-                className="record-btn idle"
+                onClick={recordHandlers?.startRecording}
+                disabled={recordState?.isSaving || recordState?.recordingChannels?.length === 0}
+                className="record-btn idle flex items-center gap-1"
               >
                 <Radio size={22} />
                 <span className='text-[16px]'>REC</span>
               </button>
             )}
 
-            {isRecording && (
+            {recordState?.isRecording && (
               <>
                 <button
-                  onClick={stopRecording}
-                  className="record-btn recording"
+                  onClick={recordHandlers?.stopRecording}
+                  className="record-btn recording flex items-center gap-1"
                 >
                   <Square size={22} fill="currentColor" />
-                  <span className='text-[16px]'>STOP ({recordingTime}s)</span>
+                  <span className='text-[16px]'>STOP ({recordState?.recordingTime}s)</span>
                 </button>
 
                 <button
-                  onClick={togglePause}
-                  className={`record-btn ${isPausedRecording ? 'idle' : 'paused-btn'}`}
+                  onClick={recordHandlers?.togglePauseRecording}
+                  className={`record-btn flex items-center gap-1 ${recordState?.isPausedRecording ? 'idle' : 'paused-btn'}`}
                 >
-                  {isPausedRecording ? <Play size={22} fill="currentColor" /> : <Pause size={22} fill="currentColor" />}
-                  <span className='text-[16px]'>{isPausedRecording ? 'RESUME' : 'PAUSE'}</span>
+                  {recordState?.isPausedRecording ? <Play size={22} fill="currentColor" /> : <Pause size={22} fill="currentColor" />}
+                  <span className='text-[16px]'>{recordState?.isPausedRecording ? 'RESUME' : 'PAUSE'}</span>
                 </button>
               </>
             )}
 
-            {isConfirmationPending && (
-              <div className="confirm-group">
-                <span className="text-[14px] font-bold text-muted uppercase tracking-wider mr-2">Keep Session ({recordingTime}s)?</span>
+            {recordState?.isConfirmationPending && (
+              <div className="confirm-group flex items-center gap-2">
+                <span className="text-[14px] font-bold text-muted uppercase tracking-wider mr-2">Keep Session ({recordState?.recordingTime}s)?</span>
                 <button
-                  onClick={saveRecording}
-                  disabled={isSaving}
-                  className="save-btn"
+                  onClick={recordHandlers?.saveRecording}
+                  disabled={recordState?.isSaving}
+                  className="save-btn flex items-center gap-1"
                 >
                   <Save size={18} />
                   <span className='text-[12px]'>SAVE</span>
                 </button>
                 <button
-                  onClick={discardRecording}
-                  disabled={isSaving}
-                  className="discard-btn"
+                  onClick={recordHandlers?.discardRecording}
+                  disabled={recordState?.isSaving}
+                  className="discard-btn flex items-center gap-1"
                 >
                   <Trash2 size={18} />
                   <span className='text-[12px]'>DISCARD</span>
@@ -325,7 +203,7 @@ export default function LiveView({ wsData, wsEvent, config, isPaused, wsUrl }) {
               </div>
             )}
 
-            {isSaving && <div className="saving-indicator ml-2">SAVING...</div>}
+            {recordState?.isSaving && <div className="saving-indicator ml-2 text-primary font-bold">SAVING...</div>}
           </div>
 
           <div className="w-[2px] h-6 bg-border" />
@@ -336,14 +214,14 @@ export default function LiveView({ wsData, wsEvent, config, isPaused, wsUrl }) {
             <div className="flex gap-1.5">
               {Array.from({ length: numChannels }).map((_, chNum) => {
                 const chKey = `ch${chNum}`;
-                const isSelected = recordingChannels.includes(chNum);
+                const isSelected = recordState?.recordingChannels?.includes(chNum);
                 const sensor = channelMapping[chKey]?.sensor || '??';
 
                 return (
                   <button
                     key={chKey}
                     onClick={() => {
-                      setRecordingChannels(prev =>
+                      recordHandlers?.setRecordingChannels(prev =>
                         prev.includes(chNum)
                           ? prev.filter(c => c !== chNum)
                           : [...prev, chNum].sort()
@@ -364,7 +242,7 @@ export default function LiveView({ wsData, wsEvent, config, isPaused, wsUrl }) {
           <div className="w-[2px] h-6 bg-border" />
 
           <button
-            onClick={() => setIsFirmwareModalOpen(true)}
+            onClick={() => recordHandlers?.setIsFirmwareModalOpen(true)}
             className="px-3 py-1.5 bg-bg/50 border border-border rounded-lg text-[14px] font-bold text-muted hover:text-text hover:bg-surface/50 transition-all flex items-center gap-2"
             title="Download Firmware"
           >
@@ -373,60 +251,57 @@ export default function LiveView({ wsData, wsEvent, config, isPaused, wsUrl }) {
           </button>
 
           <div>
-            {isRecording && <div className="recording-status">● RECORDING IN PROGRESS</div>}
+            {recordState?.isRecording && <div className="recording-status font-bold text-red-500 animate-pulse">● RECORDING IN PROGRESS</div>}
           </div>
         </div>
 
-        <div className="flex flex-row gap-2">
-          <div className="mode-indicator ">
+        <div className="flex flex-row gap-2 shrink-0">
+          <div className="mode-indicator px-4 py-2 bg-surface/80 rounded-xl border border-border flex items-center gap-4">
             <span className="text-[16px] text-primary font-bold flex items-center gap-2 w-auto"><Settings2 size={22} /> MODE:</span>
-            INDEPENDENT SCALING
-            <span className='separator'></span>
-            <div className="flex items-center gap-2"><span className="text-[16px] text-purple-400 flex items-center gap-1"><Wifi size={22} /> Stream</span>: {wsData?.raw?.stream_name || 'Disconnected'}</div>
+            <span className="text-text font-bold tracking-wider text-sm">INDEPENDENT SCALING</span>
+            <div className="w-[2px] h-6 bg-border mx-2" />
+            <div className="flex items-center gap-2 text-muted font-bold text-sm"><span className="text-[16px] text-purple-400 flex items-center gap-1"><Wifi size={22} /> Stream</span>: <span className="text-text">{wsData?.raw?.stream_name || 'Disconnected'}</span></div>
           </div>
         </div>
       </div>
 
-      {Array.from({ length: numChannels }).map((_, chIdx) => {
-        // Render all channels up to numChannels (2)
-        const isEnabled = channelMapping[`ch${chIdx}`]?.enabled !== false;
+      <div className="graphs-grid-container grid gap-4 grid-cols-1 p-4 pt-2 h-full min-h-0">
+        {Array.from({ length: numChannels }).map((_, chIdx) => {
+          // Render all channels up to numChannels (2)
+          const isEnabled = channelMapping[`ch${chIdx}`]?.enabled !== false;
 
-        const sensorName = channelMapping[`ch${chIdx}`]?.sensor
-        const currentZoom = channelConfig[chIdx]?.zoom || 1
-        const currentManual = channelConfig[chIdx]?.manualRange || ""
-        const currentTimeWindow = channelConfig[chIdx]?.timeWindowMs || defaultTimeWindowMs
-        const currentChColor = channelConfig[chIdx]?.color || ['#3b82f6', '#10b981', '#f59e0b', '#a855f7'][chIdx % 4]
-        const currentSmoothing = channelConfig[chIdx]?.smoothing ?? true
+          const sensorName = channelMapping[`ch${chIdx}`]?.sensor
+          const currentZoom = channelConfig[chIdx]?.zoom || 1
+          const currentManual = channelConfig[chIdx]?.manualRange || ""
+          const currentTimeWindow = channelConfig[chIdx]?.timeWindowMs || defaultTimeWindowMs
+          const currentChColor = channelConfig[chIdx]?.color || ['#3b82f6', '#10b981', '#f59e0b', '#a855f7'][chIdx % 4]
+          const currentSmoothing = channelConfig[chIdx]?.smoothing ?? true
 
-        return (
-          <div key={chIdx} className="channel-wrapper">
-            <SignalChart
-              ref={el => chartRefs.current[chIdx] = el}
-              graphNo={`Graph ${chIdx + 1}`}
-              title={`${sensorName}`}
-              disabled={!isEnabled}
-              timeWindowMs={currentTimeWindow}
-              color={currentChColor}
-              height="100%"
-              showGrid={showGrid}
-              annotations={annotations.filter(a => a.channel === `ch${chIdx}`)}
-              currentZoom={currentZoom}
-              currentManual={currentManual}
-              channelIndex={chIdx}
-              smoothing={currentSmoothing}
-              onZoomChange={(z) => { updateChannelConfig(chIdx, 'zoom', z); updateChannelConfig(chIdx, 'manualRange', ""); }}
-              onRangeChange={(val) => updateChannelConfig(chIdx, 'manualRange', val)}
-              onTimeWindowChange={(val) => updateChannelConfig(chIdx, 'timeWindowMs', val)}
-              onColorChange={(val) => updateChannelConfig(chIdx, 'color', val)}
-            />
-          </div>
-        )
-      })}
-
-      <FirmwareModal
-        isOpen={isFirmwareModalOpen}
-        onClose={() => setIsFirmwareModalOpen(false)}
-      />
+          return (
+            <div key={chIdx} className="channel-wrapper h-full min-h-[300px]">
+              <SignalChart
+                ref={el => chartRefs.current[chIdx] = el}
+                graphNo={`Graph ${chIdx + 1}`}
+                title={`${sensorName}`}
+                disabled={!isEnabled}
+                timeWindowMs={currentTimeWindow}
+                color={currentChColor}
+                height="100%"
+                showGrid={showGrid}
+                annotations={annotations.filter(a => a.channel === `ch${chIdx}`)}
+                currentZoom={currentZoom}
+                currentManual={currentManual}
+                channelIndex={chIdx}
+                smoothing={currentSmoothing}
+                onZoomChange={(z) => { updateChannelConfig(chIdx, 'zoom', z); updateChannelConfig(chIdx, 'manualRange', ""); }}
+                onRangeChange={(val) => updateChannelConfig(chIdx, 'manualRange', val)}
+                onTimeWindowChange={(val) => updateChannelConfig(chIdx, 'timeWindowMs', val)}
+                onColorChange={(val) => updateChannelConfig(chIdx, 'color', val)}
+              />
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }

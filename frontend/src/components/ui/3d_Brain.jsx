@@ -37,17 +37,11 @@ const Brain3D = () => {
           gl={{ antialias: true, alpha: true }}
           style={{ background: 'transparent', margin: 0, padding: 0, overflow: 'visible' }}
         >
-          <Stage
-            intensity={0.4}
-            environment="city"
-            adjustCamera={false}
-            shadows={false}
-            center={{ precise: true }}
-          >
-            <Suspense fallback={null}>
-              <Model url="/Resources/NeuroTECH.glb" />
-            </Suspense>
-          </Stage>
+          <ambientLight intensity={1.5} />
+          <directionalLight position={[10, 10, 5]} intensity={2.0} />
+          <Suspense fallback={null}>
+            <Model url="/Resources/NeuroTECH.glb" />
+          </Suspense>
 
           <OrbitControls
             enableZoom={false}

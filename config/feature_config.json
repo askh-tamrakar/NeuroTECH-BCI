@@ -1,4 +1,72 @@
 {
+  "EEG": {
+    "target_freqs": [
+      8,
+      10,
+      12,
+      15,
+      18,
+      20
+    ],
+    "targets": [
+      {
+        "id": 0,
+        "freq": 8,
+        "label": "Enter",
+        "mappedKey": "ArrowUp",
+        "mappedMouse": "Scroll Up",
+        "enabled": true,
+        "controlType": "Mouse"
+      },
+      {
+        "id": 1,
+        "freq": 10,
+        "label": "Target 2",
+        "mappedKey": "A",
+        "mappedMouse": "None",
+        "enabled": true,
+        "controlType": "Keyboard"
+      },
+      {
+        "id": 2,
+        "freq": 12,
+        "label": "Target 3",
+        "mappedKey": "S",
+        "mappedMouse": "None",
+        "enabled": true,
+        "controlType": "Keyboard"
+      },
+      {
+        "id": 3,
+        "freq": 15,
+        "label": "Target 4",
+        "mappedKey": "D",
+        "mappedMouse": "None",
+        "enabled": true,
+        "controlType": "Keyboard"
+      },
+      {
+        "id": 4,
+        "freq": 18,
+        "label": "Target 5",
+        "mappedKey": "Space",
+        "mappedMouse": "None",
+        "enabled": true,
+        "controlType": "Keyboard"
+      },
+      {
+        "id": 5,
+        "freq": 20,
+        "label": "Target 6",
+        "mappedKey": "Escape",
+        "mappedMouse": "None",
+        "enabled": true,
+        "controlType": "Keyboard"
+      }
+    ],
+    "rest_threshold": 0.45,
+    "window_len_sec": 1
+  },
   "EOG": {
     "detection_method": "Threshold"
   }

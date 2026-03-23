@@ -46,6 +46,7 @@ class StreamManagerApp:
             try:
                 # Load Dynamic Mapping from Config
                 mapping = config_manager.get_channel_mapping()
+                sampling_rate = config_manager.get_sampling_rate()
                 num_channels = 2 # Hardcoded to 2 based on 8-byte packet protocol
                 
                 channel_types = []
@@ -62,7 +63,7 @@ class StreamManagerApp:
                     channel_types=channel_types,
                     channel_labels=channel_labels,
                     channel_count=num_channels,
-                    nominal_srate=512
+                    nominal_srate=sampling_rate
                 )
                 self.log(f"✅ LSL Stream 'BioSignals-Raw-uV' created ({', '.join(channel_labels)}).")
 
@@ -76,7 +77,7 @@ class StreamManagerApp:
                     channel_types=channel_types,
                     channel_labels=[f"{label}_filt" for label in channel_labels],
                     channel_count=num_channels,
-                    nominal_srate=512
+                    nominal_srate=sampling_rate
                 )
                 self.log(f"✅ LSL Stream 'BioSignals-Processed' created.")
 

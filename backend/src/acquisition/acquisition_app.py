@@ -118,7 +118,7 @@ class AcquisitionApp:
             self.config.get("ui_settings", {}).get("window_seconds", 5.0)
         )
         self.buffer_size = int(
-            self.config.get("sampling_rate", 512) * self.window_seconds
+            self.config.get("sampling_rate", 1000) * self.window_seconds
         )
         
         # Ring buffers (Raw)
@@ -190,7 +190,7 @@ class AcquisitionApp:
     def _default_config(self) -> dict:
         """Default configuration with proper structure."""
         return {
-            "sampling_rate": 512,
+            "sampling_rate": 1000,
             "channel_mapping": {
                 "ch0": {
                     "sensor": "EMG",
@@ -235,7 +235,7 @@ class AcquisitionApp:
                 del sensor_config["features"]
             
             # Update specific fields controlled by this UI
-            sensor_config["sampling_rate"] = self.config.get("sampling_rate", 512)
+            sensor_config["sampling_rate"] = self.config.get("sampling_rate", 1000)
             
             # Update Channel Mapping
             channel_mapping = sensor_config.get("channel_mapping", {})
@@ -814,7 +814,7 @@ class AcquisitionApp:
                 "timestamp": self.session_start_time.isoformat(),
                 "duration_seconds": (datetime.now() - self.session_start_time).total_seconds(),
                 "total_packets": self.packet_count,
-                "sampling_rate_hz": self.config.get("sampling_rate", 512),
+                "sampling_rate_hz": self.config.get("sampling_rate", 1000),
                 "channel_0_type": self.ch0_type,
                 "channel_1_type": self.ch1_type
             },

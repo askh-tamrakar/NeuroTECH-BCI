@@ -163,9 +163,9 @@ function render(elapsed) {
         let isOn = false;
         if (isFlickering && cfg.enabled) {
             const hz = Number(cfg.freq) || 1;
-            // Frame-accurate flicker using sine wave over frame count
-            // This aligns better with monitor refresh cycles
-            isOn = Math.sin(2 * Math.PI * hz * (frameCount / refreshRate)) > 0;
+            // Frame-accurate flicker locked to specified monitor refresh rate
+            // This prevents rendering jitter from affecting SSVEP frequency stability
+            isOn = Math.sin(2 * Math.PI * hz * (frameCount / refreshRate)) >= 0;
 
             ctx.fillStyle = isOn ? COLORS.ON(brightness) : COLORS.OFF;
             ctx.fillRect(x, y, gridW, gridH);
@@ -207,13 +207,4 @@ function render(elapsed) {
         ctx.globalAlpha = 1.0;
     });
 
-    // Photodiode Marker (Bottom Left)
-    const pdSize = 64;
-    if (isFlickering) {
-        const isWhite = frameCount % 2 === 0;
-        ctx.fillStyle = isWhite ? '#ffffff' : '#000000';
-    } else {
-        ctx.fillStyle = '#000000';
-    }
-    ctx.fillRect(0, h - pdSize, pdSize, pdSize);
 }

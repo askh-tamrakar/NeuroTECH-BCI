@@ -6,6 +6,7 @@ const broadcast = new BroadcastChannel('bci-data-stream');
 
 // State for timestamp interpolation (similar to what was in LiveView)
 let lastTs = 0;
+let isPaused = false;
 
 self.onmessage = (e) => {
     const { type, payload } = e.data;
@@ -24,6 +25,9 @@ self.onmessage = (e) => {
             if (socket && socket.connected) {
                 socket.emit('message', payload);
             }
+            break;
+        case 'SET_PAUSED':
+            isPaused = payload;
             break;
     }
 };
@@ -52,11 +56,12 @@ function connect(url) {
     });
 
     socket.on('bio_data_batch', (batchData) => {
+        if (isPaused) return;
         if (!batchData || !batchData.samples || batchData.samples.length === 0) return;
 
         const samples = batchData.samples;
         const totalSamples = samples.length;
-        const samplingRate = batchData.sample_rate || 250;
+        const samplingRate = batchData.sample_rate || 1000;
         const sampleIntervalMs = 1000 / samplingRate;
 
         // We assume backend provides `sample.timestamp` in seconds (epoch) or relative time

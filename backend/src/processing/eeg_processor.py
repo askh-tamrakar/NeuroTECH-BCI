@@ -10,7 +10,7 @@ import numpy as np
 from scipy.signal import butter, lfilter, lfilter_zi
 
 class EEGFilterProcessor:
-    def __init__(self, config: dict, sr: int = 512, channel_key: str = None):
+    def __init__(self, config: dict, sr: int = 1000, channel_key: str = None):
         self.config = config
         self.sr = int(sr)
         self.channel_key = channel_key

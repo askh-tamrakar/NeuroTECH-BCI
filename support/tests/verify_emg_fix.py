@@ -25,7 +25,7 @@ def test_emg_processor_math():
         }
     }
     
-    sr = 512
+    sr = 1000
     processor = EMGFilterProcessor(config, sr)
     
     # 1. Verify filters are designed

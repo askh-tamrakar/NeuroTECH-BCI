@@ -13,11 +13,11 @@ def test_robustness():
     print("=== RPSExtractor Robustness Test ===")
     
     test_cases = {
-        "all_zeros": [0.0] * 512,
-        "nans": [np.nan] * 512,
-        "infs": [np.inf] * 512,
-        "massive_values": [1e100] * 512,
-        "mixed_invalid": [0.0, np.nan, np.inf, -np.inf, 1e100] * 100 + [0.0]*12
+        "all_zeros": [0.0] * 1000,
+        "nans": [np.nan] * 1000,
+        "infs": [np.inf] * 1000,
+        "massive_values": [1e100] * 1000,
+        "mixed_invalid": [0.0, np.nan, np.inf, -np.inf, 1e100] * 200
     }
     
     detector = RPSDetector({"features": {"RPS": {"confidence_threshold": 0.6}}})

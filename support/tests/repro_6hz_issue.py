@@ -15,7 +15,7 @@ def generate_sine(f, duration, sr):
 def test_6hz_detection():
     print("=== Testing 6Hz Detection (Reproduction) ===")
     
-    sr = 512
+    sr = 1000
     target_freqs = [6.0, 8.0, 10.0, 12.0, 15.0, 20.0]
     config = {
         "sampling_rate": sr,

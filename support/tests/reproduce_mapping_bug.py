@@ -14,7 +14,7 @@ def test_multi_channel_routing():
     
     # Mock Config similar to user's setup
     config = {
-        "sampling_rate": 512,
+        "sampling_rate": 1000,
         "channel_mapping": {
             "ch0": {"sensor": "EEG", "enabled": True},
             "ch1": {"sensor": "EMG", "enabled": True}
@@ -37,7 +37,7 @@ def test_multi_channel_routing():
     
     router = FilterRouter()
     router.config = config
-    router.sr = 512
+    router.sr = 1000
     router.num_channels = 2
     router.raw_index_map = [(0, "ch0", "ch0"), (1, "ch1", "ch1")]
     

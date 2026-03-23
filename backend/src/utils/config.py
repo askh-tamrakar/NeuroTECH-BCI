@@ -226,7 +226,7 @@ class ConfigManager:
 
     # ============== SENSOR CONFIG ==============
 
-    def get_sampling_rate(self, default: int = 512) -> int:
+    def get_sampling_rate(self, default: int = 1000) -> int:
         """Get sampling rate from sensor config."""
         return int(self.sensor_config.get("sampling_rate", default))
 

@@ -19,7 +19,7 @@ except Exception:
 
 class LSLStreamer:
     def __init__(self, name: str, channel_types: List[str], channel_labels: Optional[List[str]] = None,
-                 channel_count: Optional[int] = None, nominal_srate: float = 512.0, source_id: Optional[str] = None):
+                 channel_count: Optional[int] = None, nominal_srate: float = 1000.0, source_id: Optional[str] = None):
         """
         name: stream name
         channel_types: list of type strings (e.g., ['EMG','EMG'] or ['EEG','EOG'])

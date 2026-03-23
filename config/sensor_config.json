@@ -1,12 +1,9 @@
 {
-  "active_models": {
-    "EOG": "Neurobench",
-    "EMG": "anjali"
-  },
+  "sampling_rate": 1000,
   "channel_mapping": {
     "ch0": {
       "enabled": true,
-      "sensor": "EOG"
+      "sensor": "EMG"
     },
     "ch1": {
       "enabled": true,
@@ -14,10 +11,9 @@
     }
   },
   "display": {
-    "scannerX": 0,
+    "timeWindowMs": 10000,
     "showGrid": true,
-    "timeWindowMs": 10000
+    "scannerX": 0
   },
-  "num_channels": 2,
-  "sampling_rate": 512
+  "num_channels": 2
 }

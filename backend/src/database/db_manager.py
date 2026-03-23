@@ -46,6 +46,7 @@ class DatabaseManager:
         # EEG
         conn = self.connect('EEG')
         self._create_eeg_table(conn.cursor(), "eeg_windows")
+        self._ensure_eeg_columns(conn, "eeg_windows")
         conn.commit()
         conn.close()
 
@@ -112,6 +113,23 @@ class DatabaseManager:
                 std REAL NOT NULL,
                 max REAL NOT NULL,
                 min REAL NOT NULL,
+                score_1 REAL NOT NULL DEFAULT 0,
+                score_2 REAL NOT NULL DEFAULT 0,
+                score_3 REAL NOT NULL DEFAULT 0,
+                score_4 REAL NOT NULL DEFAULT 0,
+                score_5 REAL NOT NULL DEFAULT 0,
+                score_6 REAL NOT NULL DEFAULT 0,
+                max_score REAL NOT NULL DEFAULT 0,
+                second_max_score REAL NOT NULL DEFAULT 0,
+                score_ratio REAL NOT NULL DEFAULT 0,
+                score_mean REAL NOT NULL DEFAULT 0,
+                score_std REAL NOT NULL DEFAULT 0,
+                dominant_freq REAL NOT NULL DEFAULT 0,
+                target_frequency REAL DEFAULT 0,
+                channel_index INTEGER DEFAULT 0,
+                sample_count INTEGER DEFAULT 0,
+                window_ms REAL DEFAULT 0,
+                metadata_json TEXT DEFAULT '',
                 label INTEGER NOT NULL,
                 session_id TEXT,
                 timestamp REAL,
@@ -119,6 +137,35 @@ class DatabaseManager:
             )
         ''')
         cursor.execute(f'CREATE INDEX IF NOT EXISTS idx_{table_name}_label ON {table_name}(label)')
+
+    def _ensure_columns(self, conn, table_name: str, columns: Dict[str, str]):
+        cursor = conn.cursor()
+        cursor.execute(f"PRAGMA table_info({table_name})")
+        existing = {row[1] for row in cursor.fetchall()}
+        for column_name, column_type in columns.items():
+            if column_name not in existing:
+                cursor.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}")
+
+    def _ensure_eeg_columns(self, conn, table_name: str):
+        self._ensure_columns(conn, table_name, {
+            "score_1": "REAL NOT NULL DEFAULT 0",
+            "score_2": "REAL NOT NULL DEFAULT 0",
+            "score_3": "REAL NOT NULL DEFAULT 0",
+            "score_4": "REAL NOT NULL DEFAULT 0",
+            "score_5": "REAL NOT NULL DEFAULT 0",
+            "score_6": "REAL NOT NULL DEFAULT 0",
+            "max_score": "REAL NOT NULL DEFAULT 0",
+            "second_max_score": "REAL NOT NULL DEFAULT 0",
+            "score_ratio": "REAL NOT NULL DEFAULT 0",
+            "score_mean": "REAL NOT NULL DEFAULT 0",
+            "score_std": "REAL NOT NULL DEFAULT 0",
+            "dominant_freq": "REAL NOT NULL DEFAULT 0",
+            "target_frequency": "REAL DEFAULT 0",
+            "channel_index": "INTEGER DEFAULT 0",
+            "sample_count": "INTEGER DEFAULT 0",
+            "window_ms": "REAL DEFAULT 0",
+            "metadata_json": "TEXT DEFAULT ''",
+        })
 
     def sanitize_table_name(self, name: str) -> str:
         safe = re.sub(r'[^a-zA-Z0-9]', '_', name)
@@ -140,6 +187,7 @@ class DatabaseManager:
             self._create_eog_table(cursor, table_name)
         elif sensor == "EEG":
             self._create_eeg_table(cursor, table_name)
+            self._ensure_eeg_columns(conn, table_name)
             
         conn.commit()
         conn.close()
@@ -474,14 +522,18 @@ class DatabaseManager:
     def insert_eeg_window(self, features: Dict[str, float], label: int, session_id: str = None, table_name: str = "eeg_windows") -> bool:
         try:
             conn = self.connect('EEG')
+            self._ensure_eeg_columns(conn, table_name)
             cursor = conn.cursor()
             cursor.execute(f'''
                 INSERT INTO {table_name} (
                     bp_delta, bp_theta, bp_alpha, bp_beta, bp_gamma,
                     rel_delta, rel_theta, rel_alpha, rel_beta, rel_gamma,
                     mean, std, max, min,
+                    score_1, score_2, score_3, score_4, score_5, score_6,
+                    max_score, second_max_score, score_ratio, score_mean, score_std, dominant_freq,
+                    target_frequency, channel_index, sample_count, window_ms, metadata_json,
                     label, session_id, timestamp
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 features.get('bp_delta', 0), features.get('bp_theta', 0),
                 features.get('bp_alpha', 0), features.get('bp_beta', 0),
@@ -490,6 +542,15 @@ class DatabaseManager:
                 features.get('rel_beta', 0), features.get('rel_gamma', 0),
                 features.get('mean', 0), features.get('std', 0),
                 features.get('max', 0), features.get('min', 0),
+                features.get('score_1', 0), features.get('score_2', 0),
+                features.get('score_3', 0), features.get('score_4', 0),
+                features.get('score_5', 0), features.get('score_6', 0),
+                features.get('max_score', 0), features.get('second_max_score', 0),
+                features.get('score_ratio', 0), features.get('score_mean', 0),
+                features.get('score_std', 0), features.get('dominant_freq', 0),
+                features.get('target_frequency', 0), features.get('channel_index', 0),
+                features.get('sample_count', 0), features.get('window_ms', 0),
+                features.get('metadata_json', ''),
                 label, session_id, features.get('timestamp', 0)
             ))
             conn.commit()

@@ -88,7 +88,7 @@ const SignalChart = forwardRef(({
 
   // Initialize Worker
   useEffect(() => {
-    if (!canvasRef.current || disabled) return;
+    if (!canvasRef.current) return;
 
     if (!workerRef.current) {
       if (!canvasRef.current.transferControlToOffscreen) {
@@ -117,7 +117,8 @@ const SignalChart = forwardRef(({
                 zoom: currentZoom,
                 manualRange: autoScaledRange || currentManual,
                 showGrid,
-                channelIndex
+                channelIndex,
+                disabled
               }
             }
           }, [offscreen]);
@@ -152,17 +153,16 @@ const SignalChart = forwardRef(({
     }
 
     return () => {
-      // Don't auto-terminate on fast refreshes unless unmounting.
-      // Strict mode makes this tricky, we'll keep it simple:
-      if (workerRef.current && !isTransferred.current) {
-        // If we handled strict mode cleanly, we terminate. 
-        // Re-rendering unmounts components, we will terminate here
+      if (workerRef.current) {
+        // We must ALWAYS terminate the worker when the component unmounts
+        // or during strict mode re-renders, otherwise multiple workers
+        // will pile up in the background and crash the browser context limits.
         workerRef.current.terminate();
         workerRef.current = null;
       }
       observer.disconnect();
     };
-  }, [disabled]); // init only once or if disabled toggles
+  }, []); // init only once
 
   // Sync Config Updates
   useEffect(() => {
@@ -176,11 +176,12 @@ const SignalChart = forwardRef(({
           zoom: currentZoom,
           manualRange: autoScaledRange || currentManual,
           showGrid,
-          channelIndex
+          channelIndex,
+          disabled
         }
       });
     }
-  }, [timeWindowMs, color, currentZoom, currentManual, autoScaledRange, showGrid, currentTheme]);
+  }, [timeWindowMs, color, currentZoom, currentManual, autoScaledRange, showGrid, currentTheme, disabled]);
 
   // Sync Annotations
   useEffect(() => {
@@ -282,7 +283,7 @@ const SignalChart = forwardRef(({
               <ElasticSlider
                 defaultValue={(timeWindowMs || 10000) / 1000}
                 startingValue={1}
-                maxValue={30}
+                maxValue={20}
                 stepSize={1}
                 isStepped={true}
                 onChange={(val) => onTimeWindowChange && onTimeWindowChange(val * 1000)}

@@ -15,7 +15,7 @@ def generate_sine(f, duration, sr):
 def test_fbcca():
     print("=== Testing EEGFrequencyDetector (FBCCA SSVEP) ===")
     
-    sr = 512
+    sr = 1000
     # Matching the new frontend SSVEP defaults
     target_freqs = [8.0, 10.0, 12.0, 15.0, 18.0, 20.0]
     config = {

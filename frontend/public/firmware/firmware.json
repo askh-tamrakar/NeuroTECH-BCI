@@ -20,12 +20,12 @@
     },
     {
       "id": "uno-r4-servo",
-      "name": "BCI + Servo PWM",
+      "name": "BCI + Servo PWM (1kHz)",
       "board": "UNO R4",
-      "version": "1.2.0",
+      "version": "1.3.0",
       "date": "2024-03-08",
-      "description": "Stable 512Hz acquisition with concurrent high-stability Servo control for prosthetic applications.",
-      "file": "Uno_R4_2ch_512Hz_Servo.ino"
+      "description": "Stable 1kHz acquisition with concurrent high-stability Servo control for prosthetic applications.",
+      "file": "Uno_R4_2ch_1000Hz_Servo.ino"
     },
     {
       "id": "rps-arduino",

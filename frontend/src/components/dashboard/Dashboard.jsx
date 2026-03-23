@@ -17,11 +17,13 @@ import PillNav from '../ui/PillNav';
 import Pill from '../ui/Pill';
 import { ConnectionButton } from '../ui/ConnectionButton';
 import Brain3D from '../ui/3d_Brain';
+import MobileNav from '../ui/MobileNav';
 
 export default function Dashboard() {
   const { user, logout } = useAuth()
   const [currentPage, setCurrentPage] = useState('live')
-  // const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [mobileMainView, setMobileMainView] = useState('graphs')
+  const [isMobile, setIsMobile] = useState(false);
   const [localWs, setLocalWs] = useState(import.meta.env.VITE_WS_URL || 'http://localhost:5005')
   const [ngrokWs, setNgrokWs] = useState(import.meta.env.VITE_NGROK_WS_URL || 'wss://squelchingly-thriftier-cecile.ngrok-free.dev')
 
@@ -78,7 +80,17 @@ export default function Dashboard() {
     };
 
     window.addEventListener('hashchange', handleHashChange);
-    return () => window.removeEventListener('hashchange', handleHashChange);
+
+    // Mobile detection
+    const lgQuery = window.matchMedia('(min-width: 1024px)');
+    setIsMobile(!lgQuery.matches);
+    const handler = (e) => setIsMobile(!e.matches);
+    lgQuery.addEventListener('change', handler);
+
+    return () => {
+      window.removeEventListener('hashchange', handleHashChange);
+      lgQuery.removeEventListener('change', handler);
+    }
   }, [])
 
   const handleSignupSuccess = () => {
@@ -98,7 +110,7 @@ export default function Dashboard() {
     { label: 'M. L.', onClick: () => setCurrentPage('ml_training'), href: '#ml_training' },
     { label: 'Data Collection', onClick: () => setCurrentPage('data_collection'), href: '#data_collection' },
     { label: 'Settings', onClick: () => setCurrentPage('settings'), href: '#settings' },
-    {
+    ...(isMobile ? [] : [{
       label: 'Theme',
       type: 'pill',
       key: 'theme-dropdown',
@@ -126,15 +138,15 @@ export default function Dashboard() {
           ))}
         </ScrollStack>
       )
-    }
-  ], [themes, currentThemeId, pillSize.width, currentPage]);
+    }])
+  ], [themes, currentThemeId, pillSize.width, currentPage, isMobile]);
 
   return (
-    <div className="app-root">
+    <div className="app-root flex flex-col h-screen overflow-hidden">
       {/* Navigation */}
-      <div className="header" style={{ zIndex: 50 }}>
+      <div className="header shrink-0" style={{ zIndex: 50 }}>
         <div className="header-inner">
-          <div className="cursor-pointer m-0 p-0 flex-shrink-0 relative z-20" onClick={() => setCurrentPage('live')} title="Back to Terminal">
+          <div className="cursor-pointer m-0 p-0 flex-shrink-0 relative z-20 hidden lg:block" onClick={() => setCurrentPage('live')} title="Back to Terminal">
             <Brain3D />
           </div>
 
@@ -168,7 +180,7 @@ export default function Dashboard() {
             </div>
           )}
 
-          <nav className="nav absolute left-1/2 -translate-x-1/2 shrink-0 z-10 hidden lg:block">
+          <nav className="nav absolute left-1/2 -translate-x-1/2 shrink-0 z-10 hidden landscape:block lg:block">
             <div className="backdrop-blur-sm bg-surface/50 border border-white/5 rounded-full p-1">
               <PillNav
                 items={navItems}
@@ -183,7 +195,7 @@ export default function Dashboard() {
               />
             </div>
           </nav>
-          <div className="w-[180px] flex justify-end shrink-0">
+          <div className="w-[180px] flex justify-end shrink-0 lg:flex">
             <ConnectionButton
               status={status}
               latency={latency}
@@ -194,34 +206,42 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Main Content Area */}
-      <div className="scrollbar-thin scrollbar-thumb-border hover:scrollbar-thumb-primary/50 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']" style={{ flex: 1, padding: '0px 0px', overflowY: 'auto' }}>
+      {/* Main Container for MobileNav + Content Area */}
+      <div className="flex flex-row flex-1 overflow-hidden relative">
+        <MobileNav
+          currentPage={currentPage}
+          setCurrentPage={setCurrentPage}
+          mobileMainView={mobileMainView}
+          setMobileMainView={setMobileMainView}
+        />
+        <div className="scrollbar-thin scrollbar-thumb-border hover:scrollbar-thumb-primary/50 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none'] flex-1" style={{ padding: '0px 0px', overflowY: 'auto' }}>
 
-        {/* Helper to determine if we need spacers (non-full-screen pages need them to clear fixed header/footer) */}
-        {(() => {
-          const FULL_SCREEN_PAGES = ['live', 'dino'];
-          const showSpacers = !FULL_SCREEN_PAGES.includes(currentPage);
+          {/* Helper to determine if we need spacers (non-full-screen pages need them to clear fixed header/footer) */}
+          {(() => {
+            const FULL_SCREEN_PAGES = ['live', 'dino'];
+            const showSpacers = !FULL_SCREEN_PAGES.includes(currentPage);
 
-          return (
-            <>
-              {showSpacers && <div className="h-[94px] shrink-0" />}
+            return (
+              <>
+                {showSpacers && <div className="h-[94px] shrink-0" />}
 
-              {currentPage === 'live' && <LiveDashboard wsData={lastMessage} wsConfig={lastConfig} wsEvent={lastEvent} sendMessage={sendMessage} wsUrl={currentUrl || defaultWsSource} />}
-              {currentPage === 'dino' && <DinoView isConnected={!!lastMessage} wsEvent={lastEvent} isPaused={false} />}
-              {currentPage === 'ssvep' && <SSVEPView isConnected={!!lastMessage} wsEvent={lastEvent} />}
-              {currentPage === 'rps' && <RPSGame wsEvent={lastEvent} />}
-              {currentPage === 'data_collection' && <DataCollectionView wsData={lastMessage} wsEvent={lastEvent} config={lastConfig} wsUrl={currentUrl || defaultWsSource} />}
-              {currentPage === 'ml_training' && <MLTrainingView />}
-              {currentPage === 'settings' && <SettingsView latency={latency} />}
+                {currentPage === 'live' && <LiveDashboard wsData={lastMessage} wsConfig={lastConfig} wsEvent={lastEvent} sendMessage={sendMessage} wsUrl={status === 'connected' ? (currentUrl || defaultWsSource) : null} mobileMainView={mobileMainView} setMobileMainView={setMobileMainView} />}
+                {currentPage === 'dino' && <DinoView isConnected={!!lastMessage} wsEvent={lastEvent} isPaused={false} />}
+                {currentPage === 'ssvep' && <SSVEPView isConnected={!!lastMessage} wsEvent={lastEvent} />}
+                {currentPage === 'rps' && <RPSGame wsEvent={lastEvent} />}
+                {currentPage === 'data_collection' && <DataCollectionView wsData={lastMessage} wsEvent={lastEvent} config={lastConfig} wsUrl={status === 'connected' ? (currentUrl || defaultWsSource) : null} />}
+                {currentPage === 'ml_training' && <MLTrainingView />}
+                {currentPage === 'settings' && <SettingsView latency={latency} />}
 
-              {showSpacers && <div className="h-[35px] shrink-0" />}
-            </>
-          );
-        })()}
+                {showSpacers && <div className="h-[35px] shrink-0" />}
+              </>
+            );
+          })()}
+        </div>
       </div>
 
       {/* Footer */}
-      <div className="footer">
+      <div className="footer shrink-0">
         <span className="flex items-center gap-1">NeuroTECH - A BCI Project </span>  •  {' '}
         <a onClick={() => setAuthView('signup')} className="muted flex items-center gap-1" href="#signup" rel="noreferrer">
           Sign Up

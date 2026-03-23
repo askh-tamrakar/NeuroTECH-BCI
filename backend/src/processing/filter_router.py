@@ -59,7 +59,7 @@ FILTER_CONFIG_PATH = CONFIG_DIR / "filter_config.json"
 RAW_STREAM_NAME = "BioSignals-Raw-uV"
 PROCESSED_STREAM_NAME = "BioSignals-Processed"
 RELOAD_INTERVAL = 2.0
-DEFAULT_SR = 512
+DEFAULT_SR = 1000
 
 
 def load_config() -> dict:
@@ -272,32 +272,25 @@ class FilterRouter:
         - Missing channel config (defaults applied) ✅
         """
         
-        # Clean up old configuration
+        # Preserve old processors to avoid destroying filter states (zi) on mapping changes
+        old_processors = self.channel_processors
         self.channel_processors = {}
         self.channel_mapping = {}
         
-        # ========== IMPROVED: Explicitly close old outlet ==========
+        # ========== IMPROVED: Keep socket alive if already connected ==========
         # Connect to Stream Manager (Processed)
-        if self.stream_socket:
-            try:
-                self.stream_socket.close()
-            except:
-                pass
-        self.stream_socket = None
-        self.stream_connected = False
-        
-        # Retry connection loop to avoid startup race conditions
-        max_retries = 5
-        for attempt in range(max_retries):
-            try:
-                self.stream_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                self.stream_socket.connect(('localhost', 6001))
-                self.stream_connected = True
-                log.info(f"Connected to Stream Manager (Processed)")
-                break
-            except Exception as e:
-                log.debug(f"[Router] ⚠️ Could not connect to Stream Manager (Attempt {attempt+1}/{max_retries}): {e}")
-                time.sleep(1.0)
+        if not self.stream_socket or not self.stream_connected:
+            max_retries = 5
+            for attempt in range(max_retries):
+                try:
+                    self.stream_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    self.stream_socket.connect(('localhost', 6001))
+                    self.stream_connected = True
+                    log.info(f"Connected to Stream Manager (Processed)")
+                    break
+                except Exception as e:
+                    log.debug(f"[Router] ⚠️ Could not connect to Stream Manager (Attempt {attempt+1}/{max_retries}): {e}")
+                    time.sleep(1.0)
                 
         if not self.stream_connected:
              log.error("Failed to connect to Stream Manager after multiple retries. Data will be dropped.")
@@ -323,44 +316,44 @@ class FilterRouter:
                     enabled = cinfo.get("enabled", True)
                     sensor_type = str(cinfo.get("sensor", "UNKNOWN")).upper()
                     
-                    # CASE 2: Channel disabled
-                    if not enabled:
-                        print(f"[Router] [{i}] → {sensor_type} (DISABLED - Pass-through)")
-                        self.channel_mapping[i] = {
-                            "sensor": sensor_type,
-                            "enabled": False,
-                            "label": f"RAW_{i}",
-                            "processor": None
-                        }
-                        self.channel_processors[i] = None
-                        continue
-                    
-                    # CASE 3: Channel enabled with processor
+                    # CASE 2: Channel configured (regardless of enabled state)
+                    # We MUST keep the processor alive even if disabled,
+                    # otherwise the filter state (zi) resets to zeros, causing
+                    # a massive step response (noise spike) when turned back on.
                     self.channel_mapping[i] = {
                         "sensor": sensor_type,
-                        "enabled": True,
+                        "enabled": enabled,
                         "label": f"{sensor_type}_{i}",
                         "processor": sensor_type
                     }
                     
-                    # Create processor instance for this channel
-                    if sensor_type == "EMG":
-                        self.channel_processors[i] = EMGFilterProcessor(self.config, self.sr, channel_key=ch_key)
-                        env_status = "ENABLED" if getattr(self.channel_processors[i], 'envelope_enabled', False) else "DISABLED"
-                        print(f"[Router] [{i}] → EMG (EMG Processor) | Key: {ch_key} | Enveloping: {env_status}")
-                    
-                    elif sensor_type == "EOG":
-                        self.channel_processors[i] = EOGFilterProcessor(self.config, self.sr, channel_key=ch_key)
-                        print(f"[Router] [{i}] → EOG (EOG Processor) | Key: {ch_key}")
-                    
-                    elif sensor_type == "EEG":
-                        self.channel_processors[i] = EEGFilterProcessor(self.config, self.sr, channel_key=ch_key)
-                        print(f"[Router] [{i}] → EEG (EEG Processor) | Key: {ch_key}")
-                    
+                    # Try to reuse existing processor to prevent filter state resets
+                    existing_proc = old_processors.get(i)
+                    if existing_proc and existing_proc.__class__.__name__.startswith(sensor_type):
+                        self.channel_processors[i] = existing_proc
+                        # Also update config just in case
+                        if hasattr(existing_proc, 'update_config'):
+                            existing_proc.update_config(self.config, self.sr)
+                        print(f"[Router] [{i}] → {sensor_type} (REUSED Processor) | Key: {ch_key}")
                     else:
-                        # Unknown type - pass-through
-                        self.channel_processors[i] = None
-                        print(f"[Router] [{i}] → {sensor_type} (Unknown - Pass-through)")
+                        # Create NEW processor instance for this channel
+                        if sensor_type == "EMG":
+                            self.channel_processors[i] = EMGFilterProcessor(self.config, self.sr, channel_key=ch_key)
+                            env_status = "ENABLED" if getattr(self.channel_processors[i], 'envelope_enabled', False) else "DISABLED"
+                            print(f"[Router] [{i}] → EMG (EMG Processor) | Key: {ch_key} | Enveloping: {env_status}")
+                        
+                        elif sensor_type == "EOG":
+                            self.channel_processors[i] = EOGFilterProcessor(self.config, self.sr, channel_key=ch_key)
+                            print(f"[Router] [{i}] → EOG (EOG Processor) | Key: {ch_key}")
+                        
+                        elif sensor_type == "EEG":
+                            self.channel_processors[i] = EEGFilterProcessor(self.config, self.sr, channel_key=ch_key)
+                            print(f"[Router] [{i}] → EEG (EEG Processor) | Key: {ch_key}")
+                        
+                        else:
+                            # Unknown type - pass-through
+                            self.channel_processors[i] = None
+                            print(f"[Router] [{i}] → {sensor_type} (Unknown - Pass-through)")
                 
                 # CASE 4: Channel NOT in config - Apply default
                 else:
@@ -462,9 +455,8 @@ class FilterRouter:
 
                             sample_count += 1
                             
-                            # Log progress every 512 samples (1 second at 512 Hz)
-                            # Log progress every 5 seconds (approx 2560 samples at 512 Hz)
-                            if sample_count % 2560 == 0:
+                            # Log progress every 5 seconds based on the active sampling rate.
+                            if sample_count % max(self.sr * 5, 1) == 0:
                                 log.debug(f"[Router] ✅ {sample_count} samples processed")
                     
                     except Exception as e:

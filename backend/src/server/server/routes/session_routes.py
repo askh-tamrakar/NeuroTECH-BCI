@@ -200,7 +200,7 @@ def api_emg_stop():
                 raw_data = raw_data.flatten()
             
             # Windowing parameters
-            sr = state.sr or 512
+            sr = state.sr or 1000
             window_size = int(sr * 0.5)  # 0.5s window
             step_size = int(window_size * 0.5) # 50% overlap
             
@@ -322,7 +322,7 @@ def api_eog_stop():
             if raw_data.ndim > 1:
                 raw_data = raw_data.flatten()
                 
-            sr = state.sr or 512
+            sr = state.sr or 1000
             window_size = int(sr * 0.6) # 600ms to capture full blink
             step_size = int(window_size * 0.5)
             

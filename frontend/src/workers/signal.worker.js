@@ -14,6 +14,7 @@ let channelIndex = -1; // To be set via INIT or SET_CONFIG
 
 const broadcast = new BroadcastChannel('bci-data-stream');
 broadcast.onmessage = (e) => {
+    if (config.disabled) return;
     if (e.data.type === 'DATA_BATCH' && channelIndex !== -1) {
         const samples = e.data.samples;
         const newPoints = [];
@@ -48,7 +49,8 @@ let config = {
     showGrid: true,
     channels: 1,
     themeAxisColor: '#aaaaaa', // New config default
-    smoothing: false
+    smoothing: false,
+    disabled: false
 };
 
 let markedWindows = [];

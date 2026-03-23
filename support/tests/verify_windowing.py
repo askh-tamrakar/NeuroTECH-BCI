@@ -9,7 +9,7 @@ sys.path.append(str(PROJECT_ROOT / "src"))
 from feature.extractors.blink_extractor import BlinkExtractor
 
 def test_robust_windowing():
-    sr = 512
+    sr = 1000
     config = {"features": {"EOG": {"amp_threshold": 300.0, "min_duration_ms": 50.0, "max_duration_ms": 1500.0}}}
     extractor = BlinkExtractor(0, config, sr)
     

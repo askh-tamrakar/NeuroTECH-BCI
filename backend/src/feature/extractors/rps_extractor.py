@@ -12,11 +12,12 @@ class RPSExtractor:
         self.channel_index = channel_index
         self.sr = sr
         
-        # Window settings
-        # Window size 512 samples (~1s at 512Hz)
-        self.buffer_size = 512 
-        # Stride 64 samples (~125ms update rate) for responsiveness
-        self.stride = 64 
+        # Window settings are time-based so changing the system sampling rate
+        # preserves the same model/input timing semantics.
+        self.window_seconds = 1.0
+        self.update_period_seconds = 0.125
+        self.buffer_size = max(1, int(self.sr * self.window_seconds))
+        self.stride = max(1, int(self.sr * self.update_period_seconds))
         
         self.buffer = collections.deque(maxlen=self.buffer_size)
         self.sample_count = 0

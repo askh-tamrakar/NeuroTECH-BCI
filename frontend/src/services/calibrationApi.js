@@ -49,7 +49,7 @@ export const CalibrationApi = {
                     EEG: { profiles: { Concentration: { power: 10 }, Relaxation: { power: 5 } } }
                 },
                 filters: {},
-                sampling_rate: 250
+                sampling_rate: 1000
             };
         }
         return response.json();
@@ -158,6 +158,7 @@ export const CalibrationApi = {
                 channel: windowPayload.channel,
                 samples: windowPayload.samples,
                 timestamps: windowPayload.timestamps,
+                metadata: windowPayload.metadata,
                 session_name: sessionName // Pass session name
             };
 

@@ -10,7 +10,7 @@ from src.feature.detectors.eeg_frequency_detector import EEGFrequencyDetector
 def main():
     print("Testing EEGFrequencyDetector...")
     config = {
-        "sampling_rate": 512,
+        "sampling_rate": 1000,
         "features": {
             "EEG": {
                 "target_freqs": [6.0, 8.0, 10.0, 12.0, 15.0, 18.0, 20.0],
@@ -24,10 +24,10 @@ def main():
     
     detector = EEGFrequencyDetector(config)
     
-    # Generate 1 second of 512Hz data containing an 8.0Hz sine wave
-    t = np.linspace(0, 1.0, 512, endpoint=False)
+    # Generate 1 second of 1kHz data containing an 8.0Hz sine wave
+    t = np.linspace(0, 1.0, 1000, endpoint=False)
     # Give it a strong 8Hz signal
-    signal = 100 * np.sin(2 * np.pi * 8.0 * t) + 10 * np.random.randn(512)
+    signal = 100 * np.sin(2 * np.pi * 8.0 * t) + 10 * np.random.randn(1000)
     
     features = {
         "raw_window": signal.tolist()

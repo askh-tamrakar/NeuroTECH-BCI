@@ -1,4 +1,5 @@
 from flask import Blueprint, jsonify, request
+import json
 import time
 import numpy as np
 from src.server.server.state import state
@@ -9,7 +10,7 @@ from src.server.server.lsl_service import extract_emg_features, extract_emg_feat
 # Note: original code routed `extract_features_for_sensor` to specific functions.
 # We need to reimplement that routing or import it.
 # EOG features are also needed.
-from src.server.server.lsl_service import extract_eog_features
+from src.server.server.lsl_service import extract_eog_features, extract_eeg_features
 from scipy import stats as scipy_stats
 
 # Imports for ML logic
@@ -26,13 +27,15 @@ from src.learning.eog_trainer import (
 
 training_bp = Blueprint('training', __name__)
 
-def extract_features_wrapper(sensor: str, samples: list, sr: int = 512) -> dict:
+def extract_features_wrapper(sensor: str, samples: list, sr: int = 1000) -> dict:
     """Route to sensor-specific feature extraction."""
     sensor = sensor.upper()
     if sensor == "EMG":
         return extract_emg_features(samples, sr)
     elif sensor == "EOG":
         return extract_eog_features(samples, sr)
+    elif sensor == "EEG":
+        return extract_eeg_features(samples, sr)
     else:
         return extract_emg_features(samples, sr)
 
@@ -343,15 +346,26 @@ def api_save_window():
         action = payload.get('action')
         samples = payload.get('samples')
         timestamps = payload.get('timestamps', None)
+        metadata = payload.get('metadata', {}) or {}
 
         if sensor is None or action is None or samples is None:
             return jsonify({"error": "Missing required fields: sensor, action, samples"}), 400
 
         # Compute features
-        sr = state.config.get('sampling_rate', 512) if state.config else 512
+        sr = state.config.get('sampling_rate', 1000) if state.config else 1000
         features = extract_features_wrapper(sensor, samples, sr)
+        if not features:
+            return jsonify({"error": "Feature extraction failed"}), 400
+
+        if sensor.upper() == 'EEG':
+            features['target_frequency'] = float(metadata.get('targetFrequency', metadata.get('frequency', 0)) or 0)
+            features['channel_index'] = int(metadata.get('channelIndex', payload.get('channel', 0)) or 0)
+            features['sample_count'] = int(metadata.get('sampleCount', len(samples)) or len(samples))
+            features['window_ms'] = float(metadata.get('windowMs', (len(samples) / sr) * 1000.0) or 0)
+            features['metadata_json'] = json.dumps(metadata)
 
         ts = time.time()
+        features['timestamp'] = ts
 
         # Load config and update thresholds
         cfg = state.config or load_config()
@@ -386,27 +400,34 @@ def api_save_window():
             # Also insert into the global evaluation table (skip if merged session)
             if "merge" not in table_name.lower():
                 db_manager.insert_eog_window(features, label_int, session_id=str(int(ts)), table_name="eog_windows")
+        elif sensor.upper() == 'EEG':
+            db_manager.insert_eeg_window(features, label_int, session_id=str(int(ts)), table_name=table_name)
+            if "merge" not in table_name.lower():
+                db_manager.insert_eeg_window(features, label_int, session_id=str(int(ts)), table_name="eeg_windows")
 
         # Update Config Logic (Auto-Calibration on fly)
-        action_entry = sensor_features.setdefault(action, {})
-        updated = {}
+        if sensor.upper() != 'EEG':
+            action_entry = sensor_features.setdefault(action, {})
+            updated = {}
 
-        for k, val in features.items():
-            old_range = action_entry.get(k)
-            if isinstance(old_range, list) and len(old_range) == 2:
-                lo, hi = float(old_range[0]), float(old_range[1])
-                new_lo = min(lo, val)
-                new_hi = max(hi, val)
-                action_entry[k] = [new_lo, new_hi]
-                updated[k] = [new_lo, new_hi]
-            else:
-                if val == 0:
-                    new_lo, new_hi = 0.0, 0.0
+            for k, val in features.items():
+                if not isinstance(val, (int, float)):
+                    continue
+                old_range = action_entry.get(k)
+                if isinstance(old_range, list) and len(old_range) == 2:
+                    lo, hi = float(old_range[0]), float(old_range[1])
+                    new_lo = min(lo, val)
+                    new_hi = max(hi, val)
+                    action_entry[k] = [new_lo, new_hi]
+                    updated[k] = [new_lo, new_hi]
                 else:
-                    new_lo = val * 0.9
-                    new_hi = val * 1.1
-                action_entry[k] = [new_lo, new_hi]
-                updated[k] = [new_lo, new_hi]
+                    if val == 0:
+                        new_lo, new_hi = 0.0, 0.0
+                    else:
+                        new_lo = val * 0.9
+                        new_hi = val * 1.1
+                    action_entry[k] = [new_lo, new_hi]
+                    updated[k] = [new_lo, new_hi]
 
         # Disable saving config to disk on EVERY window to prevent Continuous Reload loops
         # save_success = save_config(cfg)
@@ -436,7 +457,10 @@ def api_save_window():
                 
         # 2. Try Threshold Detection (Fallback or for EOG/EEG)
         # If we didn't get a confident ML prediction (or simpler sensor)
-        if predicted_label == "Unknown" or sensor.upper() != 'EMG':
+        if sensor.upper() == 'EEG':
+            detected = True
+            predicted_label = action
+        elif predicted_label == "Unknown" or sensor.upper() != 'EMG':
              is_det = calibration_manager.detect_signal(sensor, action, features, cfg)
              detected = is_det
              if detected:

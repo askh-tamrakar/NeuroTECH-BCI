@@ -50,7 +50,7 @@ class ChannelGenerator:
         self.events = []  # queued transient events (tuples)
         self.ssv_ep_on = False
         self.ssv_freq = None
-        self.sampling_rate = 512.0
+        self.sampling_rate = 1000.0
         self.scale = 1.0
         self.random = random.Random(12345 + (1 if role == "EMG" else 0)) # Slight seed diff
         self._noise_freqs = [50.0, 60.0]  # Line noise only to avoid false SSVEP triggers
@@ -113,6 +113,9 @@ class ChannelGenerator:
         # (Original neurobench scale was approx 1 unit = 330 uV)
         val = bg_uv / 330.0
         
+        # Output the frequency of 1kHz for every sensor
+        val += math.sin(2 * math.pi * 1000.0 * t_seconds)
+
         # continuous components
         if role == "EEG":
             # SSVEP if toggled
@@ -343,7 +346,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # state
 
         
-        self.sample_rate = self.config.get("sampling_rate", 512.0)
+        self.sample_rate = self.config.get("sampling_rate", 1000.0)
         self.baud = self.config.get("baud", 230400)
         self.port = self.config.get("serial_port", "")
         self.connection_mode = self.config.get("connection_mode", "Serial") # "Serial" or "WiFi"
@@ -398,7 +401,7 @@ class MainWindow(QtWidgets.QMainWindow):
             pass
         # default
         return {
-            "sampling_rate": 512.0,
+            "sampling_rate": 1000.0,
             "baud": 230400,
             "serial_port": "",
             "connection_mode": "Serial",
@@ -519,8 +522,14 @@ class MainWindow(QtWidgets.QMainWindow):
         self.wifi_group = QtWidgets.QWidget()
         wifi_form = QtWidgets.QFormLayout(self.wifi_group)
         wifi_form.setContentsMargins(0,0,0,0)
+        ip_layout = QtWidgets.QHBoxLayout()
+        ip_layout.setContentsMargins(0,0,0,0)
         self.ip_input = QtWidgets.QLineEdit(self.target_ip)
-        wifi_form.addRow("Target IP", self.ip_input)
+        self.btn_auto_ip = QtWidgets.QPushButton("Get IP")
+        self.btn_auto_ip.clicked.connect(self._auto_local_ip)
+        ip_layout.addWidget(self.ip_input)
+        ip_layout.addWidget(self.btn_auto_ip)
+        wifi_form.addRow("Target IP", ip_layout)
         self.port_input = QtWidgets.QLineEdit(str(self.target_port))
         wifi_form.addRow("Target Port", self.port_input)
         form.addRow(self.wifi_group)
@@ -700,6 +709,18 @@ class MainWindow(QtWidgets.QMainWindow):
                 print(f"[{datetime.now()}] Error listing ports: {e}")
                 ports = []
         self.port_combo.addItems([""] + ports)
+
+    def _auto_local_ip(self):
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            ip = s.getsockname()[0]
+            s.close()
+            self.ip_input.setText(ip)
+            self.log(f"Auto-filled local IP: {ip}")
+        except Exception as e:
+            self.log(f"Failed to get local IP: {e}")
+            self.ip_input.setText("127.0.0.1")
 
     def _build_plot(self):
         # rolling buffers for plotting
