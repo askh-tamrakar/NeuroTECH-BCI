@@ -297,23 +297,185 @@ export const CalibrationApi = {
     },
 
     /**
+
+            const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+            const resp = await fetch(`${API_BASE_URL}/api/window`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+
+            if (!resp.ok) {
+                const txt = await resp.text();
+                throw new Error(`Server error: ${resp.status} ${txt}`);
+            }
+
+            return resp.json();
+        } catch (err) {
+            console.error('[CalibrationApi] sendWindow error', err);
+            throw err;
+        }
+    },
+
+    /**
+     * Send a single window for PREDICTION only (Test Mode).
+     * @param {string} sensorType 
+     * @param {{action: string, samples: number[]}} windowPayload 
+     */
+    async sendPredictionWindow(sensorType, windowPayload) {
+        try {
+            const body = {
+                sensor: sensorType,
+                action: windowPayload.action, // Used as ground truth label or empty
+                label: windowPayload.action,
+                samples: windowPayload.samples
+            };
+
+            const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+            const resp = await fetch(`${API_BASE_URL}/api/prediction/window/predict`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+
+            if (!resp.ok) {
+                const txt = await resp.text();
+                throw new Error(`Prediction error: ${resp.status} ${txt}`);
+            }
+
+            return resp.json();
+        } catch (err) {
+            console.error('[CalibrationApi] sendPredictionWindow error', err);
+            throw err;
+        }
+    },
+
+    /**
+     * Lists all available recordings from the server.
+     * @returns {Promise<Array<{name: string, size: number, created: number}>>}
+     */
+    async listRecordings() {
+        try {
+            const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+            const response = await fetch(`${API_BASE_URL}/api/recordings`);
+            if (!response.ok) throw new Error('Failed to list recordings');
+            return response.json();
+        } catch (error) {
+            console.error('[CalibrationApi] Error listing recordings:', error);
+            return [];
+        }
+    },
+
+    /**
+     * Fetches the content of a specific recording.
+     * @param {string} filename 
+     * @returns {Promise<Object>}
+     */
+    async getRecording(filename) {
+        try {
+            const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+            const response = await fetch(`${API_BASE_URL}/api/recordings/${encodeURIComponent(filename)}`);
+            console.log(response);
+            if (!response.ok) throw new Error('Failed to fetch recording');
+            return response.json();
+        } catch (error) {
+            console.error('[CalibrationApi] Error getting recording:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * Start EMG recording for a specific label.
+     * @param {number} label - 0=Rest, 1=Rock, 2=Paper, 3=Scissors
+     */
+    async startEmgRecording(label) {
+        try {
+            const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+            const response = await fetch(`${API_BASE_URL}/api/emg/start`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ label })
+            });
+            return response.json();
+        } catch (error) {
+            console.error('[CalibrationApi] Error starting EMG recording:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * Stop EMG recording.
+     */
+    async stopEmgRecording() {
+        try {
+            const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+            const response = await fetch(`${API_BASE_URL}/api/emg/stop`, { method: 'POST' });
+            return response.json();
+        } catch (error) {
+            console.error('[CalibrationApi] Error stopping EMG recording:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * Get EMG recording status and counts.
+     */
+    async getEmgStatus() {
+        try {
+            const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+            const response = await fetch(`${API_BASE_URL}/api/emg/status`);
+            if (!response.ok) return null;
+            return response.json();
+        } catch (error) {
+            console.error('[CalibrationApi] Error getting EMG status:', error);
+            return null;
+        }
+    },
+
+    /**
      * Toggle real-time prediction for a sensor.
      * @param {string} sensorType 
      * @param {boolean} isActive 
      */
     async togglePrediction(sensorType, isActive) {
-        if (sensorType !== 'EMG' && sensorType !== 'EOG' && sensorType !== 'EEG' && sensorType !== 'ALL') return;
+        const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+        sensorType = sensorType.toUpperCase();
         const action = isActive ? 'start' : 'stop';
+        let endpoint = '';
+        if (sensorType === 'ALL') {
+            endpoint = `/api/detectors/predict/${action}`;
+        } else {
+            endpoint = `/api/${sensorType.toLowerCase()}/predict/${action}`;
+        }
+        
+        try {
+            const response = await fetch(`${API_BASE_URL}${endpoint}`, { method: 'POST' });
+            if (!response.ok) throw new Error('Failed to toggle prediction');
+            return await response.json();
+        } catch (error) {
+            console.error(`Error toggling prediction for ${sensorType}:`, error);
+            throw error;
+        }
+    },
+
+    /**
+     * Sends a manual override command to the servo claw.
+     * @param {string} action - The action string (e.g., "Rock", "Paper", "Scissors", "SingleBlink", "DoubleBlink")
+     * @returns {Promise<Object>} The API response
+     */
+    async sendManualClawCommand(action) {
         try {
             const API_BASE_URL = import.meta.env.VITE_API_URL || '';
-            const route = sensorType === 'ALL'
-                ? `${API_BASE_URL}/api/detectors/predict/${action}`
-                : `${API_BASE_URL}/api/${sensorType.toLowerCase()}/predict/${action}`;
-            const response = await fetch(route, { method: 'POST' });
-            return response.json();
+            const response = await fetch(`${API_BASE_URL}/api/servo/manual`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action })
+            });
+            if (!response.ok) throw new Error('Failed to send manual claw command');
+            return await response.json();
         } catch (error) {
-            console.error(`[CalibrationApi] Error toggling ${sensorType} prediction:`, error);
+            console.error('Error sending manual claw command:', error);
+            throw error;
         }
     }
 };
-
