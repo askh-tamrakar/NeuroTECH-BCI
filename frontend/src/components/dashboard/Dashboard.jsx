@@ -10,6 +10,7 @@ import RPSGame from '../views/RPSGame'
 import DataCollectionView from '../views/DataCollectionView'
 import MLTrainingView from '../views/MLTrainingView'
 import SettingsView from '../views/SettingsView'
+import ServoClawView from '../views/ServoClawView'
 
 import '../../styles/App.css';
 import ScrollStack, { ScrollStackItem } from '../ui/ScrollStack';
@@ -110,6 +111,7 @@ export default function Dashboard() {
     { label: 'M. L.', onClick: () => setCurrentPage('ml_training'), href: '#ml_training' },
     { label: 'Data Collection', onClick: () => setCurrentPage('data_collection'), href: '#data_collection' },
     { label: 'Settings', onClick: () => setCurrentPage('settings'), href: '#settings' },
+    { label: 'Servo Claw', onClick: () => setCurrentPage('servo_claw'), href: '#servo_claw' },
     ...(isMobile ? [] : [{
       label: 'Theme',
       type: 'pill',
@@ -232,6 +234,7 @@ export default function Dashboard() {
                 {currentPage === 'data_collection' && <DataCollectionView wsData={lastMessage} wsEvent={lastEvent} config={lastConfig} wsUrl={status === 'connected' ? (currentUrl || defaultWsSource) : null} />}
                 {currentPage === 'ml_training' && <MLTrainingView />}
                 {currentPage === 'settings' && <SettingsView latency={latency} />}
+                {currentPage === 'servo_claw' && <ServoClawView wsEvent={lastEvent} isConnected={!!lastMessage} />}
 
                 {showSpacers && <div className="h-[35px] shrink-0" />}
               </>

@@ -15,5 +15,9 @@
     "showGrid": true,
     "scannerX": 0
   },
-  "num_channels": 2
+  "num_channels": 2,
+  "active_models": {
+    "EMG": "long",
+    "EOG": "Neurobench"
+  }
 }

@@ -138,22 +138,38 @@ def save_config(config: dict) -> bool:
 
 DETECTION_STATE_PATH = CONFIG_DIR / "detection_state.json"
 
-def get_detection_state() -> bool:
-    """Read detection active state from file."""
+def get_detection_config() -> dict:
+    """Read full detection routing config from file."""
     try:
         if DETECTION_STATE_PATH.exists():
             with open(DETECTION_STATE_PATH, 'r') as f:
                 data = json.load(f)
-                return data.get("active", False)
-        return False
+                if isinstance(data, dict):
+                    return {
+                        "active": bool(data.get("active", False)),
+                        "target": data.get("target")
+                    }
+        return {"active": False, "target": None}
     except:
-        return False
+        return {"active": False, "target": None}
 
-def set_detection_state(active: bool):
-    """Write detection active state to file."""
+def get_detection_state() -> bool:
+    """Read detection active state from file."""
+    return get_detection_config().get("active", False)
+
+def get_detection_target() -> str | None:
+    """Read which detector target is currently active."""
+    target = get_detection_config().get("target")
+    return str(target).upper() if target else None
+
+def set_detection_state(active: bool, target: str | None = None):
+    """Write detection active state and routed target to file."""
     try:
         DETECTION_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
         with open(DETECTION_STATE_PATH, 'w') as f:
-            json.dump({"active": active}, f)
+            json.dump({
+                "active": bool(active),
+                "target": (str(target).upper() if target and active else None)
+            }, f)
     except Exception as e:
         print(f"❌ Error saving detection state: {e}")

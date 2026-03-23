@@ -7,7 +7,10 @@ os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
 os.environ["NUMEXPR_NUM_THREADS"] = "1"
 
 import eventlet
-eventlet.monkey_patch(all=True)
+# Avoid patching threading primitives; ConfigWatcher uses real threads/locks
+# and eventlet's thread patching can trigger cross-thread greenlet switch errors
+# during config reload.
+eventlet.monkey_patch(all=True, thread=False)
 
 import sys
 from pathlib import Path

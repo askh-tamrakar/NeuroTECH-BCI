@@ -119,6 +119,7 @@
 @media (min-width: 1024px) {
     .dino-game-wrapper {
         flex-wrap: nowrap;
+        flex-direction: row-reverse;
     }
 }
 

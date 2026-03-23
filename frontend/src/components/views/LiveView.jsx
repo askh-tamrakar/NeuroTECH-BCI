@@ -143,7 +143,7 @@ export default function LiveView({ wsData, wsEvent, config, isPaused, wsUrl, rec
   }, [])
 
   // (Recording action handlers moved to LiveDashboard.jsx)
-  
+
   return (
     <div className="live-view-container !pt-[94px] !pb-[35px]">
       {/* Top Controls Bar - Desktop Only */}
@@ -251,7 +251,7 @@ export default function LiveView({ wsData, wsEvent, config, isPaused, wsUrl, rec
           </button>
 
           <div>
-            {recordState?.isRecording && <div className="recording-status font-bold text-red-500 animate-pulse">● RECORDING IN PROGRESS</div>}
+            {recordState?.isRecording && <div className="recording-status font-bold text-red-500 animate-pulse"> ● RECORDING </div>}
           </div>
         </div>
 

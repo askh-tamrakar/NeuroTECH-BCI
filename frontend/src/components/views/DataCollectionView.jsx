@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import WorkerTimeSeriesChart from '../charts/WorkerTimeSeriesChart';
 import WindowListPanel from '../calibration/WindowListPanel';
+import EEGDataCollectionPanel from '../calibration/EEGDataCollectionPanel';
 import ConfigPanel from '../calibration/ConfigPanel';
 import SessionManagerPanel from '../calibration/SessionManagerPanel';
 import { CalibrationApi } from '../../services/calibrationApi';
@@ -47,6 +48,7 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
     // const [chartData, setChartData] = useState([]); // REMOVED
 
     const [markedWindows, setMarkedWindows] = useState([]);
+    const [showEegWindowList, setShowEegWindowList] = useState(false); // Toggle between collection panel and list
     const [readyWindows, setReadyWindows] = useState([]); // Windows waiting to be appended
     const [bufferWindows, setBufferWindows] = useState([]); // History of processed windows
     const [activeWindow, setActiveWindow] = useState(null);
@@ -494,7 +496,9 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
             .catch(e => console.error("Start Calib API failed", e));
 
         if (mode === 'collection' || mode === 'test') {
-            startAutoWindowing();
+            if (activeSensor !== 'EEG') {
+                startAutoWindowing();
+            }
         }
     }, [activeSensor, mode, targetLabel, windowDuration, sessionName, startAutoWindowing]);
 
@@ -537,6 +541,128 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
             }
         }
     }, [activeSensor, activeChannelIndex, targetLabel]);
+
+    const handleEEGRecord = useCallback(async (start, end, label) => {
+        if (!chartRef.current) return;
+
+        try {
+            const samplesPoints = await chartRef.current.getSamples(start, end);
+            if (!samplesPoints || samplesPoints.length === 0) {
+                console.warn("[DataCollectionView] No samples collected for EEG sequence");
+                return;
+            }
+            const allSamples = samplesPoints.map(p => p.value);
+            const allTimestamps = samplesPoints.map(p => p.time);
+
+            // Segment into 1.5s windows with 0.25s step
+            const durationSec = (end - start) / 1000;
+            const N = samplesPoints.length;
+            const fs = N / durationSec;
+            
+            const winLenSec = 1.5;
+            const stepSec = 0.25;
+            const winLenSamples = Math.floor(winLenSec * fs);
+            const stepSamples = Math.floor(stepSec * fs);
+
+            const segments = [];
+            let offset = 0;
+            
+            while (offset + winLenSamples <= N) {
+                segments.push({
+                    samples: allSamples.slice(offset, offset + winLenSamples),
+                    timestamps: allTimestamps.slice(offset, offset + winLenSamples),
+                    startTime: start + (offset / fs) * 1000,
+                    endTime: start + ((offset + winLenSamples) / fs) * 1000,
+                });
+                offset += stepSamples;
+            }
+
+            // Fallback if data is too short
+            if (segments.length === 0 && N > 0) {
+                segments.push({
+                    samples: allSamples,
+                    timestamps: allTimestamps,
+                    startTime: start,
+                    endTime: end,
+                });
+            }
+
+            const activeTargets = eegTargets.filter(t => t.enabled);
+            const selectedTarget = activeTargets.find(t => t.label === label) || selectedEegTarget;
+
+            // Prepare all promises and optimistic UI state
+            const promises = [];
+            const tempWindows = [];
+            
+            segments.forEach((seg, idx) => {
+                const winId = `eeg-${Date.now()}-${idx}`;
+                const newWindow = {
+                    id: winId,
+                    sensor: activeSensor,
+                    startTime: seg.startTime,
+                    endTime: seg.endTime,
+                    label: label,
+                    channel: activeChannelIndex,
+                    samples: seg.samples,
+                    timestamps: seg.timestamps,
+                    status: 'saving'
+                };
+                tempWindows.push(newWindow);
+
+                const payload = {
+                    action: label,
+                    channel: activeChannelIndex,
+                    samples: seg.samples,
+                    timestamps: seg.timestamps,
+                    metadata: {
+                        targetFrequency: selectedTarget?.freq || 0,
+                        channelIndex: activeChannelIndex,
+                        sampleCount: seg.samples.length,
+                        windowMs: seg.endTime - seg.startTime,
+                        source: 'ssvep_collector'
+                    }
+                };
+
+                promises.push(
+                    CalibrationApi.sendWindow(activeSensor, payload, sessionName)
+                        .then(resp => ({ winId, resp }))
+                        .catch(err => ({ winId, error: err }))
+                );
+            });
+
+            // Add all as 'saving'
+            setMarkedWindows(prev => [...tempWindows, ...prev]);
+
+            // Execute all API requests concurrently
+            const results = await Promise.all(promises);
+
+            setMarkedWindows(prev => {
+                const draft = [...prev];
+                results.forEach(({ winId, resp, error }) => {
+                    const idx = draft.findIndex(w => w.id === winId);
+                    if (idx !== -1) {
+                        if (error) {
+                            console.error("EEG segment record failed:", error);
+                            draft[idx] = { ...draft[idx], status: 'error' };
+                        } else {
+                            draft[idx] = { 
+                                ...draft[idx], 
+                                status: 'saved', 
+                                predictedLabel: resp?.predicted_label, 
+                                features: resp?.features 
+                            };
+                        }
+                    }
+                });
+                return draft;
+            });
+            
+            setDataLastUpdated(Date.now());
+            sessionWorkerRef.current?.postMessage({ type: 'FETCH_SESSIONS', payload: { silent: true } });
+        } catch (err) {
+            console.error("EEG manual record extraction failed:", err);
+        }
+    }, [activeSensor, activeChannelIndex, sessionName, eegTargets, selectedEegTarget]);
 
 
 
@@ -1061,11 +1187,10 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                                             <button
                                                 key={target.id}
                                                 onClick={() => handleTargetChange(target.label)}
-                                                className={`rounded-lg border px-2 py-2 text-left transition-all ${
-                                                    targetLabel === target.label
+                                                className={`rounded-lg border px-2 py-2 text-left transition-all ${targetLabel === target.label
                                                         ? 'border-primary bg-primary/15 text-text shadow-sm'
                                                         : 'border-border bg-bg text-muted hover:text-text'
-                                                }`}
+                                                    }`}
                                             >
                                                 <div className="text-xs font-bold uppercase tracking-wider">{target.label}</div>
                                                 <div className="text-base font-black text-primary">{target.freq.toFixed(1)} Hz</div>
@@ -1073,11 +1198,10 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                                         ))}
                                         <button
                                             onClick={() => handleTargetChange('Rest')}
-                                            className={`rounded-lg border px-2 py-2 text-left transition-all ${
-                                                targetLabel === 'Rest'
+                                            className={`rounded-lg border px-2 py-2 text-left transition-all ${targetLabel === 'Rest'
                                                     ? 'border-primary bg-primary/15 text-text shadow-sm'
                                                     : 'border-border bg-bg text-muted hover:text-text'
-                                            }`}
+                                                }`}
                                         >
                                             <div className="text-xs font-bold uppercase tracking-wider">Rest</div>
                                             <div className="text-sm font-black text-primary/80">Baseline</div>
@@ -1240,24 +1364,67 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                     ) : (
                         <ConfigPanel config={config} sensor={activeSensor} onSave={setConfig} />
                     )}
-                </div>
-
-                {/* Window List */}
-                <div className="lg:col-span-3 h-full min-h-0 overflow-hidden shadow-sm">
-                    <WindowListPanel
-                        windows={markedWindows}
-                        onDelete={deleteWindow}
-                        onMarkMissed={markMissed}
-                        onHighlight={setHighlightedWindow}
-                        activeSensor={activeSensor}
-                        windowProgress={windowProgress}
-                        autoLimit={autoLimit}
-                        onAutoLimitChange={setAutoLimit}
-                        autoCalibrate={autoCalibrate}
-                        onAutoCalibrateChange={setAutoCalibrate}
-                        onClearSaved={handleAppendSamples}
-                        onDeleteAll={handleClearAllWindows}
-                    />
+                </div>                {/* Window List */}
+                <div className="lg:col-span-3 h-full min-h-0 overflow-hidden shadow-sm flex flex-col bg-card rounded-md">
+                    {activeSensor === 'EEG' ? (
+                        <>
+                            <div className="flex border-b border-border p-1 bg-muted/30">
+                                <button
+                                    onClick={() => setShowEegWindowList(false)}
+                                    className={`flex-1 px-2 py-1.5 text-xs font-semibold rounded-md transition-colors ${!showEegWindowList ? 'bg-primary text-primary-foreground shadow' : 'text-muted-foreground hover:bg-muted'}`}
+                                >
+                                    Collection View
+                                </button>
+                                <button
+                                    onClick={() => setShowEegWindowList(true)}
+                                    className={`flex-1 px-2 py-1.5 text-xs font-semibold rounded-md transition-colors ${showEegWindowList ? 'bg-primary text-primary-foreground shadow' : 'text-muted-foreground hover:bg-muted'}`}
+                                >
+                                    Window List
+                                </button>
+                            </div>
+                            <div className="flex-1 min-h-0 overflow-hidden">
+                                {showEegWindowList ? (
+                                    <WindowListPanel
+                                        windows={markedWindows}
+                                        onDelete={deleteWindow}
+                                        onMarkMissed={markMissed}
+                                        onHighlight={setHighlightedWindow}
+                                        activeSensor={activeSensor}
+                                        windowProgress={windowProgress}
+                                        autoLimit={autoLimit}
+                                        onAutoLimitChange={setAutoLimit}
+                                        autoCalibrate={autoCalibrate}
+                                        onAutoCalibrateChange={setAutoCalibrate}
+                                        onClearSaved={handleAppendSamples}
+                                        onDeleteAll={handleClearAllWindows}
+                                    />
+                                ) : (
+                                    <EEGDataCollectionPanel
+                                        isCalibrating={isCalibrating}
+                                        targetLabel={targetLabel}
+                                        targetFrequency={selectedEegTarget?.freq || 0}
+                                        onRecord={handleEEGRecord}
+                                        savedCount={markedWindows.filter(w => w.label === targetLabel && (w.status === 'saved' || w.status === 'correct')).length}
+                                    />
+                                )}
+                            </div>
+                        </>
+                    ) : (
+                        <WindowListPanel
+                            windows={markedWindows}
+                            onDelete={deleteWindow}
+                            onMarkMissed={markMissed}
+                            onHighlight={setHighlightedWindow}
+                            activeSensor={activeSensor}
+                            windowProgress={windowProgress}
+                            autoLimit={autoLimit}
+                            onAutoLimitChange={setAutoLimit}
+                            autoCalibrate={autoCalibrate}
+                            onAutoCalibrateChange={setAutoCalibrate}
+                            onClearSaved={handleAppendSamples}
+                            onDeleteAll={handleClearAllWindows}
+                        />
+                    )}
                 </div>
             </div>
         </div>

@@ -72,6 +72,7 @@ class FeatureRouter:
         # State tracking
         self.sample_counter = 0
         self.detection_active = False # Start disabled/passive
+        self.detection_target = None
         self.last_event_state = {} # Key: ch_idx_type -> event_name
         self.last_event_time = {} # Key: ch_idx_type -> timestamp
         self.last_config_vhash = config_manager.get_config_version_hash()
@@ -179,6 +180,7 @@ class FeatureRouter:
                             log.error(f"Failed to reload pipeline: {e}")
                     
                     self.detection_active = config_manager.get_detection_state()
+                    self.detection_target = config_manager.get_detection_target()
                     last_check_time = time.time()
 
                 # 2. Pull data from inlet
@@ -196,6 +198,9 @@ class FeatureRouter:
                                 # Keep feature extraction hot for UI/recording, but gate actual detection
                                 # and confirmed event emission on the shared detection state.
                                 if not self.detection_active:
+                                    continue
+
+                                if self.detection_target and self.detection_target not in ("ALL", sensor_type):
                                     continue
 
                                 # Feature Extractor produced a window -> Run Detector
@@ -217,8 +222,13 @@ class FeatureRouter:
                                     if isinstance(detection_result, str) and detection_result:
                                         self._emit_event(detection_result, ch_idx, sensor_type, features, ts)
                                 elif sensor_type == "EEG":
-                                    # EEG detector now returns (live_event, confirmed_event)
-                                    live_event, confirmed_event = detection_result
+                                    if not detection_result:
+                                        continue
+                                    if len(detection_result) == 3:
+                                        live_event, confirmed_event, runtime_features = detection_result
+                                    else:
+                                        live_event, confirmed_event = detection_result
+                                        runtime_features = features
                                     
                                     # 1. Emit Real-time Frequency update (for UI)
                                     live_freq = 0.0
@@ -228,11 +238,21 @@ class FeatureRouter:
                                             live_freq = float(num_str)
                                         except: pass
                                     
-                                    self._emit_event("eeg_prediction", ch_idx, sensor_type, features, ts, extra_data={"frequency": live_freq})
+                                    self._emit_event(
+                                        "eeg_prediction",
+                                        ch_idx,
+                                        sensor_type,
+                                        runtime_features,
+                                        ts,
+                                        extra_data={
+                                            "frequency": live_freq,
+                                            "confidence": runtime_features.get("detector_confidence", 0.0),
+                                        }
+                                    )
 
                                     # 2. Emit confirmed event
                                     if confirmed_event:
-                                        self._emit_event(confirmed_event, ch_idx, sensor_type, features, ts)
+                                        self._emit_event(confirmed_event, ch_idx, sensor_type, runtime_features, ts)
 
             except Exception as e:
                 log.warn(f"Error: {e}")

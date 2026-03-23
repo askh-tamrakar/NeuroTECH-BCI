@@ -97,6 +97,7 @@ class AcquisitionApp:
         # Stream Manager Connection
         self.stream_socket = None
         self.stream_connected = False
+        self.stream_command_buffer = ""
 
 
         # Processed Data Stream State
@@ -673,7 +674,9 @@ class AcquisitionApp:
             self.stream_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             # Port 6000 is for RAW data as defined in stream_manager.py
             self.stream_socket.connect(('localhost', 6000))
+            self.stream_socket.setblocking(False)
             self.stream_connected = True
+            self.stream_command_buffer = ""
             if getattr(self, '_stream_error_logged', False):
                 self._stream_error_logged = False
             print("✅ Connected to Stream Manager (Raw)")
@@ -701,6 +704,7 @@ class AcquisitionApp:
                 pass
             self.stream_socket = None
             self.stream_connected = False
+            self.stream_command_buffer = ""
             print("Disconnected from Stream Manager")
 
         
@@ -832,6 +836,27 @@ class AcquisitionApp:
     def main_loop(self):
         """Main acquisition and update loop (Optimized)"""
         try:
+            if self.stream_connected and self.stream_socket and self.serial_reader:
+                try:
+                    while True:
+                        incoming = self.stream_socket.recv(1024)
+                        if not incoming:
+                            self.stream_connected = False
+                            break
+
+                        self.stream_command_buffer += incoming.decode('ascii', errors='ignore')
+                        while '\n' in self.stream_command_buffer:
+                            line, self.stream_command_buffer = self.stream_command_buffer.split('\n', 1)
+                            command = line.strip()
+                            if command:
+                                print(f"Relay command received: {command}")
+                                self.serial_reader.send_command(command)
+                except BlockingIOError:
+                    pass
+                except Exception as e:
+                    print(f"Stream command receive error: {e}")
+                    self.stream_connected = False
+
             # --- 0. CHECK ARDUINO MESSAGES (Switches) ---
             if self.serial_reader:
                 while True:

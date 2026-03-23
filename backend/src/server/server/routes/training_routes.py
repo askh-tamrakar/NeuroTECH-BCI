@@ -24,6 +24,7 @@ from src.learning.eog_trainer import (
     delete_model as delete_eog_model, 
     load_model as load_eog_model
 )
+from src.learning.eeg_lda_trainer import train_eeg_lda_model
 
 training_bp = Blueprint('training', __name__)
 
@@ -124,6 +125,28 @@ def api_train_eog():
         return jsonify({"error": str(e)}), 500
 
 
+@training_bp.route('/api/train-eeg-lda', methods=['POST'])
+def api_train_eeg_lda():
+    try:
+        params = request.get_json() or {}
+        table_name = params.get('table_name', 'eeg_windows')
+        if table_name == 'ALL':
+            table_name = 'eeg_windows'
+        test_size = float(params.get('test_size', 0.2))
+        model_name = params.get('model_name', 'eeg_lda')
+
+        result = train_eeg_lda_model(
+            table_name=table_name,
+            test_size=test_size,
+            model_name=model_name,
+        )
+        if "error" in result:
+            return jsonify(result), 400
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @training_bp.route('/api/model/evaluate', methods=['POST'])
 def api_eval_emg():
     params = request.get_json() or {}
@@ -214,6 +237,8 @@ def api_list_models_generic(sensor):
             return api_list_models()
         elif sensor.upper() == 'EOG':
             return api_list_eog_models()
+        elif sensor.upper() == 'EEG':
+            return jsonify(list_saved_models('EEG'))
         else:
             return jsonify({"error": f"Unknown sensor type {sensor}"}), 400
     except Exception as e:
@@ -336,8 +361,6 @@ def api_get_tree():
 def api_save_window():
     """Accept a recorded window, save as CSV/DB, compute features and update config thresholds."""
     try:
-        from src.calibration.calibration_manager import calibration_manager
-        
         payload = request.get_json()
         if not payload:
             return jsonify({"error": "No payload provided"}), 400
@@ -357,7 +380,9 @@ def api_save_window():
         if not features:
             return jsonify({"error": "Feature extraction failed"}), 400
 
-        if sensor.upper() == 'EEG':
+        sensor_upper = str(sensor).upper()
+
+        if sensor_upper == 'EEG':
             features['target_frequency'] = float(metadata.get('targetFrequency', metadata.get('frequency', 0)) or 0)
             features['channel_index'] = int(metadata.get('channelIndex', payload.get('channel', 0)) or 0)
             features['sample_count'] = int(metadata.get('sampleCount', len(samples)) or len(samples))
@@ -390,23 +415,23 @@ def api_save_window():
              label_int = int(action)
         if label_int == -1: label_int = 0
         
-        if sensor.upper() == 'EMG':
+        if sensor_upper == 'EMG':
             db_manager.insert_window(features, label_int, session_id=str(int(ts)), table_name=table_name)
             # Also insert into the global evaluation table (skip if merged session)
             if "merge" not in table_name.lower():
                 db_manager.insert_window(features, label_int, session_id=str(int(ts)), table_name="emg_windows")
-        elif sensor.upper() == 'EOG':
+        elif sensor_upper == 'EOG':
             db_manager.insert_eog_window(features, label_int, session_id=str(int(ts)), table_name=table_name)
             # Also insert into the global evaluation table (skip if merged session)
             if "merge" not in table_name.lower():
                 db_manager.insert_eog_window(features, label_int, session_id=str(int(ts)), table_name="eog_windows")
-        elif sensor.upper() == 'EEG':
+        elif sensor_upper == 'EEG':
             db_manager.insert_eeg_window(features, label_int, session_id=str(int(ts)), table_name=table_name)
             if "merge" not in table_name.lower():
                 db_manager.insert_eeg_window(features, label_int, session_id=str(int(ts)), table_name="eeg_windows")
 
         # Update Config Logic (Auto-Calibration on fly)
-        if sensor.upper() != 'EEG':
+        if sensor_upper != 'EEG':
             action_entry = sensor_features.setdefault(action, {})
             updated = {}
 
@@ -438,7 +463,7 @@ def api_save_window():
         predicted_label = "Unknown"
         
         # 1. Try ML Model first (Priority for EMG)
-        if sensor.upper() == 'EMG' and state.rps_detector:
+        if sensor_upper == 'EMG' and state.rps_detector:
             try:
                 # Use stateless prediction for test windows
                 pred_label, pred_conf = state.rps_detector.predict_instant(features)
@@ -457,10 +482,11 @@ def api_save_window():
                 
         # 2. Try Threshold Detection (Fallback or for EOG/EEG)
         # If we didn't get a confident ML prediction (or simpler sensor)
-        if sensor.upper() == 'EEG':
+        if sensor_upper == 'EEG':
             detected = True
             predicted_label = action
-        elif predicted_label == "Unknown" or sensor.upper() != 'EMG':
+        elif predicted_label == "Unknown" or sensor_upper != 'EMG':
+             from src.calibration.calibration_manager import calibration_manager
              is_det = calibration_manager.detect_signal(sensor, action, features, cfg)
              detected = is_det
              if detected:

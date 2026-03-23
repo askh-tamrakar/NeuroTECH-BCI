@@ -78,9 +78,7 @@ const SignalChart = forwardRef(({
 }, ref) => {
 
   const containerRef = useRef(null)
-  const canvasRef = useRef(null)
   const workerRef = useRef(null)
-  const isTransferred = useRef(false)
 
   const [stats, setStats] = useState({ min: 0, max: 0, mean: 0 })
   const [autoScaledRange, setAutoScaledRange] = useState(null)
@@ -88,10 +86,21 @@ const SignalChart = forwardRef(({
 
   // Initialize Worker
   useEffect(() => {
-    if (!canvasRef.current) return;
+    if (!containerRef.current) return;
+
+    let canvas = null;
 
     if (!workerRef.current) {
-      if (!canvasRef.current.transferControlToOffscreen) {
+      // Dynamically create canvas to avoid React StrictMode DOM reuse issues with OffscreenCanvas
+      canvas = document.createElement('canvas');
+      canvas.style.width = '100%';
+      canvas.style.height = '100%';
+      canvas.style.display = 'block';
+      canvas.style.margin = '0';
+      canvas.style.padding = '0';
+      containerRef.current.prepend(canvas);
+
+      if (!canvas.transferControlToOffscreen) {
         console.error("OffscreenCanvas not supported!");
         return;
       }
@@ -100,38 +109,36 @@ const SignalChart = forwardRef(({
         const worker = new Worker(new URL('../../workers/signal.worker.js', import.meta.url), { type: 'module' });
         workerRef.current = worker;
 
-        if (!isTransferred.current) {
-          const offscreen = canvasRef.current.transferControlToOffscreen();
-          isTransferred.current = true;
+        const offscreen = canvas.transferControlToOffscreen();
 
-          worker.postMessage({
-            type: 'INIT',
-            payload: {
-              canvas: offscreen,
-              width: containerRef.current.clientWidth,
-              height: containerRef.current.clientHeight,
-              config: {
-                timeWindowMs,
-                color,
-                themeAxisColor: getComputedStyle(document.documentElement).getPropertyValue('--muted').trim() || '#aaaaaa',
-                zoom: currentZoom,
-                manualRange: autoScaledRange || currentManual,
-                showGrid,
-                channelIndex,
-                disabled
-              }
+        worker.postMessage({
+          type: 'INIT',
+          payload: {
+            canvas: offscreen,
+            width: containerRef.current.clientWidth,
+            height: containerRef.current.clientHeight,
+            config: {
+              timeWindowMs,
+              color,
+              themeAxisColor: getComputedStyle(document.documentElement).getPropertyValue('--muted').trim() || '#aaaaaa',
+              zoom: currentZoom,
+              manualRange: autoScaledRange || currentManual,
+              showGrid,
+              channelIndex,
+              disabled
             }
-          }, [offscreen]);
+          }
+        }, [offscreen]);
 
-          worker.onmessage = (e) => {
-            const { type, payload } = e.data;
-            if (type === 'STATS') {
-              // Update local state less frequently, or rely on worker throttling
-              setStats({ min: payload.min || 0, max: payload.max || 0, mean: payload.mean || 0 });
-            }
-          };
-        }
-      } catch (err) {
+        worker.onmessage = (e) => {
+          const { type, payload } = e.data;
+          if (type === 'STATS') {
+            // Update local state less frequently, or rely on worker throttling
+            setStats({ min: payload.min || 0, max: payload.max || 0, mean: payload.mean || 0 });
+          }
+        };
+      }
+      catch (err) {
         console.error("Failed to init worker:", err);
       }
     }
@@ -159,6 +166,9 @@ const SignalChart = forwardRef(({
         // will pile up in the background and crash the browser context limits.
         workerRef.current.terminate();
         workerRef.current = null;
+      }
+      if (canvas && containerRef.current && containerRef.current.contains(canvas)) {
+        containerRef.current.removeChild(canvas);
       }
       observer.disconnect();
     };
@@ -376,7 +386,7 @@ const SignalChart = forwardRef(({
       </div>
 
       <div className="chart-area" style={{ minHeight: 0, overflow: 'hidden', position: 'relative', margin: 0, padding: 0 }} ref={containerRef}>
-        <canvas ref={canvasRef} style={{ width: '100%', height: '100%', display: 'block', margin: 0, padding: 0 }} />
+        {/* Canvas is dynamically injected here */}
 
         {/* Centered Static Labels Overlay */}
         <div style={{

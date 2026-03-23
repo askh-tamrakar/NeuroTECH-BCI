@@ -7,7 +7,7 @@
 #define NUM_CHANNELS 2 // A0, A2
 #define HEADER_LEN 3
 #define PACKET_LEN (NUM_CHANNELS * 2 + HEADER_LEN + 1) // 8 bytes
-#define SAMP_RATE 1000.0                            // 512 Hz
+#define SAMP_RATE 512.0                                // 512 Hz
 #define SYNC_BYTE_1 0xC7
 #define SYNC_BYTE_2 0x7C
 #define END_BYTE 0x01

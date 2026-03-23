@@ -1,5 +1,5 @@
 import React from 'react';
-import { Terminal, Gamepad2, Zap, HandMetal, BrainCircuit, Database, Settings2 } from 'lucide-react';
+import { Terminal, Gamepad2, Zap, HandMetal, BrainCircuit, Database, Settings2, Bot } from 'lucide-react';
 
 export default function MobileNav({ currentPage, setCurrentPage, mobileMainView, setMobileMainView }) {
     const navItems = [
@@ -7,6 +7,7 @@ export default function MobileNav({ currentPage, setCurrentPage, mobileMainView,
         { id: 'dino', icon: Gamepad2, label: 'Dino', href: '#dino' },
         { id: 'ssvep', icon: Zap, label: 'SSVEP', href: '#ssvep' },
         { id: 'rps', icon: HandMetal, label: 'RPS', href: '#rps' },
+        { id: 'servo_claw', icon: Bot, label: 'Servo', href: '#servo_claw' },
         { id: 'ml_training', icon: BrainCircuit, label: 'M.L.', href: '#ml_training' },
         { id: 'data_collection', icon: Database, label: 'Data', href: '#data_collection' }
     ]

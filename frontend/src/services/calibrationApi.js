@@ -302,11 +302,14 @@ export const CalibrationApi = {
      * @param {boolean} isActive 
      */
     async togglePrediction(sensorType, isActive) {
-        if (sensorType !== 'EMG' && sensorType !== 'EOG') return;
+        if (sensorType !== 'EMG' && sensorType !== 'EOG' && sensorType !== 'EEG' && sensorType !== 'ALL') return;
         const action = isActive ? 'start' : 'stop';
         try {
             const API_BASE_URL = import.meta.env.VITE_API_URL || '';
-            const response = await fetch(`${API_BASE_URL}/api/${sensorType.toLowerCase()}/predict/${action}`, { method: 'POST' });
+            const route = sensorType === 'ALL'
+                ? `${API_BASE_URL}/api/detectors/predict/${action}`
+                : `${API_BASE_URL}/api/${sensorType.toLowerCase()}/predict/${action}`;
+            const response = await fetch(route, { method: 'POST' });
             return response.json();
         } catch (error) {
             console.error(`[CalibrationApi] Error toggling ${sensorType} prediction:`, error);

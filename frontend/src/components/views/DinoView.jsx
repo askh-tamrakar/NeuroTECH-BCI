@@ -14,6 +14,11 @@ import { soundHandler } from '../../handlers/SoundHandler'
 export default function DinoView({ isConnected, wsEvent, isPaused }) {
     const API_BASE_URL = import.meta.env.VITE_API_URL || '';
 
+    const togglePrediction = useCallback((active) => {
+        fetch(`${API_BASE_URL}/api/eog/predict/${active ? 'start' : 'stop'}`, { method: 'POST' })
+            .catch(err => console.error("EOG prediction toggle failed:", err));
+    }, [API_BASE_URL]);
+
     // Game state
     const [gameState, setGameState] = useState('ready') // ready, playing, paused, gameOver
     const [score, setScore] = useState(0)
@@ -92,7 +97,7 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
 
     // --- Event Logging System ---
     const [eventLogs, setEventLogs] = useState([])
-    const logEvent = (msg, type = 'info') => {
+    const logEvent = useCallback((msg, type = 'info') => {
         const time = new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })
         setEventLogs(prev => [{
             id: Date.now() + Math.random(),
@@ -100,7 +105,7 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
             text: msg,
             type
         }, ...prev].slice(0, 50))
-    }
+    }, [])
 
     // Refs for game state (to avoid stale closures)
     const containerRef = useRef(null) // Container for ResizeObserver
@@ -317,6 +322,11 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
             .catch(err => console.error("Error fetching config for channels", err));
     }, []);
 
+    useEffect(() => {
+        togglePrediction(true);
+        return () => togglePrediction(false);
+    }, [togglePrediction]);
+
     // WebSocket Event Listener (Blinks)
     useEffect(() => {
         if (!wsEvent) return;
@@ -337,13 +347,18 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
         }
     }, [wsEvent, settings.CONTROL_CHANNEL]); // Added settings.CONTROL_CHANNEL to dependency array
 
+    const isInitialConnectionMount = useRef(true);
+    const prevConnectionState = useRef(isConnected);
+
     useEffect(() => {
-        if (isConnected) {
-            logEvent("Sensor Connected", 'connection')
-        } else {
-            logEvent("Sensor Disconnected", 'disconnect')
+        if (isInitialConnectionMount.current) {
+            logEvent(isConnected ? "Sensor Connected" : "Sensor Disconnected", isConnected ? 'connection' : 'disconnect')
+            isInitialConnectionMount.current = false;
+        } else if (prevConnectionState.current !== isConnected) {
+            logEvent(isConnected ? "Sensor Connected" : "Sensor Disconnected", isConnected ? 'connection' : 'disconnect')
+            prevConnectionState.current = isConnected;
         }
-    }, [isConnected]) // Only trigger on boolean flip
+    }, [isConnected, logEvent]) // Only trigger on boolean flip
 
     // --- Worker Bridge ---
     const workerRef = useRef(null)
@@ -764,16 +779,16 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
                 <div className="game-main-area">
                     <div className="game-card">
                         <div className="game-header">
-                            <h2 className="game-title">
-                                <span className={`status-eye ${isConnected ? 'connected' : 'disconnected'}`}><ScanEye size={32} /></span>
-                                EOG Dino Game
-                            </h2>
                             <button
                                 onClick={() => setShowSettings(!showSettings)}
                                 className={`tuner-button ${showSettings ? 'active' : 'inactive'}`}
                             >
                                 <SlidersHorizontal /> Tuner
                             </button>
+                            <h2 className="game-title">
+                                <span className={`status-eye ${isConnected ? 'connected' : 'disconnected'}`}><ScanEye size={32} /></span>
+                                EOG Dino Game
+                            </h2>
                         </div>
 
                         <div className="game-content-stack">

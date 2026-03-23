@@ -1,7 +1,7 @@
 {
   "filters": {
     "EMG": {
-      "cutoff": 53.2,
+      "cutoff": 49,
       "notch_enabled": true,
       "notch_freq": 50,
       "bandpass_enabled": true,
@@ -16,7 +16,7 @@
       "bandpass_low": 0.4
     },
     "EEG": {
-      "cutoff": 71.8,
+      "cutoff": 0.1,
       "bandpass_enabled": true,
       "notch_enabled": true,
       "bandpass_high": 40

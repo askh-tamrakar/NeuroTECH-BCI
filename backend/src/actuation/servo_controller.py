@@ -6,6 +6,8 @@ import argparse
 from typing import Optional
 from pylsl import StreamInlet, resolve_byprop
 
+from src.utils.config import config_manager
+
 class ServoController:
     def __init__(self, target_ip="127.0.0.1", target_port=6002):
         self.target_ip = target_ip
@@ -13,11 +15,42 @@ class ServoController:
         self.current_angle = 97
         self.sock: Optional[socket.socket] = None
         self.inlet: Optional[StreamInlet] = None
+        self.last_config_vhash = None
+        self.config = {}
         
         # Angle range for the claw
         self.MIN_ANGLE = 1     # Fully Open
         self.MIDDLE_ANGLE = 48 # Approximate middle
         self.MAX_ANGLE = 97    # Fully Closed
+
+    def _reload_config_if_needed(self):
+        vhash = config_manager.get_config_version_hash()
+        if vhash != self.last_config_vhash:
+            self.config = config_manager.get_all_configs()
+            self.last_config_vhash = vhash
+
+    def _get_eeg_target_angle(self, event_name: str):
+        try:
+            freq = float(event_name.replace("TARGET_", "").replace("HZ", "").replace("_", "."))
+        except Exception:
+            return None
+
+        self._reload_config_if_needed()
+        eeg_targets = self.config.get("features", {}).get("EEG", {}).get("targets", [])
+        if not eeg_targets:
+            return None
+
+        ordered_targets = [
+            target for target in eeg_targets
+            if target.get("enabled", True)
+        ]
+        ordered_targets.sort(key=lambda target: int(target.get("id", 0)))
+
+        for index, target in enumerate(ordered_targets):
+            if abs(float(target.get("freq", 0)) - freq) < 0.1:
+                preset_angles = [97, 82, 66, 48, 24, 1]
+                return preset_angles[min(index, len(preset_angles) - 1)]
+        return None
 
     def connect_lsl(self):
         print("Looking for BioSignals-Events LSL stream...")
@@ -111,6 +144,12 @@ class ServoController:
                         elif event_name == "Scissors":
                             new_angle = self.MIDDLE_ANGLE
                             print(f"Event: {event_name} -> Snap MIDDLE")
+                        
+                        elif event_name.startswith("TARGET_"):
+                            mapped_angle = self._get_eeg_target_angle(event_name)
+                            if mapped_angle is not None:
+                                new_angle = mapped_angle
+                                print(f"Event: {event_name} -> Target preset {mapped_angle}")
 
                         # Only send if changed
                         if new_angle != self.current_angle:
