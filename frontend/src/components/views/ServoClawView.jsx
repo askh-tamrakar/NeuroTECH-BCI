@@ -1,52 +1,111 @@
 import React, { useState } from 'react';
 import { Activity, BrainCircuit, Play, Square, Settings, Cpu, Zap, RadioReceiver } from 'lucide-react';
 import { soundHandler } from '../../handlers/SoundHandler';
+import { CalibrationApi } from '../../services/calibrationApi';
 
 export default function ServoClawView({ wsEvent, isConnected }) {
     // -------------------------------------------------------------
     // STATES
     // -------------------------------------------------------------
     const [ssvepActive, setSsvepActive] = useState(false);
-    const [mlActive, setMlActive] = useState(false);
-    const [emgActive, setEmgActive] = useState(false);
+    const [rpsActive, setRpsActive] = useState(false);
+    const [blinkActive, setBlinkActive] = useState(false);
 
-    const [clawStatus, setClawStatus] = useState('Idle');
+    const [ clawStatus, setClawStatus ] = useState('Idle');
+    const [ lastAction, setLastAction ] = useState('Waiting for BCI input...');
+    const [ currentAngle, setCurrentAngle ] = useState(97); // 97 is fully closed, 1 is fully open
+    const [ eventLogs, setEventLogs ] = useState([]);
+
+    // Sync Claw Status with incoming wsEvent
+    React.useEffect(() => {
+        if (!wsEvent || !wsEvent.event) return;
+        const e = wsEvent.event;
+        let action = null;
+        let newAngle = currentAngle;
+
+        if (e === 'SingleBlink') {
+            action = 'Closing (+5°)';
+            newAngle = Math.min(97, currentAngle + 5);
+        } else if (e === 'DoubleBlink') {
+            action = 'Opening (-5°)';
+            newAngle = Math.max(1, currentAngle - 5);
+        } else if (e === 'Rock') {
+            action = 'Snap CLOSED';
+            newAngle = 97;
+        } else if (e === 'Paper') {
+            action = 'Snap OPEN';
+            newAngle = 1;
+        } else if (e === 'Scissors') {
+            action = 'Snap MIDDLE';
+            newAngle = 48;
+        } else if (typeof e === 'string' && e.startsWith('TARGET_')) {
+            action = `Preset Position (${e})`;
+            // Rough approximation for visual representation of SSVEP targets
+            newAngle = 82; // E.g., slightly open for target
+        }
+        
+        if (action) {
+            setClawStatus(`Executing: ${action}`);
+            setLastAction(`Last event: ${e}`);
+            setCurrentAngle(newAngle);
+            
+            // Add to event log matching backend format
+            const timeStr = new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            
+            setEventLogs(prev => [
+                { id: Date.now() + Math.random(), text: `[${timeStr}] [Servo Actuator ] Sent: DEG ${newAngle}` },
+                { id: Date.now() + Math.random() + 1, text: `[${timeStr}] [Stream Manager ] Control: DEG ${newAngle}` },
+                { id: Date.now() + Math.random() + 2, text: `[${timeStr}] [HID Controller ] Received Event: ${e}` },
+                { id: Date.now() + Math.random() + 3, text: `[${timeStr}] [Servo Actuator ] Event: ${e} -> ${action}` },
+                ...prev
+            ].slice(0, 100));
+
+            const timer = setTimeout(() => {
+                updateClawStatus(ssvepActive, rpsActive, blinkActive);
+            }, 2000);
+            return () => clearTimeout(timer);
+        }
+    }, [wsEvent, ssvepActive, rpsActive, blinkActive, currentAngle]);
 
     // -------------------------------------------------------------
     // HANDLERS
     // -------------------------------------------------------------
     const toggleAll = () => {
         soundHandler?.playClick?.();
-        const anyActive = ssvepActive || mlActive || emgActive;
+        const anyActive = ssvepActive || rpsActive || blinkActive;
         const nextState = !anyActive;
         setSsvepActive(nextState);
-        setMlActive(nextState);
-        setEmgActive(nextState);
+        setRpsActive(nextState);
+        setBlinkActive(nextState);
         updateClawStatus(nextState, nextState, nextState);
+        CalibrationApi.togglePrediction('ALL', nextState).catch(err => console.error("Toggle All failed:", err));
     };
 
     const toggleDetection = (detectionType) => {
         soundHandler?.playClick?.();
-        
+
         if (detectionType === 'ssvep') {
             const nextState = !ssvepActive;
             setSsvepActive(nextState);
-            updateClawStatus(nextState, mlActive, emgActive);
-        } else if (detectionType === 'ml') {
-            const nextState = !mlActive;
-            setMlActive(nextState);
-            updateClawStatus(ssvepActive, nextState, emgActive);
-        } else if (detectionType === 'emg') {
-            const nextState = !emgActive;
-            setEmgActive(nextState);
-            updateClawStatus(ssvepActive, mlActive, nextState);
+            updateClawStatus(nextState, rpsActive, blinkActive);
+            CalibrationApi.togglePrediction('EEG', nextState).catch(err => console.error("SSVEP toggle failed:", err));
+        } else if (detectionType === 'rps') {
+            const nextState = !rpsActive;
+            setRpsActive(nextState);
+            updateClawStatus(ssvepActive, nextState, blinkActive);
+            CalibrationApi.togglePrediction('EMG', nextState).catch(err => console.error("RPS toggle failed:", err));
+        } else if (detectionType === 'blink') {
+            const nextState = !blinkActive;
+            setBlinkActive(nextState);
+            updateClawStatus(ssvepActive, rpsActive, nextState);
+            CalibrationApi.togglePrediction('EOG', nextState).catch(err => console.error("Blink toggle failed:", err));
         }
     };
 
-    const updateClawStatus = (s, m, e) => {
-        if (s && m && e) {
+    const updateClawStatus = (s, r, b) => {
+        if (s && r && b) {
             setClawStatus('Fully Active [All Modes]');
-        } else if (s || m || e) {
+        } else if (s || r || b) {
             setClawStatus('Listening...');
         } else {
             setClawStatus('Idle');
@@ -56,8 +115,9 @@ export default function ServoClawView({ wsEvent, isConnected }) {
     const testMovement = (action) => {
         soundHandler?.playClick?.();
         setClawStatus(`Executing: ${action}`);
+        setLastAction(`Manual: ${action}`);
         setTimeout(() => {
-            updateClawStatus(ssvepActive, mlActive, emgActive);
+            updateClawStatus(ssvepActive, rpsActive, blinkActive);
         }, 2000);
     };
 
@@ -90,7 +150,7 @@ export default function ServoClawView({ wsEvent, isConnected }) {
     };
 
     return (
-        <div className="p-6 lg:p-12 max-w-7xl mx-auto flex flex-col gap-8 w-full animate-in fade-in duration-500">
+        <div className="p-6 lg:p-12 w-full flex flex-col gap-8 animate-in fade-in duration-500">
             {/* Header */}
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-border pb-6">
                 <div>
@@ -103,16 +163,15 @@ export default function ServoClawView({ wsEvent, isConnected }) {
                     </p>
                 </div>
                 <div className="flex gap-3">
-                    <button 
+                    <button
                         onClick={toggleAll}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-colors ${
-                            (ssvepActive || mlActive || emgActive) 
-                                ? 'bg-red-500/10 border border-red-500/50 text-red-500 hover:bg-red-500/20' 
+                        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-colors ${(ssvepActive || rpsActive || blinkActive)
+                                ? 'bg-red-500/10 border border-red-500/50 text-red-500 hover:bg-red-500/20'
                                 : 'bg-primary border border-primary text-primary-contrast shadow-glow hover:opacity-90'
-                        }`}
+                            }`}
                     >
-                        {(ssvepActive || mlActive || emgActive) ? <Square size={18} /> : <Play size={18} />}
-                        {(ssvepActive || mlActive || emgActive) ? 'Stop All' : 'Start All Detections'}
+                        {(ssvepActive || rpsActive || blinkActive) ? <Square size={18} /> : <Play size={18} />}
+                        {(ssvepActive || rpsActive || blinkActive) ? 'Stop All' : 'Start All Detections'}
                     </button>
                     <button className="flex items-center gap-2 px-4 py-2 bg-surface border border-border rounded-xl text-sm font-bold text-text hover:border-primary/50 transition-colors">
                         <Settings size={18} />
@@ -123,7 +182,7 @@ export default function ServoClawView({ wsEvent, isConnected }) {
 
             {/* Main Content Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                
+
                 {/* Left Column: Detections (2/3 width on wide screens) */}
                 <div className="lg:col-span-2 flex flex-col gap-6">
                     <h2 className="text-xl font-bold border-b border-border pb-2 opacity-80 flex items-center gap-2">
@@ -139,19 +198,46 @@ export default function ServoClawView({ wsEvent, isConnected }) {
                             description: 'Uses flickering visual stimuli to detect target focus.'
                         })}
                         {renderDetectionCard({
-                            id: 'ml',
-                            title: 'Motor Imagery',
+                            id: 'rps',
+                            title: 'EMG RPS Control',
                             icon: BrainCircuit,
-                            active: mlActive,
-                            description: 'Decodes imagined movements (left/right arm) via ML.'
+                            active: rpsActive,
+                            description: 'Detects wrist movements (Rock, Paper, Scissors) via EMG.'
                         })}
                         {renderDetectionCard({
-                            id: 'emg',
-                            title: 'EMG / Blink',
+                            id: 'blink',
+                            title: 'EOG Blink Control',
                             icon: Zap,
-                            active: emgActive,
-                            description: 'Detects facial muscle variations like jaw clench or blink.'
+                            active: blinkActive,
+                            description: 'Detects eye blinks (Single, Double) via EOG.'
                         })}
+                    </div>
+                    
+                    {/* Event Logger */}
+                    <div className="mt-4 flex flex-col gap-4 h-64 border border-border/50 rounded-2xl bg-surface p-5 shadow-inner">
+                        <div className="flex items-center justify-between border-b border-border/50 pb-2">
+                            <h2 className="text-sm font-bold opacity-80 flex items-center gap-2 uppercase tracking-widest text-muted">
+                                <Activity size={16} />
+                                Action Log
+                            </h2>
+                            <span className="text-xs font-bold bg-primary/10 text-primary px-2 py-0.5 rounded-md border border-primary/20">
+                                {eventLogs.length} Events
+                            </span>
+                        </div>
+                        
+                        <div className="flex-1 overflow-y-auto space-y-1.5 pr-2 custom-scrollbar">
+                            {eventLogs.length === 0 ? (
+                                <div className="h-full flex items-center justify-center text-muted text-sm italic">
+                                    Awaiting detection events...
+                                </div>
+                            ) : (
+                                eventLogs.map(log => (
+                                    <div key={log.id} className="font-mono text-xs text-primary/80 truncate">
+                                        <span dangerouslySetInnerHTML={{ __html: log.text.replace(/(\[.*?\])/g, '<span class="text-muted/60 font-bold">$1</span>').replace('->', '<span class="text-white/50">-></span>') }} />
+                                    </div>
+                                ))
+                            )}
+                        </div>
                     </div>
                 </div>
 
@@ -161,11 +247,11 @@ export default function ServoClawView({ wsEvent, isConnected }) {
                         <RadioReceiver size={20} />
                         Claw Status
                     </h2>
-                    
+
                     <div className="bg-surface border border-border rounded-2xl p-6 flex flex-col gap-6 shadow-xl relative overflow-hidden">
                         {/* Background glowing effect */}
                         <div className="absolute -top-20 -right-20 w-48 h-48 bg-primary/10 rounded-full blur-3xl pointer-events-none" />
-                        
+
                         <div className="flex items-center justify-between">
                             <span className="text-sm font-bold text-muted uppercase tracking-wider">Current State</span>
                             <div className={`px-3 py-1 rounded-full text-xs font-bold border ${clawStatus === 'Idle' ? 'bg-surface border-border text-muted' : 'bg-primary/20 border-primary/50 text-primary animate-pulse'}`}>
@@ -174,16 +260,45 @@ export default function ServoClawView({ wsEvent, isConnected }) {
                         </div>
 
                         <div className="flex-1 flex flex-col items-center justify-center py-6">
-                            <div className="relative">
-                                {/* Simulated Claw Graphic (Icon based for now) */}
-                                <Cpu size={80} className={`text-text transition-all duration-500 ${clawStatus !== 'Idle' ? 'text-primary scale-110' : 'opacity-50'}`} />
-                                {clawStatus.includes('Open') && (
-                                    <div className="absolute inset-0 border-4 border-primary/50 rounded-full animate-ping" />
-                                )}
+                            <div className="relative w-48 h-48 flex items-end justify-center mb-8">
+                                {/* Base */}
+                                <div className="absolute bottom-0 w-24 h-12 bg-surface border-4 border-primary rounded-t-[1.5rem] z-10 shadow-[0_-5px_25px_rgba(var(--color-primary-rgb),0.15)] flex flex-col items-center justify-center gap-1">
+                                    <div className="w-12 h-1.5 bg-primary/30 rounded-full" />
+                                    <div className="w-8 h-1.5 bg-primary/20 rounded-full" />
+                                </div>
+                                
+                                {/* Left Pincer */}
+                                <div 
+                                    className="absolute bottom-6 left-1/2 w-8 h-36 origin-bottom transition-transform duration-[600ms] ease-[cubic-bezier(0.34,1.56,0.64,1)] z-0"
+                                    style={{ transform: `translateX(-24px) rotate(-${45 * ((97 - currentAngle) / 96)}deg)` }}
+                                >
+                                    <div className="w-full h-full bg-surface border-4 border-primary rounded-t-full rounded-b-lg shadow-[0_0_15px_rgba(var(--color-primary-rgb),0.2)] relative flex justify-end">
+                                        {/* Grip pad */}
+                                        <div className="absolute top-4 right-[-4px] w-2.5 h-16 bg-primary rounded-l-md shadow-[0_0_5px_rgba(var(--color-primary-rgb),0.5)]" />
+                                    </div>
+                                </div>
+                                
+                                {/* Right Pincer */}
+                                <div 
+                                    className="absolute bottom-6 right-1/2 w-8 h-36 origin-bottom transition-transform duration-[600ms] ease-[cubic-bezier(0.34,1.56,0.64,1)] z-0"
+                                    style={{ transform: `translateX(24px) rotate(${45 * ((97 - currentAngle) / 96)}deg)` }}
+                                >
+                                    <div className="w-full h-full bg-surface border-4 border-primary rounded-t-full rounded-b-lg shadow-[0_0_15px_rgba(var(--color-primary-rgb),0.2)] relative flex justify-start">
+                                        {/* Grip pad */}
+                                        <div className="absolute top-4 left-[-4px] w-2.5 h-16 bg-primary rounded-r-md shadow-[0_0_5px_rgba(var(--color-primary-rgb),0.5)]" />
+                                    </div>
+                                </div>
+
+                                {/* Angle Display Bubble */}
+                                <div className="absolute -top-6 bg-surface border-2 border-primary/50 px-4 py-1.5 rounded-full z-20 shadow-[0_0_15px_rgba(var(--color-primary-rgb),0.2)] flex items-center gap-2">
+                                    <Cpu size={14} className="text-primary/70" />
+                                    <span className="text-sm font-black text-primary tracking-widest tabular-nums">{Math.round(currentAngle)}°</span>
+                                </div>
                             </div>
-                            <div className="mt-6 text-center">
-                                <p className="text-lg font-bold text-text tracking-wide">{clawStatus}</p>
-                                <p className="text-sm text-muted mt-1">Waiting for BCI input...</p>
+                            
+                            <div className="mt-8 text-center bg-bg/50 px-6 py-4 rounded-2xl border border-border/50">
+                                <p className="text-lg font-bold text-text tracking-wide mb-1">{clawStatus}</p>
+                                <p className="text-sm font-medium text-muted">{lastAction}</p>
                             </div>
                         </div>
 

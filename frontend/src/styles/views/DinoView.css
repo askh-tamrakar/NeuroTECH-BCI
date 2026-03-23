@@ -392,6 +392,12 @@
     display: flex;
     flex-direction: column;
     gap: 1.5rem;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.game-sidebar::-webkit-scrollbar {
+    display: none;
 }
 
 @media (min-width: 1024px) {
