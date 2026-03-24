@@ -336,6 +336,17 @@ const RPSGame = ({ wsEvent }) => {
     // Keyboard handling: map R / P / S to moves when in manual mode
     useEffect(() => {
         const onKeyDown = (ev) => {
+            if (ev.code === 'Space' || ev.key === 'Enter') {
+                ev.preventDefault();
+                if (gameState === 'idle') {
+                    handlePlay();
+                } else {
+                    setGameState('idle');
+                    togglePrediction(false);
+                }
+                return;
+            }
+
             if (!manualMode || matchWinner) return;
             const k = ev.key.toLowerCase();
             if (k === 'r') onManualMove('ROCK');
@@ -345,6 +356,7 @@ const RPSGame = ({ wsEvent }) => {
 
         window.addEventListener('keydown', onKeyDown);
         return () => window.removeEventListener('keydown', onKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [manualMode, gameState, matchWinner]);
 
     const determineWinner = (p, c) => {
@@ -433,13 +445,46 @@ const RPSGame = ({ wsEvent }) => {
             {/* Main Game Area */}
             <div className="flex-1 flex flex-col items-center justify-start h-full overflow-hidden w-full relative">
 
-                {/* Header (Title, Scoreboard) */}
-                <div className="rps-header flex items-start justify-between w-full px-4 md:px-8 py-2 md:py-4 z-20 shrink-0 relative">
-                    {/* Title on left */}
-                    <div className="rps-title">NEURO RPS</div>
+                {/* Header (Play Button, Scoreboard, Title) */}
+                <div className="rps-header flex items-center justify-between w-full px-4 md:px-8 py-2 md:py-4 z-20 shrink-0 relative">
+                    {/* Play Button & Status on left */}
+                    <div className="w-1/3 flex justify-start items-center gap-4 z-50">
+                        {gameState === 'idle' ? (
+                            <button
+                                onClick={handlePlay}
+                                className="px-6 md:px-8 py-2 bg-primary text-primary-contrast rounded-xl font-bold text-lg shadow-lg hover:scale-105 transition-transform animate-in zoom-in duration-300"
+                            >
+                                PLAY
+                            </button>
+                        ) : (
+                            <button
+                                onClick={() => {
+                                    setGameState('idle');
+                                    togglePrediction(false);
+                                }}
+                                className="px-4 md:px-6 py-2 bg-red-600/90 hover:bg-red-500 text-white rounded-xl font-bold text-lg shadow-lg hover:scale-105 transition-transform animate-in zoom-in duration-300"
+                            >
+                                STOP
+                            </button>
+                        )}
+                        
+                        {gameState === 'waiting' && !manualMode && (
+                            <span className="pulse text-lg md:text-xl font-bold">
+                                {currentPrediction === 'REST' || currentPrediction === 'UNKNOWN'
+                                    ? "Waiting for Gesture..."
+                                    : "Recording..."}
+                            </span>
+                        )}
+                        {gameState === 'waiting_for_rest' && !manualMode && (
+                            <span className="animate-pulse text-yellow-400 text-lg md:text-xl font-bold">Release Gesture...</span>
+                        )}
+                        {gameState === 'waiting' && manualMode && (
+                            <span className="pulse text-lg md:text-xl font-bold">Manual Mode: press <strong className="text-primary font-black">R</strong>/<strong className="text-primary font-black">P</strong>/<strong className="text-primary font-black">S</strong></span>
+                        )}
+                    </div>
 
                     {/* Centered Scoreboard */}
-                    <div className="scoreboard-container flex flex-col items-center pt-2 absolute left-1/2 -translate-x-1/2 pointer-events-none">
+                    <div className="scoreboard-container flex flex-col items-center absolute left-1/2 -translate-x-1/2 pointer-events-none">
                         <div className="scoreboard transform-none left-auto top-auto pointer-events-auto" style={{ margin: 0 }}>
                             <div>Player: <strong>{score.player}</strong></div>
                             <div>Computer: <strong>{score.computer}</strong></div>
@@ -453,8 +498,10 @@ const RPSGame = ({ wsEvent }) => {
                         )}
                     </div>
 
-                    {/* Right spacer for balance */}
-                    <div className="w-1/3"></div>
+                    {/* Title on right */}
+                    <div className="w-1/3 flex justify-end">
+                        <div className="rps-title text-right m-0 whitespace-nowrap">NEURO RPS</div>
+                    </div>
                 </div>
 
                 {/* Arena */}
@@ -480,37 +527,9 @@ const RPSGame = ({ wsEvent }) => {
                     )}
 
                     <div className="status-text shrink-0" style={{ minHeight: '60px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1rem' }}>
-                        {gameState === 'idle' ? (
-                            <button
-                                onClick={handlePlay}
-                                className="px-6 md:px-8 py-2 bg-primary text-primary-contrast rounded-xl font-bold text-lg shadow-lg hover:scale-105 transition-transform animate-in zoom-in duration-300"
-                            >
-                                PLAY
-                            </button>
-                        ) : (
-                            <button
-                                onClick={() => {
-                                    setGameState('idle');
-                                    togglePrediction(false);
-                                }}
-                                className="px-4 md:px-6 py-2 bg-red-600/90 hover:bg-red-500 text-white rounded-xl font-bold text-lg shadow-lg hover:scale-105 transition-transform animate-in zoom-in duration-300"
-                            >
-                                STOP
-                            </button>
-                        )}
-
-                        {gameState === 'waiting' && !manualMode && (
-                            <span className="pulse text-sm md:text-base">
-                                {currentPrediction === 'REST' || currentPrediction === 'UNKNOWN'
-                                    ? "Waiting for Gesture"
-                                    : "Recording..."}
-                            </span>
-                        )}
-                        {gameState === 'waiting_for_rest' && !manualMode && <span className="animate-pulse text-yellow-400 text-sm md:text-base">Release Gesture...</span>}
-                        {gameState === 'waiting' && manualMode && <span className="pulse text-sm md:text-base">Manual Mode: press <strong>R</strong>/<strong>P</strong>/<strong>S</strong></span>}
                         {gameState !== 'waiting' && gameState !== 'waiting_for_rest' && gameState !== 'idle' && (
-                            <span className="animate-in fade-in zoom-in duration-300 text-sm md:text-base">
-                                {result === 'TIE' ? "IT'S A TIE" : `YOU ${result}!`}
+                            <span className="animate-in fade-in zoom-in duration-300 text-2xl md:text-3xl font-black text-primary tracking-widest uppercase" style={{ textShadow: '0 0 15px rgba(0, 243, 255, 0.4)' }}>
+                                {result === 'TIE' ? "IT'S A TIE!" : `YOU ${result}!`}
                             </span>
                         )}
                     </div>

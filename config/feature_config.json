@@ -1,78 +1,78 @@
 {
   "EEG": {
     "target_freqs": [
-      3.72,
-      4.19,
-      5.58,
-      6.7,
-      7.44,
-      8.38
+      3.33,
+      3.75,
+      5,
+      6,
+      6.67,
+      7.5
     ],
     "targets": [
       {
+        "controlType": "Keyboard",
+        "divisor": 18,
+        "enabled": true,
+        "freq": 3.33,
         "id": 0,
-        "freq": 3.72,
         "label": "Targ 1",
         "mappedKey": "W",
         "mappedMouse": "None",
-        "enabled": true,
-        "controlType": "Keyboard",
-        "divisor": 18,
         "source": "dynamic"
       },
       {
+        "controlType": "Keyboard",
+        "divisor": 16,
+        "enabled": true,
+        "freq": 3.75,
         "id": 1,
-        "freq": 4.19,
         "label": "Target 2ss",
         "mappedKey": "A",
         "mappedMouse": "None",
-        "enabled": true,
-        "controlType": "Keyboard",
-        "divisor": 16,
         "source": "dynamic"
       },
       {
+        "controlType": "Keyboard",
+        "divisor": 12,
+        "enabled": true,
+        "freq": 5,
         "id": 2,
-        "freq": 5.58,
         "label": "Target 3",
         "mappedKey": "S",
         "mappedMouse": "None",
-        "enabled": true,
-        "controlType": "Keyboard",
-        "divisor": 12,
         "source": "dynamic"
       },
       {
+        "controlType": "Keyboard",
+        "divisor": 10,
+        "enabled": true,
+        "freq": 6,
         "id": 3,
-        "freq": 6.7,
         "label": "Target 4",
         "mappedKey": "D",
         "mappedMouse": "None",
-        "enabled": true,
-        "controlType": "Keyboard",
-        "divisor": 10,
         "source": "dynamic"
       },
       {
+        "controlType": "Keyboard",
+        "divisor": 9,
+        "enabled": true,
+        "freq": 6.67,
         "id": 4,
-        "freq": 7.44,
         "label": "Target 5",
         "mappedKey": "Space",
         "mappedMouse": "None",
-        "enabled": true,
-        "controlType": "Keyboard",
-        "divisor": 9,
         "source": "dynamic"
       },
       {
+        "controlType": "Keyboard",
+        "divisor": 8,
+        "enabled": true,
+        "freq": 7.5,
         "id": 5,
-        "freq": 8.38,
         "label": "Target 6",
         "mappedKey": "Escape",
         "mappedMouse": "None",
-        "enabled": true,
-        "controlType": "Keyboard",
-        "divisor": 8,
         "source": "dynamic"
       }
     ],
@@ -83,9 +83,9 @@
     "num_harmonics": 4,
     "step_sec": 0.25,
     "smoothing_windows": 7,
-    "refresh_rate": 67
+    "refresh_rate": 60
   },
   "EOG": {
-    "detection_method": "Threshold"
+    "detection_method": "ML"
   }
 }

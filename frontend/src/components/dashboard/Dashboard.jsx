@@ -11,7 +11,6 @@ import DataCollectionView from '../views/DataCollectionView'
 import MLTrainingView from '../views/MLTrainingView'
 import SettingsView from '../views/SettingsView'
 import ServoClawView from '../views/ServoClawView'
-import Test from '../views/test/DinoView-anj'
 
 import '../../styles/App.css';
 import ScrollStack, { ScrollStackItem } from '../ui/ScrollStack';
@@ -110,7 +109,6 @@ export default function Dashboard() {
     { label: 'Data Collection', onClick: () => setCurrentPage('data_collection'), href: '#data_collection' },
     { label: 'Settings', onClick: () => setCurrentPage('settings'), href: '#settings' },
     { label: 'Servo Claw', onClick: () => setCurrentPage('servo_claw'), href: '#servo_claw' },
-    { label: 'Test', onClick: () => setCurrentPage('test'), href: '#test' },
     ...(isMobile ? [] : [{
       label: 'Theme',
       type: 'pill',
@@ -211,7 +209,6 @@ export default function Dashboard() {
                 {currentPage === 'ml_training' && <MLTrainingView />}
                 {currentPage === 'settings' && <SettingsView latency={latency} localWs={localWs} setLocalWs={setLocalWs} ngrokWs={ngrokWs} setNgrokWs={setNgrokWs} connect={connect} />}
                 {currentPage === 'servo_claw' && <ServoClawView wsEvent={lastEvent} isConnected={!!lastMessage} />}
-                {currentPage === 'test' && <Test />}
 
                 {showSpacers && <div className="h-[35px] shrink-0" />}
               </>
