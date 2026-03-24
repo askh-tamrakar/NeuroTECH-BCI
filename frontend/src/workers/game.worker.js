@@ -357,7 +357,7 @@ function updatePhysics(deltaTime) {
         const displayScore = Math.floor(score / 10);
         if (displayScore > lastSentScore) {
             lastSentScore = displayScore;
-            self.postMessage({ type: 'SCORE_UPDATE', score: score, obstaclesPassed: obstaclesPassed });
+            self.postMessage({ type: 'SCORE_UPDATE', score: score });
         }
 
         // Collisions
@@ -396,7 +396,7 @@ function updatePhysics(deltaTime) {
                     highScore = score;
                     self.postMessage({ type: 'HIGHSCORE_UPDATE', highScore });
                 }
-                self.postMessage({ type: 'GAME_OVER', score, obstaclesPassed: obstaclesPassed });
+                self.postMessage({ type: 'GAME_OVER', score });
             }
         }
 
