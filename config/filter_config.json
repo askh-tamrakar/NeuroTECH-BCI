@@ -19,7 +19,8 @@
       "cutoff": 0.1,
       "bandpass_enabled": true,
       "notch_enabled": true,
-      "bandpass_high": 40
+      "bandpass_high": 40,
+      "notch": "50Hz"
     }
   }
 }

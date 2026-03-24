@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { BrainCircuit, Activity, ImageIcon, Menu, ChevronLeft, Gamepad2, Settings, History, ScrollText, Zap, Trophy, Keyboard, Radio, HandFist, Hand, Scissors } from 'lucide-react';
+﻿import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { BrainCircuit, Activity, ImageIcon, Menu, ChevronLeft, Gamepad2, Settings, History, ScrollText, Zap, Trophy } from 'lucide-react';
 import { soundHandler } from '../../handlers/SoundHandler';
 import CustomSelect from '../ui/CustomSelect';
 import '../../styles/views/RPSGame.css';
@@ -158,7 +158,7 @@ const RPSGame = ({ wsEvent }) => {
             setGameState('waiting_for_rest');
             // Keep prediction running for auto-restart
         } else {
-            setGameState('waiting');
+            setGameState('idle');
             // Disable prediction when game sends to idle
             togglePrediction(false);
         }
@@ -287,16 +287,6 @@ const RPSGame = ({ wsEvent }) => {
         setPlayerMove(pMove);
         setComputerMove(cMove); // Ensure it's set in state for rendering
         soundHandler.playRPSMove(); // Play sound on move selection
-
-        // Log manual gesture for UI
-        if (manualMode) {
-            setEventLogs(prev => [{
-                id: Date.now() + Math.random(),
-                time: new Date().toLocaleTimeString(),
-                name: pMove,
-                channel: 'Manual'
-            }, ...prev].slice(0, 15));
-        }
 
         const matchEnded = determineWinner(pMove, cMove);
 
@@ -428,7 +418,7 @@ const RPSGame = ({ wsEvent }) => {
     };
 
     return (
-        <div className="rps-container overflow-hidden pt-[72px] pb-[32px] relative h-full flex flex-row-reverse w-full">
+        <div className="rps-container overflow-hidden pt-[94px] pb-[35px] relative h-full flex flex-row-reverse w-full">
 
             {/* Main Game Area */}
             <div className="flex-1 flex flex-col items-center justify-start h-full overflow-hidden w-full relative">
@@ -525,73 +515,30 @@ const RPSGame = ({ wsEvent }) => {
 
             {/* Left Sidebar Container */}
             <div className={`transition-all duration-300 ease-in-out border-r border-border bg-surface/80 backdrop-blur-md flex flex-col h-full relative ${!isSidebarCollapsed ? 'w-80 overflow-y-auto overflow-x-hidden' : 'w-[4.5rem] overflow-visible'} [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']`}>
+
                 {/* Collapsed State Icons */}
                 {isSidebarCollapsed && (
-                    <div className="flex flex-col items-center gap-4 w-full animate-fade-in shrink-0 h-full relative">
-                        <button onClick={() => setIsSidebarCollapsed(false)} className="hover:bg-white/10 rounded-full transition-colors mt-6" title="Expand Sidebar">
-                            <Menu size={34} className="text-primary" />
+                    <div className="flex flex-col items-center gap-6 mt-4 w-full animate-fade-in shrink-0 h-full">
+                        <button onClick={() => setIsSidebarCollapsed(false)} className="p-2 hover:bg-white/10 rounded-full transition-colors mb-2" title="Expand Sidebar">
+                            <Menu size={24} className="text-primary" />
                         </button>
+                        <Gamepad2 size={24} className="text-primary animate-pulse" title="RPS Game Setup" />
 
-                        <hr className="w-[72px] border-border" />
-
-                        <button onClick={() => setIsSidebarCollapsed(false)} className="hover:text-primary transition-colors group relative" title="RPS Game Setup">
-                            <Gamepad2 size={28} className="text-primary animate-pulse" />
-                            <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">RPS Game Setup</div>
-                        </button>
-
-                        {/* Switch Mode */}
-                        <button onClick={toggleManualMode} title={`Mode: ${manualMode ? 'Manual' : 'Sensor'}`} className="hover:text-primary transition-colors group relative mt-4">
-                            {manualMode ? <Keyboard size={28} className="text-primary" /> : <Radio size={28} className="text-muted group-hover:text-primary animate-pulse" />}
-                            <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Mode: {manualMode ? 'Manual' : 'Sensor'}</div>
-                        </button>
-
-                        {/* Computer Level Toggle */}
-                        <button onClick={() => {
-                            const diffs = ['low', 'moderate', 'high'];
-                            const next = diffs[(diffs.indexOf(difficulty) + 1) % diffs.length];
-                            setDifficulty(next);
-                        }} title={`Difficulty: ${difficulty}`} className="hover:text-primary transition-colors group relative mt-4">
-                            <Settings size={28} className="text-muted group-hover:text-primary" />
-                            <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Level: {difficulty}</div>
-                        </button>
-
-                        {/* Image Icon Toggle (Assets) */}
-                        <button onClick={() => {
-                            setAssetType(prev => prev === 'set1' ? 'set2' : 'set1');
-                            setGlobalFallbackMode(false);
-                            soundHandler.playRPSWarp();
-                        }} title={`Assets: ${assetType === 'set1' ? 'Classic' : 'Variant'}`} className="hover:text-primary transition-colors group relative mt-4">
-                            <ImageIcon size={28} className="text-muted group-hover:text-primary" />
-                            <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Assets: {assetType === 'set1' ? 'Classic' : 'Variant'}</div>
-                        </button>
-
-                        <button onClick={() => setIsSidebarCollapsed(false)} title="Model Settings" className="hover:text-primary transition-colors group relative mt-4">
-                            <BrainCircuit size={28} className="text-muted group-hover:text-primary" />
+                        <button onClick={() => setIsSidebarCollapsed(false)} title="Model Settings" className="hover:text-primary transition-colors group relative mt-2">
+                            <BrainCircuit size={20} className="text-muted group-hover:text-primary" />
                             <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Model Settings</div>
                         </button>
 
-                        <div className="flex-1" />
+                        <button onClick={() => setIsSidebarCollapsed(false)} title="Visual Options" className="hover:text-primary transition-colors group relative mt-2">
+                            <ImageIcon size={20} className="text-muted group-hover:text-primary" />
+                            <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Visual Options</div>
+                        </button>
 
-                        {/* Event Log 3-item log */}
-                        <div className="flex flex-col items-center gap-3 mt-4 group relative cursor-default pb-4 w-full border-t border-border pt-4">
-                            <div className="flex flex-col items-center gap-4">
-                                {eventLogs.length > 0 ? (
-                                    eventLogs.slice(0, 5).map((log, i) => (
-                                        <div key={log.id} className="text-muted group-hover:text-primary transition-colors" title={log.name}>
-                                            {log.name === 'ROCK' ? <HandFist size={28} /> : log.name === 'PAPER' ? <Hand size={28} /> : log.name === 'SCISSORS' ? <Scissors size={28} /> : <Activity size={28} />}
-                                        </div>
-                                    ))
-                                ) : (
-                                    <History size={28} className="text-muted/50" />
-                                )}
-                            </div>
-                            <div className="absolute left-16 bottom-12 bg-surface border border-border px-3 py-2 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50 w-[180px]">
-                                {eventLogs.length > 0 ?
-                                    <div className="font-bold pb-1 mb-1">Recent Events</div>
-                                    : <div className="font-bold pb-1 mb-1">No Events</div>
-                                }
-                            </div>
-                        </div>
+                        <button onClick={() => setIsSidebarCollapsed(false)} title="Event Log" className="hover:text-primary transition-colors group relative mt-2">
+                            <History size={20} className="text-muted group-hover:text-primary" />
+                            {eventLogs.length > 0 && <span className="absolute -top-1 -right-1 w-2 h-2 bg-primary rounded-full animate-pulse blur-[1px]"></span>}
+                            <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Event Log</div>
+                        </button>
                     </div>
                 )}
 
@@ -649,7 +596,7 @@ const RPSGame = ({ wsEvent }) => {
                     <div className="flex flex-col gap-3 shrink-0 bg-bg/30 p-3 rounded-xl border border-border/50">
                         <div className="flex items-center justify-between">
                             <label className="text-sm font-bold text-muted uppercase tracking-widest flex items-center gap-2">
-                                {manualMode ? <Keyboard size={16} className="text-primary" /> : <Radio size={16} className="text-muted" />} Input Mode
+                                <Activity size={16} /> Input Mode
                             </label>
                             <button className={`mode-btn ${manualMode ? 'active' : ''}`} onClick={toggleManualMode} title="Toggle manual mode">
                                 {manualMode ? 'Manual' : 'Sensor'}

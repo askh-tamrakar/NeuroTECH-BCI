@@ -134,7 +134,7 @@ export default function SSVEPView({ isConnected, wsEvent }) {
             })
             .catch(err => console.error("Failed to load generic config for SSVEP", err))
             .finally(() => setIsConfigLoaded(true));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     useEffect(() => {
@@ -261,7 +261,7 @@ export default function SSVEPView({ isConnected, wsEvent }) {
 
     useEffect(() => {
         return () => {
-            CalibrationApi.togglePrediction('EEG', false).catch(() => {});
+            CalibrationApi.togglePrediction('EEG', false).catch(() => { });
         };
     }, []);
 
@@ -295,8 +295,8 @@ export default function SSVEPView({ isConnected, wsEvent }) {
                             <div key={cfg.id} className="border border-white/50 rounded-xl flex flex-col items-center justify-center relative shadow-lg bg-black/40">
                                 <span className="text-[10px] font-bold text-white/50 absolute top-2 left-3">{cfg.label}</span>
                                 <span className="text-4xl font-bold text-white drop-shadow-md">
-                                    {(cfg.controlType || 'Keyboard') === 'Mouse' 
-                                        ? (cfg.mappedMouse !== 'None' ? cfg.mappedMouse : '-') 
+                                    {(cfg.controlType || 'Keyboard') === 'Mouse'
+                                        ? (cfg.mappedMouse !== 'None' ? cfg.mappedMouse : '-')
                                         : (cfg.mappedKey !== 'None' ? cfg.mappedKey : '-')}
                                 </span>
                             </div>
@@ -307,52 +307,67 @@ export default function SSVEPView({ isConnected, wsEvent }) {
 
             {/* Left Sidebar */}
             <div
-                className={`absolute left-0 top-0 bottom-0 z-10 transition-all duration-300 ease-in-out border-r border-border bg-surface/80 backdrop-blur-md flex flex-col h-full ${showSidebar ? 'w-80 overflow-y-auto overflow-x-hidden' : 'w-[4.5rem] overflow-visible'} [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']`}
+                className={`absolute left-0 top-0 bottom-0 z-10 transition-all duration-300 ease-in-out border-r border-border bg-surface/80 backdrop-blur-md flex flex-col h-full ${showSidebar ? 'w-80 overflow-y-auto overflow-x-hidden' : 'w-[4.25rem] overflow-visible'} [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']`}
             >
                 {/* Collapsed Icons Only State */}
                 {!showSidebar && (
-                    <div className="flex flex-col items-center gap-6 mt-4 w-full animate-fade-in shrink-0 h-full">
+                    <div className="flex flex-col items-center justify-around py-3 w-full animate-fade-in shrink-0 h-full overflow-visible">
                         <button
                             onClick={() => setShowSidebar(true)}
-                            className="p-2 hover:bg-white/10 rounded-full transition-colors mb-2"
+                            className=" hover:bg-white/10 rounded-full transition-colors"
                             title="Expand Sidebar"
                         >
-                            <Menu size={24} className="text-primary" />
+                            <Menu size={34} className="text-primary" />
                         </button>
 
+                        <div className="w-full h-px bg-border/80 shrink-0" />
+
                         <div className="flex flex-col items-center cursor-default group relative w-full" title="Signal Frequency">
-                            <Activity size={20} className="text-primary" />
-                            <span className="text-[12px] font-black tabular-nums mt-1 text-primary">{realTimeFreq ? realTimeFreq.toFixed(1) : '0.0'}</span>
-                            <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Live Signal (Hz)</div>
+                            <Activity size={28} className="text-primary" />
+                            <span className="text-[20px] font-black tabular-nums mt-1 text-primary">{realTimeFreq ? realTimeFreq.toFixed(1) : '0.0'}</span>
+                            <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-1.5 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Live Signal (Hz)</div>
                         </div>
 
                         <button onClick={() => setShowSidebar(true)} title="System Activity" className="hover:text-primary transition-colors group relative">
-                            <History size={20} className="text-muted group-hover:text-primary" />
+                            <History size={28} className="text-muted group-hover:text-primary" />
                             {logs.length > 0 && <span className="absolute -top-1 -right-1 w-2 h-2 bg-primary rounded-full animate-pulse blur-[1px]"></span>}
                             <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">System Activity Logs</div>
                         </button>
 
-                        <button onClick={globalRunning ? stopFlicker : startFlicker} title="Start/Stop Manual Simulation" className={`transition-colors group relative p-3 rounded-full border-2 ${globalRunning ? 'bg-red-500/10 border-red-500/50 text-red-500 hover:bg-red-500/20' : 'bg-green-500/10 border-green-500/50 text-green-500 hover:bg-green-500/20'}`}>
-                            {globalRunning ? <Square size={18} /> : <Play size={18} />}
-                            <div className="absolute left-16 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">{globalRunning ? "Stop Simulation" : "Start Simulation"}</div>
+                        <div className="w-full h-px bg-border/80 shrink-0" />
+
+                        <button onClick={globalRunning ? stopFlicker : startFlicker} title="Start/Stop Manual Simulation" className={`transition-colors group relative p-2 rounded-full ${globalRunning ? 'text-red-500 hover:bg-red-500/20' : 'text-green-500 hover:bg-green-500/20'}`}>
+                            {globalRunning ? <Square size={28} /> : <Play size={28} />}
+                            <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-1.5 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">{globalRunning ? "Stop Simulation" : "Start Simulation"}</div>
                         </button>
 
                         {!globalRunning && (
-                            <button onClick={runProtocol} title="Run Protocol" className="transition-colors group relative p-3 rounded-full border-2 bg-primary/10 border-primary/50 text-primary hover:bg-primary/20">
-                                <Zap size={18} />
-                                <div className="absolute left-16 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Run Protocol</div>
+                            <button onClick={runProtocol} title="Run Protocol" className="transition-colors group relative p-2 rounded-full text-primary hover:bg-primary/20">
+                                <Zap size={28} />
+                                <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-surface px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Run Protocol</div>
                             </button>
                         )}
 
-                        <button onClick={() => setShowSidebar(true)} title="Targets" className="hover:text-primary transition-colors group relative mt-2">
-                            <Monitor size={20} className="text-muted group-hover:text-primary" />
+                        <div className="w-full h-px bg-border/80 shrink-0" />
+
+                        <button onClick={() => setShowSidebar(true)} title="Targets Settings" className="hover:text-primary transition-colors group relative">
+                            <Monitor size={28} className="text-muted group-hover:text-primary" />
                             <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Targets Settings</div>
                         </button>
 
-                        <div className="flex-1" />
-                        <div className="flex flex-col gap-2 w-full items-center border-t border-border pt-4 pb-4 shrink-0">
+                        {configs.filter(c => c.enabled).map((cfg) => (
+                            <div key={cfg.id} className="flex flex-col items-center group relative cursor-help" title={cfg.label}>
+                                <Target size={28} className="text-primary/70 mb-1 group-hover:text-primary transition-colors" />
+                                <span className="text-[18px] font-black text-text/80 group-hover:text-primary">{cfg.freq}</span>
+                                <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">{cfg.label} ({cfg.freq}Hz)</div>
+                            </div>
+                        ))}
+
+                        <div className="w-full h-px bg-border/80 shrink-0" />
+
+                        <div className="flex flex-col w-full items-center shrink-0">
                             <button className={`w-[42px] h-[42px] flex items-center justify-center rounded-full border transition-all cursor-default shadow-sm group relative ${isConnected ? 'bg-green-500/10 border-green-500/30 text-green-500' : 'bg-red-500/10 border-red-500/30 text-red-500'}`} title={isConnected ? "Sensor Connected" : "Sensor Disconnected"}>
-                                {isConnected ? <Zap size={18} /> : <Power size={18} />}
+                                {isConnected ? <Zap size={28} /> : <Power size={28} />}
                                 <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Sensor Status</div>
                             </button>
                         </div>

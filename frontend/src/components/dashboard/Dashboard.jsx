@@ -11,6 +11,7 @@ import DataCollectionView from '../views/DataCollectionView'
 import MLTrainingView from '../views/MLTrainingView'
 import SettingsView from '../views/SettingsView'
 import ServoClawView from '../views/ServoClawView'
+import Test from '../views/test/DinoView-anj'
 
 import '../../styles/App.css';
 import ScrollStack, { ScrollStackItem } from '../ui/ScrollStack';
@@ -31,9 +32,6 @@ export default function Dashboard() {
   // Choose default based on whether we're loaded over https/ngrok or localhost
   const defaultWsSource = typeof window !== 'undefined' && window.location.hostname !== 'localhost' ? ngrokWs : localWs;
   const { status, lastMessage, lastConfig, lastEvent, latency, connect, disconnect, sendMessage, currentUrl } = useWebSocket(defaultWsSource)
-
-  // WebSocket modal state and preset URLs
-  const [wsModalOpen, setWsModalOpen] = useState(false)
 
   const { themes, currentTheme, currentThemeId, setTheme } = useTheme();
   const [authView, setAuthView] = useState(null);
@@ -112,6 +110,7 @@ export default function Dashboard() {
     { label: 'Data Collection', onClick: () => setCurrentPage('data_collection'), href: '#data_collection' },
     { label: 'Settings', onClick: () => setCurrentPage('settings'), href: '#settings' },
     { label: 'Servo Claw', onClick: () => setCurrentPage('servo_claw'), href: '#servo_claw' },
+    { label: 'Test', onClick: () => setCurrentPage('test'), href: '#test' },
     ...(isMobile ? [] : [{
       label: 'Theme',
       type: 'pill',
@@ -131,10 +130,10 @@ export default function Dashboard() {
                   setTheme(t.id);
                   close?.();
                 }}
-                baseColor={t.colors['--accent']}
-                pillColor={t.colors['--text']}
-                hoveredTextColor={t.colors['--text']}
-                pillTextColor={t.colors['--accent']}
+                baseColor={t.colors['--text']}
+                pillColor={t.colors['--accent']}
+                hoveredTextColor={t.colors['--accent']}
+                pillTextColor={t.colors['--text']}
               />
             </ScrollStackItem>
           ))}
@@ -156,31 +155,9 @@ export default function Dashboard() {
             <div className="headline-line main">
               NeuroTECH
               <br />
-              <div className="headline-line sub">BCI Dashboard</div>
+              <div className="headline-line sub"> BCI Dashboard </div>
             </div>
           </div>
-
-          {/* WebSocket connect modal */}
-          {wsModalOpen && (
-            <div className="fixed inset-0 z-60 flex items-start justify-center bg-black/40" style={{ paddingTop: '96px' }}>
-              <div className="bg-surface rounded-lg p-6 w-96">
-                <h3 className="text-sm font-bold text-muted uppercase tracking-wider mb-4">WebSocket Connection</h3>
-                <div className="mb-2">
-                  <label className="text-xs font-medium text-text block mb-1">Local WS URL</label>
-                  <input className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-sm outline-none focus:border-primary/50" value={localWs} onChange={e => setLocalWs(e.target.value)} />
-                </div>
-                <div className="mb-2">
-                  <label className="text-xs font-medium text-text block mb-1">Ngrok WS URL</label>
-                  <input className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-sm outline-none focus:border-primary/50" value={ngrokWs} onChange={e => setNgrokWs(e.target.value)} />
-                </div>
-                <div className="flex gap-2 mt-4">
-                  <button className="w-full py-2 bg-primary text-primary-contrast rounded-lg font-bold text-sm shadow-glow hover:opacity-90 active:scale-95 transition-all" onClick={() => { connect(localWs); setWsModalOpen(false) }}>Connect Local</button>
-                  <button className="w-full py-2 bg-primary text-primary-contrast rounded-lg font-bold text-sm shadow-glow hover:opacity-90 active:scale-95 transition-all" onClick={() => { connect(ngrokWs); setWsModalOpen(false) }}>Connect Ngrok</button>
-                  <button className="w-full py-2 bg-muted text-muted-contrast rounded-lg font-bold text-sm shadow-glow hover:opacity-90 active:scale-95 transition-all" onClick={() => setWsModalOpen(false)}>Close</button>
-                </div>
-              </div>
-            </div>
-          )}
 
           <nav className="nav absolute left-1/2 -translate-x-1/2 shrink-0 z-10 hidden landscape:block lg:block">
             <div className="backdrop-blur-sm bg-surface/50 border border-white/5 rounded-full p-1">
@@ -193,7 +170,6 @@ export default function Dashboard() {
                 pillColor={navColors.pill}
                 hoveredPillTextColor={navColors.hoverText}
                 pillTextColor={navColors.pillText}
-                onLogoClick={() => setWsModalOpen(true)}
               />
             </div>
           </nav>
@@ -220,7 +196,7 @@ export default function Dashboard() {
 
           {/* Helper to determine if we need spacers (non-full-screen pages need them to clear fixed header/footer) */}
           {(() => {
-            const FULL_SCREEN_PAGES = ['live', 'dino'];
+            const FULL_SCREEN_PAGES = ['live', 'dino', 'rps', 'test'];
             const showSpacers = !FULL_SCREEN_PAGES.includes(currentPage);
 
             return (
@@ -233,8 +209,9 @@ export default function Dashboard() {
                 {currentPage === 'rps' && <RPSGame wsEvent={lastEvent} />}
                 {currentPage === 'data_collection' && <DataCollectionView wsData={lastMessage} wsEvent={lastEvent} config={lastConfig} wsUrl={status === 'connected' ? (currentUrl || defaultWsSource) : null} />}
                 {currentPage === 'ml_training' && <MLTrainingView />}
-                {currentPage === 'settings' && <SettingsView latency={latency} />}
+                {currentPage === 'settings' && <SettingsView latency={latency} localWs={localWs} setLocalWs={setLocalWs} ngrokWs={ngrokWs} setNgrokWs={setNgrokWs} connect={connect} />}
                 {currentPage === 'servo_claw' && <ServoClawView wsEvent={lastEvent} isConnected={!!lastMessage} />}
+                {currentPage === 'test' && <Test />}
 
                 {showSpacers && <div className="h-[35px] shrink-0" />}
               </>

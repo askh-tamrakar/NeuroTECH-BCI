@@ -86,12 +86,12 @@
 
 .header {
   position: fixed;
+  border-bottom: 1px solid var(--border);
   top: 0;
   left: 0;
   width: 100%;
   z-index: 50;
   background: var(--bg);
-  border-bottom: 1px solid var(--border);
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
   transition: all 0.3s ease;
 }
@@ -216,7 +216,7 @@
   text-align: center;
   height: 32px;
   padding: 0;
-  border-top: 1px solid color-mix(in srgb, var(--border) 15%, transparent);
+  border-top: 1px solid var(--border);
   background: color-mix(in srgb, var(--bg) 30%, transparent);
   backdrop-filter: blur(6px);
   display: flex;
