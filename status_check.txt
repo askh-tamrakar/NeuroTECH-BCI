@@ -1,0 +1,9 @@
+ M config/feature_config.json
+ M config/filter_config.json
+ M config/sensor_config.json
+A  frontend/src/components/views/SSVEPView.jsx
+?? diff_merge_head.txt
+?? git_status.txt
+?? git_status_utf8.txt
+?? status_check.txt
+?? support/firmware/Uno_R4_2ch_1000Hz_SSVEP/

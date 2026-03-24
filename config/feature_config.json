@@ -12,7 +12,7 @@
       {
         "id": 0,
         "freq": 8,
-        "label": "Targ 1",
+        "label": "ww",
         "mappedKey": "W",
         "mappedMouse": "None",
         "enabled": true,
@@ -86,7 +86,7 @@
     "refresh_rate": 144
   },
   "EOG": {
-    "detection_method": "Threshold",
+    "detection_method": "ML",
     "SingleBlink": {
       "amplitude": [
         0.7082626082003116,
