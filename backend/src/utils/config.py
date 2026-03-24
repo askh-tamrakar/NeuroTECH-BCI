@@ -323,17 +323,28 @@ class ConfigManager:
 
     # ============== DETECTION STATE ==============
 
-    def get_detection_state(self) -> bool:
-        """Read detection active state from file."""
+    def get_detection_config(self) -> Dict[str, Any]:
+        """Read full detection routing config from file."""
         state_path = self.config_dir / "detection_state.json"
         try:
             if state_path.exists():
                 with open(state_path, 'r') as f:
                     data = json.load(f)
-                    return data.get("active", False)
-            return False
+                    if isinstance(data, dict):
+                        return {
+                            "active": bool(data.get("active", False)),
+                            "target": data.get("target")
+                        }
+            return {"active": False, "target": None}
         except:
-            return False
+            return {"active": False, "target": None}
+
+    def get_detection_state(self) -> bool:
+        return self.get_detection_config().get("active", False)
+
+    def get_detection_target(self) -> Optional[str]:
+        target = self.get_detection_config().get("target")
+        return str(target).upper() if target else None
 
     # ============== FACADE (UNIFIED) ==============
 

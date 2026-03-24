@@ -3,11 +3,43 @@ import sqlite3
 import time
 import json
 import os
+import socket
 from pathlib import Path
 from src.server.server.state import state
 from src.server.server.lsl_service import extract_emg_features
 
 prediction_bp = Blueprint('prediction', __name__)
+
+@prediction_bp.route('/api/servo/manual', methods=['POST'])
+def manual_servo_override():
+    try:
+        payload = request.get_json()
+        action = payload.get('action', '')
+        
+        # Map manual actions to DEG
+        if action == 'Open':
+            angle = 1
+        elif action == 'Close':
+            angle = 97
+        elif action == 'Snap MIDDLE':
+            angle = 48
+        else:
+            angle = 48
+            
+        if angle >= 0:
+            # Send to StreamManager Relay on 6002
+            try:
+                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                s.settimeout(1.0)
+                s.connect(('127.0.0.1', 6002))
+                s.sendall(f"DEG {angle}\n".encode())
+                s.close()
+            except Exception as e:
+                print(f"Failed to send manual command to relay: {e}")
+                
+        return jsonify({"status": "sent", "action": action, "angle": angle})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 # DB Path configuration
 from src.utils.paths import get_base_data_dir

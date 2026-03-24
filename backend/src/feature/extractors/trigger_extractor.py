@@ -1,6 +1,7 @@
 import numpy as np
 import collections
 from scipy import signal
+from src.feature.ssvep_utils import compute_ssvep_features
 
 class EEGExtractor:
     """
@@ -11,26 +12,28 @@ class EEGExtractor:
     def __init__(self, channel_index: int, config: dict, sr: int):
         self.channel_index = channel_index
         self.sr = sr
-        
-        # Window settings for SSVEP
-        # 1.0 second window, 100ms stride for "snappy" detection
-        self.buffer_size = int(sr * 1.0) 
-        self.stride = int(sr * 0.1)
-        
+
+        self._load_config(config)
         self.buffer = collections.deque(maxlen=self.buffer_size)
         self.sample_count = 0
-        
-        self._load_config(config)
         
     def _load_config(self, config):
         self.config = config
         eeg_cfg = self.config.get("features", {}).get("EEG", {})
+        self.window_len_sec = float(eeg_cfg.get("window_len_sec", 1.5))
+        self.step_sec = float(eeg_cfg.get("step_sec", 0.25))
+        self.num_harmonics = int(eeg_cfg.get("num_harmonics", 4))
+        self.target_freqs = eeg_cfg.get("target_freqs", [8.0, 9.0, 12.0, 14.4, 16.0, 18.0])
+        self.buffer_size = max(1, int(self.sr * self.window_len_sec))
+        self.stride = max(1, int(self.sr * self.step_sec))
         self.freq_bands = eeg_cfg.get("freq_bands", {
             "delta": [0.5, 4],
             "theta": [4, 8],
             "alpha": [8, 13],
             "beta": [13, 30]
         })
+        if hasattr(self, "buffer"):
+            self.buffer = collections.deque(list(self.buffer)[-self.buffer_size:], maxlen=self.buffer_size)
         
     def process(self, sample_val: float):
         """
@@ -47,13 +50,17 @@ class EEGExtractor:
 
     def _extract_features(self, window):
         data = np.array(window)
-        # Simple Periodogram or Welch's method (nperseg=len(data) for 1s window is just fine)
+        ssvep_features = compute_ssvep_features(
+            data,
+            sr=self.sr,
+            target_freqs=self.target_freqs,
+            num_harmonics=self.num_harmonics,
+        )
+
         freqs, psd = signal.welch(data, self.sr, nperseg=len(data))
-        
-        features = {
-            "timestamp": self.sample_count / self.sr,
-            "raw_window": data.tolist() # CCA needs the raw time-domain signal
-        }
+        features = dict(ssvep_features)
+        features["timestamp"] = self.sample_count / self.sr
+        features["raw_window"] = data.tolist()
         
         total_power = 0
         for band, (low, high) in self.freq_bands.items():

@@ -1,179 +1,193 @@
-import numpy as np
-from sklearn.cross_decomposition import CCA
-from scipy.signal import detrend, butter, filtfilt
 import time
+from collections import deque
+from pathlib import Path
+
+import joblib
+import numpy as np
+
+from src.feature.ssvep_utils import compute_ssvep_features
+from src.utils.paths import get_models_dir
+
 
 class EEGFrequencyDetector:
     """
-    Detects SSVEP target frequencies using Filter Bank Canonical Correlation Analysis (FBCCA).
+    SSVEP detector using FBCCA-derived features with optional LDA inference.
     """
-    
+
+    FEATURE_ORDER = [
+        "score_1",
+        "score_2",
+        "score_3",
+        "score_4",
+        "score_5",
+        "score_6",
+        "max_score",
+        "second_max_score",
+        "score_ratio",
+        "score_mean",
+        "score_std",
+    ]
+
     def __init__(self, config: dict):
         self.config = config
-        self.last_event_ts = 0.0
+        self.model = None
+        self.scaler = None
+        self.model_name = None
         self._load_config()
-        
+
     def _load_config(self):
         eeg_config = self.config.get("features", {}).get("EEG", {})
-        
-        # SSVEP Settings
-        self.sampling_rate = self.config.get("sampling_rate", 1000)
-        # Default 6 targets if not specified
-        self.target_freqs = sorted(eeg_config.get("target_freqs", [6.0, 8.0, 10.0, 12.0, 15.0, 18.0, 20.0]), reverse=True)
-        self.window_len_sec = eeg_config.get("window_len_sec", 1.0)
-        self.num_harmonics = eeg_config.get("num_harmonics", 3)
-        self.rest_threshold = eeg_config.get("rest_threshold", 0.40) # Increased from 0.25 for higher noise immunity
-        self.debounce_ms = eeg_config.get("debounce_ms", 500)
-        
-        # Clear score history on config reload to prevent dimension mismatches
-        if hasattr(self, 'score_history'):
-            self.score_history = None
-            
-        # FBCCA Settings
-        self.num_subbands = 3
-        self.subband_weights = [(k + 1)**(-1.25) + 0.25 for k in range(self.num_subbands)]
-        self.total_weight = sum(self.subband_weights)
-        
-        # Initialize CCA and Reference Signals
-        self.cca = CCA(n_components=1)
+
+        self.sampling_rate = int(self.config.get("sampling_rate", 1000))
+        self.target_freqs = [float(freq) for freq in eeg_config.get("target_freqs", [8.0, 9.0, 12.0, 14.4, 16.0, 18.0])]
+        self.window_len_sec = float(eeg_config.get("window_len_sec", 1.5))
+        self.num_harmonics = int(eeg_config.get("num_harmonics", 4))
+        self.rest_threshold = float(eeg_config.get("rest_threshold", 0.6))
+        self.ratio_threshold = float(eeg_config.get("ratio_threshold", 1.2))
+        self.debounce_ms = int(eeg_config.get("debounce_ms", 500))
+        self.smoothing_windows = int(eeg_config.get("smoothing_windows", 7))
+        self.classifier_mode = str(eeg_config.get("classifier", "fbcca")).lower()
         self.window_samples = int(self.window_len_sec * self.sampling_rate)
-        self.references = [self._generate_ref(f) for f in self.target_freqs]
-        
-        # Prep filters for sub-bands
-        self.subband_filters = []
-        for i in range(self.num_subbands):
-            # Optimized FBCCA bands for broad support (6Hz - 20Hz)
-            # SB1: [5, 88], SB2: [12, 88], SB3: [19, 88]
-            low = max(5.0, 7.0 * (i + 1) - 2.0)
-            high = min(self.sampling_rate / 2 - 1, 88.0)
-            b, a = butter(4, [low, high], btype='bandpass', fs=self.sampling_rate)
-            self.subband_filters.append((b, a))
 
-    def _generate_ref(self, f):
-        """Creates sine/cosine reference signals (fundamental + harmonics)"""
-        t = np.linspace(0, self.window_samples / self.sampling_rate, self.window_samples, endpoint=False)
-        ref = []
-        for h in range(1, self.num_harmonics + 1):
-            ref.append(np.sin(2 * np.pi * h * f * t))
-            ref.append(np.cos(2 * np.pi * h * f * t))
-        return np.array(ref).T
+        self.prediction_history = deque(maxlen=max(1, self.smoothing_windows))
+        self.current_stable_target = "REST"
+        self.stable_target_start = time.time()
+        self.last_emitted_ts = 0.0
 
-    def detect(self, features: dict) -> str | None:
-        """
-        Uses FBCCA to detect if the user is looking at a target frequency.
-        Expects 'raw_window' in the features dictionary.
-        """
-        if not features or "raw_window" not in features:
+        self._load_model()
+
+    def _load_model(self):
+        self.model = None
+        self.scaler = None
+        self.model_name = None
+
+        active_models = self.config.get("active_models", {})
+        requested_model = active_models.get("EEG")
+        if not requested_model:
+            return
+
+        models_dir = get_models_dir("EEG")
+        model_path = models_dir / f"{requested_model}.joblib"
+        scaler_path = models_dir / f"{requested_model}_scaler.joblib"
+        if not model_path.exists():
+            return
+
+        try:
+            self.model = joblib.load(model_path)
+            self.scaler = joblib.load(scaler_path) if scaler_path.exists() else None
+            self.model_name = requested_model
+        except Exception:
+            self.model = None
+            self.scaler = None
+            self.model_name = None
+
+    def _normalize_event(self, prediction_idx: int | None) -> str:
+        if prediction_idx is None or prediction_idx <= 0:
+            return "REST"
+        target_idx = prediction_idx - 1
+        if 0 <= target_idx < len(self.target_freqs):
+            freq = self.target_freqs[target_idx]
+            return f"TARGET_{str(freq).replace('.', '_')}HZ"
+        return "REST"
+
+    def _fbcca_decision(self, features: dict) -> tuple[str, float, float]:
+        score_vector = np.asarray(features.get("score_vector") or [
+            features.get("score_1", 0.0),
+            features.get("score_2", 0.0),
+            features.get("score_3", 0.0),
+            features.get("score_4", 0.0),
+            features.get("score_5", 0.0),
+            features.get("score_6", 0.0),
+        ], dtype=float)
+
+        if score_vector.size == 0 or np.all(score_vector <= 0):
+            return "REST", 0.0, 0.0
+
+        best_idx = int(np.argmax(score_vector))
+        best_score = float(score_vector[best_idx])
+        second_best = float(np.partition(score_vector, -2)[-2]) if score_vector.size > 1 else 0.0
+        ratio = float(best_score / second_best) if second_best > 1e-8 else float(best_score)
+
+        if best_score < self.rest_threshold or ratio < self.ratio_threshold:
+            return "REST", best_score, ratio
+
+        event_name = self._normalize_event(best_idx + 1)
+        return event_name, best_score, ratio
+
+    def _lda_decision(self, features: dict) -> tuple[str, float]:
+        if self.model is None:
+            return "REST", 0.0
+
+        vector = np.array([[float(features.get(key, 0.0)) for key in self.FEATURE_ORDER]], dtype=float)
+        if self.scaler is not None:
+            vector = self.scaler.transform(vector)
+
+        prediction = int(self.model.predict(vector)[0])
+        confidence = 0.0
+        if hasattr(self.model, "predict_proba"):
+            try:
+                confidence = float(np.max(self.model.predict_proba(vector)))
+            except Exception:
+                confidence = 0.0
+
+        if prediction <= 0:
+            return "REST", confidence
+
+        return self._normalize_event(prediction), confidence
+
+    def detect(self, features: dict):
+        if not features:
             return None
-            
+
+        if "score_vector" not in features and "raw_window" in features:
+            features = compute_ssvep_features(
+                features["raw_window"],
+                sr=self.sampling_rate,
+                target_freqs=self.target_freqs,
+                num_harmonics=self.num_harmonics,
+            )
+        elif "score_vector" not in features:
+            return None
+
+        fbcca_event, fbcca_score, ratio = self._fbcca_decision(features)
+        live_event = fbcca_event
+        confidence = fbcca_score
+
+        if self.classifier_mode == "lda" and self.model is not None:
+            lda_event, lda_confidence = self._lda_decision(features)
+            if lda_event != "REST" and lda_confidence >= self.rest_threshold:
+                live_event = lda_event
+                confidence = lda_confidence
+            elif fbcca_event == "REST":
+                live_event = "REST"
+
+        self.prediction_history.append(live_event)
+        if len(self.prediction_history) == 0:
+            smoothed_event = live_event
+        else:
+            vote_counts = {}
+            for event in self.prediction_history:
+                vote_counts[event] = vote_counts.get(event, 0) + 1
+            smoothed_event = max(vote_counts.items(), key=lambda item: item[1])[0]
+
         current_time = time.time()
-            
-        raw_data = np.array(features["raw_window"])
-        if len(raw_data) < self.window_samples:
-            return None
-            
-        # Detrend to remove DC bias
-        raw_data = detrend(raw_data)
-        
-        # If single channel, reshape to (samples, 1)
-        if raw_data.ndim == 1:
-            raw_data = raw_data.reshape(-1, 1)
-            
-        target_scores = []
-        
-        # FBCCA Logic
-        for ref in self.references:
-            weighted_corr = 0
-            for k in range(self.num_subbands):
-                b, a = self.subband_filters[k]
-                # Filter the signal for this sub-band
-                y = filtfilt(b, a, raw_data, axis=0)
-                
-                # Compute CCA
-                try:
-                    self.cca.fit(y, ref)
-                    x_score, y_score = self.cca.transform(y, ref)
-                    corr = np.corrcoef(x_score[:, 0], y_score[:, 0])[0, 1]
-                    weighted_corr += self.subband_weights[k] * (corr ** 2)
-                except Exception:
-                    continue
-            
-            target_scores.append(weighted_corr)
-            
-        if not target_scores:
-            return None
-            
-        # Instead of absolute correlation thresholds (which fail on real EEG due to 1/f noise),
-        # calculate the Signal-to-Noise Ratio (SNR) for the targets.
-        target_scores = np.array(target_scores)
-        mean_score = np.mean(target_scores)
-        snr_scores = target_scores / (mean_score + 1e-6) # relative power compared to background
-            
-        # EMA Smoothing for SNR to prevent continuous bouncing
-        if not hasattr(self, 'snr_history') or self.snr_history is None:
-            self.snr_history = snr_scores
-        else:
-            alpha = 0.4 # Smoothing factor
-            self.snr_history = alpha * snr_scores + (1 - alpha) * self.snr_history
-            
-        max_snr = np.max(self.snr_history)
-        best_idx = np.argmax(self.snr_history)
-        detected_freq = self.target_freqs[best_idx]
-        
-        # --- True Harmonic Correction ---
-        # Canonical Correlation is mathematically biased toward LOWER frequencies (sub-harmonics).
-        # E.g., a pure 20Hz signal perfectly matches a 10Hz reference's 2nd harmonic, making 10Hz score highly.
-        # If 10Hz is detected, we check if 20Hz (its harmonic) ALSO has a high score. If so, 20Hz is the REAL signal.
-        for i, f_other in enumerate(self.target_freqs):
-            if i == best_idx: continue
-            for multiplier in [2, 3]:
-                if abs(f_other - (detected_freq * multiplier)) < 0.2:
-                    harmonic_snr = self.snr_history[i]
-                    # If the true signal is 20Hz, then target 20Hz will have an extremely strong SNR too
-                    if harmonic_snr > (max_snr * 0.75): 
-                        print(f"✅ True Harmonic Corrected: {detected_freq}Hz was sub-harmonic, real signal is {f_other}Hz")
-                        detected_freq = f_other
-                        best_idx = i
-                        max_snr = harmonic_snr
-                        break
-        
-        # Heuristic: 10Hz is common brain alpha noise. Apply penalty if it barely exceeds background.
-        if detected_freq == 10.0 and max_snr < 1.3:
-             max_snr *= 0.8
-        
-        # Real EEG detection requires the target to stand out from the mean background by ~1.15x (15%)
-        # In neurobench with no targets, SNR ~ 1.0. With a clear target, SNR spikes to 1.5 - 3.0.
-        snr_threshold = 1.15
-        
-        if max_snr < snr_threshold:
-            live_event = "REST"
-        else:
-            live_event = f"TARGET_{str(detected_freq).replace('.', '_')}HZ"
-            
-        # Initialize debounce trackers
-        if not hasattr(self, 'current_stable_target'):
-            self.current_stable_target = live_event
+        if smoothed_event != self.current_stable_target:
+            self.current_stable_target = smoothed_event
             self.stable_target_start = current_time
-            self.last_emitted_ts = 0.0
-            
-        # Debounce logic: target must remain stable
-        if live_event != self.current_stable_target:
-            self.current_stable_target = live_event
-            self.stable_target_start = current_time
-            
+
         confirmed = None
-        
-        # Check if the signal has been stable long enough
         if (current_time - self.stable_target_start) * 1000 >= self.debounce_ms:
-            # Emit a confirmed event at most once per debounce_ms for the same stable target
             if (current_time - self.last_emitted_ts) * 1000 >= self.debounce_ms:
                 confirmed = self.current_stable_target
                 self.last_emitted_ts = current_time
-                if confirmed != "REST":
-                    print(f"FBCCA Confirmed: {confirmed} (SNR: {max_snr:.2f}x)")
-        
-        return live_event, confirmed
+
+        enriched_features = dict(features)
+        enriched_features["detector_confidence"] = confidence
+        enriched_features["score_ratio_runtime"] = ratio
+
+        return smoothed_event, confirmed, enriched_features
 
     def update_config(self, config: dict):
         self.config = config
         self._load_config()
+

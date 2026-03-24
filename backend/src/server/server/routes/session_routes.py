@@ -273,14 +273,15 @@ def api_emg_clear():
 
 @session_bp.route('/api/emg/predict/<action>', methods=['POST'])
 def api_emg_predict_toggle(action):
-    from src.server.server.config_manager import set_detection_state, get_detection_state
+    from src.server.server.config_manager import set_detection_state, get_detection_target
     
     if action == 'start':
         state.session.prediction_active['EMG'] = True
-        set_detection_state(True)
+        set_detection_state(True, 'EMG')
     elif action == 'stop':
         state.session.prediction_active['EMG'] = False
-        set_detection_state(False)
+        if get_detection_target() == 'EMG':
+            set_detection_state(False, None)
         
     return jsonify({"status": "ok", "predicting": state.session.prediction_active['EMG']})
 
@@ -358,12 +359,54 @@ def api_eog_clear():
 
 @session_bp.route('/api/eog/predict/<action>', methods=['POST'])
 def api_eog_predict_toggle(action):
-    from src.server.server.config_manager import set_detection_state
+    from src.server.server.config_manager import set_detection_state, get_detection_target
 
     if action == 'start':
         state.session.prediction_active['EOG'] = True
-        set_detection_state(True)
+        set_detection_state(True, 'EOG')
     elif action == 'stop':
         state.session.prediction_active['EOG'] = False
-        set_detection_state(False)
+        if get_detection_target() == 'EOG':
+            set_detection_state(False, None)
     return jsonify({"status": "ok", "predicting": state.session.prediction_active['EOG']})
+
+
+@session_bp.route('/api/eeg/predict/<action>', methods=['POST'])
+def api_eeg_predict_toggle(action):
+    from src.server.server.config_manager import set_detection_state, get_detection_target
+
+    if action == 'start':
+        state.session.prediction_active['EEG'] = True
+        set_detection_state(True, 'EEG')
+    elif action == 'stop':
+        state.session.prediction_active['EEG'] = False
+        if get_detection_target() == 'EEG':
+            set_detection_state(False, None)
+    return jsonify({"status": "ok", "predicting": state.session.prediction_active['EEG']})
+
+
+@session_bp.route('/api/detectors/predict/<action>', methods=['POST'])
+def api_all_predict_toggle(action):
+    from src.server.server.config_manager import set_detection_state, get_detection_target
+
+    if action == 'start':
+        state.session.prediction_active['EMG'] = True
+        state.session.prediction_active['EOG'] = True
+        state.session.prediction_active['EEG'] = True
+        set_detection_state(True, 'ALL')
+    elif action == 'stop':
+        state.session.prediction_active['EMG'] = False
+        state.session.prediction_active['EOG'] = False
+        state.session.prediction_active['EEG'] = False
+        if get_detection_target() == 'ALL':
+            set_detection_state(False, None)
+
+    return jsonify({
+        "status": "ok",
+        "predicting": {
+            "EMG": state.session.prediction_active['EMG'],
+            "EOG": state.session.prediction_active['EOG'],
+            "EEG": state.session.prediction_active['EEG'],
+        },
+        "target": "ALL" if action == 'start' else None,
+    })

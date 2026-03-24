@@ -166,9 +166,7 @@ function render(elapsed) {
             // Frame-accurate flicker locked to specified monitor refresh rate
             // This prevents rendering jitter from affecting SSVEP frequency stability
             isOn = Math.sin(2 * Math.PI * hz * (frameCount / refreshRate)) >= 0;
-
-            ctx.fillStyle = isOn ? COLORS.ON(brightness) : COLORS.OFF;
-            ctx.fillRect(x, y, gridW, gridH);
+            drawCheckerboard(x, y, gridW, gridH, isOn, brightness);
         } else {
             if (protocolMode && protocolState === 'CUE') {
                 const isTarget = trials[currentTrialIdx] === cfg.id;
@@ -207,4 +205,18 @@ function render(elapsed) {
         ctx.globalAlpha = 1.0;
     });
 
+}
+
+function drawCheckerboard(x, y, width, height, isOn, alpha) {
+    const cells = 6;
+    const cellW = width / cells;
+    const cellH = height / cells;
+
+    for (let row = 0; row < cells; row++) {
+        for (let col = 0; col < cells; col++) {
+            const phaseOn = ((row + col) % 2 === 0) ? isOn : !isOn;
+            ctx.fillStyle = phaseOn ? COLORS.ON(alpha) : COLORS.OFF;
+            ctx.fillRect(x + col * cellW, y + row * cellH, cellW + 1, cellH + 1);
+        }
+    }
 }

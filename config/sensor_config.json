@@ -2,7 +2,7 @@
   "sampling_rate": 1000,
   "channel_mapping": {
     "ch0": {
-      "enabled": true,
+      "enabled": false,
       "sensor": "EMG"
     },
     "ch1": {
@@ -15,5 +15,9 @@
     "showGrid": true,
     "scannerX": 0
   },
-  "num_channels": 2
+  "num_channels": 2,
+  "active_models": {
+    "EMG": "Neurobench",
+    "EOG": "Neurobench"
+  }
 }

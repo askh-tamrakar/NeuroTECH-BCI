@@ -87,7 +87,7 @@ const CameraPanel = ({ initialCameraOn = true }) => {
 
     if (error) {
         return (
-            <div className="card bg-surface border border-border shadow-card rounded-2xl p-4 flex items-center justify-center min-h-[200px]">
+            <div className="card bg-surface border border-border rounded-2xl p-4 flex items-center justify-center min-h-[200px]">
                 <span className="text-red-500 text-sm">{error}</span>
             </div>
         )

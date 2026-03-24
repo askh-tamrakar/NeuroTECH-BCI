@@ -15,16 +15,19 @@ class SessionManager:
         
         self.data_store = {
             'EMG': {},
-            'EOG': {}
+            'EOG': {},
+            'EEG': {}
         }
         # Counts per label
         self.counts = {
             'EMG': {},
-            'EOG': {}
+            'EOG': {},
+            'EEG': {}
         }
         self.prediction_active = {
             'EMG': False,
-            'EOG': False
+            'EOG': False,
+            'EEG': False
         }
         
     def start_recording(self, sensor_type, label, session_name="Default"):

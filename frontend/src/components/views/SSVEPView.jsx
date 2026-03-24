@@ -4,29 +4,42 @@ import SSVEPStimulus from '../ssvep/Stimulus';
 import { soundHandler } from '../../handlers/SoundHandler';
 import CustomNumberInput from '../ui/CustomNumberInput';
 import CustomSelect from '../ui/CustomSelect';
+import { CalibrationApi } from '../../services/calibrationApi';
 
 const COMMON_KEYS = ['None', 'W', 'A', 'S', 'D', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'Enter', 'Escape', 'P', 'Q', '0', '1', '2', '3'];
 const MOUSE_ACTIONS = ['None', 'Left Click', 'Right Click', 'Double Click', 'Scroll Up', 'Scroll Down'];
+const TARGET_DIVISORS = [18, 16, 12, 10, 9, 8];
+
+function buildDynamicTargets(refreshRate, previousConfigs = []) {
+    return TARGET_DIVISORS.map((divisor, index) => {
+        const previous = previousConfigs[index] || {};
+        const frequency = Number((refreshRate / divisor).toFixed(2));
+        return {
+            id: previous.id ?? index,
+            freq: frequency,
+            label: previous.label || `Target ${index + 1}`,
+            mappedKey: previous.mappedKey || ['W', 'A', 'S', 'D', 'Space', 'Escape'][index] || 'None',
+            mappedMouse: previous.mappedMouse || 'None',
+            enabled: previous.enabled !== false,
+            controlType: previous.controlType || 'Keyboard',
+            divisor,
+            source: 'dynamic',
+        };
+    });
+}
 
 export default function SSVEPView({ isConnected, wsEvent }) {
     const [showTargets, setShowTargets] = useState(true);
-    const [configs, setConfigs] = useState([
-        { id: 0, freq: 8, label: 'Target 1', mappedKey: 'W', mappedMouse: 'None', enabled: true, controlType: 'Keyboard' },
-        { id: 1, freq: 10, label: 'Target 2', mappedKey: 'A', mappedMouse: 'None', enabled: true, controlType: 'Keyboard' },
-        { id: 2, freq: 12, label: 'Target 3', mappedKey: 'S', mappedMouse: 'None', enabled: true, controlType: 'Keyboard' },
-        { id: 3, freq: 15, label: 'Target 4', mappedKey: 'D', mappedMouse: 'None', enabled: true, controlType: 'Keyboard' },
-        { id: 4, freq: 18, label: 'Target 5', mappedKey: 'Space', mappedMouse: 'None', enabled: true, controlType: 'Keyboard' },
-        { id: 5, freq: 20, label: 'Target 6', mappedKey: 'Escape', mappedMouse: 'None', enabled: true, controlType: 'Keyboard' },
-    ]);
-
     const [brightness, setBrightness] = useState(() => {
         const stored = localStorage.getItem('ssvep_brightness');
         return stored ? parseFloat(stored) : 1.0;
     });
     const [refreshRate, setRefreshRate] = useState(() => {
         const stored = localStorage.getItem('ssvep_refreshRate');
-        return stored ? parseInt(stored) : 60;
+        return stored ? parseInt(stored, 10) : 144;
     });
+    const [configs, setConfigs] = useState(() => buildDynamicTargets(refreshRate));
+    const refreshDetectedRef = useRef(false);
 
     useEffect(() => {
         localStorage.setItem('ssvep_brightness', brightness);
@@ -34,6 +47,43 @@ export default function SSVEPView({ isConnected, wsEvent }) {
 
     useEffect(() => {
         localStorage.setItem('ssvep_refreshRate', refreshRate);
+    }, [refreshRate]);
+
+    useEffect(() => {
+        let frameId = null;
+        let cancelled = false;
+        const samples = [];
+        let lastTs = null;
+
+        const tick = (ts) => {
+            if (cancelled || refreshDetectedRef.current) return;
+            if (lastTs !== null) {
+                samples.push(ts - lastTs);
+            }
+            lastTs = ts;
+
+            if (samples.length >= 30) {
+                const average = samples.reduce((sum, value) => sum + value, 0) / samples.length;
+                const estimated = Math.round(1000 / average);
+                if (estimated >= 50 && estimated <= 360) {
+                    refreshDetectedRef.current = true;
+                    setRefreshRate(prev => Math.abs(prev - estimated) > 1 ? estimated : prev);
+                }
+                return;
+            }
+
+            frameId = requestAnimationFrame(tick);
+        };
+
+        frameId = requestAnimationFrame(tick);
+        return () => {
+            cancelled = true;
+            if (frameId) cancelAnimationFrame(frameId);
+        };
+    }, []);
+
+    useEffect(() => {
+        setConfigs(prev => buildDynamicTargets(refreshRate, prev));
     }, [refreshRate]);
 
     const [globalRunning, setGlobalRunning] = useState(false);
@@ -69,20 +119,22 @@ export default function SSVEPView({ isConnected, wsEvent }) {
         fetch('/api/config')
             .then(res => res.json())
             .then(data => {
-                const loadedTargets = data?.features?.EEG?.targets;
-                if (loadedTargets && Array.isArray(loadedTargets) && loadedTargets.length > 0) {
-                    // Update current defaults with loaded config while maintaining structure
-                    setConfigs(prev => prev.map(p => {
-                        const match = loadedTargets.find(t => t.id === p.id);
-                        if (match) {
-                            return { ...p, ...match };
-                        }
-                        return p;
-                    }));
+                const eeg = data?.features?.EEG;
+                if (eeg) {
+                    let newRefRate = refreshRate;
+                    if (eeg.refresh_rate) {
+                        newRefRate = eeg.refresh_rate;
+                        setRefreshRate(newRefRate);
+                        localStorage.setItem('ssvep_refreshRate', newRefRate);
+                    }
+                    if (eeg.targets && Array.isArray(eeg.targets) && eeg.targets.length > 0) {
+                        setConfigs(prev => buildDynamicTargets(newRefRate, eeg.targets));
+                    }
                 }
             })
             .catch(err => console.error("Failed to load generic config for SSVEP", err))
             .finally(() => setIsConfigLoaded(true));
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     useEffect(() => {
@@ -141,8 +193,14 @@ export default function SSVEPView({ isConnected, wsEvent }) {
                                 ...c,
                                 controlType: !c.enabled ? 'None' : (c.controlType || 'Keyboard')
                             })),
-                            rest_threshold: 0.45,
-                            window_len_sec: 1.0
+                            rest_threshold: 0.6,
+                            ratio_threshold: 1.2,
+                            classifier: 'lda',
+                            num_harmonics: 4,
+                            window_len_sec: 1.5,
+                            step_sec: 0.25,
+                            smoothing_windows: 7,
+                            refresh_rate: refreshRate
                         }
                     }
                 };
@@ -163,18 +221,20 @@ export default function SSVEPView({ isConnected, wsEvent }) {
 
         const timeoutId = setTimeout(syncConfig, 500); // 500ms debounce
         return () => clearTimeout(timeoutId);
-    }, [configs]);
+    }, [configs, refreshRate, isConfigLoaded]);
 
     // --- Controls ---
     const startFlicker = () => {
         setProtocolMode(false);
         setGlobalRunning(true);
+        CalibrationApi.togglePrediction('EEG', true).catch(err => console.error('EEG prediction start failed:', err));
         addLog('Manual simulation started');
     };
 
     const stopFlicker = () => {
         setGlobalRunning(false);
         setProtocolMode(false);
+        CalibrationApi.togglePrediction('EEG', false).catch(err => console.error('EEG prediction stop failed:', err));
         addLog('Simulation stopped');
     };
 
@@ -195,13 +255,20 @@ export default function SSVEPView({ isConnected, wsEvent }) {
         setCurrentTrialIdx(0);
         setProtocolMode(true);
         setGlobalRunning(true);
+        CalibrationApi.togglePrediction('EEG', true).catch(err => console.error('EEG prediction start failed:', err));
         addLog(`Protocol started (${newTrials.length} trials)`);
     };
+
+    useEffect(() => {
+        return () => {
+            CalibrationApi.togglePrediction('EEG', false).catch(() => { });
+        };
+    }, []);
 
     return (
         <div className="w-full flex bg-black overflow-hidden relative h-[calc(100vh-129px)]">
             {/* Main Stimulus View */}
-            <div className={`flex-grow flex flex-col items-center justify-center relative transition-all duration-300 ${showSidebar ? 'mr-80' : 'mr-[4.5rem]'}`}>
+            <div className={`flex-grow flex flex-col items-center justify-center relative transition-all duration-300 ${showSidebar ? 'ml-80' : 'ml-[4.5rem]'}`}>
                 <SSVEPStimulus
                     configs={configs}
                     brightness={brightness}
@@ -217,6 +284,7 @@ export default function SSVEPView({ isConnected, wsEvent }) {
                     onProtocolFinished={() => {
                         setGlobalRunning(false);
                         setProtocolMode(false);
+                        CalibrationApi.togglePrediction('EEG', false).catch(err => console.error('EEG prediction stop failed:', err));
                         addLog('Protocol finished');
                     }}
                 />
@@ -227,8 +295,8 @@ export default function SSVEPView({ isConnected, wsEvent }) {
                             <div key={cfg.id} className="border border-white/50 rounded-xl flex flex-col items-center justify-center relative shadow-lg bg-black/40">
                                 <span className="text-[10px] font-bold text-white/50 absolute top-2 left-3">{cfg.label}</span>
                                 <span className="text-4xl font-bold text-white drop-shadow-md">
-                                    {(cfg.controlType || 'Keyboard') === 'Mouse' 
-                                        ? (cfg.mappedMouse !== 'None' ? cfg.mappedMouse : '-') 
+                                    {(cfg.controlType || 'Keyboard') === 'Mouse'
+                                        ? (cfg.mappedMouse !== 'None' ? cfg.mappedMouse : '-')
                                         : (cfg.mappedKey !== 'None' ? cfg.mappedKey : '-')}
                                 </span>
                             </div>
@@ -237,48 +305,70 @@ export default function SSVEPView({ isConnected, wsEvent }) {
                 )}
             </div>
 
-            {/* Right Sidebar */}
+            {/* Left Sidebar */}
             <div
-                className={`absolute right-0 top-0 bottom-0 z-10 transition-all duration-300 ease-in-out border-l border-border bg-surface/80 backdrop-blur-md flex flex-col h-full ${showSidebar ? 'w-80 overflow-y-auto overflow-x-hidden' : 'w-[4.5rem] overflow-visible'} [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']`}
+                className={`absolute left-0 top-0 bottom-0 z-10 transition-all duration-300 ease-in-out border-r border-border bg-surface/80 backdrop-blur-md flex flex-col h-full ${showSidebar ? 'w-80 overflow-y-auto overflow-x-hidden' : 'w-[4.25rem] overflow-visible'} [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']`}
             >
                 {/* Collapsed Icons Only State */}
                 {!showSidebar && (
-                    <div className="flex flex-col items-center gap-6 mt-4 w-full animate-fade-in shrink-0 h-full">
+                    <div className="flex flex-col items-center justify-around py-3 w-full animate-fade-in shrink-0 h-full overflow-visible">
                         <button
                             onClick={() => setShowSidebar(true)}
-                            className="p-2 hover:bg-white/10 rounded-full transition-colors mb-2"
+                            className=" hover:bg-white/10 rounded-full transition-colors"
                             title="Expand Sidebar"
                         >
-                            <Menu size={24} className="text-primary" />
+                            <Menu size={34} className="text-primary" />
                         </button>
-                        <Settings size={24} className="text-primary animate-pulse" title="SSVEP Setup" />
 
-                        <button onClick={() => setShowSidebar(true)} title="Signal" className="hover:text-primary transition-colors group relative">
-                            <Activity size={20} className="text-muted group-hover:text-primary" />
-                            <div className="absolute right-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Signal Frequency</div>
-                        </button>
+                        <div className="w-full h-px bg-border/80 shrink-0" />
+
+                        <div className="flex flex-col items-center cursor-default group relative w-full" title="Signal Frequency">
+                            <Activity size={28} className="text-primary" />
+                            <span className="text-[20px] font-black tabular-nums mt-1 text-primary">{realTimeFreq ? realTimeFreq.toFixed(1) : '0.0'}</span>
+                            <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-1.5 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Live Signal (Hz)</div>
+                        </div>
 
                         <button onClick={() => setShowSidebar(true)} title="System Activity" className="hover:text-primary transition-colors group relative">
-                            <History size={20} className="text-muted group-hover:text-primary" />
+                            <History size={28} className="text-muted group-hover:text-primary" />
                             {logs.length > 0 && <span className="absolute -top-1 -right-1 w-2 h-2 bg-primary rounded-full animate-pulse blur-[1px]"></span>}
-                            <div className="absolute right-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">System Activity</div>
+                            <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">System Activity Logs</div>
                         </button>
 
-                        <button onClick={() => setShowSidebar(true)} title="Global Actions" className="hover:text-primary transition-colors group relative">
-                            {globalRunning ? <Square size={20} className="text-red-500" /> : <Play size={20} className="text-green-500" />}
-                            <div className="absolute right-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Global Actions</div>
+                        <div className="w-full h-px bg-border/80 shrink-0" />
+
+                        <button onClick={globalRunning ? stopFlicker : startFlicker} title="Start/Stop Manual Simulation" className={`transition-colors group relative p-2 rounded-full ${globalRunning ? 'text-red-500 hover:bg-red-500/20' : 'text-green-500 hover:bg-green-500/20'}`}>
+                            {globalRunning ? <Square size={28} /> : <Play size={28} />}
+                            <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-1.5 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">{globalRunning ? "Stop Simulation" : "Start Simulation"}</div>
                         </button>
 
-                        <button onClick={() => setShowSidebar(true)} title="Targets" className="hover:text-primary transition-colors group relative">
-                            <Monitor size={20} className="text-muted group-hover:text-primary" />
-                            <div className="absolute right-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Targets Settings</div>
+                        {!globalRunning && (
+                            <button onClick={runProtocol} title="Run Protocol" className="transition-colors group relative p-2 rounded-full text-primary hover:bg-primary/20">
+                                <Zap size={28} />
+                                <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-surface px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Run Protocol</div>
+                            </button>
+                        )}
+
+                        <div className="w-full h-px bg-border/80 shrink-0" />
+
+                        <button onClick={() => setShowSidebar(true)} title="Targets Settings" className="hover:text-primary transition-colors group relative">
+                            <Monitor size={28} className="text-muted group-hover:text-primary" />
+                            <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Targets Settings</div>
                         </button>
 
-                        <div className="flex-1" />
-                        <div className="flex flex-col gap-2 w-full items-center border-t border-border pt-4 pb-4 shrink-0">
-                            <button onClick={() => setShowSidebar(true)} className={`w-[42px] h-[42px] flex items-center justify-center rounded-full border transition-all shadow-sm group relative ${isConnected ? 'bg-green-500/10 border-green-500/30 text-green-500' : 'bg-red-500/10 border-red-500/30 text-red-500'}`} title={isConnected ? "Sensor Connected" : "Sensor Disconnected"}>
-                                {isConnected ? <Zap size={18} /> : <Power size={18} />}
-                                <div className="absolute right-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Sensor Status</div>
+                        {configs.filter(c => c.enabled).map((cfg) => (
+                            <div key={cfg.id} className="flex flex-col items-center group relative cursor-help" title={cfg.label}>
+                                <Target size={28} className="text-primary/70 mb-1 group-hover:text-primary transition-colors" />
+                                <span className="text-[18px] font-black text-text/80 group-hover:text-primary">{cfg.freq}</span>
+                                <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">{cfg.label} ({cfg.freq}Hz)</div>
+                            </div>
+                        ))}
+
+                        <div className="w-full h-px bg-border/80 shrink-0" />
+
+                        <div className="flex flex-col w-full items-center shrink-0">
+                            <button className={`w-[42px] h-[42px] flex items-center justify-center rounded-full border transition-all cursor-default shadow-sm group relative ${isConnected ? 'bg-green-500/10 border-green-500/30 text-green-500' : 'bg-red-500/10 border-red-500/30 text-red-500'}`} title={isConnected ? "Sensor Connected" : "Sensor Disconnected"}>
+                                {isConnected ? <Zap size={28} /> : <Power size={28} />}
+                                <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Sensor Status</div>
                             </button>
                         </div>
                     </div>
@@ -301,7 +391,7 @@ export default function SSVEPView({ isConnected, wsEvent }) {
                             className="p-2 hover:bg-white/10 rounded-full transition-colors"
                             title="Collapse Sidebar"
                         >
-                            <ChevronLeft size={24} className="rotate-180" />
+                            <ChevronLeft size={24} />
                         </button>
                     </div>
 
@@ -456,15 +546,9 @@ export default function SSVEPView({ isConnected, wsEvent }) {
                                                     <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse shadow-[0_0_5px_currentColor] shrink-0 mx-1" />
                                                 ) : <span className="w-1.5 h-1.5 shrink-0 mx-1" />}
 
-                                                <div className="flex items-center gap-2 shrink-0">
-                                                    <CustomNumberInput
-                                                        value={cfg.freq}
-                                                        onChange={(val) => updateConfig(cfg.id, { freq: val })}
-                                                        min={0}
-                                                        step={0.1}
-                                                        className="w-[7rem] !h-[1.75rem]"
-                                                        unit="Hz"
-                                                    />
+                                                <div className="flex items-center gap-2 shrink-0 rounded-lg border border-primary/20 bg-primary/5 px-2 py-1">
+                                                    <span className="text-[11px] font-bold uppercase tracking-wider text-primary/70">{refreshRate}/{cfg.divisor}</span>
+                                                    <span className="text-sm font-black text-primary">{cfg.freq}Hz</span>
                                                 </div>
                                             </div>
 

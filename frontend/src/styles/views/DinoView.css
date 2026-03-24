@@ -103,6 +103,7 @@
 /* Main Containers */
 .dino-container {
     height: 100vh;
+    width: 100%;
     overflow: hidden;
     /* Padding moved to children for granular control */
     padding: 0;
@@ -114,11 +115,13 @@
     gap: 0.5rem;
     flex-wrap: wrap;
     height: 100%;
+    width: 100%;
 }
 
 @media (min-width: 1024px) {
     .dino-game-wrapper {
         flex-wrap: nowrap;
+        flex-direction: row-reverse;
     }
 }
 
@@ -152,7 +155,7 @@
     justify-content: space-between;
     align-items: center;
     margin-bottom: 0.5rem;
-    padding-left: 0.5rem;
+    padding-left: 0rem;
     padding-right: 0.5rem;
 }
 
@@ -243,23 +246,21 @@
 }
 
 .stat-group-left {
-    display: grid;
-    grid-template-columns: 200px 300px;
-    /* Fixed widths for stability */
+    display: flex;
+    justify-content: space-between;
     align-items: center;
-    gap: 7rem;
+    gap: 2rem;
     text-align: left;
+    flex: 1;
 }
 
 .stat-group-right {
-    display: grid;
-    grid-template-columns: 300px 200px;
+    display: flex;
+    justify-content: space-between;
     align-items: center;
-    justify-content: center;
-    gap: 7rem;
+    gap: 2rem;
     text-align: right;
-    justify-items: center;
-
+    flex: 1;
 }
 
 
@@ -391,6 +392,14 @@
     display: flex;
     flex-direction: column;
     gap: 1.5rem;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    padding-top: 109px;
+    padding-bottom: 45px;
+}
+
+.game-sidebar::-webkit-scrollbar {
+    display: none;
 }
 
 @media (min-width: 1024px) {
@@ -398,6 +407,14 @@
         width: 18rem;
         min-width: 18rem;
         flex-shrink: 0;
+        transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), min-width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .game-sidebar.collapsed {
+        width: 4rem;
+        min-width: 4rem;
+        border-right: 1px solid var(--border);
+        padding-right: 6px;
     }
 }
 
