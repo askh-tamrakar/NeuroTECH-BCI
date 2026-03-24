@@ -1,17 +1,17 @@
 {
   "EEG": {
     "target_freqs": [
-      4.22,
-      4.75,
-      6.33,
-      7.6,
-      8.44,
-      9.5
+      5.72,
+      6.44,
+      8.58,
+      10.3,
+      11.44,
+      12.88
     ],
     "targets": [
       {
         "id": 0,
-        "freq": 4.22,
+        "freq": 5.72,
         "label": "Targ 1",
         "mappedKey": "W",
         "mappedMouse": "None",
@@ -22,7 +22,7 @@
       },
       {
         "id": 1,
-        "freq": 4.75,
+        "freq": 6.44,
         "label": "Target 2ss",
         "mappedKey": "A",
         "mappedMouse": "None",
@@ -33,7 +33,7 @@
       },
       {
         "id": 2,
-        "freq": 6.33,
+        "freq": 8.58,
         "label": "Target 3",
         "mappedKey": "S",
         "mappedMouse": "None",
@@ -44,7 +44,7 @@
       },
       {
         "id": 3,
-        "freq": 7.6,
+        "freq": 10.3,
         "label": "Target 4",
         "mappedKey": "D",
         "mappedMouse": "None",
@@ -55,7 +55,7 @@
       },
       {
         "id": 4,
-        "freq": 8.44,
+        "freq": 11.44,
         "label": "Target 5",
         "mappedKey": "Space",
         "mappedMouse": "None",
@@ -66,7 +66,7 @@
       },
       {
         "id": 5,
-        "freq": 9.5,
+        "freq": 12.88,
         "label": "Target 6",
         "mappedKey": "Escape",
         "mappedMouse": "None",
@@ -83,7 +83,7 @@
     "num_harmonics": 4,
     "step_sec": 0.25,
     "smoothing_windows": 7,
-    "refresh_rate": 76
+    "refresh_rate": 103
   },
   "EOG": {
     "detection_method": "ML",

@@ -47,6 +47,17 @@ def api_save_config():
         print(f"❌ Error saving config: {e}")
         return jsonify({"error": str(e)}), 500
 
+@config_bp.route('/api/mode', methods=['POST'])
+def api_set_mode():
+    try:
+        data = request.get_json()
+        preset = data.get('preset')
+        view = data.get('view')
+        state.mode_manager.set_preset_and_view(preset, view)
+        return jsonify({"status": "ok", "preset": preset, "view": view})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @config_bp.route('/api/config', methods=['DELETE'])
 def api_delete_config():
     """Reset to default configuration."""

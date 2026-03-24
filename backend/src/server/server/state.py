@@ -1,4 +1,5 @@
 import collections
+from src.core.mode_manager import ModeManager
 
 class WebServerState:
     def __init__(self):
@@ -16,6 +17,7 @@ class WebServerState:
         self.emg_buffer = collections.deque(maxlen=1000) # 1 second buffer at 1kHz
         self.last_pred_time = 0
         self.session = None # Assigned by main app or initialized here? Initialize in app setup.
+        self.mode_manager = ModeManager()
 
 # Global instance
 state = WebServerState()

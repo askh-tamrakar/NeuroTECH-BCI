@@ -1,0 +1,193 @@
+.eeg-dashboard-wrapper {
+  display: flex;
+  height: 100%;
+  width: 100%;
+  color: var(--text);
+  font-family: 'Inter', sans-serif;
+  overflow: hidden;
+}
+
+.eeg-sidebar {
+  width: 260px;
+  background: var(--surface);
+  border-right: 1px solid rgba(255,255,255,0.08);
+  display: flex;
+  flex-direction: column;
+  padding: 24px 0;
+  shrink: 0;
+}
+
+.eeg-sidebar-header {
+  padding: 0 24px 24px 24px;
+  font-size: 1.25rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  margin-bottom: 24px;
+}
+
+.eeg-sidebar-group {
+  margin-bottom: 24px;
+}
+
+.eeg-sidebar-title {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  color: #888;
+  margin: 0 24px 12px 24px;
+  letter-spacing: 1.5px;
+  font-weight: 600;
+}
+
+.eeg-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 24px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-left: 3px solid transparent;
+  color: #aaa;
+  font-size: 0.95rem;
+}
+
+.eeg-nav-item:hover {
+  background: rgba(255,255,255,0.03);
+  color: var(--text);
+}
+
+.eeg-nav-item.active {
+  background: rgba(255, 255, 255, 0.08);
+  border-left-color: var(--accent, #4CAF50);
+  color: var(--text);
+  font-weight: 500;
+}
+
+.eeg-main-content {
+  flex: 1;
+  padding: 40px;
+  display: flex;
+  flex-direction: column;
+  background: radial-gradient(circle at top right, rgba(255,255,255,0.02) 0%, transparent 60%);
+  overflow-y: auto;
+}
+
+.eeg-glass-card {
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 24px;
+  padding: 40px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+  position: relative;
+  overflow: hidden;
+  min-height: 500px;
+}
+
+.eeg-view-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 40px;
+}
+
+.eeg-view-title {
+  font-size: 2.5rem;
+  font-weight: 700;
+  margin: 0;
+  background: linear-gradient(135deg, #fff 0%, #aaa 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.eeg-view-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+}
+
+.eeg-status-box {
+  background: rgba(0,0,0,0.2);
+  border-radius: 20px;
+  padding: 40px;
+  text-align: center;
+  border: 1px solid rgba(255,255,255,0.05);
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+.eeg-score-display {
+  font-size: 5rem;
+  font-weight: 800;
+  margin: 20px 0;
+  line-height: 1;
+}
+
+.eeg-meta-text {
+  font-size: 1.25rem;
+  color: #aaa;
+  margin-top: 10px;
+}
+
+.eeg-progress-track {
+  width: 100%;
+  max-width: 400px;
+  height: 8px;
+  background: rgba(255,255,255,0.1);
+  border-radius: 4px;
+  margin: 30px auto 0;
+  overflow: hidden;
+}
+
+.eeg-progress-fill {
+  height: 100%;
+  background: var(--accent, #4CAF50);
+  border-radius: 4px;
+  transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes pulseGlow {
+  0% { filter: drop-shadow(0 0 10px currentColor); }
+  50% { filter: drop-shadow(0 0 25px currentColor); }
+  100% { filter: drop-shadow(0 0 10px currentColor); }
+}
+
+.pulse-glow {
+  animation: pulseGlow 2s infinite ease-in-out;
+}
+
+.waiting-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #666;
+  gap: 20px;
+}
+
+.loader-circle {
+  width: 50px;
+  height: 50px;
+  border: 3px solid rgba(255,255,255,0.1);
+  border-top-color: var(--accent, #fff);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}

@@ -213,6 +213,16 @@ def broadcast_data(socketio):
                             "sample_count": state.sample_count
                         })
                         
+                        # --- MODE MANAGER HOOK ---
+                        try:
+                            # Pass just the first channel's value (Oz or FP1/FP2 depending on preset)
+                            ch_val = channels_data[0]['value'] if 0 in channels_data else 0.0
+                            mode_result = state.mode_manager.process_sample([ch_val])
+                            if mode_result:
+                                socketio.emit('eeg_mode_result', mode_result)
+                        except Exception as e:
+                            print(f"ModeManager Error: {e}", flush=True)
+                        
                         # --- RECORDING & PREDICTION hooks ---
                         if hasattr(state, 'session') and state.session:
                             eog_vals = []

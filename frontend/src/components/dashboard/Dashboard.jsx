@@ -5,7 +5,7 @@ import { useTheme } from '../../contexts/ThemeContext'
 import { Github, UserPlus } from 'lucide-react'
 import LiveDashboard from '../views/LiveDashboard'
 import DinoView from '../views/DinoView'
-import SSVEPView from '../views/SSVEPView'
+import EEGDashboard from '../views/EEGDashboard'
 import RPSGame from '../views/RPSGame'
 import DataCollectionView from '../views/DataCollectionView'
 import MLTrainingView from '../views/MLTrainingView'
@@ -103,7 +103,7 @@ export default function Dashboard() {
   const navItems = React.useMemo(() => [
     { label: 'TERMINAL', onClick: () => setCurrentPage('live'), href: '#live' },
     { label: 'Dino', onClick: () => setCurrentPage('dino'), href: '#dino' },
-    { label: 'SSVEP', onClick: () => setCurrentPage('ssvep'), href: '#ssvep' },
+    { label: 'EEG Suite', onClick: () => setCurrentPage('eeg_dashboard'), href: '#eeg_dashboard' },
     { label: 'RPS', onClick: () => setCurrentPage('rps'), href: '#rps' },
     { label: 'M. L.', onClick: () => setCurrentPage('ml_training'), href: '#ml_training' },
     { label: 'Data Collection', onClick: () => setCurrentPage('data_collection'), href: '#data_collection' },
@@ -203,7 +203,7 @@ export default function Dashboard() {
 
                 {currentPage === 'live' && <LiveDashboard wsData={lastMessage} wsConfig={lastConfig} wsEvent={lastEvent} sendMessage={sendMessage} wsUrl={status === 'connected' ? (currentUrl || defaultWsSource) : null} mobileMainView={mobileMainView} setMobileMainView={setMobileMainView} />}
                 {currentPage === 'dino' && <DinoView isConnected={!!lastMessage} wsEvent={lastEvent} isPaused={false} />}
-                {currentPage === 'ssvep' && <SSVEPView isConnected={!!lastMessage} wsEvent={lastEvent} />}
+                {currentPage === 'eeg_dashboard' && <EEGDashboard isConnected={!!lastMessage} wsEvent={lastEvent} />}
                 {currentPage === 'rps' && <RPSGame wsEvent={lastEvent} />}
                 {currentPage === 'data_collection' && <DataCollectionView wsData={lastMessage} wsEvent={lastEvent} config={lastConfig} wsUrl={status === 'connected' ? (currentUrl || defaultWsSource) : null} />}
                 {currentPage === 'ml_training' && <MLTrainingView />}
