@@ -114,6 +114,8 @@ class SoundHandler {
 
     // --- DINO GAME ---
     playDinoJump() {
+        if (!this.enabled || !this.initialized || !this.ctx) return;
+        this.resume();
         // Upward sliding frequency
         this.playTone(150, 'square', 0.15, 0.1);
         const now = this.ctx.currentTime;
@@ -132,6 +134,8 @@ class SoundHandler {
     }
 
     playDinoDead() {
+        if (!this.enabled || !this.initialized || !this.ctx) return;
+        this.resume();
         // Dramatic low frequency drop + noise
         const now = this.ctx.currentTime;
         this.playTone(100, 'sawtooth', 0.5, 0.3);
@@ -168,6 +172,8 @@ class SoundHandler {
     }
 
     playRPSWarp() {
+        if (!this.enabled || !this.initialized || !this.ctx) return;
+        this.resume();
         // Liquid switch sound
         const now = this.ctx.currentTime;
         const osc = this.ctx.createOscillator();
@@ -197,6 +203,8 @@ class SoundHandler {
 
     // --- ML TRAINING ---
     playMLTrain() {
+        if (!this.enabled || !this.initialized || !this.ctx) return;
+        this.resume();
         // Ascending technical Arpeggio
         const now = this.ctx.currentTime;
         [440, 523, 659, 880].forEach((f, i) => {
@@ -221,6 +229,8 @@ class SoundHandler {
     }
 
     playConnectionZap() {
+        if (!this.enabled || !this.initialized || !this.ctx) return;
+        this.resume();
         // Electric zap sound
         const now = this.ctx.currentTime;
         const osc = this.ctx.createOscillator();
@@ -249,6 +259,8 @@ class SoundHandler {
     }
 
     playDataFetch() {
+        if (!this.enabled || !this.initialized || !this.ctx) return;
+        this.resume();
         // High to low data-fetching sound
         const now = this.ctx.currentTime;
         const osc = this.ctx.createOscillator();
