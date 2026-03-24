@@ -158,9 +158,9 @@
   backdrop-filter: blur(10px);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 20px;
-  padding: 2.5rem;
-  width: 340px;
-  height: 460px;
+  padding: 3rem;
+  width: 400px;
+  height: 520px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -195,8 +195,8 @@
 }
 
 .card-image {
-  width: 200px;
-  height: 200px;
+  width: 280px;
+  height: 280px;
   object-fit: contain;
   filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.4));
   transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);

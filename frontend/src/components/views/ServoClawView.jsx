@@ -24,24 +24,23 @@ export default function ServoClawView({ wsEvent, isConnected }) {
         let newAngle = currentAngle;
 
         if (e === 'SingleBlink') {
-            action = 'Closing (+5°)';
+            action = 'Degree (+ve)';
             newAngle = Math.min(97, currentAngle + 5);
         } else if (e === 'DoubleBlink') {
-            action = 'Opening (-5°)';
+            action = 'Degree (-ve)';
             newAngle = Math.max(1, currentAngle - 5);
         } else if (e === 'Rock') {
-            action = 'Snap CLOSED';
+            action = 'Full Closing';
             newAngle = 97;
         } else if (e === 'Paper') {
-            action = 'Snap OPEN';
+            action = 'Full Open';
             newAngle = 1;
         } else if (e === 'Scissors') {
             action = 'Snap MIDDLE';
             newAngle = 48;
         } else if (typeof e === 'string' && e.startsWith('TARGET_')) {
-            action = `Preset Position (${e})`;
-            // Rough approximation for visual representation of SSVEP targets
-            newAngle = 82; // E.g., slightly open for target
+            action = `Preset (${e})`;
+            newAngle = 82; 
         }
         
         if (action) {
@@ -49,14 +48,11 @@ export default function ServoClawView({ wsEvent, isConnected }) {
             setLastAction(`Last event: ${e}`);
             setCurrentAngle(newAngle);
             
-            // Add to event log matching backend format
             const timeStr = new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
             
+            // Log concise descriptive event
             setEventLogs(prev => [
-                { id: Date.now() + Math.random(), text: `[${timeStr}] [Servo Actuator ] Sent: DEG ${newAngle}` },
-                { id: Date.now() + Math.random() + 1, text: `[${timeStr}] [Stream Manager ] Control: DEG ${newAngle}` },
-                { id: Date.now() + Math.random() + 2, text: `[${timeStr}] [HID Controller ] Received Event: ${e}` },
-                { id: Date.now() + Math.random() + 3, text: `[${timeStr}] [Servo Actuator ] Event: ${e} -> ${action}` },
+                { id: Date.now() + Math.random(), text: `[${timeStr}] Event: ${e} -> ${action}` },
                 ...prev
             ].slice(0, 100));
 
@@ -112,10 +108,17 @@ export default function ServoClawView({ wsEvent, isConnected }) {
         }
     };
 
-    const testMovement = (action) => {
+    const testMovement = async (action) => {
         soundHandler?.playClick?.();
         setClawStatus(`Executing: ${action}`);
         setLastAction(`Manual: ${action}`);
+        
+        try {
+            await CalibrationApi.sendManualClawCommand(action);
+        } catch (e) {
+            console.error("Failed manual override", e);
+        }
+        
         setTimeout(() => {
             updateClawStatus(ssvepActive, rpsActive, blinkActive);
         }, 2000);
@@ -163,19 +166,16 @@ export default function ServoClawView({ wsEvent, isConnected }) {
                     </p>
                 </div>
                 <div className="flex gap-3">
-                    <button
+                    <button 
                         onClick={toggleAll}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-colors ${(ssvepActive || rpsActive || blinkActive)
-                                ? 'bg-red-500/10 border border-red-500/50 text-red-500 hover:bg-red-500/20'
+                        className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-md font-bold transition-colors ${
+                            (ssvepActive || rpsActive || blinkActive) 
+                                ? 'bg-red-500/10 border border-red-500/50 text-red-500 hover:bg-red-500/20' 
                                 : 'bg-primary border border-primary text-primary-contrast shadow-glow hover:opacity-90'
-                            }`}
+                        }`}
                     >
-                        {(ssvepActive || rpsActive || blinkActive) ? <Square size={18} /> : <Play size={18} />}
+                        {(ssvepActive || rpsActive || blinkActive) ? <Square size={20} /> : <Play size={20} />}
                         {(ssvepActive || rpsActive || blinkActive) ? 'Stop All' : 'Start All Detections'}
-                    </button>
-                    <button className="flex items-center gap-2 px-4 py-2 bg-surface border border-border rounded-xl text-sm font-bold text-text hover:border-primary/50 transition-colors">
-                        <Settings size={18} />
-                        Calibrate
                     </button>
                 </div>
             </div>
@@ -232,8 +232,9 @@ export default function ServoClawView({ wsEvent, isConnected }) {
                                 </div>
                             ) : (
                                 eventLogs.map(log => (
-                                    <div key={log.id} className="font-mono text-xs text-primary/80 truncate">
-                                        <span dangerouslySetInnerHTML={{ __html: log.text.replace(/(\[.*?\])/g, '<span class="text-muted/60 font-bold">$1</span>').replace('->', '<span class="text-white/50">-></span>') }} />
+                                    <div key={log.id} className="font-mono text-sm leading-relaxed text-primary/90 truncate py-0.5">
+                                        {/* Highlight the timestamp and the arrow to make it super readable */}
+                                        <span dangerouslySetInnerHTML={{ __html: log.text.replace(/(\[.*?\])/g, '<span class="text-muted/60 font-bold">$1</span>').replace('->', '<span class="text-white/50 px-1">-></span>').replace(/Event:(.*?)->/, 'Event:<span class="text-primary font-bold px-1">$1</span>->') }} />
                                     </div>
                                 ))
                             )}
@@ -270,7 +271,7 @@ export default function ServoClawView({ wsEvent, isConnected }) {
                                 {/* Left Pincer */}
                                 <div 
                                     className="absolute bottom-6 left-1/2 w-8 h-36 origin-bottom transition-transform duration-[600ms] ease-[cubic-bezier(0.34,1.56,0.64,1)] z-0"
-                                    style={{ transform: `translateX(-24px) rotate(-${45 * ((97 - currentAngle) / 96)}deg)` }}
+                                    style={{ transform: `translateX(-24px) rotate(-${90 * ((97 - currentAngle) / 96)}deg)` }}
                                 >
                                     <div className="w-full h-full bg-surface border-4 border-primary rounded-t-full rounded-b-lg shadow-[0_0_15px_rgba(var(--color-primary-rgb),0.2)] relative flex justify-end">
                                         {/* Grip pad */}
@@ -281,7 +282,7 @@ export default function ServoClawView({ wsEvent, isConnected }) {
                                 {/* Right Pincer */}
                                 <div 
                                     className="absolute bottom-6 right-1/2 w-8 h-36 origin-bottom transition-transform duration-[600ms] ease-[cubic-bezier(0.34,1.56,0.64,1)] z-0"
-                                    style={{ transform: `translateX(24px) rotate(${45 * ((97 - currentAngle) / 96)}deg)` }}
+                                    style={{ transform: `translateX(24px) rotate(${90 * ((97 - currentAngle) / 96)}deg)` }}
                                 >
                                     <div className="w-full h-full bg-surface border-4 border-primary rounded-t-full rounded-b-lg shadow-[0_0_15px_rgba(var(--color-primary-rgb),0.2)] relative flex justify-start">
                                         {/* Grip pad */}

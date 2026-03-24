@@ -2,7 +2,7 @@
   "sampling_rate": 1000,
   "channel_mapping": {
     "ch0": {
-      "enabled": true,
+      "enabled": false,
       "sensor": "EMG"
     },
     "ch1": {
@@ -17,7 +17,7 @@
   },
   "num_channels": 2,
   "active_models": {
-    "EMG": "long",
-    "EOG": "dino-ml"
+    "EMG": "Neurobench",
+    "EOG": "Neurobench"
   }
 }

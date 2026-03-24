@@ -4,12 +4,26 @@ import CameraPanel from '../ui/CameraPanel'
 import CustomSelect from '../ui/CustomSelect'
 import Counter from '../ui/Counter'
 import {
-    ScanEye, SlidersHorizontal, ArrowUp, Pause, Play, Trash2, Wifi, WifiOff, Save, Skull, Trophy, Keyboard, Eye,
-    Gamepad2, Globe, Sparkles, Atom, Ruler, Settings, RotateCcw, ScrollText, Timer, Weight, MoveVertical,
+    ScanEye, SlidersHorizontal, ArrowUp, Pause, Play, Trash2, Wifi, WifiOff, Save, Skull, Trophy, Keyboard, Eye, Gamepad2, Globe, Sparkles, Atom, Ruler, Settings, RotateCcw, ScrollText, Timer, Weight, MoveVertical,
     MoveHorizontal, Maximize, ArrowDownToLine, Grid, Sun, Moon, Cloud, Star, TreePine, Leaf, Hand,
-    Layers, Zap, Clock, ChevronDown, Activity, Target, Radio, Signal, Circle
+    Layers, Zap, Clock, ChevronDown, Activity, Target, Radio, Signal, Circle, Camera, Menu, BrainCircuit
 } from 'lucide-react'
 import { soundHandler } from '../../handlers/SoundHandler'
+
+const getEventEmoji = (type) => {
+    switch (type) {
+        case 'jump': return '⬆️';
+        case 'blink': return '👁️';
+        case 'keyboard': return '⌨️';
+        case 'toggle': return '⏯️';
+        case 'connection': return '🟢';
+        case 'disconnect': return '🔴';
+        case 'settings': return '⚙️';
+        case 'gameover': return '💀';
+        case 'highscore': return '🏆';
+        default: return '📝';
+    }
+};
 
 export default function DinoView({ isConnected, wsEvent, isPaused }) {
     const API_BASE_URL = import.meta.env.VITE_API_URL || '';
@@ -27,6 +41,7 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
     )
     const [eyeState, setEyeState] = useState('open') // open, blink, double-blink
     const [showSettings, setShowSettings] = useState(false)
+    const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
     const [models, setModels] = useState([]) // EOG Models
 
     // Game settings (easy mode default)
@@ -779,12 +794,22 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
                 <div className="game-main-area">
                     <div className="game-card">
                         <div className="game-header">
-                            <button
-                                onClick={() => setShowSettings(!showSettings)}
-                                className={`tuner-button ${showSettings ? 'active' : 'inactive'}`}
-                            >
-                                <SlidersHorizontal /> Tuner
-                            </button>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={() => setIsSidebarCollapsed(true)}
+                                    className={`p-2 hover:bg-white/10 rounded-full transition-all duration-300 text-muted hover:text-text ${isSidebarCollapsed ? 'hidden' : 'opacity-100 scale-100 w-[40px]'}`}
+                                    title="Collapse Sidebar"
+                                >
+                                    <Menu size={24} />
+                                </button>
+                                <button
+                                    onPointerDown={() => !isSidebarCollapsed && setShowSettings(!showSettings)}
+                                    className={`tuner-button ${showSettings ? 'active' : 'inactive'} ${isSidebarCollapsed ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}`}
+                                    disabled={isSidebarCollapsed}
+                                >
+                                    <SlidersHorizontal /> Tuner
+                                </button>
+                            </div>
                             <h2 className="game-title">
                                 <span className={`status-eye ${isConnected ? 'connected' : 'disconnected'}`}><ScanEye size={32} /></span>
                                 EOG Dino Game
@@ -845,19 +870,22 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
                                         </div>
                                         <div className="stat-block-row stat-block-start">
                                             <span className="stat-label flex items-center gap-1"><Target size={24} /> Score :</span>
-                                            <Counter value={Math.floor(score / 10)} fontSize={48} digitHeight={75} places={[10000, 1000, 100, 10, 1]} className="stat-counter-large" />
+                                            <Counter value={Math.floor(score / 10)} fontSize="clamp(1.5rem, 3.5vw, 3rem)" places={[10000, 1000, 100, 10, 1]} className="stat-counter-large" style={{ lineHeight: 1 }} />
                                         </div>
                                     </div>
+
+                                    {/* Middle Spacer to avoid eye collision */}
+                                    <div className="hidden lg:block" style={{ width: '24rem', flexShrink: 0 }}></div>
 
                                     {/* Right Side: Best & Sensor */}
                                     <div className="stat-group-right">
                                         <div className="stat-block-row stat-block-end">
                                             <Counter
                                                 value={Math.floor(highScore / 10)}
-                                                fontSize={48}
-                                                digitHeight={75}
+                                                fontSize="clamp(1.5rem, 3.5vw, 3rem)"
                                                 places={[10000, 1000, 100, 10, 1]}
                                                 className="stat-counter-large"
+                                                style={{ lineHeight: 1 }}
                                             />
                                             <span className="stat-label flex items-center gap-1">: Best <Trophy size={24} className="text-yellow-500 mb-1" /></span>
                                         </div>
@@ -886,235 +914,310 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
                     </div>
                 </div>
 
-                {/* Right Sidebar */}
-                <div className="game-sidebar pr-1.5">
-                    <div className="shrink-0" style={{ height: '85px' }} />
-                    {/* Camera Panel */}
-                    <CameraPanel initialCameraOn={false} />
-
-                    {/* Eye Controls Panel */}
-                    <div className="card bg-surface border border-border shadow-card rounded-2xl p-4 " style={{ flexShrink: 0 }}>
-                        <h3 className="text-sm font-bold text-text uppercase tracking-wider mb-3 flex items-center gap-2"><Gamepad2 size={16} /> Controls</h3>
-                        <div className="space-y-2 text-sm text-text">
-                            <div className="flex justify-between items-center">
-                                <span className="text-muted flex items-center gap-1.5"><Eye size={14} className="text-secondary/70" /> Blink ONCE</span>
-                                <span className="font-bold text-primary flex items-center gap-1"><ArrowUp size={12} /> Jump</span>
-                            </div>
-                            <div className="flex justify-between items-center">
-                                <span className="text-muted flex items-center gap-1.5"><Eye size={14} className="text-secondary/70" /><Eye size={14} className="text-secondary/70 -ml-2" /> Blink TWICE</span>
-                                <span className="font-bold text-primary flex items-center gap-1"><Pause size={12} /> Pause/Resume</span>
-                            </div>
-                        </div>
-
-                        <div className="mt-4 pt-3 border-t border-border space-y-3">
-                            <SettingSelect
-                                label="Method"
-                                value={settings.DETECTION_METHOD}
-                                options={[
-                                    { label: 'ML', value: 'ML' },
-                                    { label: 'Threshold', value: 'Threshold' }
-                                ]}
-                                onChange={(v) => handleSettingChange('DETECTION_METHOD', v)}
-                            />
-
-                            {settings.DETECTION_METHOD === 'ML' && models.length > 0 && (
-                                <SettingSelect
-                                    label="Model"
-                                    value={settings.ACTIVE_MODEL || ''}
-                                    options={models.map(m => ({ label: m.name, value: m.name }))}
-                                    onChange={(v) => handleSettingChange('ACTIVE_MODEL', v)}
-                                />
-                            )}
-
-                            <SettingSelect
-                                label="Channel"
-                                value={settings.CONTROL_CHANNEL}
-                                options={availableChannels}
-                                onChange={(v) => handleSettingChange('CONTROL_CHANNEL', v)}
-                            />
-
-                            <div className="flex justify-between items-center text-xs">
-                                <span className="text-muted font-medium uppercase tracking-wider flex items-center gap-1"><Signal size={12} /> Input Status</span>
-                                <span className={`font-bold ${settings.CONTROL_CHANNEL === 'none' ? 'text-red-500' : (isConnected ? 'text-green-500' : 'text-red-500')}`}>
-                                    {settings.CONTROL_CHANNEL === 'none' ? 'INACTIVE' : (isConnected ? 'ACTIVE' : 'OFFLINE')}
-                                </span>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Event Log Panel */}
-                    <div className="card bg-surface border border-border shadow-card rounded-2xl p-4 flex flex-col min-h-[200px]" style={{ flex: '1 0 0' }}>
-                        <div className="flex justify-between items-center mb-2 shrink-0">
-                            <h3 className="text-sm font-bold text-text uppercase tracking-wider flex items-center gap-2"><ScrollText size={16} /> Event Log</h3>
+                {/* Left Sidebar (visually left via row-reverse) */}
+                <div className={`game-sidebar ${isSidebarCollapsed ? 'collapsed overflow-visible' : 'overflow-x-hidden overflow-y-auto'} pl-1.5`}>
+                    {/* Collapsed Icons Only State */}
+                    {isSidebarCollapsed && (
+                        <div className="flex flex-col items-center gap-4 w-full animate-fade-in shrink-0 h-full">
                             <button
-                                onClick={() => setEventLogs([])}
-                                className="text-sm text-muted hover:text-red-400 flex items-center gap-1"
+                                onClick={() => setIsSidebarCollapsed(false)}
+                                className="hover:bg-white/10 rounded-full transition-colors mt-6 "
+                                title="Expand Sidebar"
                             >
-                                <Trash2 size={16} /> Clear
+                                <Menu size={34} className="text-primary" />
                             </button>
-                        </div>
-                        <div className="bg-bg/50 rounded-lg p-2 flex-1 overflow-y-auto font-mono text-xs space-y-1 border border-border scrollbar-thin scrollbar-thumb-border hover:scrollbar-thumb-primary/50 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']">
-                            {eventLogs.length === 0 ? (
-                                <div className="text-muted italic text-center py-4">No events yet...</div>
-                            ) : (
-                                eventLogs.map((log) => (
-                                    <div key={log.id} className="text-muted hover:text-text transition-colors border-b border-border last:border-0 pb-1 mb-1 flex items-start gap-2">
-                                        <span className="opacity-50 text-[10px] mt-0.5">{log.time}</span>
-                                        <div className="flex-1 flex items-center gap-1.5 break-words min-w-0">
-                                            {log.type === 'jump' && <ArrowUp size={12} className="text-primary shrink-0" />}
-                                            {log.type === 'blink' && <Eye size={12} className="text-primary shrink-0" />}
-                                            {log.type === 'keyboard' && <Keyboard size={12} className="text-muted shrink-0" />}
-                                            {log.type === 'toggle' && <div className="flex shrink-0"><Pause size={12} className="text-yellow-500" /><Play size={12} className="text-green-500 -ml-1" /></div>}
-                                            {log.type === 'connection' && <Wifi size={12} className="text-green-500 shrink-0" />}
-                                            {log.type === 'disconnect' && <WifiOff size={12} className="text-red-500 shrink-0" />}
-                                            {log.type === 'settings' && <Save size={12} className="text-blue-400 shrink-0" />}
-                                            {log.type === 'gameover' && <Skull size={12} className="text-red-500 shrink-0" />}
-                                            {log.type === 'highscore' && <Trophy size={12} className="text-yellow-400 shrink-0" />}
-                                            <span>{log.text}</span>
-                                        </div>
+
+                            <hr className="w-16 border-border" />
+
+                            <button onClick={() => setIsSidebarCollapsed(false)} className="mt-4 hover:text-primary transition-colors group relative" title="Camera">
+                                <Gamepad2 size={28} className="text-primary animate-pulse" title="Dino Game Setup" />
+                                <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Controls & Method</div>
+                            </button>
+
+                            <button onClick={() => setIsSidebarCollapsed(false)} className="mt-4 hover:text-primary transition-colors group relative" title="Camera">
+                                <Camera size={28} className="text-muted group-hover:text-primary" />
+                                <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Camera Panel</div>
+                            </button>
+                            <button onClick={() => { handleSettingChange('DETECTION_METHOD', settings.DETECTION_METHOD === 'ML' ? 'Threshold' : 'ML') }} className="hover:text-primary transition-colors group relative mt-4" title="ML Model">
+                                < BrainCircuit size={28} className={`duration-300 ${settings.DETECTION_METHOD === 'ML' ? 'text-blue-500' : 'text-orange-500'}`} />
+                                <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Mode: {settings.DETECTION_METHOD}</div>
+                            </button>
+                            <button onClick={() => setIsSidebarCollapsed(false)} className="hover:text-primary transition-colors group relative mt-4" title="Event Log">
+                                <ScrollText size={28} className="text-muted group-hover:text-primary" />
+                                {eventLogs.length > 0 && <span className="absolute -top-1 -right-1 w-2 h-2 bg-primary rounded-full animate-pulse blur-[1px]"></span>}
+                                <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Event Log</div>
+                            </button>
+                            <button onClick={() => { setIsSidebarCollapsed(false); setShowSettings(true); }} className="hover:text-primary transition-colors group relative mt-4" title="Settings">
+                                <Settings size={28} className="text-muted group-hover:text-primary" />
+                                <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Game Constants</div>
+                            </button>
+
+                            <hr className="w-16 border-border mt-4" />
+
+                            <div className="flex flex-col gap-3 mt-4 items-center group relative cursor-default">
+                                <div className="flex flex-col items-center">
+                                    <Eye size={22} className={`transition-colors duration-200 ${eyeState === 'blink' ? 'text-primary' : 'text-muted/40'}`} />
+                                    <span className="text-[8px] font-bold text-muted/60 uppercase tracking-widest mt-1">Jump</span>
+                                </div>
+                                <div className="flex flex-col items-center mt-2">
+                                    <div className="flex flex-col -space-y-1.5">
+                                        <Eye size={22} className={`transition-colors duration-200 ${eyeState === 'double-blink' ? 'text-primary' : 'text-muted/40'}`} />
+                                        <Eye size={22} className={`transition-colors duration-200 ${eyeState === 'double-blink' ? 'text-primary' : 'text-muted/40'}`} />
                                     </div>
-                                ))
-                            )}
-                        </div>
-                    </div>
-
-                    {/* Settings Panel (Moved here) */}
-                    {showSettings && (
-                        <div className="card bg-surface border border-border shadow-card rounded-2xl p-4 animate-fade-in" style={{ flexShrink: 0 }}>
-                            <div className="flex justify-between flex-col gap-2 mb-4">
-                                <h3 className="text-sm font-bold text-text uppercase tracking-wider flex items-center gap-2"><Settings size={16} /> Game Constants</h3>
-                                <div className="flex gap-2 justify-between">
-                                    <span className="flex items-center gap-2">
-                                        <button
-                                            onClick={handleSaveSettings}
-                                            className="text-sm bg-primary text-bg px-2 py-1 rounded font-bold hover:opacity-90 flex items-center gap-1"
-                                        >
-                                            <Save size={18} /> Save
-                                        </button>
-                                        {savedMessage && <span className="text-xs text-green-500 font-bold animate-fade-in">{savedMessage}</span>}
-                                    </span>
-
-                                    <button
-                                        onClick={handleResetSettings}
-                                        className="text-sm text-red-400 hover:text-red-300 flex items-center gap-1"
-                                    >
-                                        <RotateCcw size={18} /> Reset
-                                    </button>
+                                    <span className="text-[8px] font-bold text-muted/60 uppercase tracking-widest mt-1">Pause</span>
+                                </div>
+                                <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-[60]">
+                                    Blink Status
                                 </div>
                             </div>
 
-                            <div className="space-y-2">
-                                <SettingsSection title="Gameplay" icon={Gamepad2} defaultOpen={true}>
-                                    <div className="space-y-3 pt-2">
-                                        <SettingToggle label="Manual Controls (Space)" value={settings.ENABLE_MANUAL_CONTROLS} onChange={(v) => handleSettingChange('ENABLE_MANUAL_CONTROLS', v)} icon={Hand} />
-                                        <SettingInput label="Obstacle Bonus" value={settings.OBSTACLE_BONUS_FACTOR} onChange={(v) => handleSettingChange('OBSTACLE_BONUS_FACTOR', v)} min="0" max="0.5" step="0.005" icon={Zap} />
-                                        <div className="flex justify-between items-center text-xs pt-1 border-t border-border">
-                                            <span className="text-muted flex items-center gap-1"><Trophy size={10} /> Highscore: {Math.floor(highScore / 10)}</span>
-                                            <button
-                                                onClick={() => {
-                                                    localStorage.setItem('dino_highscore', '0')
-                                                    setHighScore(0)
-                                                    setSavedMessage('Score Reset!')
-                                                    setTimeout(() => setSavedMessage(''), 2000)
-                                                }}
-                                                className="text-red-400 hover:text-red-300 font-bold uppercase tracking-wide text-[10px] border border-red-900/50 px-2 py-0.5 rounded bg-red-900/10 flex items-center gap-1"
-                                            >
-                                                <Trash2 size={10} /> Reset
-                                            </button>
-                                        </div>
-                                    </div>
-                                </SettingsSection>
+                            <div className="flex-1" />
 
-                                <SettingsSection title="Environment" icon={Globe}>
-                                    <div className="space-y-3 pt-2">
-                                        <h5 className="text-[10px] font-bold text-muted uppercase tracking-wider mb-1 flex items-center gap-1"><Sun size={10} /> Day/Night</h5>
-                                        <SettingToggle label="Auto Cycle" value={settings.ENABLE_DAY_NIGHT_CYCLE} onChange={(v) => handleSettingChange('ENABLE_DAY_NIGHT_CYCLE', v)} icon={RotateCcw} />
-                                        {settings.ENABLE_DAY_NIGHT_CYCLE ? (
-                                            <SettingInput label="Duration (s)" value={settings.CYCLE_DURATION} onChange={(v) => handleSettingChange('CYCLE_DURATION', v)} min="10" max="300" step="5" icon={Timer} />
-                                        ) : (
-                                            <SettingInput label="Fixed Time" value={settings.FIXED_TIME} onChange={(v) => handleSettingChange('FIXED_TIME', v)} min="0" max="1" step="0.05" icon={Clock} />
-                                        )}
+                            <hr className="w-16 border-border" />
 
-                                        <h5 className="text-[10px] font-bold text-muted uppercase tracking-wider mb-1 mt-3 flex items-center gap-1"><Moon size={10} /> Moon</h5>
-                                        <SettingToggle label="Enable Phases" value={settings.ENABLE_MOON_PHASES} onChange={(v) => handleSettingChange('ENABLE_MOON_PHASES', v)} icon={Moon} />
-                                        {settings.ENABLE_MOON_PHASES && (
-                                            <>
-                                                <SettingToggle label="Auto Cycle" value={settings.ENABLE_AUTO_MOON_CYCLE} onChange={(v) => handleSettingChange('ENABLE_AUTO_MOON_CYCLE', v)} icon={RotateCcw} />
-                                                {settings.ENABLE_AUTO_MOON_CYCLE ? (
-                                                    <SettingInput label="Days/Cycle" value={settings.MOON_CYCLE_DAYS} onChange={(v) => handleSettingChange('MOON_CYCLE_DAYS', v)} min="1" max="30" step="1" icon={Timer} />
-                                                ) : (
-                                                    <SettingInput label="Phase (0-1)" value={settings.MOON_PHASE} onChange={(v) => handleSettingChange('MOON_PHASE', v)} min="0" max="1" step="0.05" icon={Circle} />
-                                                )}
-                                            </>
-                                        )}
-
-                                        <h5 className="text-[10px] font-bold text-muted uppercase tracking-wider mb-1 mt-3 flex items-center gap-1"><Grid size={10} /> Elements</h5>
-                                        <div className="grid grid-cols-2 gap-2">
-                                            <SettingToggle label="Trees" value={settings.ENABLE_TREES} onChange={(v) => handleSettingChange('ENABLE_TREES', v)} icon={TreePine} />
-                                            <SettingToggle label="Clouds" value={settings.ENABLE_CLOUDS} onChange={(v) => handleSettingChange('ENABLE_CLOUDS', v)} icon={Cloud} />
-                                            <SettingToggle label="Stars" value={settings.ENABLE_STARS} onChange={(v) => handleSettingChange('ENABLE_STARS', v)} icon={Star} />
-                                            <SettingToggle label="Bushes" value={settings.ENABLE_BUSHES} onChange={(v) => handleSettingChange('ENABLE_BUSHES', v)} icon={Leaf} />
-                                        </div>
-                                    </div>
-                                </SettingsSection>
-
-                                <SettingsSection title="Visual Details" icon={Sparkles}>
-                                    <div className="space-y-4 pt-2">
-                                        {/* Trees */}
-                                        <div className="bg-bg/50 p-2 rounded border border-border">
-                                            <h5 className="text-[10px] font-bold text-primary mb-2 border-b border-border pb-1 flex items-center gap-1"><TreePine size={10} /> Trees Config</h5>
-                                            <SettingInput label="Layers" value={settings.TREES_LAYERS} onChange={(v) => handleSettingChange('TREES_LAYERS', v)} min="1" max="15" step="1" icon={Layers} />
-                                            <SettingInput label="Density" value={settings.TREES_DENSITY} onChange={(v) => handleSettingChange('TREES_DENSITY', v)} min="0" max="5" step="0.1" icon={Grid} />
-                                            <SettingInput label="Size" value={settings.TREES_SIZE} onChange={(v) => handleSettingChange('TREES_SIZE', v)} min="0.5" max="2.0" step="0.1" icon={Maximize} />
-                                        </div>
-
-                                        {/* Clouds */}
-                                        <div className="bg-bg/50 p-2 rounded border border-border">
-                                            <h5 className="text-[10px] font-bold text-primary mb-2 border-b border-border pb-1 flex items-center gap-1"><Cloud size={10} /> Clouds Config</h5>
-                                            <SettingInput label="Layers" value={settings.CLOUDS_LAYERS} onChange={(v) => handleSettingChange('CLOUDS_LAYERS', v)} min="1" max="15" step="1" icon={Layers} />
-                                            <SettingInput label="Density" value={settings.CLOUDS_DENSITY} onChange={(v) => handleSettingChange('CLOUDS_DENSITY', v)} min="0.1" max="3.0" step="0.1" icon={Grid} />
-                                            <SettingInput label="Size" value={settings.CLOUDS_SIZE} onChange={(v) => handleSettingChange('CLOUDS_SIZE', v)} min="0.5" max="1.5" step="0.1" icon={Maximize} />
-                                        </div>
-
-                                        {/* Stars & Bushes */}
-                                        <div className="bg-bg/50 p-2 rounded border border-border">
-                                            <h5 className="text-[10px] font-bold text-primary mb-2 border-b border-border pb-1 flex items-center gap-1"><Star size={10} /> Stars & Bushes</h5>
-                                            <SettingInput label="Stars Layers" value={settings.STARS_LAYERS} onChange={(v) => handleSettingChange('STARS_LAYERS', v)} min="1" max="15" step="1" icon={Layers} />
-                                            <SettingInput label="Stars Density" value={settings.STARS_DENSITY} onChange={(v) => handleSettingChange('STARS_DENSITY', v)} min="0.1" max="3.0" step="0.1" icon={Grid} />
-                                            <div className="h-2" />
-                                            <SettingInput label="Bush Layers" value={settings.BUSHES_LAYERS} onChange={(v) => handleSettingChange('BUSHES_LAYERS', v)} min="1" max="10" step="1" icon={Layers} />
-                                            <SettingInput label="Bush Density" value={settings.BUSHES_DENSITY} onChange={(v) => handleSettingChange('BUSHES_DENSITY', v)} min="0.1" max="3.0" step="0.1" icon={Grid} />
-                                        </div>
-                                    </div>
-                                </SettingsSection>
-
-                                <SettingsSection title="Physics" icon={Atom}>
-                                    <div className="space-y-3 pt-2">
-                                        <SettingInput label="Gravity" value={settings.GRAVITY} onChange={(v) => handleSettingChange('GRAVITY', v)} min="0.1" max="2.0" step="0.05" icon={Weight} />
-                                        <SettingInput label="Jump Strength" value={settings.JUMP_STRENGTH} onChange={(v) => handleSettingChange('JUMP_STRENGTH', v)} min="-20" max="-5" step="0.5" icon={MoveVertical} />
-                                        <SettingInput label="Jump Distance" value={settings.JUMP_DISTANCE} onChange={(v) => handleSettingChange('JUMP_DISTANCE', v)} min="100" max="600" step="10" icon={MoveHorizontal} />
-                                        <div className="flex justify-between text-xs text-muted pt-1 opacity-75 border-t border-border mt-2">
-                                            <span>Est. Speed</span>
-                                            <span className="font-mono">{((settings.JUMP_DISTANCE * settings.GRAVITY) / (2 * Math.abs(settings.JUMP_STRENGTH))).toFixed(1)}</span>
-                                        </div>
-                                    </div>
-                                </SettingsSection>
-
-                                <SettingsSection title="World Dimensions" icon={Ruler}>
-                                    <div className="space-y-3 pt-2">
-                                        <SettingInput label="Dino W" value={settings.DINO_WIDTH} onChange={(v) => handleSettingChange('DINO_WIDTH', v)} min="20" max="100" step="2" icon={Maximize} />
-                                        <SettingInput label="Dino H" value={settings.DINO_HEIGHT} onChange={(v) => handleSettingChange('DINO_HEIGHT', v)} min="20" max="100" step="2" icon={Maximize} />
-                                        <SettingInput label="Ground Offset" value={settings.GROUND_OFFSET} onChange={(v) => handleSettingChange('GROUND_OFFSET', v)} min="20" max="150" step="5" icon={ArrowDownToLine} />
-                                        <div className="h-1 border-t border-border my-2" />
-                                        <SettingInput label="Spawn Interval" value={settings.SPAWN_INTERVAL} onChange={(v) => handleSettingChange('SPAWN_INTERVAL', v)} min="500" max="3000" step="50" icon={Timer} />
-                                        <SettingInput label="Obs Width" value={settings.OBSTACLE_WIDTH} onChange={(v) => handleSettingChange('OBSTACLE_WIDTH', v)} min="10" max="50" step="2" icon={Maximize} />
-                                        <SettingInput label="Obs Max H" value={settings.OBSTACLE_MAX_HEIGHT} onChange={(v) => handleSettingChange('OBSTACLE_MAX_HEIGHT', v)} min="30" max="100" step="5" icon={Maximize} />
-                                    </div>
-                                </SettingsSection>
+                            <div className="flex flex-col gap-2 w-full items-center pb-4 shrink-0">
+                                <button onClick={() => setIsSidebarCollapsed(false)} className={`w-[42px] h-[42px] flex items-center justify-center rounded-full border transition-all shadow-sm group relative ${isConnected ? 'bg-green-500/10 border-green-500/30 text-green-500' : 'bg-red-500/10 border-red-500/30 text-red-500'}`} title={isConnected ? "Sensor Connected" : "Sensor Disconnected"}>
+                                    {isConnected ? <Wifi size={24} /> : <WifiOff size={24} />}
+                                    <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Sensor Status</div>
+                                </button>
                             </div>
                         </div>
                     )}
-                    <div className="spacer-footer-dino" />
+
+                    {/* Full Panels Wrapper */}
+                    <div className={`flex flex-col gap-[clamp(0.75rem,1.5vh,1.5rem)] min-w-[280px] w-full h-full transition-opacity duration-200 shrink-0 ${isSidebarCollapsed ? 'opacity-0 h-0 hidden' : 'opacity-100'}`}>
+                        {/* Camera Panel */}
+                        <CameraPanel initialCameraOn={false} />
+
+                        {/* Eye Controls Panel */}
+                        <div className="card bg-surface border border-border rounded-2xl p-4 " style={{ flexShrink: 0 }}>
+                            <h3 className="text-sm font-bold text-text uppercase tracking-wider mb-3 flex items-center gap-2"><Gamepad2 size={16} /> Controls</h3>
+                            <div className="space-y-2 text-sm text-text">
+                                <div className="flex justify-between items-center">
+                                    <span className="text-muted flex items-center gap-1.5"><Eye size={14} className="text-secondary/70" /> Blink ONCE</span>
+                                    <span className="font-bold text-primary flex items-center gap-1"><ArrowUp size={12} /> Jump</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                    <span className="text-muted flex items-center gap-1.5"><Eye size={14} className="text-secondary/70" /><Eye size={14} className="text-secondary/70 -ml-2" /> Blink TWICE</span>
+                                    <span className="font-bold text-primary flex items-center gap-1"><Pause size={12} /> Pause/Resume</span>
+                                </div>
+                            </div>
+
+                            <div className="mt-4 pt-3 border-t border-border space-y-3">
+                                <SettingSelect
+                                    label="Method"
+                                    value={settings.DETECTION_METHOD}
+                                    options={[
+                                        { label: 'ML', value: 'ML' },
+                                        { label: 'Threshold', value: 'Threshold' }
+                                    ]}
+                                    onChange={(v) => handleSettingChange('DETECTION_METHOD', v)}
+                                />
+
+                                {settings.DETECTION_METHOD === 'ML' && models.length > 0 && (
+                                    <SettingSelect
+                                        label="Model"
+                                        value={settings.ACTIVE_MODEL || ''}
+                                        options={models.map(m => ({ label: m.name, value: m.name }))}
+                                        onChange={(v) => handleSettingChange('ACTIVE_MODEL', v)}
+                                    />
+                                )}
+
+                                <SettingSelect
+                                    label="Channel"
+                                    value={settings.CONTROL_CHANNEL}
+                                    options={availableChannels}
+                                    onChange={(v) => handleSettingChange('CONTROL_CHANNEL', v)}
+                                />
+
+                                <div className="flex justify-between items-center text-xs">
+                                    <span className="text-muted font-medium uppercase tracking-wider flex items-center gap-1"><Signal size={12} /> Input Status</span>
+                                    <span className={`font-bold ${settings.CONTROL_CHANNEL === 'none' ? 'text-red-500' : (isConnected ? 'text-green-500' : 'text-red-500')}`}>
+                                        {settings.CONTROL_CHANNEL === 'none' ? 'INACTIVE' : (isConnected ? 'ACTIVE' : 'OFFLINE')}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Event Log Panel */}
+                        <div className="card bg-surface border border-border rounded-2xl p-4 flex flex-col min-h-[200px]" style={{ flex: '1 0 0' }}>
+                            <div className="flex justify-between items-center mb-2 shrink-0">
+                                <h3 className="text-sm font-bold text-text uppercase tracking-wider flex items-center gap-2"><ScrollText size={16} /> Event Log</h3>
+                                <button
+                                    onClick={() => setEventLogs([])}
+                                    className="text-sm text-muted hover:text-red-400 flex items-center gap-1"
+                                >
+                                    <Trash2 size={16} /> Clear
+                                </button>
+                            </div>
+                            <div className="bg-bg/50 rounded-lg p-2 flex-1 overflow-y-auto font-mono text-xs space-y-1 border border-border scrollbar-thin scrollbar-thumb-border hover:scrollbar-thumb-primary/50 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']">
+                                {eventLogs.length === 0 ? (
+                                    <div className="text-muted italic text-center py-4">No events yet...</div>
+                                ) : (
+                                    eventLogs.map((log) => (
+                                        <div key={log.id} className="text-muted hover:text-text transition-colors border-b border-border last:border-0 pb-1 mb-1 flex items-start gap-2">
+                                            <span className="opacity-50 text-[10px] mt-0.5">{log.time}</span>
+                                            <div className="flex-1 flex items-center gap-1.5 break-words min-w-0">
+                                                {log.type === 'jump' && <ArrowUp size={12} className="text-primary shrink-0" />}
+                                                {log.type === 'blink' && <Eye size={12} className="text-primary shrink-0" />}
+                                                {log.type === 'keyboard' && <Keyboard size={12} className="text-muted shrink-0" />}
+                                                {log.type === 'toggle' && <div className="flex shrink-0"><Pause size={12} className="text-yellow-500" /><Play size={12} className="text-green-500 -ml-1" /></div>}
+                                                {log.type === 'connection' && <Wifi size={12} className="text-green-500 shrink-0" />}
+                                                {log.type === 'disconnect' && <WifiOff size={12} className="text-red-500 shrink-0" />}
+                                                {log.type === 'settings' && <Save size={12} className="text-blue-400 shrink-0" />}
+                                                {log.type === 'gameover' && <Skull size={12} className="text-red-500 shrink-0" />}
+                                                {log.type === 'highscore' && <Trophy size={12} className="text-yellow-400 shrink-0" />}
+                                                <span>{log.text}</span>
+                                            </div>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Settings Panel (Moved here) */}
+                        {showSettings && (
+
+                            <>
+
+                                <div className="card bg-surface border border-border rounded-2xl p-4 animate-fade-in" style={{ flexShrink: 0 }}>
+                                    <div className="flex justify-between flex-col gap-2 mb-4">
+                                        <h3 className="text-sm font-bold text-text uppercase tracking-wider flex items-center gap-2"><Settings size={16} /> Game Constants</h3>
+                                        <div className="flex gap-2 justify-between">
+                                            <span className="flex items-center gap-2">
+                                                <button
+                                                    onClick={handleSaveSettings}
+                                                    className="text-sm bg-primary text-bg px-2 py-1 rounded font-bold hover:opacity-90 flex items-center gap-1"
+                                                >
+                                                    <Save size={18} /> Save
+                                                </button>
+                                                {savedMessage && <span className="text-xs text-green-500 font-bold animate-fade-in">{savedMessage}</span>}
+                                            </span>
+
+                                            <button
+                                                onClick={handleResetSettings}
+                                                className="text-sm text-red-400 hover:text-red-300 flex items-center gap-1"
+                                            >
+                                                <RotateCcw size={18} /> Reset
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <SettingsSection title="Gameplay" icon={Gamepad2} defaultOpen={true}>
+                                            <div className="space-y-3 pt-2">
+                                                <SettingToggle label="Manual Controls (Space)" value={settings.ENABLE_MANUAL_CONTROLS} onChange={(v) => handleSettingChange('ENABLE_MANUAL_CONTROLS', v)} icon={Hand} />
+                                                <SettingInput label="Obstacle Bonus" value={settings.OBSTACLE_BONUS_FACTOR} onChange={(v) => handleSettingChange('OBSTACLE_BONUS_FACTOR', v)} min="0" max="0.5" step="0.005" icon={Zap} />
+                                                <div className="flex justify-between items-center text-xs pt-1 border-t border-border">
+                                                    <span className="text-muted flex items-center gap-1"><Trophy size={10} /> Highscore: {Math.floor(highScore / 10)}</span>
+                                                    <button
+                                                        onClick={() => {
+                                                            localStorage.setItem('dino_highscore', '0')
+                                                            setHighScore(0)
+                                                            setSavedMessage('Score Reset!')
+                                                            setTimeout(() => setSavedMessage(''), 2000)
+                                                        }}
+                                                        className="text-red-400 hover:text-red-300 font-bold uppercase tracking-wide text-[10px] border border-red-900/50 px-2 py-0.5 rounded bg-red-900/10 flex items-center gap-1"
+                                                    >
+                                                        <Trash2 size={10} /> Reset
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </SettingsSection>
+
+                                        <SettingsSection title="Environment" icon={Globe}>
+                                            <div className="space-y-3 pt-2">
+                                                <h5 className="text-[10px] font-bold text-muted uppercase tracking-wider mb-1 flex items-center gap-1"><Sun size={10} /> Day/Night</h5>
+                                                <SettingToggle label="Auto Cycle" value={settings.ENABLE_DAY_NIGHT_CYCLE} onChange={(v) => handleSettingChange('ENABLE_DAY_NIGHT_CYCLE', v)} icon={RotateCcw} />
+                                                {settings.ENABLE_DAY_NIGHT_CYCLE ? (
+                                                    <SettingInput label="Duration (s)" value={settings.CYCLE_DURATION} onChange={(v) => handleSettingChange('CYCLE_DURATION', v)} min="10" max="300" step="5" icon={Timer} />
+                                                ) : (
+                                                    <SettingInput label="Fixed Time" value={settings.FIXED_TIME} onChange={(v) => handleSettingChange('FIXED_TIME', v)} min="0" max="1" step="0.05" icon={Clock} />
+                                                )}
+
+                                                <h5 className="text-[10px] font-bold text-muted uppercase tracking-wider mb-1 mt-3 flex items-center gap-1"><Moon size={10} /> Moon</h5>
+                                                <SettingToggle label="Enable Phases" value={settings.ENABLE_MOON_PHASES} onChange={(v) => handleSettingChange('ENABLE_MOON_PHASES', v)} icon={Moon} />
+                                                {settings.ENABLE_MOON_PHASES && (
+                                                    <>
+                                                        <SettingToggle label="Auto Cycle" value={settings.ENABLE_AUTO_MOON_CYCLE} onChange={(v) => handleSettingChange('ENABLE_AUTO_MOON_CYCLE', v)} icon={RotateCcw} />
+                                                        {settings.ENABLE_AUTO_MOON_CYCLE ? (
+                                                            <SettingInput label="Days/Cycle" value={settings.MOON_CYCLE_DAYS} onChange={(v) => handleSettingChange('MOON_CYCLE_DAYS', v)} min="1" max="30" step="1" icon={Timer} />
+                                                        ) : (
+                                                            <SettingInput label="Phase (0-1)" value={settings.MOON_PHASE} onChange={(v) => handleSettingChange('MOON_PHASE', v)} min="0" max="1" step="0.05" icon={Circle} />
+                                                        )}
+                                                    </>
+                                                )}
+
+                                                <h5 className="text-[10px] font-bold text-muted uppercase tracking-wider mb-1 mt-3 flex items-center gap-1"><Grid size={10} /> Elements</h5>
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    <SettingToggle label="Trees" value={settings.ENABLE_TREES} onChange={(v) => handleSettingChange('ENABLE_TREES', v)} icon={TreePine} />
+                                                    <SettingToggle label="Clouds" value={settings.ENABLE_CLOUDS} onChange={(v) => handleSettingChange('ENABLE_CLOUDS', v)} icon={Cloud} />
+                                                    <SettingToggle label="Stars" value={settings.ENABLE_STARS} onChange={(v) => handleSettingChange('ENABLE_STARS', v)} icon={Star} />
+                                                    <SettingToggle label="Bushes" value={settings.ENABLE_BUSHES} onChange={(v) => handleSettingChange('ENABLE_BUSHES', v)} icon={Leaf} />
+                                                </div>
+                                            </div>
+                                        </SettingsSection>
+
+                                        <SettingsSection title="Visual Details" icon={Sparkles}>
+                                            <div className="space-y-4 pt-2">
+                                                {/* Trees */}
+                                                <div className="bg-bg/50 p-2 rounded border border-border">
+                                                    <h5 className="text-[10px] font-bold text-primary mb-2 border-b border-border pb-1 flex items-center gap-1"><TreePine size={10} /> Trees Config</h5>
+                                                    <SettingInput label="Layers" value={settings.TREES_LAYERS} onChange={(v) => handleSettingChange('TREES_LAYERS', v)} min="1" max="15" step="1" icon={Layers} />
+                                                    <SettingInput label="Density" value={settings.TREES_DENSITY} onChange={(v) => handleSettingChange('TREES_DENSITY', v)} min="0" max="5" step="0.1" icon={Grid} />
+                                                    <SettingInput label="Size" value={settings.TREES_SIZE} onChange={(v) => handleSettingChange('TREES_SIZE', v)} min="0.5" max="2.0" step="0.1" icon={Maximize} />
+                                                </div>
+
+                                                {/* Clouds */}
+                                                <div className="bg-bg/50 p-2 rounded border border-border">
+                                                    <h5 className="text-[10px] font-bold text-primary mb-2 border-b border-border pb-1 flex items-center gap-1"><Cloud size={10} /> Clouds Config</h5>
+                                                    <SettingInput label="Layers" value={settings.CLOUDS_LAYERS} onChange={(v) => handleSettingChange('CLOUDS_LAYERS', v)} min="1" max="15" step="1" icon={Layers} />
+                                                    <SettingInput label="Density" value={settings.CLOUDS_DENSITY} onChange={(v) => handleSettingChange('CLOUDS_DENSITY', v)} min="0.1" max="3.0" step="0.1" icon={Grid} />
+                                                    <SettingInput label="Size" value={settings.CLOUDS_SIZE} onChange={(v) => handleSettingChange('CLOUDS_SIZE', v)} min="0.5" max="1.5" step="0.1" icon={Maximize} />
+                                                </div>
+
+                                                {/* Stars & Bushes */}
+                                                <div className="bg-bg/50 p-2 rounded border border-border">
+                                                    <h5 className="text-[10px] font-bold text-primary mb-2 border-b border-border pb-1 flex items-center gap-1"><Star size={10} /> Stars & Bushes</h5>
+                                                    <SettingInput label="Stars Layers" value={settings.STARS_LAYERS} onChange={(v) => handleSettingChange('STARS_LAYERS', v)} min="1" max="15" step="1" icon={Layers} />
+                                                    <SettingInput label="Stars Density" value={settings.STARS_DENSITY} onChange={(v) => handleSettingChange('STARS_DENSITY', v)} min="0.1" max="3.0" step="0.1" icon={Grid} />
+                                                    <div className="h-2" />
+                                                    <SettingInput label="Bush Layers" value={settings.BUSHES_LAYERS} onChange={(v) => handleSettingChange('BUSHES_LAYERS', v)} min="1" max="10" step="1" icon={Layers} />
+                                                    <SettingInput label="Bush Density" value={settings.BUSHES_DENSITY} onChange={(v) => handleSettingChange('BUSHES_DENSITY', v)} min="0.1" max="3.0" step="0.1" icon={Grid} />
+                                                </div>
+                                            </div>
+                                        </SettingsSection>
+
+                                        <SettingsSection title="Physics" icon={Atom}>
+                                            <div className="space-y-3 pt-2">
+                                                <SettingInput label="Gravity" value={settings.GRAVITY} onChange={(v) => handleSettingChange('GRAVITY', v)} min="0.1" max="2.0" step="0.05" icon={Weight} />
+                                                <SettingInput label="Jump Strength" value={settings.JUMP_STRENGTH} onChange={(v) => handleSettingChange('JUMP_STRENGTH', v)} min="-20" max="-5" step="0.5" icon={MoveVertical} />
+                                                <SettingInput label="Jump Distance" value={settings.JUMP_DISTANCE} onChange={(v) => handleSettingChange('JUMP_DISTANCE', v)} min="100" max="600" step="10" icon={MoveHorizontal} />
+                                                <div className="flex justify-between text-xs text-muted pt-1 opacity-75 border-t border-border mt-2">
+                                                    <span>Est. Speed</span>
+                                                    <span className="font-mono">{((settings.JUMP_DISTANCE * settings.GRAVITY) / (2 * Math.abs(settings.JUMP_STRENGTH))).toFixed(1)}</span>
+                                                </div>
+                                            </div>
+                                        </SettingsSection>
+
+                                        <SettingsSection title="World Dimensions" icon={Ruler}>
+                                            <div className="space-y-3 pt-2">
+                                                <SettingInput label="Dino W" value={settings.DINO_WIDTH} onChange={(v) => handleSettingChange('DINO_WIDTH', v)} min="20" max="100" step="2" icon={Maximize} />
+                                                <SettingInput label="Dino H" value={settings.DINO_HEIGHT} onChange={(v) => handleSettingChange('DINO_HEIGHT', v)} min="20" max="100" step="2" icon={Maximize} />
+                                                <SettingInput label="Ground Offset" value={settings.GROUND_OFFSET} onChange={(v) => handleSettingChange('GROUND_OFFSET', v)} min="20" max="150" step="5" icon={ArrowDownToLine} />
+                                                <div className="h-1 border-t border-border my-2" />
+                                                <SettingInput label="Spawn Interval" value={settings.SPAWN_INTERVAL} onChange={(v) => handleSettingChange('SPAWN_INTERVAL', v)} min="500" max="3000" step="50" icon={Timer} />
+                                                <SettingInput label="Obs Width" value={settings.OBSTACLE_WIDTH} onChange={(v) => handleSettingChange('OBSTACLE_WIDTH', v)} min="10" max="50" step="2" icon={Maximize} />
+                                                <SettingInput label="Obs Max H" value={settings.OBSTACLE_MAX_HEIGHT} onChange={(v) => handleSettingChange('OBSTACLE_MAX_HEIGHT', v)} min="30" max="100" step="5" icon={Maximize} />
+                                            </div>
+                                        </SettingsSection>
+                                    </div>
+                                </div>
+
+                                <div className='h-[29px] shrink-0'></div>
+                            </>
+                        )}
+                    </div>
                 </div>
             </div>
         </div>

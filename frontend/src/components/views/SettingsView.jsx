@@ -54,7 +54,7 @@ const ColorInput = ({ label, value, onChange }) => (
   </div>
 );
 
-export default function SettingsView({ latency = 0 }) {
+export default function SettingsView({ latency = 0, localWs = '', setLocalWs = () => {}, ngrokWs = '', setNgrokWs = () => {}, connect = () => {} }) {
   const {
     themes,
     currentTheme,
@@ -473,14 +473,33 @@ export default function SettingsView({ latency = 0 }) {
                   </span>
                 </div>
                 <div className="p-5 flex flex-col">
-                  <div className="flex flex-col md:flex-row gap-4 mb-6">
-                    <div className="flex-1 space-y-2">
-                      <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted">Core API Protocol</label>
-                      <input type="text" value={apiUrl} onChange={e => setApiUrl(e.target.value)} className="w-full px-4 py-2 bg-bg border border-border rounded-xl outline-none focus:border-primary text-sm font-mono tabular-nums transition-all" />
+                  <div className="flex flex-col gap-4 mb-6">
+                    <div className="flex flex-col md:flex-row gap-4">
+                      <div className="flex-1 space-y-2">
+                        <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted">Core API Protocol</label>
+                        <input type="text" value={apiUrl} onChange={e => setApiUrl(e.target.value)} className="w-full px-4 py-2 bg-bg border border-border rounded-xl outline-none focus:border-primary text-sm font-mono tabular-nums transition-all" />
+                      </div>
+                      <div className="flex-1 space-y-2">
+                        <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted">Neural Socket Tunnel</label>
+                        <input type="text" value={wsUrl} onChange={e => setWsUrl(e.target.value)} className="w-full px-4 py-2 bg-bg border border-border rounded-xl outline-none focus:border-primary text-sm font-mono tabular-nums transition-all" />
+                      </div>
                     </div>
-                    <div className="flex-1 space-y-2">
-                      <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted">Neural Socket Tunnel</label>
-                      <input type="text" value={wsUrl} onChange={e => setWsUrl(e.target.value)} className="w-full px-4 py-2 bg-bg border border-border rounded-xl outline-none focus:border-primary text-sm font-mono tabular-nums transition-all" />
+                    <div className="h-px bg-border/50" />
+                    <div className="flex flex-col md:flex-row gap-4">
+                      <div className="flex-1 space-y-2">
+                        <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted">Local WS URL</label>
+                        <div className="flex gap-2">
+                          <input type="text" value={localWs} onChange={e => setLocalWs(e.target.value)} className="w-full px-4 py-2 bg-bg border border-border rounded-xl outline-none focus:border-primary text-sm font-mono tabular-nums transition-all" />
+                          <button onClick={() => connect(localWs)} className="px-4 py-2 bg-primary/10 text-primary border border-primary/30 rounded-xl font-bold text-sm hover:bg-primary/20 transition-all shrink-0">Connect</button>
+                        </div>
+                      </div>
+                      <div className="flex-1 space-y-2">
+                        <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted">Ngrok WS URL</label>
+                        <div className="flex gap-2">
+                          <input type="text" value={ngrokWs} onChange={e => setNgrokWs(e.target.value)} className="w-full px-4 py-2 bg-bg border border-border rounded-xl outline-none focus:border-primary text-sm font-mono tabular-nums transition-all" />
+                          <button onClick={() => connect(ngrokWs)} className="px-4 py-2 bg-primary/10 text-primary border border-primary/30 rounded-xl font-bold text-sm hover:bg-primary/20 transition-all shrink-0">Connect</button>
+                        </div>
+                      </div>
                     </div>
                   </div>
                   <div className="flex items-center justify-between py-3 border-t border-border/50">

@@ -1,5 +1,5 @@
 .camera-panel-card {
-    @apply bg-surface border border-border shadow-card rounded-2xl overflow-hidden relative;
+    @apply bg-surface border border-border rounded-2xl overflow-hidden relative;
     flex-shrink: 0;
     min-height: 200px;
 }
@@ -9,7 +9,7 @@
 }
 
 .camera-btn {
-    @apply p-1.5 rounded-full backdrop-blur-sm transition-all text-white ;
+    @apply p-1.5 rounded-full backdrop-blur-sm transition-all text-white;
     cursor: pointer;
 }
 
