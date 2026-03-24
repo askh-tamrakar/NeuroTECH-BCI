@@ -16,19 +16,128 @@ export default function ServoClawView({ wsEvent, isConnected }) {
     const [ currentAngle, setCurrentAngle ] = useState(97); // 97 is fully closed, 1 is fully open
     const [ eventLogs, setEventLogs ] = useState([]);
 
+    // Data for models and config
+    const [models, setModels] = useState({ eog: [], emg: [] });
+    const [eegConfig, setEegConfig] = useState({ rest_threshold: 0.6, ratio_threshold: 1.2 });
+    const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+
+    // Fetch initial models and config
+    React.useEffect(() => {
+        const fetchData = async () => {
+            try {
+                const [eogRes, emgRes, configRes] = await Promise.all([
+                    fetch(`${API_BASE_URL}/api/models/eog`),
+                    fetch(`${API_BASE_URL}/api/models/emg`),
+                    fetch(`${API_BASE_URL}/api/config`)
+                ]);
+                
+                const eogModels = await eogRes.json();
+                const emgModels = await emgRes.json();
+                const configData = await configRes.json();
+                
+                setModels({
+                    eog: eogModels,
+                    emg: emgModels
+                });
+                
+                if (configData.features && configData.features.EEG) {
+                    setEegConfig({
+                        rest_threshold: configData.features.EEG.rest_threshold || 0.6,
+                        ratio_threshold: configData.features.EEG.ratio_threshold || 1.2
+                    });
+                }
+            } catch (err) {
+                console.error("Failed to load models/config for Servo Claw:", err);
+            }
+        };
+        fetchData();
+    }, [API_BASE_URL]);
+
+    // Push Config to Backend for Servo.enabled and optionally thresholds/models
+    const updateBackendConfig = React.useCallback(async (updates) => {
+        try {
+            const res = await fetch(`${API_BASE_URL}/api/config`);
+            if (!res.ok) return;
+            const config = await res.json();
+            
+            let changed = false;
+            if (!config.features) config.features = {};
+            
+            // Apply Servo enabled
+            if (updates.hasOwnProperty('servoEnabled')) {
+                if (!config.features.Servo) config.features.Servo = {};
+                if (config.features.Servo.enabled !== updates.servoEnabled) {
+                    config.features.Servo.enabled = updates.servoEnabled;
+                    changed = true;
+                }
+            }
+            
+            // Apply EEG config
+            if (updates.eeg) {
+                if (!config.features.EEG) config.features.EEG = {};
+                if (updates.eeg.rest_threshold) { config.features.EEG.rest_threshold = updates.eeg.rest_threshold; changed = true; }
+                if (updates.eeg.ratio_threshold) { config.features.EEG.ratio_threshold = updates.eeg.ratio_threshold; changed = true; }
+            }
+            
+            // Apply active models
+            if (updates.activeModelEOG || updates.activeModelEMG) {
+                if (!config.active_models) config.active_models = {};
+                if (updates.activeModelEOG && config.active_models.EOG !== updates.activeModelEOG) {
+                    config.active_models.EOG = updates.activeModelEOG;
+                    changed = true;
+                }
+                if (updates.activeModelEMG && config.active_models.EMG !== updates.activeModelEMG) {
+                    config.active_models.EMG = updates.activeModelEMG;
+                    changed = true;
+                }
+            }
+            
+            if (changed) {
+                await fetch(`${API_BASE_URL}/api/config`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(config)
+                });
+            }
+        } catch (err) {
+            console.error("Failed to update backend config:", err);
+        }
+    }, [API_BASE_URL]);
+
+    // Ensure physical servo is disabled when navigating away from this view
+    React.useEffect(() => {
+        return () => {
+            console.log("ServoClawView unmounting - Disabling Servo hardware");
+            updateBackendConfig({ servoEnabled: false });
+        };
+    }, [updateBackendConfig]);
+
+    // Throttling for rapid repeated eye blink events
+    const lastBlinkEventRef = React.useRef(0);
+
     // Sync Claw Status with incoming wsEvent
     React.useEffect(() => {
         if (!wsEvent || !wsEvent.event) return;
         const e = wsEvent.event;
+        
+        // Apply throttle for blinks
+        if (e === 'SingleBlink' || e === 'DoubleBlink') {
+            const now = Date.now();
+            if (now - lastBlinkEventRef.current < 1000) {
+                return; // Ignore repeated events within 1 second
+            }
+            lastBlinkEventRef.current = now;
+        }
+
         let action = null;
         let newAngle = currentAngle;
 
         if (e === 'SingleBlink') {
-            action = 'Degree (+ve)';
-            newAngle = Math.min(97, currentAngle + 5);
-        } else if (e === 'DoubleBlink') {
             action = 'Degree (-ve)';
             newAngle = Math.max(1, currentAngle - 5);
+        } else if (e === 'DoubleBlink') {
+            action = 'Degree (+ve)';
+            newAngle = Math.min(97, currentAngle + 5);
         } else if (e === 'Rock') {
             action = 'Full Closing';
             newAngle = 97;
@@ -54,7 +163,7 @@ export default function ServoClawView({ wsEvent, isConnected }) {
             setEventLogs(prev => [
                 { id: Date.now() + Math.random(), text: `[${timeStr}] Event: ${e} -> ${action}` },
                 ...prev
-            ].slice(0, 100));
+            ].slice(0, 50));
 
             const timer = setTimeout(() => {
                 updateClawStatus(ssvepActive, rpsActive, blinkActive);
@@ -74,28 +183,32 @@ export default function ServoClawView({ wsEvent, isConnected }) {
         setRpsActive(nextState);
         setBlinkActive(nextState);
         updateClawStatus(nextState, nextState, nextState);
+        updateBackendConfig({ servoEnabled: nextState });
         CalibrationApi.togglePrediction('ALL', nextState).catch(err => console.error("Toggle All failed:", err));
     };
 
     const toggleDetection = (detectionType) => {
         soundHandler?.playClick?.();
-
+        
+        const newStates = {
+            ssvep: detectionType === 'ssvep' ? !ssvepActive : ssvepActive,
+            rps: detectionType === 'rps' ? !rpsActive : rpsActive,
+            blink: detectionType === 'blink' ? !blinkActive : blinkActive
+        };
+        
         if (detectionType === 'ssvep') {
-            const nextState = !ssvepActive;
-            setSsvepActive(nextState);
-            updateClawStatus(nextState, rpsActive, blinkActive);
-            CalibrationApi.togglePrediction('EEG', nextState).catch(err => console.error("SSVEP toggle failed:", err));
+            setSsvepActive(newStates.ssvep);
+            CalibrationApi.togglePrediction('EEG', newStates.ssvep).catch(err => console.error("SSVEP toggle failed:", err));
         } else if (detectionType === 'rps') {
-            const nextState = !rpsActive;
-            setRpsActive(nextState);
-            updateClawStatus(ssvepActive, nextState, blinkActive);
-            CalibrationApi.togglePrediction('EMG', nextState).catch(err => console.error("RPS toggle failed:", err));
+            setRpsActive(newStates.rps);
+            CalibrationApi.togglePrediction('EMG', newStates.rps).catch(err => console.error("RPS toggle failed:", err));
         } else if (detectionType === 'blink') {
-            const nextState = !blinkActive;
-            setBlinkActive(nextState);
-            updateClawStatus(ssvepActive, rpsActive, nextState);
-            CalibrationApi.togglePrediction('EOG', nextState).catch(err => console.error("Blink toggle failed:", err));
+            setBlinkActive(newStates.blink);
+            CalibrationApi.togglePrediction('EOG', newStates.blink).catch(err => console.error("Blink toggle failed:", err));
         }
+        
+        updateClawStatus(newStates.ssvep, newStates.rps, newStates.blink);
+        updateBackendConfig({ servoEnabled: (newStates.ssvep || newStates.rps || newStates.blink) });
     };
 
     const updateClawStatus = (s, r, b) => {
@@ -127,24 +240,31 @@ export default function ServoClawView({ wsEvent, isConnected }) {
     // -------------------------------------------------------------
     // RENDER HELPERS
     // -------------------------------------------------------------
-    const renderDetectionCard = ({ id, title, icon: Icon, active, description }) => {
+    const renderDetectionCard = ({ id, title, icon: Icon, active, description, settingsContent }) => {
         return (
-            <div className={`p-6 rounded-2xl border transition-all duration-300 flex flex-col items-start gap-4 hover:border-primary/50 cursor-pointer ${active ? 'bg-primary/5 border-primary/50 shadow-glow' : 'bg-surface border-border'}`} onClick={() => toggleDetection(id)}>
-                <div className="flex items-center justify-between w-full">
+            <div className={`p-6 rounded-2xl border transition-all duration-300 flex flex-col items-start gap-4 hover:border-primary/50 relative overflow-hidden ${active ? 'bg-primary/5 border-primary/50 shadow-glow' : 'bg-surface border-border'}`}>
+                <div 
+                    className="flex items-center justify-between w-full cursor-pointer z-10" 
+                    onClick={() => toggleDetection(id)}
+                >
                     <div className={`p-3 rounded-full ${active ? 'bg-primary text-primary-contrast' : 'bg-white/5 text-muted'}`}>
                         <Icon size={24} />
                     </div>
-                    <button className={`w-[42px] h-[42px] flex items-center justify-center rounded-full border transition-all ${active ? 'bg-red-500/10 border-red-500/50 text-red-500 hover:bg-red-500/20' : 'bg-green-500/10 border-green-500/50 text-green-500 hover:bg-green-500/20'}`}>
+                    <button 
+                        className={`w-[42px] h-[42px] flex items-center justify-center rounded-full border transition-all ${active ? 'bg-red-500/10 border-red-500/50 text-red-500 hover:bg-red-500/20' : 'bg-green-500/10 border-green-500/50 text-green-500 hover:bg-green-500/20'}`}
+                        onClick={(e) => { e.stopPropagation(); toggleDetection(id); }}
+                    >
                         {active ? <Square size={18} /> : <Play size={18} />}
                     </button>
                 </div>
-                <div>
+                <div className="z-10 cursor-pointer" onClick={() => toggleDetection(id)}>
                     <h3 className={`text-lg font-bold ${active ? 'text-primary' : 'text-text'}`}>{title}</h3>
-                    <p className="text-sm text-muted mt-1">{description}</p>
+                    <p className="text-sm text-muted mt-1 leading-relaxed">{description}</p>
                 </div>
-                <div className="mt-auto pt-4 w-full border-t border-border flex justify-between items-center text-xs font-medium">
+                
+                <div className="mt-auto pt-4 w-full border-t border-border flex justify-between items-center text-xs font-medium z-10">
                     <span className="text-muted">Status</span>
-                    <span className={active ? "text-green-500 animate-pulse" : "text-muted"}>
+                    <span className={active ? "text-green-500 animate-pulse font-bold" : "text-muted"}>
                         {active ? "Active" : "Inactive"}
                     </span>
                 </div>
@@ -189,7 +309,7 @@ export default function ServoClawView({ wsEvent, isConnected }) {
                         <Activity size={20} />
                         Detection Modalities
                     </h2>
-                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         {renderDetectionCard({
                             id: 'ssvep',
                             title: 'SSVEP Detection',
@@ -213,32 +333,128 @@ export default function ServoClawView({ wsEvent, isConnected }) {
                         })}
                     </div>
                     
-                    {/* Event Logger */}
-                    <div className="mt-4 flex flex-col gap-4 h-64 border border-border/50 rounded-2xl bg-surface p-5 shadow-inner">
-                        <div className="flex items-center justify-between border-b border-border/50 pb-2">
-                            <h2 className="text-sm font-bold opacity-80 flex items-center gap-2 uppercase tracking-widest text-muted">
-                                <Activity size={16} />
-                                Action Log
-                            </h2>
-                            <span className="text-xs font-bold bg-primary/10 text-primary px-2 py-0.5 rounded-md border border-primary/20">
-                                {eventLogs.length} Events
-                            </span>
-                        </div>
+                    {/* Bottom Section: Logs & Settings */}
+                    <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-6">
                         
-                        <div className="flex-1 overflow-y-auto space-y-1.5 pr-2 custom-scrollbar">
-                            {eventLogs.length === 0 ? (
-                                <div className="h-full flex items-center justify-center text-muted text-sm italic">
-                                    Awaiting detection events...
-                                </div>
-                            ) : (
-                                eventLogs.map(log => (
-                                    <div key={log.id} className="font-mono text-sm leading-relaxed text-primary/90 truncate py-0.5">
-                                        {/* Highlight the timestamp and the arrow to make it super readable */}
-                                        <span dangerouslySetInnerHTML={{ __html: log.text.replace(/(\[.*?\])/g, '<span class="text-muted/60 font-bold">$1</span>').replace('->', '<span class="text-white/50 px-1">-></span>').replace(/Event:(.*?)->/, 'Event:<span class="text-primary font-bold px-1">$1</span>->') }} />
+                        {/* Event Logger */}
+                        <div className="flex flex-col gap-4 h-56 border border-border/50 rounded-2xl bg-surface p-5 shadow-inner">
+                            <div className="flex items-center justify-between border-b border-border/50 pb-2">
+                                <h2 className="text-sm font-bold opacity-80 flex items-center gap-2 uppercase tracking-widest text-muted">
+                                    <Activity size={16} />
+                                    Action Log
+                                </h2>
+                                <span className="text-xs font-bold bg-primary/10 text-primary px-2 py-0.5 rounded-md border border-primary/20">
+                                    {eventLogs.length} Events
+                                </span>
+                            </div>
+                            
+                            <div className="flex-1 overflow-y-auto space-y-1.5 pr-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none]">
+                                {eventLogs.length === 0 ? (
+                                    <div className="h-full flex items-center justify-center text-muted text-sm italic">
+                                        Awaiting detection events...
                                     </div>
-                                ))
-                            )}
+                                ) : (
+                                    eventLogs.map(log => (
+                                        <div key={log.id} className="font-mono text-sm leading-relaxed text-primary/90 truncate py-0.5">
+                                            <span dangerouslySetInnerHTML={{ __html: log.text.replace(/(\[.*?\])/g, '<span class="text-muted/60 font-bold">$1</span>').replace('->', '<span class="text-white/50 px-1">-></span>').replace(/Event:(.*?)->/, 'Event:<span class="text-primary font-bold px-1">$1</span>->') }} />
+                                        </div>
+                                    ))
+                                )}
+                            </div>
                         </div>
+
+                        {/* Settings Controls */}
+                        <div className="flex flex-col gap-4 h-56 border border-border/50 rounded-2xl bg-surface p-5 shadow-inner overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none]">
+                            <h2 className="text-sm font-bold opacity-80 flex items-center gap-2 uppercase tracking-widest text-muted border-b border-border/50 pb-2">
+                                <Settings size={16} />
+                                Modality Config
+                            </h2>
+
+                            <div className="flex flex-col gap-4 mt-2">
+                                {/* EOG Model */}
+                                <div className="flex flex-col gap-1.5">
+                                    <label className="text-xs font-bold text-muted uppercase flex items-center gap-1.5">
+                                        <Zap size={12} className="text-primary/70" />
+                                        EOG Active Model
+                                    </label>
+                                    <select 
+                                        className="bg-bg border border-border text-sm rounded-md px-3 py-2 w-full outline-none focus:border-primary/50 transition-colors"
+                                        value={models.eog.find(m => m.active)?.name || ''}
+                                        onChange={(e) => {
+                                            const newEogModels = [...models.eog].map(m => ({...m, active: m.name === e.target.value}));
+                                            setModels({...models, eog: newEogModels});
+                                            updateBackendConfig({ activeModelEOG: e.target.value });
+                                        }}
+                                    >
+                                        {models.eog.map(m => (
+                                            <option key={m.name} value={m.name}>{m.name}</option>
+                                        ))}
+                                        {models.eog.length === 0 && <option value="" disabled>No models found</option>}
+                                    </select>
+                                </div>
+
+                                {/* EMG Model */}
+                                <div className="flex flex-col gap-1.5">
+                                    <label className="text-xs font-bold text-muted uppercase flex items-center gap-1.5">
+                                        <BrainCircuit size={12} className="text-primary/70" />
+                                        EMG Active Model
+                                    </label>
+                                    <select 
+                                        className="bg-bg border border-border text-sm rounded-md px-3 py-2 w-full outline-none focus:border-primary/50 transition-colors"
+                                        value={models.emg.find(m => m.active)?.name || ''}
+                                        onChange={(e) => {
+                                            const newEmgModels = [...models.emg].map(m => ({...m, active: m.name === e.target.value}));
+                                            setModels({...models, emg: newEmgModels});
+                                            updateBackendConfig({ activeModelEMG: e.target.value });
+                                        }}
+                                    >
+                                        {models.emg.map(m => (
+                                            <option key={m.name} value={m.name}>{m.name}</option>
+                                        ))}
+                                        {models.emg.length === 0 && <option value="" disabled>No models found</option>}
+                                    </select>
+                                </div>
+
+                                {/* EEG Thresholds */}
+                                <div className="flex flex-col gap-1.5">
+                                    <label className="text-xs font-bold text-muted uppercase flex items-center gap-1.5">
+                                        <Activity size={12} className="text-primary/70" />
+                                        SSVEP Thresholds
+                                    </label>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div className="flex flex-col gap-1">
+                                            <span className="text-xs text-muted/80">Rest Ratio</span>
+                                            <input 
+                                                type="number" 
+                                                step="0.05"
+                                                className="bg-bg border border-border rounded px-3 py-1.5 text-sm outline-none focus:border-primary/50 transition-colors" 
+                                                value={eegConfig.rest_threshold} 
+                                                onChange={(e) => {
+                                                    const val = parseFloat(e.target.value);
+                                                    setEegConfig(prev => ({...prev, rest_threshold: val}));
+                                                }}
+                                                onBlur={() => updateBackendConfig({ eeg: eegConfig })}
+                                            />
+                                        </div>
+                                        <div className="flex flex-col gap-1">
+                                            <span className="text-xs text-muted/80">Target Ratio</span>
+                                            <input 
+                                                type="number" 
+                                                step="0.1"
+                                                className="bg-bg border border-border rounded px-3 py-1.5 text-sm outline-none focus:border-primary/50 transition-colors" 
+                                                value={eegConfig.ratio_threshold} 
+                                                onChange={(e) => {
+                                                    const val = parseFloat(e.target.value);
+                                                    setEegConfig(prev => ({...prev, ratio_threshold: val}));
+                                                }}
+                                                onBlur={() => updateBackendConfig({ eeg: eegConfig })}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                     </div>
                 </div>
 

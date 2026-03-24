@@ -239,6 +239,15 @@ function resetGame() {
 
 function handleInput(action) {
     console.log("[Worker] Input received:", action, "State:", gameState, "Y:", dinoY)
+    
+    if (action === 'start') {
+        if (gameState === 'ready' || gameState === 'gameOver') {
+            console.log("[Worker] Starting game")
+            resetGame();
+        }
+        return;
+    }
+
     if (action === 'jump') {
         // Trigger Blink Animation
         eyeState = 'blink';

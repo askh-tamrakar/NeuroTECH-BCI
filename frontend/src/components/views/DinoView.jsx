@@ -681,33 +681,37 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
         logEvent(text, source === 'keyboard' ? 'keyboard' : 'blink')
         triggerSingleBlink()
 
-        if (gameState === 'ready' || gameState === 'gameOver') {
+        const currentState = gameStateRef.current;
+        if (currentState === 'ready' || currentState === 'gameOver') {
             startGame();
-        } else if (gameState === 'playing') {
+        } else if (currentState === 'playing') {
             soundHandler.playDinoJump();
             jump();
         }
-    }, [gameState, startGame, jump, logEvent]);
+    }, [startGame, jump, logEvent]);
 
     const handleDoublePress = useCallback((source = 'blink') => {
+        const currentState = gameStateRef.current;
+        if (currentState === 'gameOver') return;
+
         const text = source === 'keyboard' ? "Spacebar x2 (Pause)" : "Double Blink (Pause)"
         logEvent(text, 'toggle')
         triggerDoubleBlink()
 
-        if (gameState === 'playing') {
+        if (currentState === 'playing') {
             soundHandler.playDinoPause();
             if (workerRef.current) {
                 workerRef.current.postMessage({ type: 'INPUT', payload: { action: 'pause' } });
             }
             setGameState('paused');
-        } else if (gameState === 'paused') {
+        } else if (currentState === 'paused') {
             soundHandler.playDinoPause();
             if (workerRef.current) {
                 workerRef.current.postMessage({ type: 'INPUT', payload: { action: 'resume' } });
             }
             setGameState('playing');
         }
-    }, [gameState, logEvent]);
+    }, [logEvent]);
 
     // Manual Keyboard Controls
     useEffect(() => {

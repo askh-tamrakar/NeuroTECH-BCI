@@ -15,9 +15,9 @@
         "enabled": true,
         "freq": 8,
         "id": 0,
-        "label": "Enter",
-        "mappedKey": "Enter",
-        "mappedMouse": "Left Click",
+        "label": "Targ 1",
+        "mappedKey": "W",
+        "mappedMouse": "None",
         "source": "dynamic"
       },
       {
@@ -26,8 +26,8 @@
         "enabled": true,
         "freq": 9,
         "id": 1,
-        "label": "UP",
-        "mappedKey": "ArrowUp",
+        "label": "Target 2ss",
+        "mappedKey": "A",
         "mappedMouse": "None",
         "source": "dynamic"
       },
@@ -37,8 +37,8 @@
         "enabled": true,
         "freq": 12,
         "id": 2,
-        "label": "Escape",
-        "mappedKey": "W",
+        "label": "Target 3",
+        "mappedKey": "S",
         "mappedMouse": "None",
         "source": "dynamic"
       },
@@ -48,8 +48,8 @@
         "enabled": true,
         "freq": 14.4,
         "id": 3,
-        "label": "LEFT",
-        "mappedKey": "ArrowLeft",
+        "label": "Target 4",
+        "mappedKey": "D",
         "mappedMouse": "None",
         "source": "dynamic"
       },
@@ -59,8 +59,8 @@
         "enabled": true,
         "freq": 16,
         "id": 4,
-        "label": "DOWN",
-        "mappedKey": "ArrowDown",
+        "label": "Target 5",
+        "mappedKey": "Space",
         "mappedMouse": "None",
         "source": "dynamic"
       },
@@ -70,8 +70,8 @@
         "enabled": true,
         "freq": 18,
         "id": 5,
-        "label": "RIGHT",
-        "mappedKey": "ArrowRight",
+        "label": "Target 6",
+        "mappedKey": "Escape",
         "mappedMouse": "None",
         "source": "dynamic"
       }
@@ -90,14 +90,14 @@
     "SingleBlink": {
       "amplitude": [
         0.7082626082003116,
-        153.76162796616555
+        1497.5478790283203
       ],
       "asymmetry": [
-        0.14662084748382492,
+        0.13164251191830614,
         6.709219810572909
       ],
       "duration_ms": [
-        641,
+        442,
         1501
       ],
       "fall_time_ms": [
@@ -105,25 +105,104 @@
         873
       ],
       "kurtosis": [
-        -1.1947166173661303,
-        -0.4331088185005041
+        -1.3544155558115796,
+        0.7560091557676087
+      ],
+      "peak_count": [
+        0,
+        2
+      ],
+      "rise_time_ms": [
+        109,
+        946.0000000000001
+      ],
+      "skewness": [
+        -1.4798803991877616,
+        1.033787654516771
+      ],
+      "timestamp": [
+        1596919528.9093406,
+        1951790535.3336387
+      ]
+    },
+    "DoubleBlink": {
+      "amplitude": [
+        716.5294185638428,
+        1610.7158081054688
+      ],
+      "asymmetry": [
+        0.10485651202554469,
+        2.150485426453954
+      ],
+      "duration_ms": [
+        518,
+        1000.9999999999999
+      ],
+      "fall_time_ms": [
+        206,
+        906
+      ],
+      "kurtosis": [
+        -1.3290017166686547,
+        -0.45268929931333046
+      ],
+      "peak_count": [
+        1.8,
+        3
+      ],
+      "rise_time_ms": [
+        87,
+        453
+      ],
+      "skewness": [
+        -0.8839363186468856,
+        0.5924413919266264
+      ],
+      "timestamp": [
+        1596924034.6541083,
+        1951796042.3550215
+      ]
+    },
+    "Rest": {
+      "amplitude": [
+        13.931469568610192,
+        484.50982971191405
+      ],
+      "asymmetry": [
+        0.07173447529792883,
+        999.9990000010001
+      ],
+      "duration_ms": [
+        493,
+        1000.9999999999999
+      ],
+      "fall_time_ms": [
+        1,
+        934
+      ],
+      "kurtosis": [
+        -1.3412519247420251,
+        14.054020119292144
       ],
       "peak_count": [
         0,
         1
       ],
       "rise_time_ms": [
-        128,
-        946.0000000000001
+        67,
+        1000
       ],
       "skewness": [
-        -0.22947331340224802,
-        0.507095357073191
+        -1.595105476683213,
+        3.349553618072197
       ],
       "timestamp": [
-        1596919528.9093406,
-        1951790535.3336387
+        1596924158.1718078,
+        1951796193.3210986
       ]
     }
+  },
+  "Servo": {
+    "enabled": true
   }
 }

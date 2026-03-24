@@ -22,6 +22,8 @@ class ServoController:
         self.MIN_ANGLE = 1     # Fully Open
         self.MIDDLE_ANGLE = 48 # Approximate middle
         self.MAX_ANGLE = 97    # Fully Closed
+        
+        self.last_blink_time = 0
 
     def _reload_config_if_needed(self):
         vhash = config_manager.get_config_version_hash()
@@ -113,6 +115,7 @@ class ServoController:
 
         try:
             while True:
+                self._reload_config_if_needed()
                 sample, timestamp = self.inlet.pull_sample(timeout=0.1)
                 if sample:
                     try:
@@ -123,15 +126,28 @@ class ServoController:
                             continue
 
                         # Logic Mapping
+                        
+                        servo_enabled = self.config.get("features", {}).get("Servo", {}).get("enabled", False)
+                        if not servo_enabled:
+                            continue
+
+                        if event_name in ["SingleBlink", "DoubleBlink"]:
+                            current_time = time.time()
+                            if current_time - self.last_blink_time < 1.0:
+                                continue # Throttle events
+                            self.last_blink_time = current_time
+
                         new_angle = self.current_angle
                         
                         if event_name == "SingleBlink":
-                            new_angle = min(self.MAX_ANGLE, self.current_angle + 5)
-                            print(f"Event: {event_name} -> Closing")
+                            # Decrease (-ve) / Opening
+                            new_angle = max(self.MIN_ANGLE, self.current_angle - 5)
+                            print(f"Event: {event_name} -> Opening (-5°)")
                         
                         elif event_name == "DoubleBlink":
-                            new_angle = max(self.MIN_ANGLE, self.current_angle - 5)
-                            print(f"Event: {event_name} -> Opening")
+                            # Increase (+ve) / Closing
+                            new_angle = min(self.MAX_ANGLE, self.current_angle + 5)
+                            print(f"Event: {event_name} -> Closing (+5°)")
                         
                         elif event_name == "Rock":
                             new_angle = self.MAX_ANGLE
