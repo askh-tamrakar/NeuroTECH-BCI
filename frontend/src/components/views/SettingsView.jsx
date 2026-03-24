@@ -694,54 +694,75 @@ export default function SettingsView({ latency = 0 }) {
         )}
         {/* ACCOUNT */}
         {activeSection === 'account' && (
-          <div className="flex flex-col gap-4 animate-fade-in w-full">
+          <div className="flex flex-col gap-6 animate-fade-in w-full">
              <div className="flex items-start justify-between gap-3">
                <div>
-                 <h2 className="text-[26px] font-bold tracking-tight text-text">Account Overview</h2>
-                 <p className="text-[14px] text-muted mt-1">Manage local operator settings and review current link credentials</p>
+                 <h2 className="text-[28px] font-extrabold tracking-tight text-text flex items-center gap-3">
+                    <UserPlus className="text-primary opacity-80" size={26} strokeWidth={2.5} /> Account Overview
+                 </h2>
+                 <p className="text-[14px] text-muted mt-1 ml-10">Manage local operator settings and review current link credentials</p>
                </div>
              </div>
              
-             <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mt-2">
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-2">
                {/* Profile */}
-        <div className="bg-surface/50 border border-border rounded-2xl p-[18px]">
-          <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-surface to-bg border border-border-hi flex items-center justify-center text-[18px] font-extrabold text-primary mb-3 shadow-[0_4px_10px_rgba(0,0,0,0.2)]">
-            {user?.avatarUrl ? <img src={user.avatarUrl} alt="Avatar" className="w-full h-full rounded-xl object-cover" /> : (user?.name?.charAt(0).toUpperCase() || 'U')}
-          </div>
-          <div className="text-[10px] tracking-[0.12em] text-muted uppercase mb-0.5 font-bold">Neural Operator</div>
-          <div className="text-[18px] font-bold tracking-[-0.3px] text-text truncate">{user?.username || 'ANONYMOUS'}</div>
-          <div className="text-[12px] text-muted mt-1 truncate">{user?.email || 'operator@neurotech.bci'}</div>
-          {user && (
-            <button onClick={logout} className="mt-3.5 w-full p-[9px] rounded-lg border border-red-500/35 bg-red-500/10 text-red-500 text-[11px] font-bold tracking-[0.08em] uppercase cursor-pointer hover:bg-red-500/20 transition-all text-center">
-              ⊗ Disconnect Link
-            </button>
-          )}
-        </div>
+               <div className="bg-surface/30 backdrop-blur-md border border-border/60 hover:border-primary/30 transition-colors rounded-2xl p-6 relative overflow-hidden group">
+                 <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full blur-3xl -mr-10 -mt-10 transition-opacity group-hover:bg-primary/10"></div>
+                 <div className="flex items-center gap-5 relative z-10">
+                   <div className="relative">
+                     <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary/20 to-surface border border-primary/30 flex items-center justify-center text-[24px] font-extrabold text-primary shadow-[0_4px_20px_rgba(0,200,240,0.15)] overflow-hidden">
+                       {user?.avatarUrl ? <img src={user.avatarUrl} alt="Avatar" className="w-full h-full object-cover" /> : (user?.username?.charAt(0).toUpperCase() || 'U')}
+                     </div>
+                     <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 border-[2px] border-bg shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div>
+                   </div>
+                   <div className="flex-1 min-w-0">
+                     <div className="text-[10px] tracking-[0.15em] text-primary/80 uppercase mb-1 font-bold flex items-center gap-2">
+                       <Activity size={10} className="text-primary" /> Neural Operator
+                     </div>
+                     <div className="text-[22px] font-bold tracking-tight text-white truncate leading-tight">{user?.username || 'ANONYMOUS'}</div>
+                     <div className="text-[13px] text-muted truncate mt-0.5">{user?.email || 'operator@neurotech.bci'}</div>
+                   </div>
+                 </div>
+                 {user && (
+                   <div className="mt-6 pt-5 border-t border-border/40 relative z-10">
+                     <button onClick={logout} className="w-full py-2.5 rounded-xl border border-red-500/20 bg-red-500/5 text-red-500 text-[12px] font-bold tracking-[0.1em] uppercase cursor-pointer hover:bg-red-500/15 hover:border-red-500/30 transition-all text-center flex items-center justify-center gap-2 group-hover:shadow-[0_4px_12px_rgba(239,68,68,0.1)]">
+                       <Power size={14} /> Disconnect Link
+                     </button>
+                   </div>
+                 )}
+               </div>
                
                {/* Quick Info */}
-        <div className="bg-surface/50 border border-border rounded-2xl overflow-hidden shadow-lg">
-          <div className="px-4 py-[11px] border-b border-border">
-             <span className="text-[11px] font-bold tracking-[0.1em] uppercase text-muted flex items-center gap-2">
-                 <Activity size={14} className="opacity-70" strokeWidth={1.8} /> Quick Info
-             </span>
-          </div>
-          <div className="px-4 py-[11px] border-b border-border flex justify-between items-center">
-             <span className="text-[13px] text-muted">Available themes</span>
-             <span className="text-[13px] font-bold">{themes.length}</span>
-          </div>
-          <div className="px-4 py-[11px] border-b border-border flex justify-between items-center">
-             <span className="text-[13px] text-muted">Active hotkeys</span>
-             <span className="text-[13px] font-bold">{Object.keys(settings.keymap?.collection || {}).length}</span>
-          </div>
-          <div className="px-4 py-[11px] border-b border-border flex justify-between items-center">
-             <span className="text-[13px] text-muted">Device status</span>
-             <span className={`text-[13px] font-bold ${latency > 0 ? 'text-emerald-500' : 'text-red-500'}`}>{latency > 0 ? 'Online' : 'Offline'}</span>
-          </div>
-          <div className="px-4 py-[11px] flex justify-between items-center">
-             <span className="text-[13px] text-muted">Target Protocol</span>
-             <span className="text-[13px] font-bold truncate max-w-[100px]">{wsUrl}</span>
-          </div>
-        </div>
+               <div className="bg-surface/30 backdrop-blur-md border border-border/60 hover:border-border transition-colors rounded-2xl overflow-hidden flex flex-col">
+                 <div className="px-5 py-4 border-b border-border/40 bg-surface/20">
+                    <span className="text-[12px] font-bold tracking-[0.1em] uppercase text-text flex items-center gap-2">
+                        <Database size={14} className="text-primary" strokeWidth={2} /> System Status
+                    </span>
+                 </div>
+                 <div className="flex flex-col flex-1 p-2">
+                   {[
+                     { label: 'Available themes', value: themes.length, icon: Palette },
+                     { label: 'Active hotkeys', value: Object.keys(settings.keymap?.collection || {}).length, icon: Keyboard },
+                     { label: 'Device status', value: latency > 0 ? 'Online' : 'Offline', icon: Activity, isStatus: true },
+                     { label: 'Target Protocol', value: wsUrl.replace('ws://', '').replace('wss://', ''), icon: Globe, highlight: true }
+                   ].map((stat, i) => {
+                      const StatIcon = stat.icon;
+                      return (
+                         <div key={i} className="flex justify-between items-center px-4 py-3 rounded-xl hover:bg-surface/40 transition-colors">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-lg bg-bg border border-border/50 flex items-center justify-center shadow-inner text-muted">
+                                <StatIcon size={14} />
+                              </div>
+                              <span className="text-[13px] text-muted font-medium">{stat.label}</span>
+                            </div>
+                            <span className={`text-[13px] font-bold ${stat.isStatus ? (latency > 0 ? 'text-emerald-500 drop-shadow-[0_0_5px_rgba(16,185,129,0.3)]' : 'text-red-500') : (stat.highlight ? 'text-primary font-mono text-[11px] bg-primary/10 px-2 py-1 rounded border border-primary/20 cursor-default' : 'text-text text-[14px]')}`}>
+                              {stat.value}
+                            </span>
+                         </div>
+                      )
+                   })}
+                 </div>
+               </div>
              </div>
           </div>
         )}
