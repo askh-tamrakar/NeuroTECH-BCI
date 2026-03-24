@@ -36,6 +36,7 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
     // Game state
     const [gameState, setGameState] = useState('ready') // ready, playing, paused, gameOver
     const [score, setScore] = useState(0)
+    const [obstaclesPassed, setObstaclesPassed] = useState(0)
     const [highScore, setHighScore] = useState(
         parseInt(localStorage.getItem('dino_highscore')) || 0
     )
@@ -510,7 +511,7 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
         // Always re-bind events because 'worker' instance is stable but closure might not be?
         if (worker) {
             worker.onmessage = (e) => {
-                const { type, score, highScore: newHigh } = e.data
+                const { type, score, highScore: newHigh, obstaclesPassed: newObstaclesPassed } = e.data
                 if (type === 'GAME_OVER') {
                     setGameState('gameOver')
                     soundHandler.playDinoDead();
@@ -518,12 +519,18 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
                         scoreRef.current = score
                         logEvent(`Game Over! Score: ${Math.floor(score / 10)}`, 'gameover')
                     }
+                    if (newObstaclesPassed !== undefined) {
+                        setObstaclesPassed(newObstaclesPassed)
+                    }
                 } else if (type === 'HIGHSCORE_UPDATE') {
                     setHighScore(newHigh)
                     localStorage.setItem('dino_highscore', newHigh.toString())
                     logEvent(`New Highscore: ${Math.floor(newHigh / 10)}!`, 'highscore')
                 } else if (type === 'SCORE_UPDATE') {
                     setScore(score)
+                    if (newObstaclesPassed !== undefined) {
+                        setObstaclesPassed(newObstaclesPassed)
+                    }
                 } else if (type === 'STATE_UPDATE') {
                     setGameState(e.data.payload)
                 }
@@ -674,6 +681,7 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
         }
         setGameState('ready');
         setScore(0);
+        setObstaclesPassed(0);
     }, []);
 
     const handleSinglePress = useCallback((source = 'blink') => {
@@ -864,12 +872,12 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
                                 </div>
 
                                 <div className="game-stats-container">
-                                    {/* Left Side: Status & Score */}
+                                    {/* Left Side: Cacti & Score */}
                                     <div className="stat-group-left">
                                         <div className="stat-block stat-block-start mb-1">
-                                            <span className="stat-label flex items-center gap-1"><Activity size={24} /> Status</span>
-                                            <div className={`stat-value-status ${gameState}`}>
-                                                {gameState}
+                                            <span className="stat-label flex items-center gap-1"><Activity size={24} /> Cacti Jumped</span>
+                                            <div className="stat-value-status text-green-400">
+                                                {obstaclesPassed}
                                             </div>
                                         </div>
                                         <div className="stat-block-row stat-block-start">
@@ -881,22 +889,18 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
                                     {/* Middle Spacer to avoid eye collision */}
                                     <div className="hidden lg:block" style={{ width: '24rem', flexShrink: 0 }}></div>
 
-                                    {/* Right Side: Best & Sensor */}
+                                    {/* Right Side: Best */}
                                     <div className="stat-group-right">
-                                        <div className="stat-block-row stat-block-end">
-                                            <Counter
-                                                value={Math.floor(highScore / 10)}
-                                                fontSize="clamp(1.5rem, 3.5vw, 3rem)"
-                                                places={[10000, 1000, 100, 10, 1]}
-                                                className="stat-counter-large"
-                                                style={{ lineHeight: 1 }}
-                                            />
-                                            <span className="stat-label flex items-center gap-1">: Best <Trophy size={24} className="text-yellow-500 mb-1" /></span>
-                                        </div>
-                                        <div className="stat-block stat-block-end mb-1">
-                                            <span className="stat-label flex items-center gap-1"><Radio size={24} /> Sensor</span>
-                                            <div className={`stat-value-sensor ${(isConnected && settings.CONTROL_CHANNEL !== 'none') ? 'text-green-500' : 'text-red-500'}`}>
-                                                {(isConnected && settings.CONTROL_CHANNEL !== 'none') ? 'Connected' : 'Disconnected'}
+                                        <div className="stat-block-row stat-block-end h-full flex flex-col justify-center">
+                                            <div className="flex items-center">
+                                                <Counter
+                                                    value={Math.floor(highScore / 10)}
+                                                    fontSize="clamp(1.5rem, 3.5vw, 3rem)"
+                                                    places={[10000, 1000, 100, 10, 1]}
+                                                    className="stat-counter-large"
+                                                    style={{ lineHeight: 1 }}
+                                                />
+                                                <span className="stat-label flex items-center gap-1">: Best <Trophy size={24} className="text-yellow-500 mb-1" /></span>
                                             </div>
                                         </div>
                                     </div>

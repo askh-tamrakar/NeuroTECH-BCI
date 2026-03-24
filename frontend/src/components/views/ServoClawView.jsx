@@ -133,11 +133,11 @@ export default function ServoClawView({ wsEvent, isConnected }) {
         let newAngle = currentAngle;
 
         if (e === 'SingleBlink') {
-            action = 'Degree (-ve)';
-            newAngle = Math.max(1, currentAngle - 5);
-        } else if (e === 'DoubleBlink') {
             action = 'Degree (+ve)';
             newAngle = Math.min(97, currentAngle + 5);
+        } else if (e === 'DoubleBlink') {
+            action = 'Degree (-ve)';
+            newAngle = Math.max(1, currentAngle - 5);
         } else if (e === 'Rock') {
             action = 'Full Closing';
             newAngle = 97;

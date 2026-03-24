@@ -140,14 +140,14 @@ class ServoController:
                         new_angle = self.current_angle
                         
                         if event_name == "SingleBlink":
-                            # Decrease (-ve) / Opening
-                            new_angle = max(self.MIN_ANGLE, self.current_angle - 5)
-                            print(f"Event: {event_name} -> Opening (-5°)")
-                        
-                        elif event_name == "DoubleBlink":
                             # Increase (+ve) / Closing
                             new_angle = min(self.MAX_ANGLE, self.current_angle + 5)
                             print(f"Event: {event_name} -> Closing (+5°)")
+                        
+                        elif event_name == "DoubleBlink":
+                            # Decrease (-ve) / Opening
+                            new_angle = max(self.MIN_ANGLE, self.current_angle - 5)
+                            print(f"Event: {event_name} -> Opening (-5°)")
                         
                         elif event_name == "Rock":
                             new_angle = self.MAX_ANGLE
