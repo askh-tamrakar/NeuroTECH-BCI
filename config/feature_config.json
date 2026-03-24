@@ -1,33 +1,33 @@
 {
   "EEG": {
     "target_freqs": [
-      3.33,
-      3.75,
-      5,
-      6,
-      6.67,
-      7.5
+      8,
+      9,
+      12,
+      14.4,
+      16,
+      18
     ],
     "targets": [
       {
         "controlType": "Keyboard",
         "divisor": 18,
         "enabled": true,
-        "freq": 3.33,
+        "freq": 8,
         "id": 0,
-        "label": "Targ 1",
-        "mappedKey": "W",
-        "mappedMouse": "None",
+        "label": "Enter",
+        "mappedKey": "Enter",
+        "mappedMouse": "Left Click",
         "source": "dynamic"
       },
       {
         "controlType": "Keyboard",
         "divisor": 16,
         "enabled": true,
-        "freq": 3.75,
+        "freq": 9,
         "id": 1,
-        "label": "Target 2ss",
-        "mappedKey": "A",
+        "label": "UP",
+        "mappedKey": "ArrowUp",
         "mappedMouse": "None",
         "source": "dynamic"
       },
@@ -35,10 +35,10 @@
         "controlType": "Keyboard",
         "divisor": 12,
         "enabled": true,
-        "freq": 5,
+        "freq": 12,
         "id": 2,
-        "label": "Target 3",
-        "mappedKey": "S",
+        "label": "Escape",
+        "mappedKey": "W",
         "mappedMouse": "None",
         "source": "dynamic"
       },
@@ -46,10 +46,10 @@
         "controlType": "Keyboard",
         "divisor": 10,
         "enabled": true,
-        "freq": 6,
+        "freq": 14.4,
         "id": 3,
-        "label": "Target 4",
-        "mappedKey": "D",
+        "label": "LEFT",
+        "mappedKey": "ArrowLeft",
         "mappedMouse": "None",
         "source": "dynamic"
       },
@@ -57,10 +57,10 @@
         "controlType": "Keyboard",
         "divisor": 9,
         "enabled": true,
-        "freq": 6.67,
+        "freq": 16,
         "id": 4,
-        "label": "Target 5",
-        "mappedKey": "Space",
+        "label": "DOWN",
+        "mappedKey": "ArrowDown",
         "mappedMouse": "None",
         "source": "dynamic"
       },
@@ -68,10 +68,10 @@
         "controlType": "Keyboard",
         "divisor": 8,
         "enabled": true,
-        "freq": 7.5,
+        "freq": 18,
         "id": 5,
-        "label": "Target 6",
-        "mappedKey": "Escape",
+        "label": "RIGHT",
+        "mappedKey": "ArrowRight",
         "mappedMouse": "None",
         "source": "dynamic"
       }
@@ -83,9 +83,47 @@
     "num_harmonics": 4,
     "step_sec": 0.25,
     "smoothing_windows": 7,
-    "refresh_rate": 60
+    "refresh_rate": 144
   },
   "EOG": {
-    "detection_method": "ML"
+    "detection_method": "ML",
+    "SingleBlink": {
+      "amplitude": [
+        0.7082626082003116,
+        153.76162796616555
+      ],
+      "asymmetry": [
+        0.14662084748382492,
+        6.709219810572909
+      ],
+      "duration_ms": [
+        641,
+        1501
+      ],
+      "fall_time_ms": [
+        126.9,
+        873
+      ],
+      "kurtosis": [
+        -1.1947166173661303,
+        -0.4331088185005041
+      ],
+      "peak_count": [
+        0,
+        1
+      ],
+      "rise_time_ms": [
+        128,
+        946.0000000000001
+      ],
+      "skewness": [
+        -0.22947331340224802,
+        0.507095357073191
+      ],
+      "timestamp": [
+        1596919528.9093406,
+        1951790535.3336387
+      ]
+    }
   }
 }

@@ -72,7 +72,7 @@ def load_config() -> dict:
         },
         "filters": {
             "EMG": {"cutoff": 70.0, "order": 4, "notch_enabled": False, "notch_freq": 50, "bandpass_enabled": False, "bandpass_low": 20, "bandpass_high": 250, "envelope_enabled": True, "envelope_cutoff": 10.0, "envelope_order": 4},
-            "EOG": {"cutoff": 10.0, "order": 4},
+            "EOG": {"bandpass_enabled": True, "bandpass_low": 0.5, "bandpass_high": 35.0, "bandpass_order": 4, "notch_enabled": False, "notch_freq": 50.0},
             "EEG": {
                 "filters": [
                     {"type": "notch", "freq": 50.0, "Q": 30},
