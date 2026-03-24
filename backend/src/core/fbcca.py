@@ -50,7 +50,7 @@ def fbcca(eeg_data, freqs, sr=1000, num_harmonics=3, num_bands=3):
         if lowcut >= highcut or lowcut >= nyq:
             continue
             
-        b, a = butter(4, [lowcut/nyq, min(highcut, nyq-1)/nyq], btype='bandpf', analog=False) if lowcut/nyq < 1.0 else (None, None)
+        b, a = butter(4, [lowcut/nyq, min(highcut, nyq-1)/nyq], btype='bandpass', analog=False) if lowcut/nyq < 1.0 else (None, None)
         
         if b is None:
             filtered_data = eeg_data

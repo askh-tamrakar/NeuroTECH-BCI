@@ -9,7 +9,7 @@ const MeditationView = ({ result }) => {
         <h2 className="eeg-view-title" style={{backgroundImage: 'linear-gradient(135deg, #10b981, #34d399)'}}>Meditation Trainer</h2>
       </div>
 
-      {result ? (
+      {result && result.meditation_score !== undefined ? (
         <div className="eeg-status-box" style={{borderColor: 'rgba(16, 185, 129, 0.2)'}}>
           <h3 style={{color: '#10b981', fontSize: '1.2rem', textTransform: 'uppercase', letterSpacing: '2px', margin: 0}}>Calmness Score</h3>
           <div className="eeg-score-display pulse-glow" style={{color: '#34d399'}}>

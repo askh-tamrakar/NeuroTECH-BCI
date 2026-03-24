@@ -18,7 +18,7 @@ const FocusView = ({ result }) => {
         <h2 className="eeg-view-title" style={{backgroundImage: 'linear-gradient(135deg, #3b82f6, #06b6d4)'}}>Focus Monitor</h2>
       </div>
 
-      {result ? (
+      {result && result.focus_score !== undefined ? (
         <div className="eeg-status-box" style={{borderColor: `rgba(59, 130, 246, 0.2)`}}>
           <h3 style={{color: '#3b82f6', fontSize: '1.2rem', textTransform: 'uppercase', letterSpacing: '2px', margin: 0}}>Concentration Level</h3>
           

@@ -15,7 +15,7 @@ const StressView = ({ result }) => {
         <h2 className="eeg-view-title" style={{ backgroundImage: 'linear-gradient(135deg, #f97316, #ef4444)' }}>Stress Monitor</h2>
       </div>
 
-      {result ? (
+      {result && result.stress_score !== undefined ? (
         <div className="eeg-status-box" style={{ borderColor: `rgba(${result.stress_score > 50 ? '239,68,68' : '139,92,246'}, 0.2)` }}>
           <h3 style={{ color: getSeverityColor(result.stress_score), fontSize: '1.2rem', textTransform: 'uppercase', letterSpacing: '2px', margin: 0 }}>Cognitive Load</h3>
 

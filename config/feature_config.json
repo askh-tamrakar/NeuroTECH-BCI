@@ -1,17 +1,17 @@
 {
   "EEG": {
     "target_freqs": [
-      5.72,
-      6.44,
-      8.58,
-      10.3,
-      11.44,
-      12.88
+      8,
+      9,
+      12,
+      14.4,
+      16,
+      18
     ],
     "targets": [
       {
         "id": 0,
-        "freq": 5.72,
+        "freq": 8,
         "label": "Targ 1",
         "mappedKey": "W",
         "mappedMouse": "None",
@@ -22,7 +22,7 @@
       },
       {
         "id": 1,
-        "freq": 6.44,
+        "freq": 9,
         "label": "Target 2ss",
         "mappedKey": "A",
         "mappedMouse": "None",
@@ -33,7 +33,7 @@
       },
       {
         "id": 2,
-        "freq": 8.58,
+        "freq": 12,
         "label": "Target 3",
         "mappedKey": "S",
         "mappedMouse": "None",
@@ -44,7 +44,7 @@
       },
       {
         "id": 3,
-        "freq": 10.3,
+        "freq": 14.4,
         "label": "Target 4",
         "mappedKey": "D",
         "mappedMouse": "None",
@@ -55,7 +55,7 @@
       },
       {
         "id": 4,
-        "freq": 11.44,
+        "freq": 16,
         "label": "Target 5",
         "mappedKey": "Space",
         "mappedMouse": "None",
@@ -66,7 +66,7 @@
       },
       {
         "id": 5,
-        "freq": 12.88,
+        "freq": 18,
         "label": "Target 6",
         "mappedKey": "Escape",
         "mappedMouse": "None",
@@ -83,10 +83,10 @@
     "num_harmonics": 4,
     "step_sec": 0.25,
     "smoothing_windows": 7,
-    "refresh_rate": 103
+    "refresh_rate": 144
   },
   "EOG": {
-    "detection_method": "ML",
+    "detection_method": "Threshold",
     "SingleBlink": {
       "amplitude": [
         0.7082626082003116,

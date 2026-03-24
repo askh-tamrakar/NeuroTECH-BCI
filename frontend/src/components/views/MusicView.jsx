@@ -9,7 +9,7 @@ const MusicView = ({ result }) => {
         <h2 className="eeg-view-title" style={{backgroundImage: 'linear-gradient(135deg, #a855f7, #ec4899)'}}>Music Control</h2>
       </div>
 
-      {result ? (
+      {result && result.action ? (
         <div className="eeg-status-box" style={{borderColor: 'rgba(168, 85, 247, 0.2)'}}>
           <h3 style={{color: '#a855f7', fontSize: '1.2rem', textTransform: 'uppercase', letterSpacing: '2px', margin: 0}}>Detected State</h3>
           <div className="eeg-score-display pulse-glow" style={{color: '#ec4899'}}>{result.state}</div>
