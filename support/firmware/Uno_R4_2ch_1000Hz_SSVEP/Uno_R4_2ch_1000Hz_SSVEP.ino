@@ -170,17 +170,25 @@ void runSSVEPAnimation() {
   static unsigned long lastUpdate[6] = {0, 0, 0, 0, 0, 0};
   static bool ledState[6] = {false, false, false, false, false, false};
 
-  const int ledPins[6] = {LED_RED_1, LED_RED_2, LED_YELLOW_1, LED_YELLOW_2, LED_GREEN_1, LED_GREEN_2};
-  
+  const int ledPins[6] = {LED_RED_1,    LED_RED_2,   LED_YELLOW_1,
+                          LED_YELLOW_2, LED_GREEN_1, LED_GREEN_2};
+
   // Half-period in microseconds: 500000 / frequency
   // 8Hz, 9Hz, 12Hz, 14.4Hz, 16Hz, 18Hz
   const unsigned long halfPeriod[6] = {
-    62500, // 500000 / 8.0
-    55555, // 500000 / 9.0
-    41666, // 500000 / 12.0
-    34722, // 500000 / 14.4
-    31250, // 500000 / 16.0
-    27777  // 500000 / 18.0
+      // 62500, // 500000 / 8.0
+      // 55555, // 500000 / 9.0
+      // 41666, // 500000 / 12.0
+      // 34722, // 500000 / 14.4
+      // 31250, // 500000 / 16.0
+      // 27777  // 500000 / 18.0
+
+      62500, // 500000 / 8.0
+      62500, // 500000 / 8.0
+      62500, // 500000 / 8.0
+      62500, // 500000 / 8.0
+      62500, // 500000 / 8.0
+      62500, // 500000 / 8.0
   };
 
   unsigned long currentMicros = micros();

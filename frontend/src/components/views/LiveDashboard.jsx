@@ -35,6 +35,17 @@ export default function LiveDashboard({ wsData, wsConfig, wsEvent, sendMessage, 
         localStorage.setItem('liveDashboardIsPaused', JSON.stringify(isPaused))
     }, [isPaused])
 
+    // Timer for recording duration
+    useEffect(() => {
+        let timer;
+        if (isRecording && !isPausedRecording && recordingStartTime) {
+            timer = setInterval(() => {
+                setRecordingTime(Math.floor((Date.now() - recordingStartTime - totalPausedDuration) / 1000));
+            }, 1000);
+        }
+        return () => clearInterval(timer);
+    }, [isRecording, isPausedRecording, recordingStartTime, totalPausedDuration]);
+
     // Load config on mount
     useEffect(() => {
         ConfigService.loadConfig().then(cfg => {

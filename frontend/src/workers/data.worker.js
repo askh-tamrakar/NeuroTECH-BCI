@@ -102,6 +102,14 @@ function connect(url) {
             samples: interpolatedSamples
         });
 
+        // Notify main thread for recording (full high-frequency array)
+        self.postMessage({
+            type: 'RECORD_BATCH',
+            payload: {
+                samples: interpolatedSamples
+            }
+        });
+
         // Also notify main thread for UI elements (timer, etc.) but with reduced frequency if needed
         // For now, send every batch but the main thread can choose to throttle its UI update
         self.postMessage({
