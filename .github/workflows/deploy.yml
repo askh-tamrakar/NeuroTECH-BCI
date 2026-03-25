@@ -5,7 +5,7 @@ on:
     branches:
       - master
       - develop
-      - extra-features
+      - refining_emg
 
 jobs:
   build-and-deploy:

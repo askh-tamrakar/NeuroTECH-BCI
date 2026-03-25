@@ -714,67 +714,70 @@ export default function SettingsView({ latency = 0, localWs = '', setLocalWs = (
         {/* ACCOUNT */}
         {activeSection === 'account' && (
           <div className="flex flex-col gap-6 animate-fade-in w-full">
-             <div className="flex items-start justify-between gap-3">
-               <div>
-                 <h2 className="text-[28px] font-extrabold tracking-tight text-text flex items-center gap-3">
-                    <UserPlus className="text-primary opacity-80" size={26} strokeWidth={2.5} /> Account Overview
+             <div className="flex flex-col items-center justify-center gap-1.5 mb-5 text-center px-4">
+                 <h2 className="text-[26px] font-black tracking-tight text-white flex items-center justify-center gap-3">
+                    <div className="p-2 bg-amber-500/10 rounded-xl border border-amber-500/15">
+                      <UserPlus className="text-amber-500" size={22} strokeWidth={2.5} />
+                    </div>
+                    Account Overview
                  </h2>
-                 <p className="text-[14px] text-muted mt-1 ml-10">Manage local operator settings and review current link credentials</p>
-               </div>
+                 <p className="text-[13px] text-muted max-w-[450px]">Manage operator settings and link credentials in a compact view</p>
              </div>
              
-             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-2">
+             <div className="flex flex-col gap-4 mt-1">
                {/* Profile */}
-               <div className="bg-surface/30 backdrop-blur-md border border-border/60 hover:border-primary/30 transition-colors rounded-2xl p-6 relative overflow-hidden group">
-                 <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full blur-3xl -mr-10 -mt-10 transition-opacity group-hover:bg-primary/10"></div>
-                 <div className="flex items-center gap-5 relative z-10">
+               <div className="bg-surface/25 border border-amber-500/20 rounded-2xl p-6 relative overflow-hidden group shadow-[0_8px_32px_rgba(0,0,0,0.15)]">
+                 <div className="flex items-center gap-6 relative z-10">
                    <div className="relative">
-                     <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary/20 to-surface border border-primary/30 flex items-center justify-center text-[24px] font-extrabold text-primary shadow-[0_4px_20px_rgba(0,200,240,0.15)] overflow-hidden">
+                     <div className="w-[60px] h-[60px] rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-[28px] font-black text-amber-500 shadow-inner">
                        {user?.avatarUrl ? <img src={user.avatarUrl} alt="Avatar" className="w-full h-full object-cover" /> : (user?.username?.charAt(0).toUpperCase() || 'U')}
                      </div>
-                     <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 border-[2px] border-bg shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div>
+                     <div className="absolute -bottom-1 -right-1 w-[18px] h-[18px] rounded-full bg-emerald-500 border-[3px] border-[#18181b] shadow-[0_0_12px_rgba(16,185,129,0.5)]"></div>
                    </div>
-                   <div className="flex-1 min-w-0">
-                     <div className="text-[10px] tracking-[0.15em] text-primary/80 uppercase mb-1 font-bold flex items-center gap-2">
-                       <Activity size={10} className="text-primary" /> Neural Operator
+                   <div className="flex-1">
+                     <div className="text-[10px] tracking-[0.2em] text-amber-500/80 uppercase font-black flex items-center gap-2 mb-1.5 px-0.5">
+                       <Activity size={10} className="text-amber-500" /> Neural Operator
                      </div>
-                     <div className="text-[22px] font-bold tracking-tight text-white truncate leading-tight">{user?.username || 'ANONYMOUS'}</div>
-                     <div className="text-[13px] text-muted truncate mt-0.5">{user?.email || 'operator@neurotech.bci'}</div>
+                     <div className="text-[22px] font-bold tracking-tight text-white leading-tight mb-0.5 group-hover:text-amber-500 transition-colors duration-300 uppercase">{user?.username || 'ANONYMOUS'}</div>
+                     <div className="text-[13px] text-muted flex items-center gap-2 mt-0.5 opacity-80">{user?.email || 'operator@neurotech.bci'}</div>
                    </div>
                  </div>
+
                  {user && (
-                   <div className="mt-6 pt-5 border-t border-border/40 relative z-10">
-                     <button onClick={logout} className="w-full py-2.5 rounded-xl border border-red-500/20 bg-red-500/5 text-red-500 text-[12px] font-bold tracking-[0.1em] uppercase cursor-pointer hover:bg-red-500/15 hover:border-red-500/30 transition-all text-center flex items-center justify-center gap-2 group-hover:shadow-[0_4px_12px_rgba(239,68,68,0.1)]">
-                       <Power size={14} /> Disconnect Link
+                   <div className="mt-4 pt-0 relative z-10">
+                     <button onClick={logout} className="w-full py-2.5 rounded-xl border border-red-500/20 bg-red-500/5 text-red-500 text-[11px] font-bold tracking-[0.1em] uppercase cursor-pointer hover:bg-red-500/10 transition-all flex items-center justify-center gap-2">
+                       <Power size={14} className="opacity-80" /> Disconnect Link
                      </button>
                    </div>
                  )}
                </div>
                
                {/* Quick Info */}
-               <div className="bg-surface/30 backdrop-blur-md border border-border/60 hover:border-border transition-colors rounded-2xl overflow-hidden flex flex-col">
-                 <div className="px-5 py-4 border-b border-border/40 bg-surface/20">
-                    <span className="text-[12px] font-bold tracking-[0.1em] uppercase text-text flex items-center gap-2">
-                        <Database size={14} className="text-primary" strokeWidth={2} /> System Status
+               <div className="bg-surface/25 border border-amber-500/25 rounded-2xl overflow-hidden flex flex-col group shadow-[0_8px_32px_rgba(0,0,0,0.15)]">
+                 <div className="px-5 py-3 border-b border-amber-500/15 flex items-center gap-3 relative z-10 bg-amber-500/5">
+                    <Database size={17} className="text-amber-500" strokeWidth={2.5} />
+                    <span className="text-[13px] font-black tracking-[0.15em] uppercase text-text flex items-center gap-2">
+                        System Status
                     </span>
                  </div>
-                 <div className="flex flex-col flex-1 p-2">
+                 
+                 <div className="grid grid-cols-1 flex-1 p-4 gap-2 relative z-10">
                    {[
                      { label: 'Available themes', value: themes.length, icon: Palette },
                      { label: 'Active hotkeys', value: Object.keys(settings.keymap?.collection || {}).length, icon: Keyboard },
                      { label: 'Device status', value: latency > 0 ? 'Online' : 'Offline', icon: Activity, isStatus: true },
-                     { label: 'Target Protocol', value: wsUrl.replace('ws://', '').replace('wss://', ''), icon: Globe, highlight: true }
+					 { label: 'Target Protocol', value: wsUrl.replace('ws://', '').replace('wss://', ''), icon: Globe, highlight: true }
                    ].map((stat, i) => {
                       const StatIcon = stat.icon;
                       return (
-                         <div key={i} className="flex justify-between items-center px-4 py-3 rounded-xl hover:bg-surface/40 transition-colors">
+                         <div key={i} className="flex justify-between items-center gap-3 px-4 py-3 rounded-xl hover:bg-amber-500/5 border border-amber-500/5 hover:border-amber-500/20 transition-all duration-300 group/item bg-[#000000]/15 shadow-sm">
                             <div className="flex items-center gap-3">
-                              <div className="w-8 h-8 rounded-lg bg-bg border border-border/50 flex items-center justify-center shadow-inner text-muted">
-                                <StatIcon size={14} />
+                              <div className="w-9 h-9 rounded-lg bg-bg/50 border border-amber-500/20 flex items-center justify-center shadow-inner text-amber-500/80 group-hover/item:text-amber-500 transition-colors duration-300 shrink-0">
+                                <StatIcon size={16} strokeWidth={2} />
                               </div>
-                              <span className="text-[13px] text-muted font-medium">{stat.label}</span>
+                              <span className="text-[13px] text-muted font-bold group-hover/item:text-white transition-colors duration-300 leading-tight uppercase tracking-tight">{stat.label}</span>
                             </div>
-                            <span className={`text-[13px] font-bold ${stat.isStatus ? (latency > 0 ? 'text-emerald-500 drop-shadow-[0_0_5px_rgba(16,185,129,0.3)]' : 'text-red-500') : (stat.highlight ? 'text-primary font-mono text-[11px] bg-primary/10 px-2 py-1 rounded border border-primary/20 cursor-default' : 'text-text text-[14px]')}`}>
+                            <span className={`font-black ${stat.isStatus ? (latency > 0 ? 'text-emerald-500 drop-shadow-[0_0_6px_rgba(16,185,129,0.3)] text-[14px]' : 'text-red-500 font-medium text-[14px]') : (stat.highlight ? 'text-amber-400 font-mono text-[11px] bg-amber-500/10 px-2.5 py-1 rounded-md border border-amber-500/20 cursor-default shadow-sm inline-block max-w-[150px] truncate' : 'text-text text-[15px]')}`}>
                               {stat.value}
                             </span>
                          </div>
