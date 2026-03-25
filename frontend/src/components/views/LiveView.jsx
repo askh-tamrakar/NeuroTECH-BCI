@@ -148,7 +148,7 @@ export default function LiveView({ wsData, wsEvent, config, isPaused, wsUrl, rec
   // (Recording action handlers moved to LiveDashboard.jsx)
 
   return (
-    <div className="live-view-container !pt-[94px] !pb-[35px]">
+    <div className="live-view-container h-full">
       {/* Top Controls Bar - Desktop Only */}
       <div className="controls-container hidden lg:flex ml-4 mr-4 mt-4 items-center justify-between gap-4">
         <div className="flex items-center gap-4">

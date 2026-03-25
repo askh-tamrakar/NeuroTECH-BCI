@@ -1,9 +1,11 @@
 import Tree from 'react-d3-tree';
 import { useState, useEffect } from 'react';
+import { motion } from 'framer-motion';
 import {
     Trash2, Rocket, ArrowRight, Save, Target, ListOrdered, Database, Hand, Eye, Network, Grid3X3, Brain, PieChart, RefreshCw, Sliders, ChevronLeft, ChevronRight, Circle,
-    Cpu, Activity, Download, Layers, Clock, Settings, Play, GitBranch, BarChart2, Info
+    Cpu, Activity, Download, Layers, Clock, Settings, Play, GitBranch, BarChart2, Info, Package, ChevronsRight, ArrowRightFromLine
 } from 'lucide-react';
+
 import { soundHandler } from '../../handlers/SoundHandler';
 import CustomSelect from '../ui/CustomSelect';
 
@@ -32,8 +34,98 @@ const renderCustomNodeElement = ({ nodeDatum, toggleNode }) => (
     </g>
 );
 
-// --- NEW/UPDATED COMPONENTS ---
+// Updated ControlPanel (Added Model Name Input)
+const ControlPanel = ({
+    onTrain,
+    loading,
+    sessions,
+    selectedSession,
+    onSessionSelect,
+    onRefreshSessions,
+    activeTab,
+    setActiveTab,
+    modelName,
+    setModelName,
+    onSwitchLab
+}) => (
+    <div className="space-y-4">
+        {/* Session Select */}
+        <div className="card p-4 bg-[var(--surface)] border border-[var(--border)] rounded-xl flex flex-col gap-2">
+            <span className="flex flex-row justify-between">
+                <label className="text-xl flex items-center font-bold text-[var(--muted)] uppercase tracking-wide">
+                    <div className="p-1 flex items-center justify-between gap-2 bg-surface/50">
+                        <div className="flex flex-row items-center gap-2.5">
+                            <span className="flex flex-row text-[22px] items-center font-bold tracking-tight">
+                                <Brain size={24} className="text-primary mr-1" /> ML Training
+                                <button
+                                    onClick={onSwitchLab}
+                                    className="transition-all group flex items-center ml-4 gap-3"
+                                    title="Switch to Data Collection"
+                                >
+                                    < ArrowRightFromLine size={18} className="text-muted group-hover:text-primary transition-all group-hover:translate-x-0.5" />
+                                    <Database size={24} className="text-muted group-hover:text-primary transition-colors" />
+                                </button>
+                            </span>
+                        </div>
+                    </div>
+                </label>
+                {/* TABS */}
+                <span className="flex bg-[var(--surface)] rounded-lg p-1 border border-[var(--border)]">
+                    <button
+                        onClick={() => { setActiveTab('EMG'); onSessionSelect(null); }}
+                        className={`px-2 py-1.5 rounded-md text-sm font-medium transition-all ${activeTab === 'EMG' ? 'bg-[var(--primary)] text-white shadow' : 'text-[var(--text)] hover:text-[var(--primary)]'} `}
+                    >
+                        <Hand className="inline mr-1 w-4 h-4" /> EMG
+                    </button>
+                    <button
+                        onClick={() => { setActiveTab('EOG'); onSessionSelect(null); }}
+                        className={`px-2 py-1.5 rounded-md text-sm font-medium transition-all ${activeTab === 'EOG' ? 'bg-[var(--primary)] text-white shadow' : 'text-[var(--text)] hover:text-[var(--primary)]'} `}
+                    >
+                        <Eye className="inline mr-1 w-4 h-4" /> EOG
+                    </button>
+                </span>
+            </span>
 
+            <div className="relative group">
+                <input
+                    type="text"
+                    value={modelName}
+                    onChange={(e) => setModelName(e.target.value)}
+                    placeholder={`Name for new ${activeTab} model...`}
+                    className="w-full bg-bg text-text border-[2px] border-border rounded-lg px-4 py-2 text-[16px] focus:border-primary focus:ring-1 focus:ring-primary/30 transition-all outline-none"
+                />
+                <div className="absolute right-3 top-1/2 -translate-y-1/2 text-[16px] font-mono text-muted group-focus-within:text-primary">.model</div>
+            </div>
+
+            <div className="flex gap-2">
+                <CustomSelect
+                    className="flex"
+                    value={selectedSession || ''}
+                    onChange={(val) => onSessionSelect(val)}
+                    options={[
+                        { value: "", label: "All Available Data" },
+                        ...sessions.map(s => ({ value: s.table, label: s.name }))
+                    ]}
+                    placeholder="Select Session..."
+                />
+                <button onClick={onRefreshSessions} className="p-2.5 border-[2px] border-[var(--border)] rounded-lg hover:bg-[var(--bg)] text-[var(--text)]" title="Refresh Sessions"><RefreshCw className="w-5 h-5" /></button>
+            </div>
+        </div>
+
+        {/* Actions */}
+        <div className="grid grid-cols-1 gap-3">
+            <button
+                onClick={onTrain}
+                disabled={loading}
+                className="btn py-3 bg-[var(--primary)] text-white hover:opacity-90 font-bold rounded-xl shadow-lg hover:translate-y-[-1px] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+                {loading ? 'Training...' : <><Rocket className="inline mr-2 w-5 h-5" /> Train New Model</>}
+            </button>
+        </div>
+    </div>
+);
+
+// --- NEW/UPDATED COMPONENTS ---
 const SavedModelsList = ({ models, selectedModelName, onSelect, onDelete }) => (
     <div className="flex flex-col h-full overflow-hidden">
         <div className="text-lg flex justify-around items-center font-bold text-[var(--muted)] uppercase tracking-widest mb-2 border-b border-[var(--border)] pb-2 px-1">
@@ -314,83 +406,7 @@ const DecisionTreeCard = ({ structure, treeIndex, totalTrees, onTreeChange, load
     );
 };
 
-// Updated ControlPanel (Added Model Name Input)
-const ControlPanel = ({
-    onTrain,
-    loading,
-    sessions,
-    selectedSession,
-    onSessionSelect,
-    onRefreshSessions,
-    activeTab,
-    setActiveTab,
-    modelName,
-    setModelName
-}) => (
-    <div className="space-y-4">
-        {/* Session Select */}
-        <div className="card p-4 bg-[var(--surface)] border border-[var(--border)] rounded-xl flex flex-col gap-2">
-            <span className="flex flex-row justify-between">
-                <label className="text-xl flex items-center font-bold text-[var(--muted)] uppercase tracking-wide mb-2">
-                    <Database className="mr-2 w-6 h-6" /> Training Data
-                </label>
-                {/* TABS */}
-                <span className="flex bg-[var(--surface)] rounded-lg p-1 border border-[var(--border)]">
-                    <button
-                        onClick={() => { setActiveTab('EMG'); onSessionSelect(null); }}
-                        className={`px-2 py-1.5 rounded-md text-sm font-medium transition-all ${activeTab === 'EMG' ? 'bg-[var(--primary)] text-white shadow' : 'text-[var(--text)] hover:text-[var(--primary)]'} `}
-                    >
-                        <Hand className="inline mr-1 w-4 h-4" /> EMG
-                    </button>
-                    <button
-                        onClick={() => { setActiveTab('EOG'); onSessionSelect(null); }}
-                        className={`px-2 py-1.5 rounded-md text-sm font-medium transition-all ${activeTab === 'EOG' ? 'bg-[var(--primary)] text-white shadow' : 'text-[var(--text)] hover:text-[var(--primary)]'} `}
-                    >
-                        <Eye className="inline mr-1 w-4 h-4" /> EOG
-                    </button>
-                </span>
-            </span>
-
-            {/* Model Name Input (Generic) */}
-            <div>
-                <input
-                    type="text"
-                    value={modelName}
-                    onChange={(e) => setModelName(e.target.value)}
-                    placeholder={`Name for new ${activeTab} model...`}
-                    className="w-full bg-[var(--bg)] text-[var(--text)] border border-[var(--border)] rounded p-2 focus:border-[var(--primary)] outline-none mb-2"
-                />
-            </div>
-
-            <div className="flex gap-2">
-                <CustomSelect
-                    className="flex-1"
-                    value={selectedSession || ''}
-                    onChange={(val) => onSessionSelect(val)}
-                    options={[
-                        { value: "", label: "All Available Data" },
-                        ...sessions.map(s => ({ value: s.table, label: s.name }))
-                    ]}
-                    placeholder="Select Session..."
-                />
-                <button onClick={onRefreshSessions} className="p-2.5 border border-[var(--border)] rounded hover:bg-[var(--bg)] text-[var(--text)]" title="Refresh Sessions"><RefreshCw className="w-5 h-5" /></button>
-            </div>
-        </div>
-
-        {/* Actions */}
-        <div className="grid grid-cols-1 gap-3">
-            <button
-                onClick={onTrain}
-                disabled={loading}
-                className="btn py-3 bg-[var(--primary)] text-white hover:opacity-90 font-bold rounded-xl shadow-lg hover:translate-y-[-1px] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-                {loading ? 'Training...' : <><Rocket className="inline mr-2 w-5 h-5" /> Train New Model</>}
-            </button>
-        </div>
-    </div>
-);
-
-export default function MLTrainingView() {
+export default function MLTrainingView({ onSwitchLab }) {
     const API_BASE_URL = import.meta.env.VITE_API_URL || '';
     const [activeTab, setActiveTab] = useState('EMG');
 
@@ -447,7 +463,7 @@ export default function MLTrainingView() {
             if (res.ok) {
                 const data = await res.json();
                 setModels(data);
-                
+
                 // Auto-load first model if none is active
                 if (data.length > 0) {
                     const activeModel = data.find(m => m.active);
@@ -669,7 +685,7 @@ export default function MLTrainingView() {
 
 
     return (
-        <div className="font-sans w-full h-[calc(100vh-120px)] p-4 flex flex-col items-stretch overflow-hidden">
+        <div className="font-sans w-full h-full p-4 flex flex-col items-stretch overflow-hidden">
             {/* ERROR DISPLAY */}
             {error && <div className="w-full bg-red-900/20 border border-red-500 text-red-200 py-2 rounded mb-4 flex justify-between items-center shrink-0 text-sm px-4">
                 <span><strong>Error:</strong> {error}</span>
@@ -678,7 +694,7 @@ export default function MLTrainingView() {
 
             {/* CONTENT scrollable container */}
             <div className="flex-1 w-full min-h-0 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']">
-                <div className="h-full min-h-[800px] grid grid-cols-12 grid-rows-6 gap-4 pb-2">
+                <div className="grid grid-cols-12 grid-rows-6 gap-4 pb-2 min-h-fit">
                     {/* LEFT SIDEBAR CONTROLS (Span 3) - NOW CONTAINS ACCURACY & FEATURES TOO */}
                     <div className="col-span-12 lg:col-span-3 row-span-6 flex flex-col gap-4">
                         {/* 1. CONTROLS */}
@@ -695,6 +711,9 @@ export default function MLTrainingView() {
                                 setActiveTab={setActiveTab}
                                 modelName={trainModelNameInput}
                                 setModelName={setTrainModelNameInput}
+                                onSwitchLab={onSwitchLab}
+                                params={activeParams}
+                                onParamChange={handleParamChange}
                             />
                         </div>
 

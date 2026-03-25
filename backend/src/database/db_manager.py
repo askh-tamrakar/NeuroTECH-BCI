@@ -388,7 +388,7 @@ class DatabaseManager:
                 }
                 
                 # Collect remaining columns as features for display
-                excluded = {'id', 'label', 'session_id', 'timestamp', 'created_at'}
+                excluded = {'id', 'label', 'session_id', 'timestamp', 'created_at', 'metadata_json'}
                 features = {k: v for k, v in r_dict.items() if k not in excluded}
                 
                 item['features'] = features

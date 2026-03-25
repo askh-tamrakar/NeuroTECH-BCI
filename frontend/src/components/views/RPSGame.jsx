@@ -440,7 +440,7 @@ const RPSGame = ({ wsEvent }) => {
     };
 
     return (
-        <div className="rps-container overflow-hidden pt-[72px] pb-[32px] relative h-full flex flex-row-reverse w-full">
+        <div className="rps-container overflow-hidden relative h-full flex flex-row-reverse w-full">
 
             {/* Main Game Area */}
             <div className="flex-1 flex flex-col items-center justify-start h-full overflow-hidden w-full relative">

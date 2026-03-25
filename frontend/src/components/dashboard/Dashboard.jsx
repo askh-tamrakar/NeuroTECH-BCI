@@ -24,6 +24,7 @@ import MobileNav from '../ui/MobileNav';
 export default function Dashboard() {
   const { user, logout } = useAuth()
   const [currentPage, setCurrentPage] = useState('live')
+  const [activeSettingsSection, setActiveSettingsSection] = useState('account')
   const [mobileMainView, setMobileMainView] = useState('graphs')
   const [isMobile, setIsMobile] = useState(false);
   const { themes, currentTheme, currentThemeId, setTheme } = useTheme();
@@ -31,7 +32,7 @@ export default function Dashboard() {
 
   // Unified WebSocket state from Context
   const wsUrl = settings.general.wsUrl || 'ws://localhost:5005';
-  
+
   // These are now just helpers for the Settings View, not the source of truth for the hook
   const [localWs, setLocalWs] = useState('ws://localhost:5005')
   const [ngrokWs, setNgrokWs] = useState('wss://squelchingly-thriftier-cecile.ngrok-free.dev')
@@ -111,7 +112,7 @@ export default function Dashboard() {
     { label: 'RPS', onClick: () => setCurrentPage('rps'), href: '#rps' },
     { label: 'Lab', onClick: () => setCurrentPage('lab'), href: '#lab' },
     { label: 'Servo Claw', onClick: () => setCurrentPage('servo_claw'), href: '#servo_claw' },
-    { label: 'Settings', onClick: () => setCurrentPage('settings'), href: '#settings' },
+    { label: 'Settings', onClick: () => { setCurrentPage('settings'); setActiveSettingsSection('account'); }, href: '#settings' },
     ...(isMobile ? [] : [{
       label: 'Theme',
       type: 'pill',
@@ -148,7 +149,7 @@ export default function Dashboard() {
       {/* Navigation */}
       <div className="header shrink-0" style={{ zIndex: 50 }}>
         <div className="header-inner">
-          <div className="cursor-pointer m-0 p-0 flex-shrink-0 relative z-20 hidden lg:block" onClick={() => setCurrentPage('live')} title="Back to Terminal">
+          <div className="cursor-pointer m-0 p-0 flex-shrink-0 relative z-20 hidden lg:block" onClick={() => { setActiveSettingsSection('connectivity'); setCurrentPage('settings'); }} title="Back to Connectivity Settings">
             <Brain3D />
           </div>
 
@@ -194,29 +195,13 @@ export default function Dashboard() {
           setMobileMainView={setMobileMainView}
         />
         <div className="scrollbar-thin scrollbar-thumb-border hover:scrollbar-thumb-primary/50 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none'] flex-1" style={{ padding: '0px 0px', overflowY: 'auto' }}>
-
-          {/* Helper to determine if we need spacers (non-full-screen pages need them to clear fixed header/footer) */}
-          {(() => {
-            const FULL_SCREEN_PAGES = ['live', 'dino', 'rps', 'test', 'meditation'];
-            const showSpacers = !FULL_SCREEN_PAGES.includes(currentPage);
-
-            return (
-              <>
-                {showSpacers && <div className="h-[94px] shrink-0" />}
-
                 {currentPage === 'live' && <LiveDashboard wsData={lastMessage} wsConfig={lastConfig} wsEvent={lastEvent} sendMessage={sendMessage} wsUrl={status === 'connected' ? (currentUrl || defaultWsSource) : null} mobileMainView={mobileMainView} setMobileMainView={setMobileMainView} />}
                 {currentPage === 'dino' && <DinoView isConnected={!!lastMessage} wsEvent={lastEvent} isPaused={false} />}
                 {currentPage === 'eeg_dashboard' && <EEGDashboard isConnected={!!lastMessage} wsEvent={lastEvent} wsUrl={status === 'connected' ? (currentUrl || defaultWsSource) : null} />}
                 {currentPage === 'rps' && <RPSGame wsEvent={lastEvent} />}
                 {currentPage === 'lab' && <LabView wsData={lastMessage} wsEvent={lastEvent} config={lastConfig} wsUrl={status === 'connected' ? (currentUrl || defaultWsSource) : null} />}
-                {currentPage === 'settings' && <SettingsView latency={latency} localWs={localWs} setLocalWs={setLocalWs} ngrokWs={ngrokWs} setNgrokWs={setNgrokWs} connect={(url) => { updateDeepSettings('general.wsUrl', url); connect(url); }} />}
+                {currentPage === 'settings' && <SettingsView latency={latency} localWs={localWs} setLocalWs={setLocalWs} ngrokWs={ngrokWs} setNgrokWs={setNgrokWs} activeSection={activeSettingsSection} onSectionChange={setActiveSettingsSection} connect={(url) => { updateDeepSettings('general.wsUrl', url); connect(url); }} />}
                 {currentPage === 'servo_claw' && <ServoClawView wsEvent={lastEvent} isConnected={!!lastMessage} />}
-                {currentPage === 'meditation' && <MeditationView result={lastMessage} isConnected={!!lastMessage} />}
-
-                {showSpacers && <div className="h-[35px] shrink-0" />}
-              </>
-            );
-          })()}
         </div>
       </div>
 

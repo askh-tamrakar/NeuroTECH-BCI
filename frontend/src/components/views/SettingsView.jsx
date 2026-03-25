@@ -54,7 +54,7 @@ const ColorInput = ({ label, value, onChange }) => (
   </div>
 );
 
-export default function SettingsView({ latency = 0, localWs = '', setLocalWs = () => { }, ngrokWs = '', setNgrokWs = () => { }, connect = () => { } }) {
+export default function SettingsView({ latency = 0, localWs = '', setLocalWs = () => { }, ngrokWs = '', setNgrokWs = () => { }, connect = () => { }, activeSection: controlledSection, onSectionChange }) {
   const {
     themes,
     currentTheme,
@@ -73,7 +73,19 @@ export default function SettingsView({ latency = 0, localWs = '', setLocalWs = (
 
   // Telemetry state
   const [fps, setFps] = useState(0);
-  const [activeSection, setActiveSection] = useState('account');
+  const [activeSection, setActiveSection] = useState(controlledSection || 'account');
+
+  // Sync with prop
+  useEffect(() => {
+    if (controlledSection) {
+      setActiveSection(controlledSection);
+    }
+  }, [controlledSection]);
+
+  const handleSectionChange = (id) => {
+    setActiveSection(id);
+    if (onSectionChange) onSectionChange(id);
+  };
 
   // Editor state
   const [isEditingName, setIsEditingName] = useState(false);
@@ -304,7 +316,19 @@ export default function SettingsView({ latency = 0, localWs = '', setLocalWs = (
   };
 
   return (
-    <div className="font-sans absolute inset-0 pt-[96px] flex overflow-hidden bg-bg text-text">
+    <div className="font-sans relative flex-1 flex overflow-hidden bg-bg text-text">
+      {/* Background Image Overlay */}
+      <div
+        className="absolute inset-0 z-0 pointer-events-none"
+        style={{
+          backgroundImage: 'url("/Resources/Nenural Brain .png")',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat',
+          opacity: 0.05,
+          filter: 'grayscale(0.4) brightness(1)'
+        }}
+      />
       {/* ── SIDEBAR ── */}
       <aside className="w-[66px] bg-surface/30 border-r border-border flex flex-col items-center py-4 gap-1 shrink-0 z-20">
         {[
@@ -324,7 +348,7 @@ export default function SettingsView({ latency = 0, localWs = '', setLocalWs = (
           return (
             <button
               key={item.id}
-              onClick={() => setActiveSection(item.id)}
+              onClick={() => handleSectionChange(item.id)}
               className={`relative w-[46px] h-[46px] rounded-xl flex flex-col items-center justify-center gap-0.5 cursor-pointer transition-all border border-transparent group ${isActive ? 'bg-primary/10 border-primary/20' : 'hover:bg-surface'}`}
               title={item.label}
             >

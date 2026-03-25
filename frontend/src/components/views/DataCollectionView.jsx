@@ -8,7 +8,10 @@ import { CalibrationApi } from '../../services/calibrationApi';
 import CustomSelect from '../ui/CustomSelect';
 import { useSettings } from '../../contexts/SettingsContext';
 import { useTheme } from '../../contexts/ThemeContext';
-import { Activity, Radio, Zap, Target, Square, Play, Palette, Brain, ChartSpline, Database } from 'lucide-react';
+import {
+    Activity, Play, Square, Database, Zap,
+    Target, Radio, ChartSpline, Brain, ArrowRightFromLine
+} from 'lucide-react';
 import { soundHandler } from '../../handlers/SoundHandler'
 
 // Workers
@@ -30,7 +33,7 @@ const SENSOR_LABELS = {
  * DataCollectionView
  * The main container for the BCI data collection experience.
  */
-export default function DataCollectionView({ wsData, wsEvent, config: initialConfig, wsUrl, onSwitchLab, switcher }) {
+export default function DataCollectionView({ wsData, wsEvent, config: initialConfig, wsUrl, onSwitchLab }) {
     const { settings, updateSettings } = useSettings();
     const { currentTheme } = useTheme();
 
@@ -558,7 +561,7 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
             const durationSec = (end - start) / 1000;
             const N = samplesPoints.length;
             const fs = N / durationSec;
-            
+
             const winLenSec = 1.5;
             const stepSec = 0.25;
             const winLenSamples = Math.floor(winLenSec * fs);
@@ -566,7 +569,7 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
 
             const segments = [];
             let offset = 0;
-            
+
             while (offset + winLenSamples <= N) {
                 segments.push({
                     samples: allSamples.slice(offset, offset + winLenSamples),
@@ -593,7 +596,7 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
             // Prepare all promises and optimistic UI state
             const promises = [];
             const tempWindows = [];
-            
+
             segments.forEach((seg, idx) => {
                 const winId = `eeg-${Date.now()}-${idx}`;
                 const newWindow = {
@@ -645,18 +648,18 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                             console.error("EEG segment record failed:", error);
                             draft[idx] = { ...draft[idx], status: 'error' };
                         } else {
-                            draft[idx] = { 
-                                ...draft[idx], 
-                                status: 'saved', 
-                                predictedLabel: resp?.predicted_label, 
-                                features: resp?.features 
+                            draft[idx] = {
+                                ...draft[idx],
+                                status: 'saved',
+                                predictedLabel: resp?.predicted_label,
+                                features: resp?.features
                             };
                         }
                     }
                 });
                 return draft;
             });
-            
+
             setDataLastUpdated(Date.now());
             sessionWorkerRef.current?.postMessage({ type: 'FETCH_SESSIONS', payload: { silent: true } });
         } catch (err) {
@@ -1096,15 +1099,27 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
     }, [currentYDomain, activeChannelIndex, customLineColor, currentTheme]);
 
     return (
-        <div className="flex flex-col h-[calc(100dvh-120px)] bg-bg text-text animate-in fade-in duration-500 overflow-hidden">
+        <div className="flex flex-col h-full bg-bg text-text animate-in fade-in duration-500 overflow-hidden gap-2">
 
             {/* TOP ROW: SIDEBAR + CHART (50%) */}
-            <div className="h-[50%] flex-none flex min-h-0 px-2 pb-2 pt-2 gap-2">
+            <div className="flex-1 flex min-h-0 px-2 pb-1 pt-2 gap-2">
                 {/* SIDEBAR CARD */}
                 <div className="w-[260px] flex-none flex flex-col bg-surface border-border border-2 rounded-xl shadow-sm overflow-hidden">
                     {/* Sidebar Header */}
-                    <div className="p-3 border-b border-border flex items-center justify-between gap-2 bg-surface/50">
-                        {switcher}
+                    <div className="p-1 border-b border-border flex items-center justify-between gap-2 bg-surface/50">
+                        <div className="flex flex-row items-center gap-2.5">
+                            <span className="flex flex-row text-[22px] items-center font-bold tracking-tight">
+                                <Database size={24} className="text-primary mr-1" /> Data Collection
+                                <button
+                                    onClick={onSwitchLab}
+                                    className="transition-all group flex items-center ml-4 gap-3 "
+                                    title="Switch to ML Training"
+                                >
+                                    <ArrowRightFromLine size={18} className="text-muted group-hover:text-primary transition-all group-hover:translate-x-0.5" />
+                                    <Brain size={24} className="text-muted group-hover:text-primary transition-colors" />
+                                </button>
+                            </span>
+                        </div>
                     </div>
 
                     {/* Sidebar Scrollable Content */}
@@ -1182,8 +1197,8 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                                                 key={target.id}
                                                 onClick={() => handleTargetChange(target.label)}
                                                 className={`rounded-lg border px-2 py-2 text-left transition-all ${targetLabel === target.label
-                                                        ? 'border-primary bg-primary/15 text-text shadow-sm'
-                                                        : 'border-border bg-bg text-muted hover:text-text'
+                                                    ? 'border-primary bg-primary/15 text-text shadow-sm'
+                                                    : 'border-border bg-bg text-muted hover:text-text'
                                                     }`}
                                             >
                                                 <div className="text-xs font-bold uppercase tracking-wider">{target.label}</div>
@@ -1193,8 +1208,8 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                                         <button
                                             onClick={() => handleTargetChange('Rest')}
                                             className={`rounded-lg border px-2 py-2 text-left transition-all ${targetLabel === 'Rest'
-                                                    ? 'border-primary bg-primary/15 text-text shadow-sm'
-                                                    : 'border-border bg-bg text-muted hover:text-text'
+                                                ? 'border-primary bg-primary/15 text-text shadow-sm'
+                                                : 'border-border bg-bg text-muted hover:text-text'
                                                 }`}
                                         >
                                             <div className="text-xs font-bold uppercase tracking-wider">Rest</div>
@@ -1328,7 +1343,7 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
             </div>
 
             {/* BOTTOM ROW: SESSION + WINDOW LIST (50%) */}
-            <div className="h-[50%] flex-none min-h-0 px-2 pb-2 pt-0 grid grid-cols-1 lg:grid-cols-12 gap-2">
+            <div className="flex-1 min-h-0 px-2 pb-2 pt-1 grid grid-cols-1 lg:grid-cols-12 gap-2">
                 {/* Session Panel */}
                 <div className="lg:col-span-9 h-full min-h-0 overflow-hidden shadow-sm">
                     {(mode === 'collection' || mode === 'test') ? (

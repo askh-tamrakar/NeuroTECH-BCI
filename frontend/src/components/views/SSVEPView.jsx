@@ -266,7 +266,7 @@ export default function SSVEPView({ isConnected, wsEvent }) {
     }, []);
 
     return (
-        <div className="w-full flex bg-black overflow-hidden relative h-[calc(100vh-129px)]">
+        <div className="w-full flex bg-black overflow-hidden relative h-full">
             {/* Main Stimulus View */}
             <div className={`flex-grow flex flex-col items-center justify-center relative transition-all duration-300 ${showSidebar ? 'ml-80' : 'ml-[4.5rem]'}`}>
                 <SSVEPStimulus

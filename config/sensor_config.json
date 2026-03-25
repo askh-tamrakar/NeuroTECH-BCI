@@ -17,7 +17,7 @@
   },
   "num_channels": 2,
   "active_models": {
-    "EMG": "anjali",
-    "EOG": "Dino"
+    "EMG": "rps-1200",
+    "EOG": "dino-ml"
   }
 }
