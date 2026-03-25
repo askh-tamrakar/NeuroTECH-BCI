@@ -2,84 +2,84 @@
   "EEG": {
     "target_freqs": [
       6.5,
-      3.63,
-      4.83,
-      5.8,
-      6.44,
-      7.25
+      4.88,
+      6.5,
+      7.8,
+      8.67,
+      9.75
     ],
     "targets": [
       {
-        "id": 0,
+        "controlType": "None",
+        "divisor": 18,
+        "enabled": true,
         "freq": 6.5,
+        "id": 0,
+        "isManual": true,
         "label": "wwwww",
         "mappedKey": "Space",
         "mappedMouse": "None",
-        "enabled": true,
-        "controlType": "None",
-        "divisor": 18,
-        "source": "dynamic",
-        "isManual": true
+        "source": "dynamic"
       },
       {
+        "controlType": "None",
+        "divisor": 16,
+        "enabled": true,
+        "freq": 4.88,
         "id": 1,
-        "freq": 3.63,
+        "isManual": false,
         "label": "Target 2ss",
         "mappedKey": "A",
         "mappedMouse": "None",
-        "enabled": true,
-        "controlType": "None",
-        "divisor": 16,
-        "source": "dynamic",
-        "isManual": false
+        "source": "dynamic"
       },
       {
+        "controlType": "None",
+        "divisor": 12,
+        "enabled": true,
+        "freq": 6.5,
         "id": 2,
-        "freq": 4.83,
+        "isManual": false,
         "label": "Target 3",
         "mappedKey": "S",
         "mappedMouse": "None",
-        "enabled": true,
-        "controlType": "None",
-        "divisor": 12,
-        "source": "dynamic",
-        "isManual": false
+        "source": "dynamic"
       },
       {
+        "controlType": "None",
+        "divisor": 10,
+        "enabled": true,
+        "freq": 7.8,
         "id": 3,
-        "freq": 5.8,
+        "isManual": false,
         "label": "Target 4",
         "mappedKey": "D",
         "mappedMouse": "None",
-        "enabled": true,
-        "controlType": "None",
-        "divisor": 10,
-        "source": "dynamic",
-        "isManual": false
+        "source": "dynamic"
       },
       {
+        "controlType": "None",
+        "divisor": 9,
+        "enabled": true,
+        "freq": 8.67,
         "id": 4,
-        "freq": 6.44,
+        "isManual": false,
         "label": "Target 5",
         "mappedKey": "Space",
         "mappedMouse": "None",
-        "enabled": true,
-        "controlType": "None",
-        "divisor": 9,
-        "source": "dynamic",
-        "isManual": false
+        "source": "dynamic"
       },
       {
+        "controlType": "None",
+        "divisor": 8,
+        "enabled": true,
+        "freq": 9.75,
         "id": 5,
-        "freq": 7.25,
+        "isManual": false,
         "label": "Target 6",
         "mappedKey": "Escape",
         "mappedMouse": "None",
-        "enabled": true,
-        "controlType": "None",
-        "divisor": 8,
-        "source": "dynamic",
-        "isManual": false
+        "source": "dynamic"
       }
     ],
     "rest_threshold": 0.6,
@@ -89,7 +89,7 @@
     "num_harmonics": 4,
     "step_sec": 0.25,
     "smoothing_windows": 7,
-    "refresh_rate": 58
+    "refresh_rate": 78
   },
   "EOG": {
     "detection_method": "ML",

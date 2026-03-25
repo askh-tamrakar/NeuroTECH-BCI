@@ -23,37 +23,40 @@ function Model({ url }) {
   );
 }
 
-const Brain3D = () => {
-  return (
-    <div className="relative w-[120px] h-[80px] group transition-all duration-500 m-0 p-0">
-      <Suspense fallback={
-        <div className="w-full h-full flex items-center justify-center text-[10px] text-muted font-mono uppercase tracking-widest animate-pulse">
-          ...
-        </div>
-      }>
-        <Canvas
-          shadows
-          camera={{ position: [0, 0.2, 2.0], fov: 25 }} // Slightly further back and up
-          gl={{ antialias: true, alpha: true }}
-          style={{ background: 'transparent', margin: 0, padding: 0, overflow: 'visible' }}
-        >
-          <ambientLight intensity={1.5} />
-          <directionalLight position={[10, 10, 5]} intensity={2.0} />
-          <Suspense fallback={null}>
-            <Model url="/Resources/NeuroTECH.glb" />
-          </Suspense>
+const Brain3D = React.memo(() => {
+    return (
+        <div className="relative w-[120px] h-[80px] group transition-all duration-500 m-0 p-0">
+            <Suspense fallback={
+                <div className="w-full h-full flex items-center justify-center text-[10px] text-muted font-mono uppercase tracking-widest animate-pulse">
+                    ...
+                </div>
+            }>
+                <Canvas
+                    shadows
+                    camera={{ position: [0, 0.2, 2.0], fov: 25 }} // Slightly further back and up
+                    gl={{ antialias: true, alpha: true }}
+                    style={{ background: 'transparent', margin: 0, padding: 0, overflow: 'visible' }}
+                >
+                    <ambientLight intensity={1.5} />
+                    <directionalLight position={[10, 10, 5]} intensity={2.0} />
+                    <Suspense fallback={null}>
+                        <Model url="/Resources/NeuroTECH.glb" />
+                    </Suspense>
 
-          <OrbitControls
-            enableZoom={false}
-            enablePan={false}
-            autoRotate={false}
-            enableDamping={true}
-            dampingFactor={0.05}
-          />
-        </Canvas>
-      </Suspense>
-    </div>
-  );
-};
+                    <OrbitControls
+                        enableZoom={false}
+                        enablePan={false}
+                        autoRotate={false}
+                        enableDamping={true}
+                        dampingFactor={0.05}
+                    />
+                </Canvas>
+            </Suspense>
+        </div>
+    );
+});
 
 export default Brain3D;
+
+// Preload the model to ensure it's cached correctly
+useGLTF.preload('/Resources/NeuroTECH.glb');

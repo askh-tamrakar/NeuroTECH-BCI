@@ -2,13 +2,13 @@ import React, { useState, useEffect } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useWebSocket } from '../../hooks/useWebSocket'
 import { useTheme } from '../../contexts/ThemeContext'
+import { useSettings } from '../../contexts/SettingsContext'
 import { Github, UserPlus } from 'lucide-react'
 import LiveDashboard from '../views/LiveDashboard'
 import DinoView from '../views/DinoView'
 import EEGDashboard from '../views/EEGDashboard'
 import RPSGame from '../views/RPSGame'
-import DataCollectionView from '../views/DataCollectionView'
-import MLTrainingView from '../views/MLTrainingView'
+import LabView from '../views/LabView'
 import SettingsView from '../views/SettingsView'
 import ServoClawView from '../views/ServoClawView'
 import MeditationView from '../views/MeditationView'
@@ -26,14 +26,17 @@ export default function Dashboard() {
   const [currentPage, setCurrentPage] = useState('live')
   const [mobileMainView, setMobileMainView] = useState('graphs')
   const [isMobile, setIsMobile] = useState(false);
-  const [localWs, setLocalWs] = useState(import.meta.env.VITE_WS_URL || 'http://localhost:5005')
-  const [ngrokWs, setNgrokWs] = useState(import.meta.env.VITE_NGROK_WS_URL || 'wss://squelchingly-thriftier-cecile.ngrok-free.dev')
-
-  // Choose default based on whether we're loaded over https/ngrok or localhost
-  const defaultWsSource = typeof window !== 'undefined' && window.location.hostname !== 'localhost' ? ngrokWs : localWs;
-  const { status, lastMessage, lastConfig, lastEvent, latency, connect, disconnect, sendMessage, currentUrl } = useWebSocket(defaultWsSource)
-
   const { themes, currentTheme, currentThemeId, setTheme } = useTheme();
+  const { settings, updateDeepSettings } = useSettings();
+
+  // Unified WebSocket state from Context
+  const wsUrl = settings.general.wsUrl || 'ws://localhost:5005';
+  
+  // These are now just helpers for the Settings View, not the source of truth for the hook
+  const [localWs, setLocalWs] = useState('ws://localhost:5005')
+  const [ngrokWs, setNgrokWs] = useState('wss://squelchingly-thriftier-cecile.ngrok-free.dev')
+
+  const { status, lastMessage, lastConfig, lastEvent, latency, connect, disconnect, sendMessage, currentUrl } = useWebSocket(wsUrl)
   const [authView, setAuthView] = useState(null);
   const isAuthenticated = !!user;
 
@@ -106,11 +109,9 @@ export default function Dashboard() {
     { label: 'Dino', onClick: () => setCurrentPage('dino'), href: '#dino' },
     { label: 'EEG Suite', onClick: () => setCurrentPage('eeg_dashboard'), href: '#eeg_dashboard' },
     { label: 'RPS', onClick: () => setCurrentPage('rps'), href: '#rps' },
-    { label: 'M. L.', onClick: () => setCurrentPage('ml_training'), href: '#ml_training' },
-    { label: 'Data Collection', onClick: () => setCurrentPage('data_collection'), href: '#data_collection' },
-    { label: 'Settings', onClick: () => setCurrentPage('settings'), href: '#settings' },
+    { label: 'Lab', onClick: () => setCurrentPage('lab'), href: '#lab' },
     { label: 'Servo Claw', onClick: () => setCurrentPage('servo_claw'), href: '#servo_claw' },
-    { label: 'Meditate', onClick: () => setCurrentPage('meditation'), href: '#meditation' },
+    { label: 'Settings', onClick: () => setCurrentPage('settings'), href: '#settings' },
     ...(isMobile ? [] : [{
       label: 'Theme',
       type: 'pill',
@@ -207,9 +208,8 @@ export default function Dashboard() {
                 {currentPage === 'dino' && <DinoView isConnected={!!lastMessage} wsEvent={lastEvent} isPaused={false} />}
                 {currentPage === 'eeg_dashboard' && <EEGDashboard isConnected={!!lastMessage} wsEvent={lastEvent} wsUrl={status === 'connected' ? (currentUrl || defaultWsSource) : null} />}
                 {currentPage === 'rps' && <RPSGame wsEvent={lastEvent} />}
-                {currentPage === 'data_collection' && <DataCollectionView wsData={lastMessage} wsEvent={lastEvent} config={lastConfig} wsUrl={status === 'connected' ? (currentUrl || defaultWsSource) : null} />}
-                {currentPage === 'ml_training' && <MLTrainingView />}
-                {currentPage === 'settings' && <SettingsView latency={latency} localWs={localWs} setLocalWs={setLocalWs} ngrokWs={ngrokWs} setNgrokWs={setNgrokWs} connect={connect} />}
+                {currentPage === 'lab' && <LabView wsData={lastMessage} wsEvent={lastEvent} config={lastConfig} wsUrl={status === 'connected' ? (currentUrl || defaultWsSource) : null} />}
+                {currentPage === 'settings' && <SettingsView latency={latency} localWs={localWs} setLocalWs={setLocalWs} ngrokWs={ngrokWs} setNgrokWs={setNgrokWs} connect={(url) => { updateDeepSettings('general.wsUrl', url); connect(url); }} />}
                 {currentPage === 'servo_claw' && <ServoClawView wsEvent={lastEvent} isConnected={!!lastMessage} />}
                 {currentPage === 'meditation' && <MeditationView result={lastMessage} isConnected={!!lastMessage} />}
 

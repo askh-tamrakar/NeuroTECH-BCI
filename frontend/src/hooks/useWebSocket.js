@@ -20,6 +20,12 @@ export function useWebSocket(url = 'http://localhost:5005') {
 
   const [currentUrl, setCurrentUrl] = useState(url)
 
+  useEffect(() => {
+    if (url) {
+      setCurrentUrl(url)
+    }
+  }, [url])
+
   const connect = (connectUrl) => {
     const endpoint = connectUrl || currentUrl || url
 

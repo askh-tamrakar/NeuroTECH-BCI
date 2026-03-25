@@ -54,7 +54,7 @@ const ColorInput = ({ label, value, onChange }) => (
   </div>
 );
 
-export default function SettingsView({ latency = 0, localWs = '', setLocalWs = () => {}, ngrokWs = '', setNgrokWs = () => {}, connect = () => {} }) {
+export default function SettingsView({ latency = 0, localWs = '', setLocalWs = () => { }, ngrokWs = '', setNgrokWs = () => { }, connect = () => { } }) {
   const {
     themes,
     currentTheme,
@@ -71,10 +71,8 @@ export default function SettingsView({ latency = 0, localWs = '', setLocalWs = (
 
   const { settings, updateDeepSettings } = useSettings()
 
-  // Local settings state
-  const [apiUrl, setApiUrl] = useState(() => localStorage.getItem('api_url') || 'http://localhost:8000')
-  const [wsUrl, setWsUrl] = useState(() => localStorage.getItem('ws_url') || 'ws://localhost:1972')
-  const [useMock, setUseMock] = useState(() => localStorage.getItem('use_mock') === 'true')
+  // Telemetry state
+  const [fps, setFps] = useState(0);
   const [activeSection, setActiveSection] = useState('account');
 
   // Editor state
@@ -83,9 +81,6 @@ export default function SettingsView({ latency = 0, localWs = '', setLocalWs = (
 
   // Keybinding state
   const [listeningKeyFor, setListeningKeyFor] = useState(null);
-
-  // Telemetry state
-  const [fps, setFps] = useState(0);
 
   useEffect(() => {
     let frameCount = 0;
@@ -171,12 +166,8 @@ export default function SettingsView({ latency = 0, localWs = '', setLocalWs = (
     };
   }, [listeningKeyFor, updateDeepSettings]);
 
-  // Auto-save settings
-  useEffect(() => {
-    localStorage.setItem('api_url', apiUrl)
-    localStorage.setItem('ws_url', wsUrl)
-    localStorage.setItem('use_mock', useMock)
-  }, [apiUrl, wsUrl, useMock])
+  // fps detection effect removed for brevity here, but assuming it stays...
+  // (Simplified for instruction, keeping existing fps effect)
 
   const handleBgmUpload = async (e) => {
     const file = e.target.files[0];
@@ -352,21 +343,21 @@ export default function SettingsView({ latency = 0, localWs = '', setLocalWs = (
       {/* ── MAIN ── */}
       <main className="flex-1 overflow-y-auto px-5 py-6 flex flex-col items-center min-w-0 custom-scrollbar">
         <div className="w-full max-w-[900px] flex flex-col gap-6">
-        {/* APPEARANCE */}
-        {activeSection === 'appearance' && (
-          <div className="flex flex-col gap-4 animate-fade-in">
-             <div className="flex items-start justify-between gap-3">
-               <div>
-                 <h2 className="text-[22px] font-bold tracking-tight">Appearance</h2>
-                 <p className="text-[13px] text-muted mt-1">Customize your dashboard theme and color palette</p>
-               </div>
-               <div className="flex gap-2">
-                 <button onClick={resetThemes} className="px-3.5 py-1.5 rounded-lg text-[11px] font-bold tracking-[0.06em] cursor-pointer border border-border bg-surface/50 text-muted hover:text-text hover:border-white/20 transition-all">Reset Defaults</button>
-                 <button onClick={handleCreateTheme} className="px-3.5 py-1.5 rounded-lg text-[11px] font-bold tracking-[0.06em] cursor-pointer border border-primary/30 bg-primary/10 text-primary hover:bg-primary/20 transition-all">+ New Theme</button>
-               </div>
-             </div>
+          {/* APPEARANCE */}
+          {activeSection === 'appearance' && (
+            <div className="flex flex-col gap-4 animate-fade-in">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-[22px] font-bold tracking-tight">Appearance</h2>
+                  <p className="text-[13px] text-muted mt-1">Customize your dashboard theme and color palette</p>
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={resetThemes} className="px-3.5 py-1.5 rounded-lg text-[11px] font-bold tracking-[0.06em] cursor-pointer border border-border bg-surface/50 text-muted hover:text-text hover:border-white/20 transition-all">Reset Defaults</button>
+                  <button onClick={handleCreateTheme} className="px-3.5 py-1.5 rounded-lg text-[11px] font-bold tracking-[0.06em] cursor-pointer border border-primary/30 bg-primary/10 text-primary hover:bg-primary/20 transition-all">+ New Theme</button>
+                </div>
+              </div>
 
-             <div className="bg-surface/50 border border-border rounded-2xl overflow-hidden shadow-lg">
+              <div className="bg-surface/50 border border-border rounded-2xl overflow-hidden shadow-lg">
                 <div className="px-5 py-3.5 border-b border-border flex items-center justify-between gap-3">
                   <span className="text-[11px] font-bold tracking-[0.1em] uppercase text-muted flex items-center gap-2">
                     <Palette size={14} className="opacity-70" strokeWidth={1.8} /> Color Theme
@@ -375,18 +366,18 @@ export default function SettingsView({ latency = 0, localWs = '', setLocalWs = (
                 <div className="p-5 flex flex-col gap-4">
                   <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2.5">
                     {themes.map((t) => (
-                       <div 
-                         key={t.id} 
-                         onClick={() => setTheme(t.id)}
-                         className={`border rounded-xl p-3 cursor-pointer transition-all bg-surface/80 hover:-translate-y-[1px] ${currentThemeId === t.id ? 'border-primary ring-1 ring-primary/50 shadow-[0_0_20px_rgba(0,200,240,0.08)]' : 'border-border/50 hover:border-border'}`}
-                       >
-                         <div className="flex gap-1.5 mb-2">
-                           <div className="w-[11px] h-[11px] rounded-full" style={{backgroundColor: t.colors['--bg']}} />
-                           <div className="w-[11px] h-[11px] rounded-full" style={{backgroundColor: t.colors['--primary']}} />
-                           <div className="w-[11px] h-[11px] rounded-full" style={{backgroundColor: t.colors['--accent']}} />
-                         </div>
-                         <div className={`text-[11px] font-medium leading-[1.3] truncate ${currentThemeId === t.id ? 'text-primary' : 'text-muted'}`}>{t.name}</div>
-                       </div>
+                      <div
+                        key={t.id}
+                        onClick={() => setTheme(t.id)}
+                        className={`border rounded-xl p-3 cursor-pointer transition-all bg-surface/80 hover:-translate-y-[1px] ${currentThemeId === t.id ? 'border-primary ring-1 ring-primary/50 shadow-[0_0_20px_rgba(0,200,240,0.08)]' : 'border-border/50 hover:border-border'}`}
+                      >
+                        <div className="flex gap-1.5 mb-2">
+                          <div className="w-[11px] h-[11px] rounded-full" style={{ backgroundColor: t.colors['--bg'] }} />
+                          <div className="w-[11px] h-[11px] rounded-full" style={{ backgroundColor: t.colors['--primary'] }} />
+                          <div className="w-[11px] h-[11px] rounded-full" style={{ backgroundColor: t.colors['--accent'] }} />
+                        </div>
+                        <div className={`text-[11px] font-medium leading-[1.3] truncate ${currentThemeId === t.id ? 'text-primary' : 'text-muted'}`}>{t.name}</div>
+                      </div>
                     ))}
                   </div>
                   <div className="h-px bg-gradient-to-r from-transparent via-primary/50 to-transparent" />
@@ -397,76 +388,76 @@ export default function SettingsView({ latency = 0, localWs = '', setLocalWs = (
                       <div className="h-1.5 rounded-full" style={{ width: '45%', backgroundColor: currentTheme.colors['--accent'] || 'var(--accent)' }} />
                     </div>
                     <div className="flex gap-2">
-                       <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: currentTheme.colors['--bg'] || 'var(--bg)' }} />
-                       <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: currentTheme.colors['--primary'] || 'var(--primary)' }} />
-                       <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: currentTheme.colors['--accent'] || 'var(--accent)' }} />
+                      <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: currentTheme.colors['--bg'] || 'var(--bg)' }} />
+                      <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: currentTheme.colors['--primary'] || 'var(--primary)' }} />
+                      <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: currentTheme.colors['--accent'] || 'var(--accent)' }} />
                     </div>
                   </div>
                 </div>
-             </div>
+              </div>
 
-             <div className="bg-surface/50 border border-border rounded-2xl overflow-hidden shadow-lg">
+              <div className="bg-surface/50 border border-border rounded-2xl overflow-hidden shadow-lg">
                 <div className="px-5 py-3.5 border-b border-border flex items-center justify-between gap-3">
                   <span className="text-[11px] font-bold tracking-[0.1em] uppercase text-muted flex items-center gap-2">
                     <Edit3 size={14} className="opacity-70" strokeWidth={1.8} /> Custom Palette
                   </span>
                   {currentTheme.type === 'custom' && (
-                     <div className="flex gap-2">
-                       <button onClick={handleDuplicateTheme} className="px-2 py-1 rounded text-[10px] bg-surface border border-border text-muted hover:text-text">Duplicate</button>
-                       <button onClick={() => removeTheme(currentThemeId)} className="px-2 py-1 rounded text-[10px] bg-red-500/10 border border-red-500/20 text-red-500">Delete</button>
-                     </div>
+                    <div className="flex gap-2">
+                      <button onClick={handleDuplicateTheme} className="px-2 py-1 rounded text-[10px] bg-surface border border-border text-muted hover:text-text">Duplicate</button>
+                      <button onClick={() => removeTheme(currentThemeId)} className="px-2 py-1 rounded text-[10px] bg-red-500/10 border border-red-500/20 text-red-500">Delete</button>
+                    </div>
                   )}
                 </div>
                 <div className="p-5 flex flex-col">
                   {currentTheme.type === 'custom' ? (
-                     <>
-                        <div className="flex items-center justify-between py-3 border-b border-border/50">
-                          <span className="text-[14px] font-medium text-text">Theme Name</span>
-                          {isEditingName ? (
-                             <input type="text" autoFocus value={tempName} onChange={e => setTempName(e.target.value)} onBlur={() => { updateTheme(currentThemeId, { name: tempName || currentTheme.name }); setIsEditingName(false); }} onKeyDown={e => { if (e.key === 'Enter') { updateTheme(currentThemeId, { name: tempName || currentTheme.name }); setIsEditingName(false); } }} className="bg-bg border border-primary rounded px-2 py-1 text-sm outline-none w-[150px] text-right" />
-                          ) : (
-                             <span className="text-[14px] font-bold border-b border-dashed border-primary/50 cursor-pointer" onClick={() => { setTempName(currentTheme.name); setIsEditingName(true); }}>{currentTheme.name}</span>
-                          )}
+                    <>
+                      <div className="flex items-center justify-between py-3 border-b border-border/50">
+                        <span className="text-[14px] font-medium text-text">Theme Name</span>
+                        {isEditingName ? (
+                          <input type="text" autoFocus value={tempName} onChange={e => setTempName(e.target.value)} onBlur={() => { updateTheme(currentThemeId, { name: tempName || currentTheme.name }); setIsEditingName(false); }} onKeyDown={e => { if (e.key === 'Enter') { updateTheme(currentThemeId, { name: tempName || currentTheme.name }); setIsEditingName(false); } }} className="bg-bg border border-primary rounded px-2 py-1 text-sm outline-none w-[150px] text-right" />
+                        ) : (
+                          <span className="text-[14px] font-bold border-b border-dashed border-primary/50 cursor-pointer" onClick={() => { setTempName(currentTheme.name); setIsEditingName(true); }}>{currentTheme.name}</span>
+                        )}
+                      </div>
+                      {[
+                        { label: 'System Background', key: '--bg' },
+                        { label: 'Surface UI Nodes', key: '--surface' },
+                        { label: 'Base Typography', key: '--text' },
+                        { label: 'Primary Action Alpha', key: '--primary' },
+                        { label: 'Accent Highlight', key: '--accent' },
+                        { label: 'Vector Border Edge', key: '--border' }
+                      ].map(({ label, key }) => (
+                        <div key={key} className="flex items-center justify-between py-3 border-b border-border/50 last:border-0">
+                          <span className="text-[14px] font-medium">{label}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[12px] text-muted font-mono">{currentTheme.colors[key]}</span>
+                            <input type="color" value={currentTheme.colors[key]} onChange={(e) => updateThemeColor(currentThemeId, key, e.target.value)} className="w-[30px] h-[30px] rounded-lg border border-border cursor-pointer p-0 bg-transparent shrink-0" />
+                          </div>
                         </div>
-                        {[
-                          { label: 'System Background', key: '--bg' },
-                          { label: 'Surface UI Nodes', key: '--surface' },
-                          { label: 'Base Typography', key: '--text' },
-                          { label: 'Primary Action Alpha', key: '--primary' },
-                          { label: 'Accent Highlight', key: '--accent' },
-                          { label: 'Vector Border Edge', key: '--border' }
-                        ].map(({ label, key }) => (
-                           <div key={key} className="flex items-center justify-between py-3 border-b border-border/50 last:border-0">
-                              <span className="text-[14px] font-medium">{label}</span>
-                              <div className="flex items-center gap-2">
-                                <span className="text-[12px] text-muted font-mono">{currentTheme.colors[key]}</span>
-                                <input type="color" value={currentTheme.colors[key]} onChange={(e) => updateThemeColor(currentThemeId, key, e.target.value)} className="w-[30px] h-[30px] rounded-lg border border-border cursor-pointer p-0 bg-transparent shrink-0" />
-                              </div>
-                           </div>
-                        ))}
-                     </>
+                      ))}
+                    </>
                   ) : (
-                     <div className="text-center py-6 text-muted text-sm">Select a custom theme or duplicate the current one to edit colors.</div>
+                    <div className="text-center py-6 text-muted text-sm">Select a custom theme or duplicate the current one to edit colors.</div>
                   )}
                 </div>
-             </div>
-          </div>
-        )}
+              </div>
+            </div>
+          )}
 
-        {/* CONNECTIVITY */}
-        {activeSection === 'connectivity' && (
-          <div className="flex flex-col gap-4 animate-fade-in">
-             <div className="flex items-start justify-between gap-3">
-               <div>
-                 <h2 className="text-[22px] font-bold tracking-tight">Connectivity</h2>
-                 <p className="text-[13px] text-muted mt-1">Manage BCI device link and stream configuration</p>
-               </div>
-               <span className={`text-[12px] font-bold tracking-[0.06em] ${latency > 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+          {/* CONNECTIVITY */}
+          {activeSection === 'connectivity' && (
+            <div className="flex flex-col gap-4 animate-fade-in">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-[22px] font-bold tracking-tight">Connectivity</h2>
+                  <p className="text-[13px] text-muted mt-1">Manage BCI device link and stream configuration</p>
+                </div>
+                <span className={`text-[12px] font-bold tracking-[0.06em] ${latency > 0 ? 'text-emerald-500' : 'text-red-500'}`}>
                   ● {latency > 0 ? 'Connected' : 'Disconnected'}
-               </span>
-             </div>
+                </span>
+              </div>
 
-             <div className="bg-surface/50 border border-border rounded-2xl overflow-hidden shadow-lg">
+              <div className="bg-surface/50 border border-border rounded-2xl overflow-hidden shadow-lg">
                 <div className="px-5 py-3.5 border-b border-border flex items-center justify-between gap-3">
                   <span className="text-[11px] font-bold tracking-[0.1em] uppercase text-muted flex items-center gap-2">
                     <Globe size={14} className="opacity-70" strokeWidth={1.8} /> Endpoint Configuration
@@ -477,11 +468,11 @@ export default function SettingsView({ latency = 0, localWs = '', setLocalWs = (
                     <div className="flex flex-col md:flex-row gap-4">
                       <div className="flex-1 space-y-2">
                         <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted">Core API Protocol</label>
-                        <input type="text" value={apiUrl} onChange={e => setApiUrl(e.target.value)} className="w-full px-4 py-2 bg-bg border border-border rounded-xl outline-none focus:border-primary text-sm font-mono tabular-nums transition-all" />
+                        <input type="text" value={settings.general.apiUrl} onChange={e => updateDeepSettings('general.apiUrl', e.target.value)} className="w-full px-4 py-2 bg-bg border border-border rounded-xl outline-none focus:border-primary text-sm font-mono tabular-nums transition-all" />
                       </div>
                       <div className="flex-1 space-y-2">
-                        <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted">Neural Socket Tunnel</label>
-                        <input type="text" value={wsUrl} onChange={e => setWsUrl(e.target.value)} className="w-full px-4 py-2 bg-bg border border-border rounded-xl outline-none focus:border-primary text-sm font-mono tabular-nums transition-all" />
+                        <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted">Active Master Socket</label>
+                        <input type="text" value={settings.general.wsUrl} onChange={e => updateDeepSettings('general.wsUrl', e.target.value)} className="w-full px-4 py-2 bg-bg border border-border rounded-xl outline-none focus:border-primary text-sm font-mono tabular-nums transition-all" />
                       </div>
                     </div>
                     <div className="h-px bg-border/50" />
@@ -508,26 +499,26 @@ export default function SettingsView({ latency = 0, localWs = '', setLocalWs = (
                       <div className="text-[12px] text-muted">Bypass neural hardware via synthetic signal injection</div>
                     </div>
                     <label className="relative inline-flex items-center cursor-pointer ml-6">
-                      <input type="checkbox" checked={useMock} onChange={e => setUseMock(e.target.checked)} className="sr-only peer" />
+                      <input type="checkbox" checked={settings.general.useMock} onChange={e => updateDeepSettings('general.useMock', e.target.checked)} className="sr-only peer" />
                       <div className="w-10 h-6 bg-surface-hover peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-[16px] peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500 border border-border-hi"></div>
                     </label>
                   </div>
                 </div>
-             </div>
-          </div>
-        )}
+              </div>
+            </div>
+          )}
 
-        {/* AUDIO & SOUNDSCAPES */}
-        {activeSection === 'audio' && (
-          <div className="flex flex-col gap-4 animate-fade-in">
-             <div className="flex items-start justify-between gap-3">
-               <div>
-                 <h2 className="text-[22px] font-bold tracking-tight">Audio & SFX</h2>
-                 <p className="text-[13px] text-muted mt-1">Configure neural feedback audio and system sounds</p>
-               </div>
-             </div>
+          {/* AUDIO & SOUNDSCAPES */}
+          {activeSection === 'audio' && (
+            <div className="flex flex-col gap-4 animate-fade-in">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-[22px] font-bold tracking-tight">Audio & SFX</h2>
+                  <p className="text-[13px] text-muted mt-1">Configure neural feedback audio and system sounds</p>
+                </div>
+              </div>
 
-             <div className="bg-surface/50 border border-border rounded-2xl overflow-hidden shadow-lg">
+              <div className="bg-surface/50 border border-border rounded-2xl overflow-hidden shadow-lg">
                 <div className="px-5 py-3.5 border-b border-border flex items-center justify-between gap-3">
                   <span className="text-[11px] font-bold tracking-[0.1em] uppercase text-muted flex items-center gap-2">
                     <Music size={14} className="opacity-70" strokeWidth={1.8} /> Sound Options
@@ -566,19 +557,19 @@ export default function SettingsView({ latency = 0, localWs = '', setLocalWs = (
                       <div className="flex items-center justify-between pt-2">
                         <span className="text-[12px] font-bold text-muted uppercase tracking-[0.1em]">Available Tracks</span>
                         <label className="text-[10px] font-bold uppercase tracking-[0.1em] text-primary px-3 py-1.5 bg-primary/10 rounded border border-primary/20 cursor-pointer hover:bg-primary/20 transition-all flex items-center gap-1.5">
-                           <Upload size={12} /> Upload Track
-                           <input type="file" accept="audio/*" onChange={handleBgmUpload} className="hidden" />
+                          <Upload size={12} /> Upload Track
+                          <input type="file" accept="audio/*" onChange={handleBgmUpload} className="hidden" />
                         </label>
                       </div>
                       <div className="grid grid-cols-1 gap-2 max-h-[160px] overflow-y-auto custom-scrollbar">
                         {settings.audio?.availableTracks?.map(track => (
                           <div key={track.name} onClick={() => updateDeepSettings('audio.bgmTrack', track.name)} className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer transition-all ${settings.audio.bgmTrack === track.name ? 'bg-primary/5 border-primary shadow-[0_0_10px_rgba(0,200,240,0.1)]' : 'bg-surface border-border/50 hover:border-border'}`}>
                             <div className="flex items-center gap-3">
-                               <Music size={14} className={settings.audio.bgmTrack === track.name ? 'text-primary' : 'text-muted'} />
-                               <div>
-                                 <div className={`text-[13px] font-bold ${settings.audio.bgmTrack === track.name ? 'text-primary' : 'text-text'}`}>{track.name}</div>
-                                 <div className="text-[10px] font-mono text-muted uppercase">{(track.size / 1024 / 1024).toFixed(2)} MB</div>
-                               </div>
+                              <Music size={14} className={settings.audio.bgmTrack === track.name ? 'text-primary' : 'text-muted'} />
+                              <div>
+                                <div className={`text-[13px] font-bold ${settings.audio.bgmTrack === track.name ? 'text-primary' : 'text-text'}`}>{track.name}</div>
+                                <div className="text-[10px] font-mono text-muted uppercase">{(track.size / 1024 / 1024).toFixed(2)} MB</div>
+                              </div>
                             </div>
                             <button onClick={(e) => { e.stopPropagation(); handleDeleteTrack(track); }} className="p-1.5 text-muted hover:text-red-500 bg-surface border border-border rounded hover:bg-red-500/10 transition-all">
                               <Trash2 size={12} />
@@ -589,22 +580,22 @@ export default function SettingsView({ latency = 0, localWs = '', setLocalWs = (
                     </div>
                   )}
                 </div>
-             </div>
-          </div>
-        )}
+              </div>
+            </div>
+          )}
 
-        {/* HOTKEYS */}
-        {activeSection === 'hotkeys' && (
-          <div className="flex flex-col gap-4 animate-fade-in">
-             <div className="flex items-start justify-between gap-3">
-               <div>
-                 <h2 className="text-[22px] font-bold tracking-tight">Neural Hotkeys</h2>
-                 <p className="text-[13px] text-muted mt-1">Keyboard shortcuts for stream and data operations</p>
-               </div>
-               <button onClick={() => updateDeepSettings('keymap', {})} className="px-3.5 py-1.5 rounded-lg text-[11px] font-bold tracking-[0.06em] cursor-pointer border border-primary/30 bg-primary/10 text-primary hover:bg-primary/20 transition-all">Reset Keymap</button>
-             </div>
+          {/* HOTKEYS */}
+          {activeSection === 'hotkeys' && (
+            <div className="flex flex-col gap-4 animate-fade-in">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-[22px] font-bold tracking-tight">Neural Hotkeys</h2>
+                  <p className="text-[13px] text-muted mt-1">Keyboard shortcuts for stream and data operations</p>
+                </div>
+                <button onClick={() => updateDeepSettings('keymap', {})} className="px-3.5 py-1.5 rounded-lg text-[11px] font-bold tracking-[0.06em] cursor-pointer border border-primary/30 bg-primary/10 text-primary hover:bg-primary/20 transition-all">Reset Keymap</button>
+              </div>
 
-             <div className="bg-surface/50 border border-border rounded-2xl overflow-hidden shadow-lg">
+              <div className="bg-surface/50 border border-border rounded-2xl overflow-hidden shadow-lg">
                 <div className="px-5 py-3.5 border-b border-border flex items-center justify-between gap-3">
                   <span className="text-[11px] font-bold tracking-[0.1em] uppercase text-muted flex items-center gap-2">
                     <Keyboard size={14} className="opacity-70" strokeWidth={1.8} /> Stream Operations
@@ -625,24 +616,24 @@ export default function SettingsView({ latency = 0, localWs = '', setLocalWs = (
                     return (
                       <div key={id} className="flex items-center justify-between py-3 border-b border-border/50 last:border-0">
                         <div className="flex items-center gap-3">
-                           <div className="w-[30px] h-[30px] rounded-lg bg-surface border border-border flex items-center justify-center shrink-0">
-                              <Icon size={14} className="text-muted" strokeWidth={1.8} />
-                           </div>
-                           <div>
-                              <div className="text-[14px] font-medium">{label}</div>
-                              <div className="text-[12px] text-muted mt-0.5">{desc}</div>
-                           </div>
+                          <div className="w-[30px] h-[30px] rounded-lg bg-surface border border-border flex items-center justify-center shrink-0">
+                            <Icon size={14} className="text-muted" strokeWidth={1.8} />
+                          </div>
+                          <div>
+                            <div className="text-[14px] font-medium">{label}</div>
+                            <div className="text-[12px] text-muted mt-0.5">{desc}</div>
+                          </div>
                         </div>
                         <button onClick={() => setListeningKeyFor(isListening ? null : id)} className={`px-2.5 py-1 text-[11px] font-bold font-mono tracking-[0.04em] rounded-md border ${isListening ? 'bg-primary/20 border-primary/40 text-primary animate-pulse shadow-[0_0_8px_rgba(0,200,240,0.3)]' : 'bg-surface border-border-hi text-muted hover:text-text'}`}>
-                           {isListening ? 'AWAITING...' : formatKeyCode(code)}
+                          {isListening ? 'AWAITING...' : formatKeyCode(code)}
                         </button>
                       </div>
                     );
                   })}
                 </div>
-             </div>
+              </div>
 
-             <div className="bg-surface/50 border border-border rounded-2xl overflow-hidden shadow-lg mt-2">
+              <div className="bg-surface/50 border border-border rounded-2xl overflow-hidden shadow-lg mt-2">
                 <div className="px-5 py-3.5 border-b border-border flex items-center justify-between gap-3">
                   <span className="text-[11px] font-bold tracking-[0.1em] uppercase text-muted flex items-center gap-2">
                     <Activity size={14} className="opacity-70" strokeWidth={1.8} /> Diagnostic Toggles
@@ -665,129 +656,129 @@ export default function SettingsView({ latency = 0, localWs = '', setLocalWs = (
                     return (
                       <div key={id} className="flex items-center justify-between py-3 border-b border-border/50 last:border-0">
                         <div className="flex items-center gap-3">
-                           <div className="w-[30px] h-[30px] rounded-lg bg-surface border border-border flex items-center justify-center shrink-0">
-                              <Icon size={14} className="text-muted" strokeWidth={1.8} />
-                           </div>
-                           <div>
-                              <div className="text-[14px] font-medium">{label}</div>
-                              <div className="text-[12px] text-muted mt-0.5">{desc}</div>
-                           </div>
+                          <div className="w-[30px] h-[30px] rounded-lg bg-surface border border-border flex items-center justify-center shrink-0">
+                            <Icon size={14} className="text-muted" strokeWidth={1.8} />
+                          </div>
+                          <div>
+                            <div className="text-[14px] font-medium">{label}</div>
+                            <div className="text-[12px] text-muted mt-0.5">{desc}</div>
+                          </div>
                         </div>
                         <button onClick={() => setListeningKeyFor(isListening ? null : id)} className={`px-2.5 py-1 text-[11px] font-bold font-mono tracking-[0.04em] rounded-md border ${isListening ? 'bg-primary/20 border-primary/40 text-primary animate-pulse shadow-[0_0_8px_rgba(0,200,240,0.3)]' : 'bg-surface border-border-hi text-muted hover:text-text'}`}>
-                           {isListening ? 'AWAITING...' : formatKeyCode(code)}
+                          {isListening ? 'AWAITING...' : formatKeyCode(code)}
                         </button>
                       </div>
                     );
                   })}
                 </div>
-             </div>
-          </div>
-        )}
+              </div>
+            </div>
+          )}
 
-        {/* TELEMETRY */}
-        {activeSection === 'telemetry' && (
-          <div className="flex flex-col gap-4 animate-fade-in">
-             <div className="flex items-start justify-between gap-3">
-               <div>
-                 <h2 className="text-[22px] font-bold tracking-tight">Telemetry</h2>
-                 <p className="text-[13px] text-muted mt-1">System diagnostics, session analytics and logging</p>
-               </div>
-             </div>
+          {/* TELEMETRY */}
+          {activeSection === 'telemetry' && (
+            <div className="flex flex-col gap-4 animate-fade-in">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-[22px] font-bold tracking-tight">Telemetry</h2>
+                  <p className="text-[13px] text-muted mt-1">System diagnostics, session analytics and logging</p>
+                </div>
+              </div>
 
-             <div className="grid grid-cols-2 gap-3">
-               <div className="bg-surface/50 border border-border rounded-xl p-4 flex flex-col relative overflow-hidden">
-                 <div className="text-[10px] font-bold tracking-[0.1em] uppercase text-muted mb-2">Neural Pipeline</div>
-                 <div className="text-[28px] font-bold tracking-tight leading-none text-text">{latency > 0 ? latency : '—'}<span className="text-[13px] font-normal text-muted ml-1">ms</span></div>
-                 <div className={`text-[12px] mt-1 ${latency > 0 ? 'text-emerald-500' : 'text-red-500'}`}>{latency > 0 ? 'Connected' : 'No device connected'}</div>
-                 <div className="absolute right-0 bottom-0 flex items-end gap-[3px] opacity-30 p-3 h-[40px] pointer-events-none">
-                   {[...Array(10)].map((_, i) => <div key={i} className="w-[3px] bg-primary rounded-t-[2px]" style={{height: `${Math.floor(Math.random() * 20 + 4)}px`}} />)}
-                 </div>
-               </div>
-               <div className="bg-surface/50 border border-border rounded-xl p-4 flex flex-col">
-                 <div className="text-[10px] font-bold tracking-[0.1em] uppercase text-muted mb-2">Sync Refresh</div>
-                 <div className="text-[28px] font-bold tracking-tight leading-none text-text tabular-nums">{fps}<span className="text-[13px] font-normal text-muted ml-1">fps</span></div>
-                 <div className="text-[12px] mt-1 text-muted">Frontend rendering speed</div>
-               </div>
-             </div>
-          </div>
-        )}
-        {/* ACCOUNT */}
-        {activeSection === 'account' && (
-          <div className="flex flex-col gap-6 animate-fade-in w-full">
-             <div className="flex flex-col items-center justify-center gap-1.5 mb-5 text-center px-4">
-                 <h2 className="text-[26px] font-black tracking-tight text-white flex items-center justify-center gap-3">
-                    <div className="p-2 bg-amber-500/10 rounded-xl border border-amber-500/15">
-                      <UserPlus className="text-amber-500" size={22} strokeWidth={2.5} />
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-surface/50 border border-border rounded-xl p-4 flex flex-col relative overflow-hidden">
+                  <div className="text-[10px] font-bold tracking-[0.1em] uppercase text-muted mb-2">Neural Pipeline</div>
+                  <div className="text-[28px] font-bold tracking-tight leading-none text-text">{latency > 0 ? latency : '—'}<span className="text-[13px] font-normal text-muted ml-1">ms</span></div>
+                  <div className={`text-[12px] mt-1 ${latency > 0 ? 'text-emerald-500' : 'text-red-500'}`}>{latency > 0 ? 'Connected' : 'No device connected'}</div>
+                  <div className="absolute right-0 bottom-0 flex items-end gap-[3px] opacity-30 p-3 h-[40px] pointer-events-none">
+                    {[...Array(10)].map((_, i) => <div key={i} className="w-[3px] bg-primary rounded-t-[2px]" style={{ height: `${Math.floor(Math.random() * 20 + 4)}px` }} />)}
+                  </div>
+                </div>
+                <div className="bg-surface/50 border border-border rounded-xl p-4 flex flex-col">
+                  <div className="text-[10px] font-bold tracking-[0.1em] uppercase text-muted mb-2">Sync Refresh</div>
+                  <div className="text-[28px] font-bold tracking-tight leading-none text-text tabular-nums">{fps}<span className="text-[13px] font-normal text-muted ml-1">fps</span></div>
+                  <div className="text-[12px] mt-1 text-muted">Frontend rendering speed</div>
+                </div>
+              </div>
+            </div>
+          )}
+          {/* ACCOUNT */}
+          {activeSection === 'account' && (
+            <div className="flex flex-col gap-6 animate-fade-in w-full">
+              <div className="flex flex-col items-center justify-center gap-1.5 mb-5 text-center px-4">
+                <h2 className="text-[26px] font-black tracking-tight text-white flex items-center justify-center gap-3">
+                  <div className="p-2 bg-amber-500/10 rounded-xl border border-amber-500/15">
+                    <UserPlus className="text-amber-500" size={22} strokeWidth={2.5} />
+                  </div>
+                  Account Overview
+                </h2>
+                <p className="text-[13px] text-muted max-w-[450px]">Manage operator settings and link credentials in a compact view</p>
+              </div>
+
+              <div className="flex flex-col gap-4 mt-1">
+                {/* Profile */}
+                <div className="bg-surface/25 border border-amber-500/20 rounded-2xl p-6 relative overflow-hidden group shadow-[0_8px_32px_rgba(0,0,0,0.15)]">
+                  <div className="flex items-center gap-6 relative z-10">
+                    <div className="relative">
+                      <div className="w-[60px] h-[60px] rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-[28px] font-black text-amber-500 shadow-inner">
+                        {user?.avatarUrl ? <img src={user.avatarUrl} alt="Avatar" className="w-full h-full object-cover" /> : (user?.username?.charAt(0).toUpperCase() || 'U')}
+                      </div>
+                      <div className="absolute -bottom-1 -right-1 w-[18px] h-[18px] rounded-full bg-emerald-500 border-[3px] border-[#18181b] shadow-[0_0_12px_rgba(16,185,129,0.5)]"></div>
                     </div>
-                    Account Overview
-                 </h2>
-                 <p className="text-[13px] text-muted max-w-[450px]">Manage operator settings and link credentials in a compact view</p>
-             </div>
-             
-             <div className="flex flex-col gap-4 mt-1">
-               {/* Profile */}
-               <div className="bg-surface/25 border border-amber-500/20 rounded-2xl p-6 relative overflow-hidden group shadow-[0_8px_32px_rgba(0,0,0,0.15)]">
-                 <div className="flex items-center gap-6 relative z-10">
-                   <div className="relative">
-                     <div className="w-[60px] h-[60px] rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-[28px] font-black text-amber-500 shadow-inner">
-                       {user?.avatarUrl ? <img src={user.avatarUrl} alt="Avatar" className="w-full h-full object-cover" /> : (user?.username?.charAt(0).toUpperCase() || 'U')}
-                     </div>
-                     <div className="absolute -bottom-1 -right-1 w-[18px] h-[18px] rounded-full bg-emerald-500 border-[3px] border-[#18181b] shadow-[0_0_12px_rgba(16,185,129,0.5)]"></div>
-                   </div>
-                   <div className="flex-1">
-                     <div className="text-[10px] tracking-[0.2em] text-amber-500/80 uppercase font-black flex items-center gap-2 mb-1.5 px-0.5">
-                       <Activity size={10} className="text-amber-500" /> Neural Operator
-                     </div>
-                     <div className="text-[22px] font-bold tracking-tight text-white leading-tight mb-0.5 group-hover:text-amber-500 transition-colors duration-300 uppercase">{user?.username || 'ANONYMOUS'}</div>
-                     <div className="text-[13px] text-muted flex items-center gap-2 mt-0.5 opacity-80">{user?.email || 'operator@neurotech.bci'}</div>
-                   </div>
-                 </div>
+                    <div className="flex-1">
+                      <div className="text-[10px] tracking-[0.2em] text-amber-500/80 uppercase font-black flex items-center gap-2 mb-1.5 px-0.5">
+                        <Activity size={10} className="text-amber-500" /> Neural Operator
+                      </div>
+                      <div className="text-[22px] font-bold tracking-tight text-white leading-tight mb-0.5 group-hover:text-amber-500 transition-colors duration-300 uppercase">{user?.username || 'ANONYMOUS'}</div>
+                      <div className="text-[13px] text-muted flex items-center gap-2 mt-0.5 opacity-80">{user?.email || 'operator@neurotech.bci'}</div>
+                    </div>
+                  </div>
 
-                 {user && (
-                   <div className="mt-4 pt-0 relative z-10">
-                     <button onClick={logout} className="w-full py-2.5 rounded-xl border border-red-500/20 bg-red-500/5 text-red-500 text-[11px] font-bold tracking-[0.1em] uppercase cursor-pointer hover:bg-red-500/10 transition-all flex items-center justify-center gap-2">
-                       <Power size={14} className="opacity-80" /> Disconnect Link
-                     </button>
-                   </div>
-                 )}
-               </div>
-               
-               {/* Quick Info */}
-               <div className="bg-surface/25 border border-amber-500/25 rounded-2xl overflow-hidden flex flex-col group shadow-[0_8px_32px_rgba(0,0,0,0.15)]">
-                 <div className="px-5 py-3 border-b border-amber-500/15 flex items-center gap-3 relative z-10 bg-amber-500/5">
+                  {user && (
+                    <div className="mt-4 pt-0 relative z-10">
+                      <button onClick={logout} className="w-full py-2.5 rounded-xl border border-red-500/20 bg-red-500/5 text-red-500 text-[11px] font-bold tracking-[0.1em] uppercase cursor-pointer hover:bg-red-500/10 transition-all flex items-center justify-center gap-2">
+                        <Power size={14} className="opacity-80" /> Disconnect Link
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Quick Info */}
+                <div className="bg-surface/25 border border-amber-500/25 rounded-2xl overflow-hidden flex flex-col group shadow-[0_8px_32px_rgba(0,0,0,0.15)]">
+                  <div className="px-5 py-3 border-b border-amber-500/15 flex items-center gap-3 relative z-10 bg-amber-500/5">
                     <Database size={17} className="text-amber-500" strokeWidth={2.5} />
                     <span className="text-[13px] font-black tracking-[0.15em] uppercase text-text flex items-center gap-2">
-                        System Status
+                      System Status
                     </span>
-                 </div>
-                 
-                 <div className="grid grid-cols-1 flex-1 p-4 gap-2 relative z-10">
-                   {[
-                     { label: 'Available themes', value: themes.length, icon: Palette },
-                     { label: 'Active hotkeys', value: Object.keys(settings.keymap?.collection || {}).length, icon: Keyboard },
-                     { label: 'Device status', value: latency > 0 ? 'Online' : 'Offline', icon: Activity, isStatus: true },
-					 { label: 'Target Protocol', value: wsUrl.replace('ws://', '').replace('wss://', ''), icon: Globe, highlight: true }
-                   ].map((stat, i) => {
+                  </div>
+
+                  <div className="grid grid-cols-1 flex-1 p-4 gap-2 relative z-10">
+                    {[
+                      { label: 'Available themes', value: themes.length, icon: Palette },
+                      { label: 'Active hotkeys', value: Object.keys(settings.keymap?.collection || {}).length, icon: Keyboard },
+                      { label: 'Device status', value: latency > 0 ? 'Online' : 'Offline', icon: Activity, isStatus: true },
+                      { label: 'Target Protocol', value: (settings.general.wsUrl || '').replace('ws://', '').replace('wss://', ''), icon: Globe, highlight: true }
+                    ].map((stat, i) => {
                       const StatIcon = stat.icon;
                       return (
-                         <div key={i} className="flex justify-between items-center gap-3 px-4 py-3 rounded-xl hover:bg-amber-500/5 border border-amber-500/5 hover:border-amber-500/20 transition-all duration-300 group/item bg-[#000000]/15 shadow-sm">
-                            <div className="flex items-center gap-3">
-                              <div className="w-9 h-9 rounded-lg bg-bg/50 border border-amber-500/20 flex items-center justify-center shadow-inner text-amber-500/80 group-hover/item:text-amber-500 transition-colors duration-300 shrink-0">
-                                <StatIcon size={16} strokeWidth={2} />
-                              </div>
-                              <span className="text-[13px] text-muted font-bold group-hover/item:text-white transition-colors duration-300 leading-tight uppercase tracking-tight">{stat.label}</span>
+                        <div key={i} className="flex justify-between items-center gap-3 px-4 py-3 rounded-xl hover:bg-amber-500/5 border border-amber-500/5 hover:border-amber-500/20 transition-all duration-300 group/item bg-[#000000]/15 shadow-sm">
+                          <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-lg bg-bg/50 border border-amber-500/20 flex items-center justify-center shadow-inner text-amber-500/80 group-hover/item:text-amber-500 transition-colors duration-300 shrink-0">
+                              <StatIcon size={16} strokeWidth={2} />
                             </div>
-                            <span className={`font-black ${stat.isStatus ? (latency > 0 ? 'text-emerald-500 drop-shadow-[0_0_6px_rgba(16,185,129,0.3)] text-[14px]' : 'text-red-500 font-medium text-[14px]') : (stat.highlight ? 'text-amber-400 font-mono text-[11px] bg-amber-500/10 px-2.5 py-1 rounded-md border border-amber-500/20 cursor-default shadow-sm inline-block max-w-[150px] truncate' : 'text-text text-[15px]')}`}>
-                              {stat.value}
-                            </span>
-                         </div>
+                            <span className="text-[13px] text-muted font-bold group-hover/item:text-white transition-colors duration-300 leading-tight uppercase tracking-tight">{stat.label}</span>
+                          </div>
+                          <span className={`font-black ${stat.isStatus ? (latency > 0 ? 'text-emerald-500 drop-shadow-[0_0_6px_rgba(16,185,129,0.3)] text-[14px]' : 'text-red-500 font-medium text-[14px]') : (stat.highlight ? 'text-amber-400 font-mono text-[11px] bg-amber-500/10 px-2.5 py-1 rounded-md border border-amber-500/20 cursor-default shadow-sm inline-block max-w-[150px] truncate' : 'text-text text-[15px]')}`}>
+                            {stat.value}
+                          </span>
+                        </div>
                       )
-                   })}
-                 </div>
-               </div>
-             </div>
-          </div>
-        )}
+                    })}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
         </div>
       </main>

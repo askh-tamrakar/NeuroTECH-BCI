@@ -8,7 +8,7 @@ import { CalibrationApi } from '../../services/calibrationApi';
 import CustomSelect from '../ui/CustomSelect';
 import { useSettings } from '../../contexts/SettingsContext';
 import { useTheme } from '../../contexts/ThemeContext';
-import { Activity, Radio, Zap, Target, Square, Play, Palette, Brain, ChartSpline } from 'lucide-react';
+import { Activity, Radio, Zap, Target, Square, Play, Palette, Brain, ChartSpline, Database } from 'lucide-react';
 import { soundHandler } from '../../handlers/SoundHandler'
 
 // Workers
@@ -30,7 +30,7 @@ const SENSOR_LABELS = {
  * DataCollectionView
  * The main container for the BCI data collection experience.
  */
-export default function DataCollectionView({ wsData, wsEvent, config: initialConfig, wsUrl }) {
+export default function DataCollectionView({ wsData, wsEvent, config: initialConfig, wsUrl, onSwitchLab, switcher }) {
     const { settings, updateSettings } = useSettings();
     const { currentTheme } = useTheme();
 
@@ -1103,14 +1103,8 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                 {/* SIDEBAR CARD */}
                 <div className="w-[260px] flex-none flex flex-col bg-surface border-border border-2 rounded-xl shadow-sm overflow-hidden">
                     {/* Sidebar Header */}
-                    <div className="p-2 border-b border-border flex items-center gap-2 bg-surface/50">
-                        <div>
-                            <Brain size={30} className="text-primary" />
-                        </div>
-                        <div>
-                            <h2 className="text-xl font-bold tracking-tight leading-tight">Data Collection</h2>
-                            <p className="text-base text-muted font-mono uppercase tracking-widest">Controls</p>
-                        </div>
+                    <div className="p-3 border-b border-border flex items-center justify-between gap-2 bg-surface/50">
+                        {switcher}
                     </div>
 
                     {/* Sidebar Scrollable Content */}
