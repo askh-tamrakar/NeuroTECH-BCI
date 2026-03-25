@@ -4,8 +4,31 @@ import os
 import argparse
 import time
 import signal
+import socket
 import threading
 from pathlib import Path
+
+def get_local_ips():
+    """Returns a list of all non-loopback IPv4 addresses."""
+    ips = []
+    try:
+        hostname = socket.gethostname()
+        # Get all IPs assigned to this host
+        for ip in socket.gethostbyname_ex(hostname)[2]:
+            if not ip.startswith("127."):
+                ips.append(ip)
+    except: pass
+    
+    try:
+        # Fallback to get the primary interface IP
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.settimeout(0)
+        s.connect(('8.8.8.8', 1)) 
+        ip = s.getsockname()[0]
+        if ip not in ips: ips.append(ip)
+        s.close()
+    except: pass
+    return list(set(ips))
 
 # Visual Theme & Formatting
 class Theme:
@@ -149,6 +172,7 @@ def main():
     parser = argparse.ArgumentParser(description="NeuroTECH System Orchestrator")
     parser.add_argument("-b", "--build", action="store_true", help="Build frontend before starting")
     parser.add_argument("-d", "--dev", action="store_true", help="Run in development mode (starts Vite dev server)")
+    parser.add_argument("-r", "--remote", action="store_true", help="Remote Mode: Suppress local frontend and expose API to network")
     parser.add_argument("-v", "--verbose", action="store_true", help="Show detailed subprocess logs")
     parser.add_argument("-s", "--servo", action="store_true", help="Enable Servo Actuator component")
     args = parser.parse_args()
@@ -171,6 +195,16 @@ def main():
     print(f"             SYSTEM ORCHESTRATOR v0.1.0")
     print("=" * 88 + f"{Theme.RESET}")
     print(f"  {Theme.DIM}Mode: {'Development' if args.dev else 'Production'}")
+    
+    if args.remote:
+        os.environ["API_ONLY"] = "1"
+        print(f"  {Theme.BOLD}{Theme.WARNING}► REMOTE MODE ACTIVE: Local frontend suppressed.{Theme.RESET}")
+        
+    ips = get_local_ips()
+    port = 5005 # API/WS port
+    print(f"  {Theme.BOLD}{Theme.OKGREEN}► Backend Connectivity Options:{Theme.RESET}")
+    for ip in ips:
+        print(f"      - http://{ip}:{port}")
     print()
 
     frontend_dir = (Path(__file__).parent.parent / "frontend").resolve()
@@ -207,11 +241,15 @@ def main():
     signal.signal(signal.SIGTERM, shutdown_handler)
 
     # --- 2. START DEV SERVER (Optional) ---
-    if args.dev:
+    if args.dev and not args.remote:
         log_system("Starting Frontend Development Server (Vite)...", icon=Theme.LAUNCH)
         try:
+             cmd = ["npm", "run", "dev"]
+             if args.remote:
+                 cmd.extend(["--", "--host"])
+                 
              dev_proc = subprocess.Popen(
-                ["npm", "run", "dev"], 
+                cmd, 
                 cwd=frontend_dir,
                 shell=True,
                 stdout=subprocess.PIPE,

@@ -533,7 +533,7 @@ class DatabaseManager:
                     max_score, second_max_score, score_ratio, score_mean, score_std, dominant_freq,
                     target_frequency, channel_index, sample_count, window_ms, metadata_json,
                     label, session_id, timestamp
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 features.get('bp_delta', 0), features.get('bp_theta', 0),
                 features.get('bp_alpha', 0), features.get('bp_beta', 0),

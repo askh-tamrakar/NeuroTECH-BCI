@@ -1,17 +1,17 @@
 {
   "EEG": {
     "target_freqs": [
-      6.59,
-      9,
-      12,
-      14.4,
-      16,
-      18
+      6.5,
+      3.63,
+      4.83,
+      5.8,
+      6.44,
+      7.25
     ],
     "targets": [
       {
         "id": 0,
-        "freq": 6.59,
+        "freq": 6.5,
         "label": "wwwww",
         "mappedKey": "Space",
         "mappedMouse": "None",
@@ -23,11 +23,11 @@
       },
       {
         "id": 1,
-        "freq": 9,
+        "freq": 3.63,
         "label": "Target 2ss",
         "mappedKey": "A",
         "mappedMouse": "None",
-        "enabled": false,
+        "enabled": true,
         "controlType": "None",
         "divisor": 16,
         "source": "dynamic",
@@ -35,11 +35,11 @@
       },
       {
         "id": 2,
-        "freq": 12,
+        "freq": 4.83,
         "label": "Target 3",
         "mappedKey": "S",
         "mappedMouse": "None",
-        "enabled": false,
+        "enabled": true,
         "controlType": "None",
         "divisor": 12,
         "source": "dynamic",
@@ -47,11 +47,11 @@
       },
       {
         "id": 3,
-        "freq": 14.4,
+        "freq": 5.8,
         "label": "Target 4",
         "mappedKey": "D",
         "mappedMouse": "None",
-        "enabled": false,
+        "enabled": true,
         "controlType": "None",
         "divisor": 10,
         "source": "dynamic",
@@ -59,11 +59,11 @@
       },
       {
         "id": 4,
-        "freq": 16,
+        "freq": 6.44,
         "label": "Target 5",
         "mappedKey": "Space",
         "mappedMouse": "None",
-        "enabled": false,
+        "enabled": true,
         "controlType": "None",
         "divisor": 9,
         "source": "dynamic",
@@ -71,11 +71,11 @@
       },
       {
         "id": 5,
-        "freq": 18,
+        "freq": 7.25,
         "label": "Target 6",
         "mappedKey": "Escape",
         "mappedMouse": "None",
-        "enabled": false,
+        "enabled": true,
         "controlType": "None",
         "divisor": 8,
         "source": "dynamic",
@@ -89,7 +89,7 @@
     "num_harmonics": 4,
     "step_sec": 0.25,
     "smoothing_windows": 7,
-    "refresh_rate": 144
+    "refresh_rate": 58
   },
   "EOG": {
     "detection_method": "ML",

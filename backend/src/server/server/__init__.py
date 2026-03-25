@@ -9,6 +9,7 @@ from src.server.server.config_manager import load_config
 from src.feature.detectors.rps_detector import RPSDetector
 from src.utils.paths import PROJECT_ROOT
 import sys
+import os
 
 # Import blueprints
 from src.server.server.routes.session_routes import session_bp
@@ -66,15 +67,28 @@ def create_app():
     app.register_blueprint(audio_bp)
     
     # Index Route
-    @app.route('/')
-    def index():
-        return render_template('index.html')
-        
-    @app.route('/<path:path>')
-    def catch_all(path):
-        if path.startswith('api/'):
-             return jsonify({"error": "API endpoint not found"}), 404
-        return render_template('index.html')
+    if os.environ.get("API_ONLY") == "1":
+        @app.route('/')
+        def index():
+            return jsonify({
+                "status": "online", 
+                "mode": "headless", 
+                "message": "NeuroTECH API serving backend only."
+            })
+            
+        @app.route('/<path:path>')
+        def catch_all(path):
+            return jsonify({"error": "API endpoint not found", "path": path}), 404
+    else:
+        @app.route('/')
+        def index():
+            return render_template('index.html')
+            
+        @app.route('/<path:path>')
+        def catch_all(path):
+            if path.startswith('api/'):
+                 return jsonify({"error": "API endpoint not found"}), 404
+            return render_template('index.html')
         
     return app
 

@@ -8,7 +8,7 @@ from src.database.db_manager import db_manager
 # from src.server.server.lsl_service import extract_emg_features # If needed for saving EMG buffer
 # Import extract_emg_features from lsl_service to avoid duplication if possible, 
 # but lsl_service.py has it.
-from src.server.server.lsl_service import extract_emg_features, extract_eog_features # Assume we export this
+from src.server.server.lsl_service import extract_emg_features, extract_eog_features, extract_eeg_features
 
 session_bp = Blueprint('session', __name__)
 
@@ -369,6 +369,76 @@ def api_eog_predict_toggle(action):
         if get_detection_target() == 'EOG':
             set_detection_state(False, None)
     return jsonify({"status": "ok", "predicting": state.session.prediction_active['EOG']})
+
+
+# --- EEG ENDPOINTS ---
+
+@session_bp.route('/api/eeg/start', methods=['POST'])
+def api_eeg_start():
+    try:
+        data = request.get_json()
+        label = data.get('label', 0)
+        session_name = data.get('session_name', 'DefaultSession')
+        
+        state.session.start_recording('EEG', str(label), session_name=session_name)
+        return jsonify({"status": "started", "label": label, "table": state.session.current_table_name})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@session_bp.route('/api/eeg/stop', methods=['POST'])
+def api_eeg_stop():
+    target_table = state.session.stop_recording() or "eeg_windows"
+    
+    # Process and save EEG data
+    try:
+        session_id = str(uuid.uuid4())
+        data_store = state.session.data_store['EEG']
+        saved_count = 0
+        
+        for label_str, samples in data_store.items():
+            if len(samples) < 50:
+                continue
+
+            try:
+                label_int = int(label_str)
+            except:
+                continue
+                
+            raw_data = np.array(samples)
+            
+            sr = state.sr or 1000
+            window_size = int(sr * 1.0) # 1s window for frequency analysis
+            step_size = int(window_size * 0.5)
+            
+            for i in range(0, len(raw_data) - window_size + 1, step_size):
+                window = raw_data[i : i + window_size]
+                
+                # Extract
+                feats = extract_eeg_features(window, sr)
+                feats['timestamp'] = time.time()
+                
+                if db_manager.insert_eeg_window(feats, label_int, session_id, table_name=target_table):
+                    saved_count += 1
+                    # Also append to global table if not a merged session
+                    if "merge" not in target_table.lower():
+                        db_manager.insert_eeg_window(feats, label_int, session_id, table_name="eeg_windows")
+
+        print(f"💾 Saved {saved_count} EEG windows to {target_table}")
+        state.session.reset_recording_state()
+        
+    except Exception as e:
+        print(f"❌ Error processing EEG session: {e}")
+
+    return jsonify({"status": "stopped", "saved_windows": saved_count if 'saved_count' in locals() else 0})
+
+@session_bp.route('/api/eeg/status', methods=['GET'])
+def api_eeg_status():
+    return jsonify(state.session.get_status('EEG'))
+
+@session_bp.route('/api/eeg/data', methods=['DELETE'])
+def api_eeg_clear():
+    state.session.clear_data('EEG')
+    return jsonify({"status": "cleared"})
 
 
 @session_bp.route('/api/eeg/predict/<action>', methods=['POST'])

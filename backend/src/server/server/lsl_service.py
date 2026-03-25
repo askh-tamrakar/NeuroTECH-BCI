@@ -227,6 +227,7 @@ def broadcast_data(socketio):
                         if hasattr(state, 'session') and state.session:
                             eog_vals = []
                             emg_vals = []
+                            eeg_vals = []
                             
                             for ch_idx, data in channels_data.items():
                                 stype = data['type'].upper()
@@ -234,12 +235,16 @@ def broadcast_data(socketio):
                                     eog_vals.append(data['value'])
                                 elif stype == 'EMG':
                                     emg_vals.append(data['value'])
+                                elif stype == 'EEG':
+                                    eeg_vals.append(data['value'])
                             
                             if state.session.is_recording:
                                  if state.session.recording_type == 'EMG' and emg_vals:
                                      state.session.add_sample('EMG', emg_vals if len(emg_vals) > 1 else emg_vals[0])
                                  elif state.session.recording_type == 'EOG' and eog_vals:
                                      state.session.add_sample('EOG', eog_vals if len(eog_vals) > 1 else eog_vals[0])
+                                 elif state.session.recording_type == 'EEG' and eeg_vals:
+                                     state.session.add_sample('EEG', eeg_vals)
 
                 now = time.time()
                 # Batch send either if enough time passed or if batch is getting large to avoid latency
