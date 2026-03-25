@@ -1,0 +1,363 @@
+/* ════════════════════════════════════════════════
+   MeditationView — CortEX-style Layout
+   All colors driven by theme CSS variables
+   ════════════════════════════════════════════════ */
+
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap');
+
+/* ── ROOT ──────────────────────────────────────── */
+.med-layout {
+  display: flex;
+  flex-direction: row;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  font-family: 'Share Tech Mono', monospace;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.med-layout *, .med-layout *::before, .med-layout *::after {
+  box-sizing: border-box; margin: 0; padding: 0;
+}
+
+/* ════════════════════════════════════════════════
+   LEFT PANEL
+   ════════════════════════════════════════════════ */
+.med-left-panel {
+  width: 200px;
+  flex-shrink: 0;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.med-left-panel::-webkit-scrollbar { width: 3px; }
+.med-left-panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+/* Logo / top branding strip */
+.med-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.med-brand-icon {
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  background: var(--primary);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px;
+  flex-shrink: 0;
+  box-shadow: 0 0 12px var(--primary);
+}
+.med-brand-name {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 10px; font-weight: 700;
+  letter-spacing: 2px;
+  color: var(--primary);
+  text-shadow: 0 0 10px var(--primary);
+  text-transform: uppercase;
+}
+
+/* Session mode block */
+.med-left-section {
+  padding: 14px 14px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.med-left-label {
+  font-size: 8px; letter-spacing: 3px;
+  color: var(--muted); opacity: .75;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+
+/* Timer preset buttons */
+.med-preset-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.med-preset-btn {
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--muted);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px; letter-spacing: 1px;
+  padding: 7px 4px;
+  cursor: pointer; transition: all .18s;
+  text-align: center;
+}
+.med-preset-btn:hover,
+.med-preset-btn.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--bg);
+  box-shadow: 0 0 12px var(--primary);
+}
+
+/* Session start/stop button */
+.med-session-btn {
+  width: 100%;
+  background: transparent;
+  border: 1px solid var(--primary);
+  border-radius: 6px;
+  color: var(--primary);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px; letter-spacing: 2px;
+  padding: 8px;
+  cursor: pointer; transition: all .2s;
+  text-align: center;
+}
+.med-session-btn:hover {
+  background: var(--primary);
+  color: var(--bg);
+  box-shadow: 0 0 16px var(--primary);
+}
+.med-session-btn.stop {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.med-session-btn.stop:hover {
+  background: var(--accent);
+  color: var(--bg);
+  box-shadow: 0 0 16px var(--accent);
+}
+
+/* Breath phase badge */
+.med-phase-badge {
+  text-align: center;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 11px; font-weight: 700; letter-spacing: 2px;
+  padding: 7px 10px; border-radius: 6px; margin-bottom: 7px;
+  border: 1px solid var(--primary);
+  color: var(--primary);
+  background: transparent;
+  transition: all .4s ease;
+  text-shadow: 0 0 8px var(--primary);
+}
+
+/* Timer readout */
+.med-timer-big {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 22px; font-weight: 900;
+  letter-spacing: 3px;
+  color: var(--text);
+  text-align: center;
+  text-shadow: 0 0 16px var(--primary);
+  padding: 8px 0 4px;
+}
+.med-cycle-count {
+  font-size: 9px; letter-spacing: 2px;
+  color: var(--muted); text-align: center;
+  margin-bottom: 6px; opacity: .7;
+}
+
+/* Connection dot */
+.med-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: #666; display: inline-block;
+  transition: background .3s, box-shadow .3s;
+}
+.med-dot.connected  { background: var(--primary); box-shadow: 0 0 8px var(--primary); }
+.med-dot.simulating { background: var(--graph-line-2, #ffb300); box-shadow: 0 0 8px var(--graph-line-2, #ffb300); animation: med-blink 1s infinite; }
+@keyframes med-blink { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+.med-conn-row {
+  display: flex; align-items: center; gap: 7px;
+  padding: 7px 14px 10px;
+  font-size: 9px; letter-spacing: 2px; color: var(--muted);
+}
+.med-conn-toggle {
+  margin-left: auto;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--muted);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 8px; letter-spacing: 1px;
+  padding: 2px 7px;
+  cursor: pointer; transition: all .15s;
+}
+.med-conn-toggle:hover { border-color: var(--primary); color: var(--primary); }
+
+/* Daily wisdom */
+.med-wisdom-section {
+  flex: 1;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+}
+.med-wisdom-title {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 9px; letter-spacing: 3px;
+  color: var(--primary); opacity: .8;
+  text-transform: uppercase;
+  margin-bottom: 14px;
+  text-shadow: 0 0 8px var(--primary);
+}
+.med-wisdom-quote {
+  font-size: 11px; line-height: 1.8;
+  color: var(--text); opacity: .85;
+  font-style: italic;
+  flex: 1;
+}
+.med-wisdom-author {
+  margin-top: 12px;
+  font-size: 9px; letter-spacing: 2px;
+  color: var(--primary); opacity: .7;
+}
+
+/* ════════════════════════════════════════════════
+   MAIN AREA
+   ════════════════════════════════════════════════ */
+.med-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+/* ── TOP CHART ROW (radar charts) ────────────── */
+.med-charts-row {
+  display: flex;
+  flex-direction: row;
+  flex: 1;
+  min-height: 0;
+  border-bottom: 1px solid var(--border);
+}
+
+/* Brain Activity header label */
+.med-section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px 8px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.med-section-icon {
+  font-size: 14px;
+  color: var(--primary);
+  text-shadow: 0 0 8px var(--primary);
+}
+.med-section-title {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 10px; font-weight: 700; letter-spacing: 3px;
+  color: var(--primary);
+  text-shadow: 0 0 8px var(--primary);
+  text-transform: uppercase;
+}
+.med-section-sub {
+  font-size: 8px; letter-spacing: 2px;
+  color: var(--muted); opacity: .6;
+  margin-left: 2px;
+}
+
+/* Each chart panel */
+.med-chart-panel {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border);
+  position: relative;
+}
+.med-chart-panel:last-child { border-right: none; }
+
+.med-chart-label {
+  font-size: 9px; letter-spacing: 3px;
+  color: var(--primary);
+  text-align: center;
+  padding: 7px 0 4px;
+  opacity: .8;
+  text-transform: uppercase;
+  font-family: 'Orbitron', sans-serif;
+  text-shadow: 0 0 6px var(--primary);
+  flex-shrink: 0;
+}
+
+.med-radar-canvas {
+  flex: 1;
+  width: 100%;
+  display: block;
+  min-height: 0;
+}
+
+/* ── BOTTOM WAVE ROWS ────────────────────────── */
+.med-waves-col {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  border-top: 1px solid var(--border);
+}
+
+.med-wave-row {
+  display: flex;
+  flex-direction: column;
+  border-bottom: 1px solid var(--border);
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+.med-wave-row:last-child { border-bottom: none; }
+
+.med-wave-label {
+  font-size: 8px; letter-spacing: 2px;
+  color: var(--muted); opacity: .6;
+  padding: 4px 12px 2px;
+  flex-shrink: 0;
+}
+
+.med-wave-canvas {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  display: block;
+}
+
+/* Calm signal overlay bar */
+.med-calm-bar-wrap {
+  position: absolute;
+  right: 10px; top: 6px;
+  display: flex; align-items: center; gap: 6px;
+  font-size: 8px; letter-spacing: 1px; color: var(--muted);
+}
+.med-calm-track {
+  width: 70px; height: 4px;
+  background: var(--panel-bg);
+  border-radius: 2px; overflow: hidden;
+}
+.med-calm-fill {
+  height: 100%; border-radius: 2px; width: 0%;
+  background: var(--primary);
+  box-shadow: 0 0 6px var(--primary);
+  transition: width .15s ease-out;
+}
+.med-calm-pct {
+  color: var(--primary);
+  font-weight: bold; width: 28px;
+}
+
+/* Grid overlay for charts */
+.med-chart-panel::before {
+  content: '';
+  position: absolute; inset: 0;
+  background-image:
+    linear-gradient(var(--graph-grid, rgba(255,255,255,.05)) 1px, transparent 1px),
+    linear-gradient(90deg, var(--graph-grid, rgba(255,255,255,.05)) 1px, transparent 1px);
+  background-size: 32px 32px;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.35;
+}
+.med-radar-canvas { position: relative; z-index: 1; }
