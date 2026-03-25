@@ -16,6 +16,7 @@ from ..modules.music_control import MusicControlModule
 from ..modules.focus_monitor import FocusMonitorModule
 from ..modules.meditation_trainer import MeditationTrainerModule
 from ..modules.stress_monitor import StressMonitorModule
+from ..modules.bubble_game import BubbleGameModule
 
 log = logging.getLogger(__name__)
 
@@ -59,6 +60,8 @@ class ModeManager:
                 self.app_module = MeditationTrainerModule()
             elif view_name == "stress":
                 self.app_module = StressMonitorModule()
+            elif view_name == "bubble":
+                self.app_module = BubbleGameModule()
             else:
                 self.app_module = None
                 log.warning(f"Unknown view {view_name} for frontal mode.")
