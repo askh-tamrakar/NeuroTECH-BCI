@@ -316,7 +316,7 @@ export default function SettingsView({ latency = 0, localWs = '', setLocalWs = (
   };
 
   return (
-    <div className="font-sans relative flex-1 flex overflow-hidden bg-bg text-text">
+    <div className="font-sans absolute inset-0 pt-[85px] flex overflow-hidden bg-bg text-text">
       {/* Background Image Overlay */}
       <div
         className="absolute inset-0 z-0 pointer-events-none"
@@ -330,7 +330,7 @@ export default function SettingsView({ latency = 0, localWs = '', setLocalWs = (
         }}
       />
       {/* ── SIDEBAR ── */}
-      <aside className="w-[66px] bg-surface/30 border-r border-border flex flex-col items-center py-4 gap-1 shrink-0 z-20">
+      <aside className="w-[66px] bg-surface/90 border-r border-border flex flex-col items-center py-4 gap-1 shrink-0 z-20">
         {[
           { id: 'account', icon: UserPlus, label: 'Account' },
           { divider: true },
@@ -376,12 +376,12 @@ export default function SettingsView({ latency = 0, localWs = '', setLocalWs = (
                   <p className="text-[13px] text-muted mt-1">Customize your dashboard theme and color palette</p>
                 </div>
                 <div className="flex gap-2">
-                  <button onClick={resetThemes} className="px-3.5 py-1.5 rounded-lg text-[11px] font-bold tracking-[0.06em] cursor-pointer border border-border bg-surface/50 text-muted hover:text-text hover:border-white/20 transition-all">Reset Defaults</button>
+                  <button onClick={resetThemes} className="px-3.5 py-1.5 rounded-lg text-[11px] font-bold tracking-[0.06em] cursor-pointer border border-border bg-surface/95 text-muted hover:text-text hover:border-white/20 transition-all">Reset Defaults</button>
                   <button onClick={handleCreateTheme} className="px-3.5 py-1.5 rounded-lg text-[11px] font-bold tracking-[0.06em] cursor-pointer border border-primary/30 bg-primary/10 text-primary hover:bg-primary/20 transition-all">+ New Theme</button>
                 </div>
               </div>
 
-              <div className="bg-surface/50 border border-border rounded-2xl overflow-hidden shadow-lg">
+              <div className="bg-surface/95 border border-border rounded-2xl overflow-hidden shadow-lg">
                 <div className="px-5 py-3.5 border-b border-border flex items-center justify-between gap-3">
                   <span className="text-[11px] font-bold tracking-[0.1em] uppercase text-muted flex items-center gap-2">
                     <Palette size={14} className="opacity-70" strokeWidth={1.8} /> Color Theme
@@ -420,7 +420,7 @@ export default function SettingsView({ latency = 0, localWs = '', setLocalWs = (
                 </div>
               </div>
 
-              <div className="bg-surface/50 border border-border rounded-2xl overflow-hidden shadow-lg">
+              <div className="bg-surface/85 border border-border rounded-2xl overflow-hidden shadow-lg">
                 <div className="px-5 py-3.5 border-b border-border flex items-center justify-between gap-3">
                   <span className="text-[11px] font-bold tracking-[0.1em] uppercase text-muted flex items-center gap-2">
                     <Edit3 size={14} className="opacity-70" strokeWidth={1.8} /> Custom Palette
@@ -481,7 +481,7 @@ export default function SettingsView({ latency = 0, localWs = '', setLocalWs = (
                 </span>
               </div>
 
-              <div className="bg-surface/50 border border-border rounded-2xl overflow-hidden shadow-lg">
+              <div className="bg-surface/95 border border-border rounded-2xl overflow-hidden shadow-lg">
                 <div className="px-5 py-3.5 border-b border-border flex items-center justify-between gap-3">
                   <span className="text-[11px] font-bold tracking-[0.1em] uppercase text-muted flex items-center gap-2">
                     <Globe size={14} className="opacity-70" strokeWidth={1.8} /> Endpoint Configuration
@@ -542,7 +542,7 @@ export default function SettingsView({ latency = 0, localWs = '', setLocalWs = (
                 </div>
               </div>
 
-              <div className="bg-surface/50 border border-border rounded-2xl overflow-hidden shadow-lg">
+              <div className="bg-surface/95 border border-border rounded-2xl overflow-hidden shadow-lg">
                 <div className="px-5 py-3.5 border-b border-border flex items-center justify-between gap-3">
                   <span className="text-[11px] font-bold tracking-[0.1em] uppercase text-muted flex items-center gap-2">
                     <Music size={14} className="opacity-70" strokeWidth={1.8} /> Sound Options
@@ -619,7 +619,7 @@ export default function SettingsView({ latency = 0, localWs = '', setLocalWs = (
                 <button onClick={() => updateDeepSettings('keymap', {})} className="px-3.5 py-1.5 rounded-lg text-[11px] font-bold tracking-[0.06em] cursor-pointer border border-primary/30 bg-primary/10 text-primary hover:bg-primary/20 transition-all">Reset Keymap</button>
               </div>
 
-              <div className="bg-surface/50 border border-border rounded-2xl overflow-hidden shadow-lg">
+              <div className="bg-surface/95 border border-border rounded-2xl overflow-hidden shadow-lg">
                 <div className="px-5 py-3.5 border-b border-border flex items-center justify-between gap-3">
                   <span className="text-[11px] font-bold tracking-[0.1em] uppercase text-muted flex items-center gap-2">
                     <Keyboard size={14} className="opacity-70" strokeWidth={1.8} /> Stream Operations
@@ -657,7 +657,7 @@ export default function SettingsView({ latency = 0, localWs = '', setLocalWs = (
                 </div>
               </div>
 
-              <div className="bg-surface/50 border border-border rounded-2xl overflow-hidden shadow-lg mt-2">
+              <div className="bg-surface/95 border border-border rounded-2xl overflow-hidden shadow-lg mt-2">
                 <div className="px-5 py-3.5 border-b border-border flex items-center justify-between gap-3">
                   <span className="text-[11px] font-bold tracking-[0.1em] uppercase text-muted flex items-center gap-2">
                     <Activity size={14} className="opacity-70" strokeWidth={1.8} /> Diagnostic Toggles
@@ -710,7 +710,7 @@ export default function SettingsView({ latency = 0, localWs = '', setLocalWs = (
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <div className="bg-surface/50 border border-border rounded-xl p-4 flex flex-col relative overflow-hidden">
+                <div className="bg-surface/95 border border-border rounded-xl p-4 flex flex-col relative overflow-hidden">
                   <div className="text-[10px] font-bold tracking-[0.1em] uppercase text-muted mb-2">Neural Pipeline</div>
                   <div className="text-[28px] font-bold tracking-tight leading-none text-text">{latency > 0 ? latency : '—'}<span className="text-[13px] font-normal text-muted ml-1">ms</span></div>
                   <div className={`text-[12px] mt-1 ${latency > 0 ? 'text-emerald-500' : 'text-red-500'}`}>{latency > 0 ? 'Connected' : 'No device connected'}</div>
@@ -718,7 +718,7 @@ export default function SettingsView({ latency = 0, localWs = '', setLocalWs = (
                     {[...Array(10)].map((_, i) => <div key={i} className="w-[3px] bg-primary rounded-t-[2px]" style={{ height: `${Math.floor(Math.random() * 20 + 4)}px` }} />)}
                   </div>
                 </div>
-                <div className="bg-surface/50 border border-border rounded-xl p-4 flex flex-col">
+                <div className="bg-surface/95 border border-border rounded-xl p-4 flex flex-col">
                   <div className="text-[10px] font-bold tracking-[0.1em] uppercase text-muted mb-2">Sync Refresh</div>
                   <div className="text-[28px] font-bold tracking-tight leading-none text-text tabular-nums">{fps}<span className="text-[13px] font-normal text-muted ml-1">fps</span></div>
                   <div className="text-[12px] mt-1 text-muted">Frontend rendering speed</div>
@@ -731,7 +731,7 @@ export default function SettingsView({ latency = 0, localWs = '', setLocalWs = (
             <div className="flex flex-col gap-6 animate-fade-in w-full">
               <div className="flex flex-col items-center justify-center gap-1.5 mb-5 text-center px-4">
                 <h2 className="text-[26px] font-black tracking-tight text-white flex items-center justify-center gap-3">
-                  <div className="p-2 bg-amber-500/10 rounded-xl border border-amber-500/15">
+                  <div className="p-2 bg-amber-500/50 rounded-xl border border-amber-500/15">
                     <UserPlus className="text-amber-500" size={22} strokeWidth={2.5} />
                   </div>
                   Account Overview
@@ -741,10 +741,10 @@ export default function SettingsView({ latency = 0, localWs = '', setLocalWs = (
 
               <div className="flex flex-col gap-4 mt-1">
                 {/* Profile */}
-                <div className="bg-surface/25 border border-amber-500/20 rounded-2xl p-6 relative overflow-hidden group shadow-[0_8px_32px_rgba(0,0,0,0.15)]">
+                <div className="bg-surface/90 border border-amber-500/20 rounded-2xl p-6 relative overflow-hidden group shadow-[0_8px_32px_rgba(0,0,0,0.15)]">
                   <div className="flex items-center gap-6 relative z-10">
                     <div className="relative">
-                      <div className="w-[60px] h-[60px] rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-[28px] font-black text-amber-500 shadow-inner">
+                      <div className="w-[60px] h-[60px] rounded-2xl bg-amber-500/50 border border-amber-500/30 flex items-center justify-center text-[28px] font-black text-amber-500 shadow-inner">
                         {user?.avatarUrl ? <img src={user.avatarUrl} alt="Avatar" className="w-full h-full object-cover" /> : (user?.username?.charAt(0).toUpperCase() || 'U')}
                       </div>
                       <div className="absolute -bottom-1 -right-1 w-[18px] h-[18px] rounded-full bg-emerald-500 border-[3px] border-[#18181b] shadow-[0_0_12px_rgba(16,185,129,0.5)]"></div>
@@ -768,8 +768,8 @@ export default function SettingsView({ latency = 0, localWs = '', setLocalWs = (
                 </div>
 
                 {/* Quick Info */}
-                <div className="bg-surface/25 border border-amber-500/25 rounded-2xl overflow-hidden flex flex-col group shadow-[0_8px_32px_rgba(0,0,0,0.15)]">
-                  <div className="px-5 py-3 border-b border-amber-500/15 flex items-center gap-3 relative z-10 bg-amber-500/5">
+                <div className="bg-surface/90 border border-amber-500/25 rounded-2xl overflow-hidden flex flex-col group shadow-[0_8px_32px_rgba(0,0,0,0.15)]">
+                  <div className="px-5 py-3 border-b border-amber-500/15 flex items-center gap-3 relative z-10 bg-amber-500/30">
                     <Database size={17} className="text-amber-500" strokeWidth={2.5} />
                     <span className="text-[13px] font-black tracking-[0.15em] uppercase text-text flex items-center gap-2">
                       System Status
@@ -785,7 +785,7 @@ export default function SettingsView({ latency = 0, localWs = '', setLocalWs = (
                     ].map((stat, i) => {
                       const StatIcon = stat.icon;
                       return (
-                        <div key={i} className="flex justify-between items-center gap-3 px-4 py-3 rounded-xl hover:bg-amber-500/5 border border-amber-500/5 hover:border-amber-500/20 transition-all duration-300 group/item bg-[#000000]/15 shadow-sm">
+                        <div key={i} className="flex justify-between items-center gap-3 px-4 py-3 rounded-xl hover:bg-amber-500/30 border border-amber-500/5 hover:border-amber-500/20 transition-all duration-300 group/item bg-[#000000]/15 shadow-sm">
                           <div className="flex items-center gap-3">
                             <div className="w-9 h-9 rounded-lg bg-bg/50 border border-amber-500/20 flex items-center justify-center shadow-inner text-amber-500/80 group-hover/item:text-amber-500 transition-colors duration-300 shrink-0">
                               <StatIcon size={16} strokeWidth={2} />

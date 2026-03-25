@@ -18,6 +18,6 @@
   "num_channels": 2,
   "active_models": {
     "EMG": "rps-1200",
-    "EOG": "dino-ml"
+    "EOG": "Dino"
   }
 }

@@ -112,7 +112,6 @@
 
 .dino-game-wrapper {
     display: flex;
-    gap: 0.5rem;
     flex-wrap: wrap;
     height: 100%;
     width: 100%;
@@ -130,7 +129,7 @@
     min-width: 0;
     width: 0px;
     padding: 15px;
-    padding-top: 109px;
+    padding-top: 100px;
     padding-bottom: 45px;
     height: 100%;
     display: flex;
@@ -391,11 +390,11 @@
     overflow-y: auto;
     display: flex;
     flex-direction: column;
-    gap: 1.5rem;
     scrollbar-width: none;
     -ms-overflow-style: none;
-    padding-top: 109px;
+    padding-top: 100px;
     padding-bottom: 45px;
+    padding-left: 6px;
 }
 
 .game-sidebar::-webkit-scrollbar {

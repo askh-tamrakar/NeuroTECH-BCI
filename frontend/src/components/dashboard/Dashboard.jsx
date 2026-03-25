@@ -150,10 +150,12 @@ export default function Dashboard() {
       <div className="header shrink-0" style={{ zIndex: 50 }}>
         <div className="header-inner">
           <div className="cursor-pointer m-0 p-0 flex-shrink-0 relative z-20 hidden lg:block" onClick={() => { setActiveSettingsSection('connectivity'); setCurrentPage('settings'); }} title="Back to Connectivity Settings">
-            <Brain3D />
+            <div className="pointer-events-none">
+              <Brain3D />
+            </div>
           </div>
 
-          <div className="headline flex flex-col flex-grow">
+          <div className="headline flex flex-col flex-grow cursor-pointer select-none" onClick={() => { setActiveSettingsSection('connectivity'); setCurrentPage('settings'); }}>
             <div className="headline-line main">
               NeuroTECH
               <br />
@@ -194,7 +196,16 @@ export default function Dashboard() {
           mobileMainView={mobileMainView}
           setMobileMainView={setMobileMainView}
         />
-        <div className="scrollbar-thin scrollbar-thumb-border hover:scrollbar-thumb-primary/50 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none'] flex-1" style={{ padding: '0px 0px', overflowY: 'auto' }}>
+        <div className="scrollbar-thin scrollbar-thumb-border hover:scrollbar-thumb-primary/50 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none'] flex-1 flex flex-col" style={{ padding: '0px 0px', overflowY: 'hidden' }}>
+          {/* Helper to determine if we need spacers (non-full-screen pages need them to clear fixed header/footer) */}
+          {(() => {
+            const FULL_SCREEN_PAGES = ['live', 'dino', 'rps', 'test', 'meditation'];
+            const showSpacers = !FULL_SCREEN_PAGES.includes(currentPage);
+
+            return (
+              <>
+                {showSpacers && <div className="h-[85px] shrink-0" />}
+
                 {currentPage === 'live' && <LiveDashboard wsData={lastMessage} wsConfig={lastConfig} wsEvent={lastEvent} sendMessage={sendMessage} wsUrl={status === 'connected' ? (currentUrl || defaultWsSource) : null} mobileMainView={mobileMainView} setMobileMainView={setMobileMainView} />}
                 {currentPage === 'dino' && <DinoView isConnected={!!lastMessage} wsEvent={lastEvent} isPaused={false} />}
                 {currentPage === 'eeg_dashboard' && <EEGDashboard isConnected={!!lastMessage} wsEvent={lastEvent} wsUrl={status === 'connected' ? (currentUrl || defaultWsSource) : null} />}
@@ -202,6 +213,11 @@ export default function Dashboard() {
                 {currentPage === 'lab' && <LabView wsData={lastMessage} wsEvent={lastEvent} config={lastConfig} wsUrl={status === 'connected' ? (currentUrl || defaultWsSource) : null} />}
                 {currentPage === 'settings' && <SettingsView latency={latency} localWs={localWs} setLocalWs={setLocalWs} ngrokWs={ngrokWs} setNgrokWs={setNgrokWs} activeSection={activeSettingsSection} onSectionChange={setActiveSettingsSection} connect={(url) => { updateDeepSettings('general.wsUrl', url); connect(url); }} />}
                 {currentPage === 'servo_claw' && <ServoClawView wsEvent={lastEvent} isConnected={!!lastMessage} />}
+
+                {showSpacers && <div className="h-[35px] shrink-0" />}
+              </>
+            );
+          })()}
         </div>
       </div>
 

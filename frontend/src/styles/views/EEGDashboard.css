@@ -4,17 +4,17 @@
   width: 100%;
   color: var(--text);
   font-family: 'Inter', sans-serif;
+  background: var(--bg);
   overflow: hidden;
 }
 
 .eeg-sidebar {
   width: 260px;
   background: var(--surface);
-  border-right: 1px solid rgba(255,255,255,0.08);
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
   display: flex;
   flex-direction: column;
   padding: 24px 0;
-  shrink: 0;
 }
 
 .eeg-sidebar-header {
@@ -24,7 +24,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  border-bottom: 1px solid rgba(255,255,255,0.05);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
   margin-bottom: 24px;
 }
 
@@ -54,7 +54,7 @@
 }
 
 .eeg-nav-item:hover {
-  background: rgba(255,255,255,0.03);
+  background: rgba(255, 255, 255, 0.03);
   color: var(--text);
 }
 
@@ -70,7 +70,7 @@
   padding: 40px;
   display: flex;
   flex-direction: column;
-  background: radial-gradient(circle at top right, rgba(255,255,255,0.02) 0%, transparent 60%);
+  background: radial-gradient(circle at top right, rgba(255, 255, 255, 0.02) 0%, transparent 60%);
   overflow-y: auto;
 }
 
@@ -83,7 +83,7 @@
   padding: 40px;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
   position: relative;
   overflow: hidden;
   min-height: 500px;
@@ -112,16 +112,16 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(255,255,255,0.05);
-  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .eeg-status-box {
-  background: rgba(0,0,0,0.2);
+  background: rgba(0, 0, 0, 0.2);
   border-radius: 20px;
   padding: 40px;
   text-align: center;
-  border: 1px solid rgba(255,255,255,0.05);
+  border: 1px solid rgba(255, 255, 255, 0.05);
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -146,7 +146,7 @@
   width: 100%;
   max-width: 400px;
   height: 8px;
-  background: rgba(255,255,255,0.1);
+  background: rgba(255, 255, 255, 0.1);
   border-radius: 4px;
   margin: 30px auto 0;
   overflow: hidden;
@@ -160,9 +160,17 @@
 }
 
 @keyframes pulseGlow {
-  0% { filter: drop-shadow(0 0 10px currentColor); }
-  50% { filter: drop-shadow(0 0 25px currentColor); }
-  100% { filter: drop-shadow(0 0 10px currentColor); }
+  0% {
+    filter: drop-shadow(0 0 10px currentColor);
+  }
+
+  50% {
+    filter: drop-shadow(0 0 25px currentColor);
+  }
+
+  100% {
+    filter: drop-shadow(0 0 10px currentColor);
+  }
 }
 
 .pulse-glow {
@@ -182,12 +190,14 @@
 .loader-circle {
   width: 50px;
   height: 50px;
-  border: 3px solid rgba(255,255,255,0.1);
+  border: 3px solid rgba(255, 255, 255, 0.1);
   border-top-color: var(--accent, #fff);
   border-radius: 50%;
   animation: spin 1s linear infinite;
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }

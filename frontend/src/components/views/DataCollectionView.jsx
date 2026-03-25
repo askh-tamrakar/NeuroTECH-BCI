@@ -1099,7 +1099,7 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
     }, [currentYDomain, activeChannelIndex, customLineColor, currentTheme]);
 
     return (
-        <div className="flex flex-col h-full bg-bg text-text animate-in fade-in duration-500 overflow-hidden gap-2">
+        <div className="flex flex-col flex-1 min-h-0 bg-bg text-text animate-in fade-in duration-500 overflow-hidden gap-2">
 
             {/* TOP ROW: SIDEBAR + CHART (50%) */}
             <div className="flex-1 flex min-h-0 px-2 pb-1 pt-2 gap-2">

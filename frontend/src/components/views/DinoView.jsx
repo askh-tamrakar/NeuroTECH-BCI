@@ -919,7 +919,7 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
                 </div>
 
                 {/* Left Sidebar (visually left via row-reverse) */}
-                <div className={`game-sidebar ${isSidebarCollapsed ? 'collapsed overflow-visible' : 'overflow-x-hidden overflow-y-auto'} pl-1.5`}>
+                <div className={`game-sidebar ${isSidebarCollapsed ? 'collapsed overflow-visible' : 'overflow-x-hidden overflow-y-auto'}`}>
                     {/* Collapsed Icons Only State */}
                     {isSidebarCollapsed && (
                         <div className="flex flex-col items-center gap-4 w-full animate-fade-in shrink-0 h-full">

@@ -14,7 +14,7 @@ export default function LabView(props) {
                 animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
                 exit={{ opacity: 0, scale: 1.02, filter: 'blur(10px)' }}
                 transition={{ duration: 0.3, ease: "easeOut" }}
-                className="h-full w-full"
+                className="flex-1 flex flex-col min-h-0 w-full"
             >
                 {activeTab === 'data' ? (
                     <DataCollectionView 
