@@ -11,6 +11,7 @@ import DataCollectionView from '../views/DataCollectionView'
 import MLTrainingView from '../views/MLTrainingView'
 import SettingsView from '../views/SettingsView'
 import ServoClawView from '../views/ServoClawView'
+import MeditationView from '../views/MeditationView'
 
 import '../../styles/App.css';
 import ScrollStack, { ScrollStackItem } from '../ui/ScrollStack';
@@ -109,6 +110,7 @@ export default function Dashboard() {
     { label: 'Data Collection', onClick: () => setCurrentPage('data_collection'), href: '#data_collection' },
     { label: 'Settings', onClick: () => setCurrentPage('settings'), href: '#settings' },
     { label: 'Servo Claw', onClick: () => setCurrentPage('servo_claw'), href: '#servo_claw' },
+    { label: 'Meditate', onClick: () => setCurrentPage('meditation'), href: '#meditation' },
     ...(isMobile ? [] : [{
       label: 'Theme',
       type: 'pill',
@@ -194,7 +196,7 @@ export default function Dashboard() {
 
           {/* Helper to determine if we need spacers (non-full-screen pages need them to clear fixed header/footer) */}
           {(() => {
-            const FULL_SCREEN_PAGES = ['live', 'dino', 'rps', 'test'];
+            const FULL_SCREEN_PAGES = ['live', 'dino', 'rps', 'test', 'meditation'];
             const showSpacers = !FULL_SCREEN_PAGES.includes(currentPage);
 
             return (
@@ -203,12 +205,13 @@ export default function Dashboard() {
 
                 {currentPage === 'live' && <LiveDashboard wsData={lastMessage} wsConfig={lastConfig} wsEvent={lastEvent} sendMessage={sendMessage} wsUrl={status === 'connected' ? (currentUrl || defaultWsSource) : null} mobileMainView={mobileMainView} setMobileMainView={setMobileMainView} />}
                 {currentPage === 'dino' && <DinoView isConnected={!!lastMessage} wsEvent={lastEvent} isPaused={false} />}
-                {currentPage === 'eeg_dashboard' && <EEGDashboard isConnected={!!lastMessage} wsEvent={lastEvent} />}
+                {currentPage === 'eeg_dashboard' && <EEGDashboard isConnected={!!lastMessage} wsEvent={lastEvent} wsUrl={status === 'connected' ? (currentUrl || defaultWsSource) : null} />}
                 {currentPage === 'rps' && <RPSGame wsEvent={lastEvent} />}
                 {currentPage === 'data_collection' && <DataCollectionView wsData={lastMessage} wsEvent={lastEvent} config={lastConfig} wsUrl={status === 'connected' ? (currentUrl || defaultWsSource) : null} />}
                 {currentPage === 'ml_training' && <MLTrainingView />}
                 {currentPage === 'settings' && <SettingsView latency={latency} localWs={localWs} setLocalWs={setLocalWs} ngrokWs={ngrokWs} setNgrokWs={setNgrokWs} connect={connect} />}
                 {currentPage === 'servo_claw' && <ServoClawView wsEvent={lastEvent} isConnected={!!lastMessage} />}
+                {currentPage === 'meditation' && <MeditationView result={lastMessage} isConnected={!!lastMessage} />}
 
                 {showSpacers && <div className="h-[35px] shrink-0" />}
               </>

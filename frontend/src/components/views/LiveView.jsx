@@ -70,26 +70,29 @@ export default function LiveView({ wsData, wsEvent, config, isPaused, wsUrl, rec
 
     const handleMessage = (e) => {
       const { type, payload } = e.data;
-      if (type === 'UI_UPDATE') {
-        const { lastSample } = payload;
-        if (lastSample && lastSample.channels && recordState?.recordedDataRef) {
-          const recordPoint = { timestamp: lastSample.timestamp, channels: {} };
-          let hasData = false;
-          recordState.recordingChannels.forEach(chNum => {
-            const chObj = lastSample.channels[chNum] || lastSample.channels[`ch${chNum}`] || lastSample.channels[String(chNum)];
-            const val = typeof chObj === 'number' ? chObj : (chObj?.value);
+      if (type === 'RECORD_BATCH') {
+        const { samples } = payload;
+        if (samples && recordState?.recordedDataRef) {
+          samples.forEach(sample => {
+            const recordPoint = { timestamp: sample.timestamp, channels: {} };
+            let hasData = false;
+            recordState.recordingChannels.forEach(chNum => {
+              const chObj = sample.channels[chNum] || sample.channels[`ch${chNum}`] || sample.channels[String(chNum)];
+              const val = typeof chObj === 'number' ? chObj : (chObj?.value);
 
-            if (val !== undefined) {
-              recordPoint.channels[`ch${chNum}`] = val;
-              hasData = true;
+              if (val !== undefined) {
+                recordPoint.channels[`ch${chNum}`] = val;
+                hasData = true;
+              }
+            });
+            if (hasData) {
+              recordState.recordedDataRef.current.push(recordPoint);
             }
           });
-          if (hasData) {
-            recordState.recordedDataRef.current.push(recordPoint);
-            // Cap recording point memory to prevent extreme memory bloat (e.g. ~10 mins per channel at high frequency)
-            if (recordState.recordedDataRef.current.length > 50000) {
-              recordState.recordedDataRef.current = recordState.recordedDataRef.current.slice(-50000);
-            }
+          
+          // Cap recording point memory to prevent extreme memory bloat (~20 mins at 1000Hz = 1.2M points)
+          if (recordState.recordedDataRef.current.length > 1500000) {
+            recordState.recordedDataRef.current = recordState.recordedDataRef.current.slice(-1500000);
           }
         }
       }

@@ -165,39 +165,35 @@ void setup() {
   Serial.println("\n=== BCI UNO R4 (STABLE SERVO PWM, 1KHZ, SSVEP) ===");
 }
 
-// ===== LED ANIMATION =====
-void runSSVEPAnimation() {
-  static unsigned long lastUpdate[6] = {0, 0, 0, 0, 0, 0};
-  static bool ledState[6] = {false, false, false, false, false, false};
-
-  const int ledPins[6] = {LED_RED_1, LED_RED_2, LED_YELLOW_1, LED_YELLOW_2, LED_GREEN_1, LED_GREEN_2};
+// ===== LED STATUS =====
+void updateLEDs() {
+  static bool lastConnected = !isConnected;
+  static bool lastAcquiring = !isAcquiring;
   
-  // Half-period in microseconds: 500000 / frequency
-  // 8Hz, 9Hz, 12Hz, 14.4Hz, 16Hz, 18Hz
-  const unsigned long halfPeriod[6] = {
-    62500, // 500000 / 8.0
-    55555, // 500000 / 9.0
-    41666, // 500000 / 12.0
-    34722, // 500000 / 14.4
-    31250, // 500000 / 16.0
-    27777  // 500000 / 18.0
-  };
-
-  unsigned long currentMicros = micros();
-
-  for (int i = 0; i < 6; i++) {
-    if (currentMicros - lastUpdate[i] >= halfPeriod[i]) {
-      lastUpdate[i] = currentMicros;
-      ledState[i] = !ledState[i];
-      digitalWrite(ledPins[i], ledState[i] ? HIGH : LOW);
+  if (isConnected != lastConnected || isAcquiring != lastAcquiring) {
+    lastConnected = isConnected;
+    lastAcquiring = isAcquiring;
+    
+    if (!isConnected) {
+      digitalWrite(LED_RED_1, HIGH); digitalWrite(LED_RED_2, HIGH);
+      digitalWrite(LED_YELLOW_1, LOW); digitalWrite(LED_YELLOW_2, LOW);
+      digitalWrite(LED_GREEN_1, LOW); digitalWrite(LED_GREEN_2, LOW);
+    } else if (!isAcquiring) {
+      digitalWrite(LED_RED_1, LOW); digitalWrite(LED_RED_2, LOW);
+      digitalWrite(LED_YELLOW_1, HIGH); digitalWrite(LED_YELLOW_2, HIGH);
+      digitalWrite(LED_GREEN_1, LOW); digitalWrite(LED_GREEN_2, LOW);
+    } else {
+      digitalWrite(LED_RED_1, LOW); digitalWrite(LED_RED_2, LOW);
+      digitalWrite(LED_YELLOW_1, LOW); digitalWrite(LED_YELLOW_2, LOW);
+      digitalWrite(LED_GREEN_1, HIGH); digitalWrite(LED_GREEN_2, HIGH);
     }
   }
 }
 
 // ===== MAIN LOOP =====
 void loop() {
-  // 1. LED SSVEP Flickering
-  runSSVEPAnimation();
+  // 1. LED Status Update
+  updateLEDs();
 
   // 2. Data Sending
   if (timerStatus && bufferReady) {

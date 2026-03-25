@@ -16,6 +16,7 @@ from ..modules.music_control import MusicControlModule
 from ..modules.focus_monitor import FocusMonitorModule
 from ..modules.meditation_trainer import MeditationTrainerModule
 from ..modules.stress_monitor import StressMonitorModule
+from ..modules.bubble_game import BubbleGameModule
 
 log = logging.getLogger(__name__)
 
@@ -32,7 +33,7 @@ class ModeManager:
         self.app_module = None
         
         # Stimulus settings (Visual)
-        self.ssvep_freqs = [8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0]
+        self.ssvep_freqs = [6.59, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0]
 
     def set_preset_and_view(self, preset_name, view_name):
         self.preset = preset_name
@@ -59,6 +60,8 @@ class ModeManager:
                 self.app_module = MeditationTrainerModule()
             elif view_name == "stress":
                 self.app_module = StressMonitorModule()
+            elif view_name == "bubble":
+                self.app_module = BubbleGameModule()
             else:
                 self.app_module = None
                 log.warning(f"Unknown view {view_name} for frontal mode.")

@@ -1,7 +1,7 @@
 {
   "EEG": {
     "target_freqs": [
-      8,
+      6.59,
       9,
       12,
       14.4,
@@ -11,14 +11,15 @@
     "targets": [
       {
         "id": 0,
-        "freq": 8,
-        "label": "ww",
-        "mappedKey": "W",
+        "freq": 6.59,
+        "label": "wwwww",
+        "mappedKey": "Space",
         "mappedMouse": "None",
         "enabled": true,
-        "controlType": "Keyboard",
+        "controlType": "None",
         "divisor": 18,
-        "source": "dynamic"
+        "source": "dynamic",
+        "isManual": true
       },
       {
         "id": 1,
@@ -26,10 +27,11 @@
         "label": "Target 2ss",
         "mappedKey": "A",
         "mappedMouse": "None",
-        "enabled": true,
-        "controlType": "Keyboard",
+        "enabled": false,
+        "controlType": "None",
         "divisor": 16,
-        "source": "dynamic"
+        "source": "dynamic",
+        "isManual": false
       },
       {
         "id": 2,
@@ -37,10 +39,11 @@
         "label": "Target 3",
         "mappedKey": "S",
         "mappedMouse": "None",
-        "enabled": true,
-        "controlType": "Keyboard",
+        "enabled": false,
+        "controlType": "None",
         "divisor": 12,
-        "source": "dynamic"
+        "source": "dynamic",
+        "isManual": false
       },
       {
         "id": 3,
@@ -48,10 +51,11 @@
         "label": "Target 4",
         "mappedKey": "D",
         "mappedMouse": "None",
-        "enabled": true,
-        "controlType": "Keyboard",
+        "enabled": false,
+        "controlType": "None",
         "divisor": 10,
-        "source": "dynamic"
+        "source": "dynamic",
+        "isManual": false
       },
       {
         "id": 4,
@@ -59,10 +63,11 @@
         "label": "Target 5",
         "mappedKey": "Space",
         "mappedMouse": "None",
-        "enabled": true,
-        "controlType": "Keyboard",
+        "enabled": false,
+        "controlType": "None",
         "divisor": 9,
-        "source": "dynamic"
+        "source": "dynamic",
+        "isManual": false
       },
       {
         "id": 5,
@@ -70,10 +75,11 @@
         "label": "Target 6",
         "mappedKey": "Escape",
         "mappedMouse": "None",
-        "enabled": true,
-        "controlType": "Keyboard",
+        "enabled": false,
+        "controlType": "None",
         "divisor": 8,
-        "source": "dynamic"
+        "source": "dynamic",
+        "isManual": false
       }
     ],
     "rest_threshold": 0.6,
