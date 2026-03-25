@@ -32,7 +32,7 @@ class ModeManager:
         self.app_module = None
         
         # Stimulus settings (Visual)
-        self.ssvep_freqs = [8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0]
+        self.ssvep_freqs = [6.59, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0]
 
     def set_preset_and_view(self, preset_name, view_name):
         self.preset = preset_name

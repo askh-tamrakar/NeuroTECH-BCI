@@ -203,7 +203,7 @@ export default function Dashboard() {
 
                 {currentPage === 'live' && <LiveDashboard wsData={lastMessage} wsConfig={lastConfig} wsEvent={lastEvent} sendMessage={sendMessage} wsUrl={status === 'connected' ? (currentUrl || defaultWsSource) : null} mobileMainView={mobileMainView} setMobileMainView={setMobileMainView} />}
                 {currentPage === 'dino' && <DinoView isConnected={!!lastMessage} wsEvent={lastEvent} isPaused={false} />}
-                {currentPage === 'eeg_dashboard' && <EEGDashboard isConnected={!!lastMessage} wsEvent={lastEvent} />}
+                {currentPage === 'eeg_dashboard' && <EEGDashboard isConnected={!!lastMessage} wsEvent={lastEvent} wsUrl={status === 'connected' ? (currentUrl || defaultWsSource) : null} />}
                 {currentPage === 'rps' && <RPSGame wsEvent={lastEvent} />}
                 {currentPage === 'data_collection' && <DataCollectionView wsData={lastMessage} wsEvent={lastEvent} config={lastConfig} wsUrl={status === 'connected' ? (currentUrl || defaultWsSource) : null} />}
                 {currentPage === 'ml_training' && <MLTrainingView />}

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Activity, Music, Brain, Wind, AlertTriangle, Eye } from 'lucide-react';
+import { Activity, Music, Brain, Wind, AlertTriangle, Eye, Radio } from 'lucide-react';
 import '../../styles/views/EEGDashboard.css';
 
 import VisualEEGView from './VisualEEGView';
@@ -7,8 +7,9 @@ import MusicView from './MusicView';
 import FocusView from './FocusView';
 import MeditationView from './MeditationView';
 import StressView from './StressView';
+import FFTView from './FFTView';
 
-const EEGDashboard = ({ wsEvent, isConnected }) => {
+const EEGDashboard = ({ wsEvent, isConnected, wsUrl }) => {
   const [preset, setPreset] = useState("frontal_fp1");
   const [currentView, setCurrentView] = useState("music");
   const [eegResult, setEegResult] = useState(null);
@@ -39,6 +40,7 @@ const EEGDashboard = ({ wsEvent, isConnected }) => {
       case "focus": return <FocusView result={eegResult} />;
       case "meditation": return <MeditationView result={eegResult} />;
       case "stress": return <StressView result={eegResult} />;
+      case "fft": return <FFTView wsUrl={wsUrl} />;
       default: return <div className="waiting-container">Select an application...</div>;
     }
   };
@@ -100,6 +102,12 @@ const EEGDashboard = ({ wsEvent, isConnected }) => {
               onClick={() => setCurrentView('stress')}
             >
               <AlertTriangle size={18} /> Stress Monitor
+            </div>
+            <div 
+              className={`eeg-nav-item ${currentView === 'fft' ? 'active' : ''}`}
+              onClick={() => setCurrentView('fft')}
+            >
+              <Radio size={18} /> FFT Spectrum
             </div>
           </div>
         )}

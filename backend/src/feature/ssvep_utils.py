@@ -3,7 +3,7 @@ from scipy.signal import butter, detrend, filtfilt, welch
 from sklearn.cross_decomposition import CCA
 
 
-DEFAULT_TARGET_FREQS = [8.0, 9.0, 12.0, 14.4, 16.0, 18.0]
+DEFAULT_TARGET_FREQS = [6.59, 9.0, 12.0, 14.4, 16.0, 18.0]
 FILTER_BANKS = [(6, 60), (12, 60), (18, 60), (24, 60)]
 FILTER_WEIGHTS = [1.0, 0.7, 0.4, 0.2]
 

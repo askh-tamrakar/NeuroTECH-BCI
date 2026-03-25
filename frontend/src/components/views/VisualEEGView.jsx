@@ -13,7 +13,10 @@ const TARGET_DIVISORS = [18, 16, 12, 10, 9, 8];
 function buildDynamicTargets(refreshRate, previousConfigs = []) {
     return TARGET_DIVISORS.map((divisor, index) => {
         const previous = previousConfigs[index] || {};
-        const frequency = Number((refreshRate / divisor).toFixed(2));
+        const isManual = previous.isManual === true;
+        const autoFreq = Number((refreshRate / divisor).toFixed(2));
+        const frequency = isManual ? (previous.freq ?? autoFreq) : autoFreq;
+        
         return {
             id: previous.id ?? index,
             freq: frequency,
@@ -24,6 +27,7 @@ function buildDynamicTargets(refreshRate, previousConfigs = []) {
             controlType: previous.controlType || 'Keyboard',
             divisor,
             source: 'dynamic',
+            isManual: isManual
         };
     });
 }
@@ -546,9 +550,18 @@ export default function SSVEPView({ isConnected, wsEvent }) {
                                                     <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse shadow-[0_0_5px_currentColor] shrink-0 mx-1" />
                                                 ) : <span className="w-1.5 h-1.5 shrink-0 mx-1" />}
 
-                                                <div className="flex items-center gap-2 shrink-0 rounded-lg border border-primary/20 bg-primary/5 px-2 py-1">
-                                                    <span className="text-[11px] font-bold uppercase tracking-wider text-primary/70">{refreshRate}/{cfg.divisor}</span>
-                                                    <span className="text-sm font-black text-primary">{cfg.freq}Hz</span>
+                                                <div className="flex items-center gap-1 shrink-0 rounded-lg border border-primary/20 bg-primary/5 px-2 py-1">
+                                                    <span className="text-[11px] font-bold uppercase tracking-wider text-primary/70" title="Divisor">
+                                                        {refreshRate}/{cfg.divisor}
+                                                    </span>
+                                                    <input
+                                                        type="number"
+                                                        step="0.01"
+                                                        className="w-[4.0rem] bg-transparent text-sm font-black text-primary text-right outline-none focus:ring-1 focus:ring-primary rounded transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                                        value={cfg.freq}
+                                                        onChange={(e) => updateConfig(cfg.id, { freq: parseFloat(e.target.value) || 0, isManual: true })}
+                                                    />
+                                                    <span className="text-sm font-black text-primary">Hz</span>
                                                 </div>
                                             </div>
 

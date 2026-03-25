@@ -44,7 +44,7 @@ def fbcca(eeg_data, freqs, sr=1000, num_harmonics=3, num_bands=3):
     nyq = sr / 2.0
     
     for band_idx in range(min(num_bands, len(weights))):
-        lowcut = 8.0 * (band_idx + 1)
+        lowcut = 6.0 * (band_idx + 1)
         highcut = 88.0
         
         if lowcut >= highcut or lowcut >= nyq:
