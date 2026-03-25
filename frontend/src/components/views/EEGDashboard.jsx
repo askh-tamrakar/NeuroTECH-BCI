@@ -7,6 +7,7 @@ import MusicView from './MusicView';
 import FocusView from './FocusView';
 import MeditationView from './MeditationView';
 import StressView from './StressView';
+import BubbleGameView from './BubbleGameView';
 
 const EEGDashboard = ({ wsEvent, isConnected }) => {
   const [preset, setPreset] = useState("frontal_fp1");
@@ -39,6 +40,7 @@ const EEGDashboard = ({ wsEvent, isConnected }) => {
       case "focus": return <FocusView result={eegResult} />;
       case "meditation": return <MeditationView result={eegResult} />;
       case "stress": return <StressView result={eegResult} />;
+      case "bubble": return <BubbleGameView result={eegResult} isConnected={isConnected} />;
       default: return <div className="waiting-container">Select an application...</div>;
     }
   };
@@ -101,13 +103,19 @@ const EEGDashboard = ({ wsEvent, isConnected }) => {
             >
               <AlertTriangle size={18} /> Stress Monitor
             </div>
+            <div 
+              className={`eeg-nav-item ${currentView === 'bubble' ? 'active' : ''}`}
+              onClick={() => setCurrentView('bubble')}
+            >
+              <Activity size={18} /> Bubble Game
+            </div>
           </div>
         )}
       </div>
 
       {/* Main Content Area */}
-      <div className="eeg-main-content" style={preset.includes("visual") ? {padding: 0, background: '#000'} : {}}>
-        {preset.includes("visual") ? (
+      <div className="eeg-main-content" style={(preset.includes("visual") || currentView === 'bubble') ? {padding: 0, background: preset.includes("visual") ? '#000' : 'transparent'} : {}}>
+        {preset.includes("visual") || currentView === 'bubble' ? (
           renderView()
         ) : (
           <div className="eeg-glass-card">

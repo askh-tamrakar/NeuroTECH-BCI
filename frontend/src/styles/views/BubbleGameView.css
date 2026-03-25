@@ -1,0 +1,412 @@
+.bubble-app-container {
+  --ocean-deep: #010a14;
+  --ocean-mid: #041628;
+  --glow-cyan: #00f5ff;
+  --glow-teal: #00c8b4;
+  --glow-violet: #7b2fff;
+  --glow-green: #00ff9d;
+  --glow-amber: #ffb300;
+  --glow-pink: #ff3d9a;
+  --signal-bar: #00f5ff;
+  --text-mono: 'Share Tech Mono', monospace;
+  --text-display: 'Orbitron', sans-serif;
+
+  position: relative;
+  background: var(--ocean-deep);
+  font-family: var(--text-mono);
+  color: var(--glow-cyan);
+  overflow: hidden;
+  height: 100%;
+  width: 100%;
+  cursor: none;
+  border-radius: inherit;
+}
+
+.bubble-app-container *, .bubble-app-container *::before, .bubble-app-container *::after { 
+  box-sizing: border-box; 
+  margin: 0; 
+  padding: 0; 
+}
+
+
+/* ── CANVAS ─────────────────────────────────── */
+.bubble-app-container #gameCanvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* ── CUSTOM CURSOR ───────────────────────────── */
+.bubble-app-container #cursor {
+  position: absolute;
+  pointer-events: none;
+  z-index: 100;
+  transform: translate(-50%, -50%);
+  transition: width .1s, height .1s;
+}
+
+/* ── HUD PANELS ──────────────────────────────── */
+.bubble-app-container .hud {
+  position: absolute;
+  z-index: 50;
+  pointer-events: none;
+}
+
+/* Top-left: score */
+.bubble-app-container #hud-score {
+  top: 22px; left: 24px;
+}
+.bubble-app-container #hud-score .label {
+  font-family: var(--text-display);
+  font-size: 10px;
+  letter-spacing: 4px;
+  color: var(--glow-teal);
+  opacity: .7;
+}
+.bubble-app-container #hud-score .value {
+  font-family: var(--text-display);
+  font-size: 38px;
+  font-weight: 900;
+  line-height: 1;
+  color: #fff;
+  text-shadow: 0 0 18px var(--glow-cyan), 0 0 40px var(--glow-cyan);
+}
+
+/* Top-right: level + combo */
+.bubble-app-container #hud-level {
+  top: 22px; right: 24px;
+  text-align: right;
+}
+.bubble-app-container #hud-level .label {
+  font-family: var(--text-display);
+  font-size: 10px;
+  letter-spacing: 4px;
+  color: var(--glow-teal);
+  opacity: .7;
+}
+.bubble-app-container #hud-level .value {
+  font-family: var(--text-display);
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--glow-green);
+  text-shadow: 0 0 14px var(--glow-green);
+}
+.bubble-app-container #combo-display {
+  font-family: var(--text-display);
+  font-size: 13px;
+  color: var(--glow-amber);
+  text-shadow: 0 0 10px var(--glow-amber);
+  min-height: 20px;
+  margin-top: 4px;
+}
+
+/* Bottom: EEG signal panel */
+.bubble-app-container #hud-eeg {
+  bottom: 24px; left: 50%;
+  transform: translateX(-50%);
+  width: min(600px, 92%);
+  pointer-events: all;
+}
+
+.bubble-app-container .eeg-panel {
+  background: rgba(4,22,40,.82);
+  border: 1px solid rgba(0,245,255,.2);
+  border-radius: 12px;
+  padding: 14px 20px 12px;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 0 40px rgba(0,245,255,.07), inset 0 0 30px rgba(0,245,255,.03);
+}
+
+.bubble-app-container .eeg-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.bubble-app-container .eeg-title {
+  font-family: var(--text-display);
+  font-size: 10px;
+  letter-spacing: 3px;
+  color: var(--glow-teal);
+}
+
+.bubble-app-container .connection-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  letter-spacing: 2px;
+  cursor: pointer;
+  pointer-events: all;
+  padding: 4px 10px;
+  border: 1px solid rgba(0,245,255,.3);
+  border-radius: 20px;
+  transition: all .2s;
+  user-select: none;
+}
+.bubble-app-container .connection-indicator:hover {
+  border-color: var(--glow-cyan);
+  background: rgba(0,245,255,.08);
+}
+.bubble-app-container .dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: #666;
+  transition: background .3s, box-shadow .3s;
+}
+.bubble-app-container .dot.connected { background: var(--glow-green); box-shadow: 0 0 8px var(--glow-green); }
+.bubble-app-container .dot.simulating { background: var(--glow-amber); box-shadow: 0 0 8px var(--glow-amber); animation: bubbleblink 1s infinite; }
+.bubble-app-container .dot.error { background: var(--glow-pink); box-shadow: 0 0 8px var(--glow-pink); }
+@keyframes bubbleblink { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+/* Signal bar */
+.bubble-app-container .signal-track {
+  position: relative;
+  height: 8px;
+  background: rgba(0,245,255,.08);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+.bubble-app-container .signal-fill {
+  height: 100%;
+  border-radius: 4px;
+  width: 0%;
+  transition: width .12s ease-out;
+  background: linear-gradient(90deg, var(--glow-teal), var(--glow-cyan));
+  box-shadow: 0 0 12px var(--glow-cyan);
+}
+.bubble-app-container .signal-fill.high {
+  background: linear-gradient(90deg, var(--glow-green), #00ff9d);
+  box-shadow: 0 0 14px var(--glow-green);
+}
+.bubble-app-container .signal-fill.low {
+  background: linear-gradient(90deg, var(--glow-violet), #9b6fff);
+  box-shadow: 0 0 12px var(--glow-violet);
+}
+
+/* Waveform canvas */
+.bubble-app-container #waveCanvas {
+  width: 100%;
+  height: 44px;
+  display: block;
+  border-radius: 6px;
+  background: rgba(0,0,0,.3);
+  margin-bottom: 8px;
+}
+
+.bubble-app-container .signal-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: rgba(0,245,255,.5);
+  letter-spacing: 1px;
+}
+.bubble-app-container .signal-value {
+  color: var(--glow-cyan);
+  font-weight: bold;
+}
+
+/* WS Config panel */
+.bubble-app-container #ws-config {
+  display: none;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(0,245,255,.1);
+  gap: 8px;
+  flex-direction: column;
+}
+.bubble-app-container #ws-config.open { display: flex; }
+.bubble-app-container #ws-config label { font-size: 10px; letter-spacing: 2px; color: var(--glow-teal); }
+.bubble-app-container #ws-config input {
+  background: rgba(0,0,0,.4);
+  border: 1px solid rgba(0,245,255,.25);
+  border-radius: 6px;
+  color: var(--glow-cyan);
+  font-family: var(--text-mono);
+  font-size: 12px;
+  padding: 6px 10px;
+  outline: none;
+  width: 100%;
+}
+.bubble-app-container #ws-config input:focus { border-color: var(--glow-cyan); }
+.bubble-app-container .config-row { display: flex; gap: 8px; }
+.bubble-app-container .btn-small {
+  background: rgba(0,245,255,.1);
+  border: 1px solid rgba(0,245,255,.3);
+  border-radius: 6px;
+  color: var(--glow-cyan);
+  font-family: var(--text-mono);
+  font-size: 11px;
+  letter-spacing: 2px;
+  padding: 6px 14px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all .2s;
+}
+.bubble-app-container .btn-small:hover { background: rgba(0,245,255,.2); border-color: var(--glow-cyan); }
+.bubble-app-container .btn-sim {
+  background: rgba(255,179,0,.1);
+  border-color: rgba(255,179,0,.3);
+  color: var(--glow-amber);
+}
+.bubble-app-container .btn-sim:hover { background: rgba(255,179,0,.2); border-color: var(--glow-amber); }
+
+/* Channel toggles */
+.bubble-app-container .channel-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+.bubble-app-container .ch-tag {
+  font-size: 10px;
+  letter-spacing: 2px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  border: 1px solid rgba(0,245,255,.2);
+  cursor: pointer;
+  transition: all .15s;
+  user-select: none;
+}
+.bubble-app-container .ch-tag.active {
+  border-color: var(--glow-cyan);
+  background: rgba(0,245,255,.12);
+  color: #fff;
+}
+
+/* Overlay screens */
+.bubble-app-container .overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(1,10,20,.93);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+.bubble-app-container .overlay.hidden { display: none; }
+
+.bubble-app-container .overlay-title {
+  font-family: var(--text-display);
+  font-size: clamp(32px, 6vw, 72px);
+  font-weight: 900;
+  letter-spacing: 6px;
+  color: #fff;
+  text-shadow: 0 0 30px var(--glow-cyan), 0 0 70px var(--glow-cyan);
+  margin-bottom: 10px;
+  text-align: center;
+}
+.bubble-app-container .overlay-sub {
+  font-size: 13px;
+  letter-spacing: 3px;
+  color: var(--glow-teal);
+  margin-bottom: 40px;
+  text-align: center;
+  opacity: .8;
+}
+
+.bubble-app-container .big-btn {
+  font-family: var(--text-display);
+  font-size: 13px;
+  letter-spacing: 4px;
+  padding: 16px 44px;
+  border: 1px solid var(--glow-cyan);
+  border-radius: 50px;
+  color: #fff;
+  background: rgba(0,245,255,.08);
+  cursor: pointer;
+  transition: all .2s;
+  margin: 6px;
+  box-shadow: 0 0 20px rgba(0,245,255,.15);
+}
+.bubble-app-container .big-btn:hover {
+  background: rgba(0,245,255,.18);
+  box-shadow: 0 0 30px rgba(0,245,255,.35), inset 0 0 20px rgba(0,245,255,.08);
+  transform: translateY(-2px);
+}
+
+.bubble-app-container .stat-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-bottom: 36px;
+  width: min(460px, 90vw);
+}
+.bubble-app-container .stat-cell {
+  background: rgba(0,245,255,.04);
+  border: 1px solid rgba(0,245,255,.15);
+  border-radius: 8px;
+  padding: 14px 10px;
+  text-align: center;
+}
+.bubble-app-container .stat-cell .s-label {
+  font-size: 9px;
+  letter-spacing: 3px;
+  color: var(--glow-teal);
+  opacity: .7;
+  margin-bottom: 6px;
+}
+.bubble-app-container .stat-cell .s-val {
+  font-family: var(--text-display);
+  font-size: 22px;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 0 12px var(--glow-cyan);
+}
+
+/* Floating score pops */
+.bubble-app-container .pop-text {
+  position: absolute;
+  pointer-events: none;
+  font-family: var(--text-display);
+  font-weight: 700;
+  font-size: 18px;
+  z-index: 80;
+  animation: floatUp .9s ease-out forwards;
+}
+@keyframes floatUp {
+  0% { opacity: 1; transform: translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateY(-70px) scale(1.4); }
+}
+
+/* lives */
+.bubble-app-container #hud-lives {
+  top: 22px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.bubble-app-container .life-dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: var(--glow-pink);
+  box-shadow: 0 0 10px var(--glow-pink);
+  transition: opacity .3s;
+}
+.bubble-app-container .life-dot.dead { opacity: .12; box-shadow: none; }
+
+/* scan line overlay */
+.bubble-app-container::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0,0,0,.07) 2px,
+    rgba(0,0,0,.07) 4px
+  );
+  pointer-events: none;
+  z-index: 300;
+}
