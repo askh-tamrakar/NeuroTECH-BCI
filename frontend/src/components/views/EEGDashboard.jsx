@@ -114,7 +114,11 @@ const EEGDashboard = ({ wsEvent, isConnected }) => {
       </div>
 
       {/* Main Content Area */}
-      <div className="eeg-main-content" style={(preset.includes("visual") || currentView === 'bubble') ? {padding: 0, background: preset.includes("visual") ? '#000' : 'transparent'} : {}}>
+      <div className="eeg-main-content" style={
+        (preset.includes("visual") || currentView === 'bubble')
+          ? {padding: 0, background: preset.includes("visual") ? '#000' : 'transparent', overflow: 'hidden', position: 'relative', height: '100%'}
+          : {overflowY: 'auto', overflowX: 'hidden'}
+      }>
         {preset.includes("visual") || currentView === 'bubble' ? (
           renderView()
         ) : (
