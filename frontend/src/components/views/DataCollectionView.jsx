@@ -29,6 +29,8 @@ const SENSOR_LABELS = {
     EEG: ['Target 1', 'Target 2', 'Target 3', 'Target 4', 'Target 5', 'Target 6', 'Rest'],
 };
 
+import AutoCalibrationWizard from '../calibration/AutoCalibrationWizard';
+
 /**
  * DataCollectionView
  * The main container for the BCI data collection experience.
@@ -43,6 +45,7 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
     const [mode, setMode] = useState('collection'); // 'collection' | 'test'
     const [config, setConfig] = useState(initialConfig || {});
     const [isCalibrating, setIsCalibrating] = useState(false);
+    const [showWizard, setShowWizard] = useState(false);
     const [runInProgress, setRunInProgress] = useState(false);
     const [windowProgress, setWindowProgress] = useState({});
 
@@ -492,10 +495,11 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
         windowWorkerRef.current?.postMessage({ type: 'START_WINDOWING' });
     }, []);
 
-    const handleStartCalibration = useCallback(async () => {
+    const handleStartCalibration = useCallback(async (overriddenLabel) => {
         setIsCalibrating(true);
         soundHandler.playRPSStart(); // Sounds similar to a start/alert
-        CalibrationApi.startCalibration(activeSensor, mode, targetLabel, windowDuration, sessionName)
+        const label = overriddenLabel || targetLabel;
+        CalibrationApi.startCalibration(activeSensor, mode, label, windowDuration, sessionName)
             .catch(e => console.error("Start Calib API failed", e));
 
         if (mode === 'collection' || mode === 'test') {
@@ -1101,6 +1105,7 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
     return (
         <div className="flex flex-col flex-1 min-h-0 bg-bg text-text animate-in fade-in duration-500 overflow-hidden gap-2">
 
+
             {/* TOP ROW: SIDEBAR + CHART (50%) */}
             <div className="flex-1 flex min-h-0 px-2 pb-1 pt-2 gap-2">
                 {/* SIDEBAR CARD */}
@@ -1126,28 +1131,43 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                     <div className="flex-grow overflow-y-auto p-3 space-y-4 no-scrollbar">
 
                         {/* 1. SENSOR & MODE */}
-                        <div className="space-y-2">
-                            <label className="text-xs font-bold text-muted uppercase tracking-wider flex items-center gap-1.5"><Activity size={14} /> Sensor & Mode</label>
-                            <div className="flex bg-bg p-1 rounded-lg border border-border overflow-x-auto no-scrollbar">
-                                {configuredSensors.map(s => (
+                        <div className="space-y-3">
+                            <label className="text-[16px] font-bold text-muted uppercase tracking-wider flex items-center gap-1.5"><Activity size={22} /> Sensor & Mode</label>
+
+                            {/* Pill Toggle for Sensors */}
+                            {configuredSensors.length > 1 ? (
+                                <div className="flex items-center justify-center gap-3 select-none">
+                                    <span className={`text-[24px] font-black tracking-tight transition-colors ${activeSensor === configuredSensors[0] ? 'text-primary' : 'text-muted'}`}>
+                                        {configuredSensors[0]}
+                                    </span>
+
                                     <button
-                                        key={s}
-                                        onClick={() => handleSensorChange(s)}
-                                        className={`flex-1 min-w-[60px] py-1 rounded font-bold text-xs transition-all ${activeSensor === s ? 'bg-primary text-primary-contrast shadow-sm' : 'text-muted hover:text-text'
-                                            }`}
+                                        onClick={() => {
+                                            const idx = configuredSensors.indexOf(activeSensor);
+                                            handleSensorChange(configuredSensors[(idx + 1) % configuredSensors.length]);
+                                        }}
+                                        className={`w-14 h-7 rounded-full relative transition-colors border-2 border-border bg-bg`}
                                     >
-                                        {s}
+                                        <div className={`absolute top-0.5 bottom-0.5 w-5 rounded-full bg-text shadow transition-all ${configuredSensors.indexOf(activeSensor) > 0 ? 'left-[calc(100%-22px)]' : 'left-0.5'}`} />
                                     </button>
-                                ))}
-                            </div>
-                            <div className="grid gap-1 grid-cols-2">
-                                {['collection', 'test'].map(m => (
+
+                                    <span className={`text-[24px] font-black tracking-tight transition-colors ${activeSensor !== configuredSensors[0] ? 'text-primary' : 'text-muted'}`}>
+                                        {activeSensor !== configuredSensors[0] ? activeSensor : configuredSensors[configuredSensors.length - 1]}
+                                    </span>
+                                </div>
+                            ) : (
+                                <span className="text-xs font-black text-primary uppercase tracking-widest">{configuredSensors[0]}</span>
+                            )}
+
+                            {/* Segmented Control for Modes (Image 1 Style) */}
+                            <div className="flex p-1 bg-bg border-2 border-accent/30 rounded-[50px] overflow-hidden shadow-inner">
+                                {['collection', 'recorded', 'test'].map(m => (
                                     <button
                                         key={m}
                                         onClick={() => setMode(m)}
-                                        className={`px-1 py-1 rounded font-bold text-xs transition-all uppercase tracking-wider border border-transparent ${mode === m
-                                            ? 'bg-accent text-primary-contrast shadow-sm border-accent/20'
-                                            : 'bg-bg text-muted hover:text-text hover:border-border'
+                                        className={`flex-1 py-1.5 rounded-[50px] font-black text-[12px] px-[4px] transition-all uppercase tracking-widest ${mode === m
+                                            ? 'bg-accent text-primary-contrast shadow-md'
+                                            : 'text-muted hover:text-text hover:bg-white/5'
                                             }`}
                                     >
                                         {m}
@@ -1155,33 +1175,11 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                                 ))}
                             </div>
                         </div>
+                        <div className="h-[2px] w-full bg-border/95"></div>
 
-                        {/* 2. CHANNELS (If Multi) */}
-                        {matchingChannels.length > 1 && (
-                            <div className="space-y-2 animate-in slide-in-from-left-2 duration-300">
-                                <label className="text-xs font-bold text-muted uppercase tracking-wider flex items-center gap-1.5"><Radio size={14} /> Active Channel</label>
-                                <div className="flex flex-wrap gap-2 overflow-hidden">
-                                    {matchingChannels.map(ch => (
-                                        <button
-                                            key={ch.id}
-                                            onClick={() => setActiveChannelIndex(ch.index)}
-                                            className={`px-2 py-1 rounded font-bold text-xs transition-all uppercase tracking-wider border ${activeChannelIndex === ch.index
-                                                ? 'bg-primary text-primary-contrast border-primary shadow-sm'
-                                                : 'bg-bg text-muted border-border hover:text-text'
-                                                }`}
-                                        >
-                                            {ch.label}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-
-                        <div className="h-[1px] w-full bg-border/50"></div>
-
-                        {/* 3. COLLECTION CONTROLS */}
+                        {/* 2. COLLECTION CONTROLS */}
                         <div className="space-y-3">
-                            <label className="text-xs font-bold text-muted uppercase tracking-wider flex items-center gap-1.5"><Zap size={14} /> Data Collection</label>
+                            <label className="text-[16px] font-bold text-muted uppercase tracking-wider flex items-center gap-1.5"><Zap size={22} /> Data Collection</label>
 
                             {activeSensor === 'EEG' ? (
                                 <div className="space-y-3 rounded-xl border border-primary/20 bg-bg/60 p-3">
@@ -1217,7 +1215,7 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                                         </button>
                                     </div>
                                     <div className="rounded-lg border border-border/70 bg-surface/60 p-2 text-[11px] leading-relaxed text-muted">
-                                        Collect 30-50 trials per target with {windowDuration} ms windows. EEG windows now save target frequency, channel, sample count, and SSVEP score features for later LDA training.
+                                        Collect 30-50 trials per target with {windowDuration} ms windows.
                                     </div>
                                 </div>
                             ) : (
@@ -1231,16 +1229,45 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                                 </div>
                             )}
 
-                            {/* Action Button */}
-                            <button
-                                onClick={isCalibrating ? handleStopCalibration : handleStartCalibration}
-                                className={`w-full py-3 rounded-lg font-black text-sm uppercase tracking-widest transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0 flex items-center justify-center gap-2 ${isCalibrating
-                                    ? 'bg-red-500 text-white hover:bg-red-600 shadow-red-500/20'
-                                    : 'bg-primary text-primary-contrast hover:opacity-90 shadow-primary/25'
-                                    }`}
-                            >
-                                {isCalibrating ? <><Square size={16} fill="currentColor" /> STOP</> : <><Play size={16} fill="currentColor" /> START COLLECTION</>}
-                            </button>
+                            {/* Action Buttons Redesign */}
+                            {showWizard ? (
+                                <AutoCalibrationWizard
+                                    isActive={showWizard}
+                                    onClose={() => setShowWizard(false)}
+                                    sensor={activeSensor}
+                                    onStartRecording={() => handleStartCalibration(targetLabel)}
+                                    onStopRecording={handleStopCalibration}
+                                    setTargetLabel={setTargetLabel}
+                                    setAutoLimit={setAutoLimit}
+                                    readyCount={markedWindows.filter(w => w.label === targetLabel).length}
+                                    isRecording={isCalibrating}
+                                    targetCount={autoLimit}
+                                    labels={SENSOR_LABELS[activeSensor]}
+                                    inline={true}
+                                />
+                            ) : (
+                                <div className="flex flex-col gap-2">
+                                    <button
+                                        onClick={isCalibrating ? handleStopCalibration : () => handleStartCalibration()}
+                                        className={`w-full py-3 rounded-xl font-black text-sm flex items-center justify-center gap-3 transition-all shadow-md active:scale-95 ${isCalibrating
+                                            ? 'bg-red-500/10 border border-red-500/50 text-red-500 hover:bg-red-500/20'
+                                            : 'bg-primary text-primary-contrast hover:scale-[1.02] shadow-primary/20'
+                                            }`}
+                                    >
+                                        {isCalibrating ? (
+                                            <><Square size={18} fill="currentColor" /> STOP RECORDING</>
+                                        ) : (
+                                            <><Play size={18} fill="currentColor" /> START COLLECTION</>
+                                        )}
+                                    </button>
+                                    <button
+                                        onClick={() => setShowWizard(true)}
+                                        className="w-full py-3 bg-surface border border-primary/30 text-primary rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-primary/5 transition-all text-sm uppercase tracking-wider"
+                                    >
+                                        <Target size={16} /> CALIBRATION WIZARD
+                                    </button>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -1346,7 +1373,7 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
             <div className="flex-1 min-h-0 px-2 pb-2 pt-1 grid grid-cols-1 lg:grid-cols-12 gap-2">
                 {/* Session Panel */}
                 <div className="lg:col-span-9 h-full min-h-0 overflow-hidden shadow-sm">
-                    {(mode === 'collection' || mode === 'test') ? (
+                    {(mode === 'collection' || mode === 'recorded' || mode === 'test') ? (
                         <SessionManagerPanel
                             activeSensor={activeSensor}
                             currentSessionName={sessionName}

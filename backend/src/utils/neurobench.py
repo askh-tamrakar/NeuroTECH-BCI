@@ -55,10 +55,47 @@ class ChannelGenerator:
         self.random = random.Random(12345 + (1 if role == "EMG" else 0)) # Slight seed diff
         self._noise_freqs = [50.0, 60.0]  # Line noise only to avoid false SSVEP triggers
         self._noise_amps = [0.05, 0.05]
+        
+        # Brain Wave Bands (Hz)
+        self.bands = {
+            "delta": (1.0, 4.0),
+            "theta": (4.0, 8.0),
+            "alpha": (8.0, 13.0),
+            "beta": (13.0, 30.0),
+            "gamma": (30.0, 45.0)
+        }
+        # Band Powers (0.0 to 1.0)
+        self.band_powers = {
+            "delta": 0.05,
+            "theta": 0.05,
+            "alpha": 0.1,
+            "beta": 0.05,
+            "gamma": 0.02
+        }
+        self.current_state = "Neutral"
 
     def set_role(self, role):
         with self.lock:
             self.role = role
+
+    def set_band_power(self, band, power):
+        with self.lock:
+            if band in self.band_powers:
+                self.band_powers[band] = float(power)
+
+    def set_brain_state(self, state_name):
+        with self.lock:
+            self.current_state = state_name
+            if state_name == "Calm":
+                self.band_powers = {"delta": 0.05, "theta": 0.1, "alpha": 0.6, "beta": 0.1, "gamma": 0.02}
+            elif state_name == "Stress":
+                self.band_powers = {"delta": 0.02, "theta": 0.05, "alpha": 0.1, "beta": 0.7, "gamma": 0.2}
+            elif state_name == "Drowsy":
+                self.band_powers = {"delta": 0.4, "theta": 0.5, "alpha": 0.1, "beta": 0.05, "gamma": 0.01}
+            elif state_name == "Deep Sleep":
+                self.band_powers = {"delta": 0.8, "theta": 0.1, "alpha": 0.05, "beta": 0.02, "gamma": 0.01}
+            else: # Neutral
+                self.band_powers = {"delta": 0.05, "theta": 0.05, "alpha": 0.1, "beta": 0.05, "gamma": 0.02}
 
     def set_rate(self, rate):
         with self.lock:
@@ -107,6 +144,7 @@ class ChannelGenerator:
             ssv_on = self.ssv_ep_on
             ssv_freq = self.ssv_freq
             scale = self.scale
+            band_powers = dict(self.band_powers)
             events = list(self.events)  # shallow copy
             
         # Convert bg_uv (microvolts) to internal "units" 
@@ -114,7 +152,7 @@ class ChannelGenerator:
         val = bg_uv / 330.0
         
         # Output the frequency of 1kHz for every sensor
-        val += math.sin(2 * math.pi * 1000.0 * t_seconds)
+        val += 0.01 * math.sin(2 * math.pi * 1000.0 * t_seconds)
 
         # continuous components
         if role == "EEG":
@@ -124,11 +162,24 @@ class ChannelGenerator:
                 val += 0.25 * math.sin(2 * math.pi * ssv_freq * t_seconds)
                 val += 0.08 * math.sin(2 * math.pi * (2 * ssv_freq) * t_seconds)
             
+            # Brain Wave Bands
+            for band, power in band_powers.items():
+                if power <= 0: continue
+                low, high = self.bands[band]
+                center = (low + high) / 2.0
+                # Multiple frequencies per band for a more realistic spectral peak
+                for offset in [-1.0, 0, 1.0]:
+                    f = center + offset
+                    if f < low or f > high: continue
+                    # Jitter the phase slightly based on band type
+                    phase = 0.5 * math.sin(2 * math.pi * 0.1 * t_seconds)
+                    val += (power / 3.0) * math.sin(2 * math.pi * f * t_seconds + phase)
+
             # fallback EEG noise if no background provided
             if bg_uv == 0.0:
                 for f, a in zip(self._noise_freqs, self._noise_amps):
                     val += a * math.sin(2 * math.pi * f * t_seconds)
-                val += 0.02 * self.random.gauss(0, 1)
+                val += 0.01 * self.random.gauss(0, 1)
         elif role == "EMG":
             # baseline noise if no background provided
             if bg_uv == 0.0:
@@ -456,14 +507,16 @@ class MainWindow(QtWidgets.QMainWindow):
         self.ch0_map.addItems(["EMG", "EEG", "EOG", "NONE"])
         self.ch0_map.setCurrentText(self.config.get("channel_mapping", {}).get("ch0", {}).get("sensor", "EMG"))
         self.ch0_map.currentTextChanged.connect(lambda v: self._on_map_change(0, v))
-        left_layout.addWidget(QtWidgets.QLabel("Channel 0"))
+        self.lbl_ch0 = QtWidgets.QLabel("Channel 0")
+        left_layout.addWidget(self.lbl_ch0)
         left_layout.addWidget(self.ch0_map)
 
         self.ch1_map = QtWidgets.QComboBox()
         self.ch1_map.addItems(["EMG", "EEG", "EOG", "NONE"])
         self.ch1_map.setCurrentText(self.config.get("channel_mapping", {}).get("ch1", {}).get("sensor", "EEG"))
         self.ch1_map.currentTextChanged.connect(lambda v: self._on_map_change(1, v))
-        left_layout.addWidget(QtWidgets.QLabel("Channel 1"))
+        self.lbl_ch1 = QtWidgets.QLabel("Channel 1")
+        left_layout.addWidget(self.lbl_ch1)
         left_layout.addWidget(self.ch1_map)
 
         left_layout.addSpacing(6)
@@ -477,10 +530,12 @@ class MainWindow(QtWidgets.QMainWindow):
         ctrl_layout = QtWidgets.QVBoxLayout(ctrl_wrapper)
         ctrl_layout.setContentsMargins(0, 0, 0, 0)
         ctrl_layout.setSpacing(6)
-        ctrl_layout.addWidget(QtWidgets.QLabel("Channel 0 controls"))
+        self.lbl_ctrl_ch0 = QtWidgets.QLabel("Channel 0 controls")
+        ctrl_layout.addWidget(self.lbl_ctrl_ch0)
         ctrl_layout.addWidget(self.controls_ch0)
         ctrl_layout.addSpacing(8)
-        ctrl_layout.addWidget(QtWidgets.QLabel("Channel 1 controls"))
+        self.lbl_ctrl_ch1 = QtWidgets.QLabel("Channel 1 controls")
+        ctrl_layout.addWidget(self.lbl_ctrl_ch1)
         ctrl_layout.addWidget(self.controls_ch1)
         left_layout.addWidget(ctrl_wrapper)
 
@@ -626,7 +681,61 @@ class MainWindow(QtWidgets.QMainWindow):
         b_str.clicked.connect(lambda: self._emg_action(ch_index, "strong"))
         v.addWidget(emg_box)
 
-        # EEG SSVEP Custom Frequency
+        # EEG Brain States & Waves
+        brain_box = QtWidgets.QGroupBox("Brain State & Waves (EEG)")
+        brain_layout = QtWidgets.QVBoxLayout()
+        
+        # State Selector
+        state_h = QtWidgets.QHBoxLayout()
+        state_h.addWidget(QtWidgets.QLabel("State:"))
+        state_combo = QtWidgets.QComboBox()
+        state_combo.addItems(["Neutral", "Calm", "Stress", "Drowsy", "Deep Sleep"])
+        state_h.addWidget(state_combo)
+        brain_layout.addLayout(state_h)
+        
+        # Wave Sliders
+        sliders_layout = QtWidgets.QGridLayout()
+        self.band_sliders = getattr(self, "band_sliders", [{}, {}])
+        
+        for i, band in enumerate(["delta", "theta", "alpha", "beta", "gamma"]):
+            lbl = QtWidgets.QLabel(band.capitalize())
+            sld = QtWidgets.QSlider(QtCore.Qt.Horizontal)
+            sld.setRange(0, 100)
+            sld.setValue(int(self.ch_gens[ch_index].band_powers[band] * 100))
+            
+            # Label for value
+            val_lbl = QtWidgets.QLabel(f"{self.ch_gens[ch_index].band_powers[band]:.2f}")
+            val_lbl.setFixedWidth(30)
+            
+            def on_sld_change(val, b=band, ch=ch_index, vl=val_lbl):
+                p = val / 100.0
+                self.ch_gens[ch].set_band_power(b, p)
+                vl.setText(f"{p:.2f}")
+
+            sld.valueChanged.connect(on_sld_change)
+            
+            sliders_layout.addWidget(lbl, i, 0)
+            sliders_layout.addWidget(sld, i, 1)
+            sliders_layout.addWidget(val_lbl, i, 2)
+            self.band_sliders[ch_index][band] = (sld, val_lbl)
+
+        brain_layout.addLayout(sliders_layout)
+        
+        def on_state_change(text, ch=ch_index):
+            self.ch_gens[ch].set_brain_state(text)
+            # Update sliders to match state
+            for b, (s, vl) in self.band_sliders[ch].items():
+                p = self.ch_gens[ch].band_powers[b]
+                s.blockSignals(True)
+                s.setValue(int(p * 100))
+                s.blockSignals(False)
+                vl.setText(f"{p:.2f}")
+
+        state_combo.currentTextChanged.connect(on_state_change)
+        brain_box.setLayout(brain_layout)
+        v.addWidget(brain_box)
+
+        # SSVEP Box (moved below Brain States)
         ssvep_box = QtWidgets.QGroupBox("SSVEP (EEG)")
         ssvep_layout = QtWidgets.QHBoxLayout()
         
@@ -671,6 +780,18 @@ class MainWindow(QtWidgets.QMainWindow):
     def _on_map_change(self, ch, text):
         self.log(f"Mapping ch{ch} -> {text}")
         self.ch_gens[ch].set_role(text)
+        
+        # Update Labels
+        lbl_map = getattr(self, f"lbl_ch{ch}")
+        ctrl_lbl = getattr(self, f"lbl_ctrl_ch{ch}")
+        
+        if text == "EEG":
+            pos = "FP1" if ch == 0 else "FP2"
+            lbl_map.setText(f"Channel {ch} ({pos})")
+            ctrl_lbl.setText(f"Channel {ch} ({pos}) controls")
+        else:
+            lbl_map.setText(f"Channel {ch}")
+            ctrl_lbl.setText(f"Channel {ch} controls")
 
     def _emg_action(self, ch, intensity):
         self.log(f"EMG trigger ch{ch} intensity={intensity}")

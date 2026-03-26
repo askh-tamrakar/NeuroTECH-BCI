@@ -40,7 +40,7 @@ def compute_ssvep_features(samples, sr: int = 1000, target_freqs=None, num_harmo
 
     filtered_signal = normalized
     try:
-        b_bp, a_bp = butter(4, [6, 60], btype='bandpass', fs=sr)
+        b_bp, a_bp = butter(4, [2, 60], btype='bandpass', fs=sr)
         filtered_signal = filtfilt(b_bp, a_bp, normalized)
     except Exception:
         pass
@@ -52,6 +52,15 @@ def compute_ssvep_features(samples, sr: int = 1000, target_freqs=None, num_harmo
         pass
 
     freqs_psd, psd = welch(filtered_signal, sr, nperseg=min(len(filtered_signal), max(256, len(filtered_signal))))
+    
+    # Find peak frequency in 2-30Hz range
+    mask_2_30 = (freqs_psd >= 2) & (freqs_psd <= 30)
+    if np.any(mask_2_30):
+        peak_idx = np.argmax(psd[mask_2_30])
+        peak_freq = float(freqs_psd[mask_2_30][peak_idx])
+    else:
+        peak_freq = 0.0
+
     bp_delta = _band_power(freqs_psd, psd, 0.5, 4)
     bp_theta = _band_power(freqs_psd, psd, 4, 8)
     bp_alpha = _band_power(freqs_psd, psd, 8, 13)
@@ -118,6 +127,7 @@ def compute_ssvep_features(samples, sr: int = 1000, target_freqs=None, num_harmo
         "score_mean": float(np.mean(scores_arr)) if scores_arr.size else 0.0,
         "score_std": float(np.std(scores_arr)) if scores_arr.size else 0.0,
         "dominant_freq": dominant_freq,
+        "peak_freq": peak_freq,
         "sample_count": int(len(data)),
         "target_freqs": targets,
         "score_vector": scores_arr.tolist(),

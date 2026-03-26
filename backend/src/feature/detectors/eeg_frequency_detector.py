@@ -76,7 +76,9 @@ class EEGFrequencyDetector:
             self.model = joblib.load(model_path)
             self.scaler = joblib.load(scaler_path) if scaler_path.exists() else None
             self.model_name = requested_model
-        except Exception:
+            print(f"\n{'='*50}\n[EEGFrequencyDetector] MODEL LOADED SUCCESSFULLY: {requested_model}\n{'='*50}\n", flush=True)
+        except Exception as e:
+            print(f"[EEGFrequencyDetector] Failed to load model {requested_model}: {e}")
             self.model = None
             self.scaler = None
             self.model_name = None
@@ -184,6 +186,7 @@ class EEGFrequencyDetector:
         enriched_features = dict(features)
         enriched_features["detector_confidence"] = confidence
         enriched_features["score_ratio_runtime"] = ratio
+        enriched_features["peak_freq"] = features.get("peak_freq", 0.0)
 
         return smoothed_event, confirmed, enriched_features
 

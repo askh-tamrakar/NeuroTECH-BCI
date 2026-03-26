@@ -149,13 +149,13 @@ export default function Dashboard() {
       {/* Navigation */}
       <div className="header shrink-0" style={{ zIndex: 50 }}>
         <div className="header-inner">
-          <div className="cursor-pointer m-0 p-0 flex-shrink-0 relative z-20 hidden lg:block" onClick={() => { setActiveSettingsSection('connectivity'); setCurrentPage('settings'); }} title="Back to Connectivity Settings">
+          <div className="cursor-pointer m-0 p-0 flex-shrink-0 relative z-20 hidden lg:block" onClick={() => setCurrentPage('live')} title="Back to Terminal">
             <div className="pointer-events-none">
               <Brain3D />
             </div>
           </div>
 
-          <div className="headline flex flex-col flex-grow cursor-pointer select-none" onClick={() => { setActiveSettingsSection('connectivity'); setCurrentPage('settings'); }}>
+          <div className="headline flex flex-col flex-grow cursor-pointer select-none" onClick={() => setCurrentPage('live')} title="Back to Terminal">
             <div className="headline-line main">
               NeuroTECH
               <br />
@@ -168,6 +168,7 @@ export default function Dashboard() {
               <PillNav
                 items={navItems}
                 activeHref={`#${currentPage}`}
+                onLogoClick={() => { setActiveSettingsSection('connectivity'); setCurrentPage('settings'); }}
                 className="custom-nav"
                 ease="power2.easeOut"
                 baseColor={navColors.base}

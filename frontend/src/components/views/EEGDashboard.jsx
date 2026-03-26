@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Activity, Music, Brain, Wind, AlertTriangle, Eye, Radio } from 'lucide-react';
 import '../../styles/views/EEGDashboard.css';
 
-import VisualEEGView from './VisualEEGView';
+import SSVEPView from './SSVEPView';
 import MusicView from './MusicView';
 import FocusView from './FocusView';
 import MeditationView from './MeditationView';
@@ -32,8 +32,8 @@ const EEGDashboard = ({ wsEvent, isConnected, wsUrl }) => {
   }, [wsEvent]);
 
   const renderView = () => {
-    if (preset.includes("visual")) {
-      return <VisualEEGView isConnected={isConnected} wsEvent={wsEvent} />;
+    if (preset.includes("ssvep")) {
+      return <SSVEPView isConnected={isConnected} wsEvent={wsEvent} />;
     }
 
     switch (currentView) {
@@ -59,11 +59,12 @@ const EEGDashboard = ({ wsEvent, isConnected, wsUrl }) => {
         <div className="eeg-sidebar-group">
           <div className="eeg-sidebar-title">Pipeline / Sensor</div>
           <div
-            className={`eeg-nav-item ${preset === 'visual_eeg_oz' ? 'active' : ''}`}
-            onClick={() => setPreset('visual_eeg_oz')}
+            className={`eeg-nav-item ${preset === 'ssvep_eeg_oz' ? 'active' : ''}`}
+            onClick={() => setPreset('ssvep_eeg_oz')}
           >
-            <Eye size={18} /> Visual Cortex (Oz)
+            <Eye size={18} /> SSVEP (Oz)
           </div>
+
           <div
             className={`eeg-nav-item ${preset === 'frontal_fp1' ? 'active' : ''}`}
             onClick={() => setPreset('frontal_fp1')}
@@ -123,11 +124,11 @@ const EEGDashboard = ({ wsEvent, isConnected, wsUrl }) => {
 
       {/* Main Content Area */}
       <div className="eeg-main-content" style={
-        (preset.includes("visual") || currentView === 'bubble')
-          ? { padding: 0, background: preset.includes("visual") ? '#000' : 'transparent', overflow: 'hidden', position: 'relative', height: '100%' }
+        (preset.includes("ssvep") || currentView === 'bubble')
+          ? { padding: 0, background: preset.includes("ssvep") ? '#000' : 'transparent', overflow: 'hidden', position: 'relative', height: '100%' }
           : { overflowY: 'auto', overflowX: 'hidden' }
       }>
-        {preset.includes("visual") || currentView === 'bubble' ? (
+        {preset.includes("ssvep") || currentView === 'bubble' ? (
           renderView()
         ) : (
           <div className="eeg-glass-card">

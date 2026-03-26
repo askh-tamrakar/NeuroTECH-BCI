@@ -3,7 +3,9 @@ import sys
 from pathlib import Path
 
 # Add backend to path
-sys.path.append(str(Path("i:/Neuroscience/Brain-To-Brain-Telepathic-Communication-System/backend").resolve()))
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "src")))
+sys.path.append(os.path.abspath(os.path.dirname(__file__)))
 
 from src.feature.detectors.eeg_frequency_detector import EEGFrequencyDetector
 

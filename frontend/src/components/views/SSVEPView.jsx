@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Settings, Play, Square, Activity, MousePointer2, Keyboard, Sun, Monitor, Power, Zap, Trash2, History, Target, Menu, ChevronLeft, ChevronUp, ChevronDown } from 'lucide-react';
+import { Settings, Play, Square, Activity, MousePointer2, Keyboard, Sun, Monitor, Power, Zap, Trash2, History, Target, Menu, ChevronLeft, ChevronUp, ChevronDown, Brain } from 'lucide-react';
+import { motion } from 'framer-motion';
 import SSVEPStimulus from '../ssvep/Stimulus';
 import { soundHandler } from '../../handlers/SoundHandler';
 import CustomNumberInput from '../ui/CustomNumberInput';
 import CustomSelect from '../ui/CustomSelect';
+import CustomRangeSlider from '../ui/CustomRangeSlider';
 import { CalibrationApi } from '../../services/calibrationApi';
 
 const COMMON_KEYS = ['None', 'W', 'A', 'S', 'D', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'Enter', 'Escape', 'P', 'Q', '0', '1', '2', '3'];
@@ -39,7 +41,7 @@ export default function SSVEPView({ isConnected, wsEvent }) {
         return stored ? parseInt(stored, 10) : 144;
     });
     const [configs, setConfigs] = useState(() => buildDynamicTargets(refreshRate));
-    const refreshDetectedRef = useRef(false);
+    // Removed auto-detection ref to keep state clean.
 
     useEffect(() => {
         localStorage.setItem('ssvep_brightness', brightness);
@@ -49,38 +51,7 @@ export default function SSVEPView({ isConnected, wsEvent }) {
         localStorage.setItem('ssvep_refreshRate', refreshRate);
     }, [refreshRate]);
 
-    useEffect(() => {
-        let frameId = null;
-        let cancelled = false;
-        const samples = [];
-        let lastTs = null;
-
-        const tick = (ts) => {
-            if (cancelled || refreshDetectedRef.current) return;
-            if (lastTs !== null) {
-                samples.push(ts - lastTs);
-            }
-            lastTs = ts;
-
-            if (samples.length >= 30) {
-                const average = samples.reduce((sum, value) => sum + value, 0) / samples.length;
-                const estimated = Math.round(1000 / average);
-                if (estimated >= 50 && estimated <= 360) {
-                    refreshDetectedRef.current = true;
-                    setRefreshRate(prev => Math.abs(prev - estimated) > 1 ? estimated : prev);
-                }
-                return;
-            }
-
-            frameId = requestAnimationFrame(tick);
-        };
-
-        frameId = requestAnimationFrame(tick);
-        return () => {
-            cancelled = true;
-            if (frameId) cancelAnimationFrame(frameId);
-        };
-    }, []);
+    // Removed auto-detection to ensure stability at 144Hz as requested.
 
     useEffect(() => {
         setConfigs(prev => buildDynamicTargets(refreshRate, prev));
@@ -100,6 +71,8 @@ export default function SSVEPView({ isConnected, wsEvent }) {
     const [protocolState, setProtocolState] = useState('IDLE');
     const [currentTrialIdx, setCurrentTrialIdx] = useState(0);
     const [trials, setTrials] = useState([]);
+    const [useML, setUseML] = useState(true);
+    const [scoreVector, setScoreVector] = useState([]);
 
     const addLog = useCallback((message, type = 'INFO') => {
         const time = new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -154,6 +127,10 @@ export default function SSVEPView({ isConnected, wsEvent }) {
             setRealTimeFreq(freqValue);
         }
 
+        if (wsEvent.features?.score_vector) {
+            setScoreVector(wsEvent.features.score_vector);
+        }
+
         const isConfirmedDetection =
             (typeof wsEvent.event === 'string' && wsEvent.event.startsWith('TARGET_')) ||
             wsEvent.event === 'DETECTION';
@@ -188,14 +165,14 @@ export default function SSVEPView({ isConnected, wsEvent }) {
                 const payload = {
                     features: {
                         EEG: {
-                            target_freqs: configs.map(c => c.freq), // Pass all to ensure backend captures disabled ones
+                            target_freqs: configs.map(c => c.freq),
                             targets: configs.map(c => ({
                                 ...c,
                                 controlType: !c.enabled ? 'None' : (c.controlType || 'Keyboard')
                             })),
                             rest_threshold: 0.6,
                             ratio_threshold: 1.2,
-                            classifier: 'lda',
+                            classifier: useML ? 'lda' : 'fbcca',
                             num_harmonics: 4,
                             window_len_sec: 1.5,
                             step_sec: 0.25,
@@ -215,13 +192,13 @@ export default function SSVEPView({ isConnected, wsEvent }) {
             } catch (err) {
                 console.error(`Sync error: ${err.message}`);
             } finally {
-                setTimeout(() => setIsSyncing(false), 300); // Visual delay for spinner
+                setTimeout(() => setIsSyncing(false), 300);
             }
         };
 
-        const timeoutId = setTimeout(syncConfig, 500); // 500ms debounce
+        const timeoutId = setTimeout(syncConfig, 500);
         return () => clearTimeout(timeoutId);
-    }, [configs, refreshRate, isConfigLoaded]);
+    }, [configs, refreshRate, isConfigLoaded, useML]);
 
     // --- Controls ---
     const startFlicker = () => {
@@ -322,6 +299,24 @@ export default function SSVEPView({ isConnected, wsEvent }) {
 
                         <div className="w-full h-px bg-border/80 shrink-0" />
 
+                        <button
+                            onClick={() => {
+                                const newState = !useML;
+                                setUseML(newState);
+                                setShowSidebar(true);
+                                console.log(`[SSVEPView] ML Pipeline inclusion toggled (collapsed): ${newState ? 'ENABLED' : 'DISABLED'}`);
+                            }}
+                            className={`p-2 rounded-full transition-all group relative ${useML ? 'text-primary bg-primary/10' : 'text-muted hover:bg-white/10'}`}
+                            title={useML ? "Disable ML" : "Enable ML"}
+                        >
+                            <Brain size={30} className={useML ? 'animate-pulse transition-all duration-700' : 'transition-all duration-700'} />
+                            <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-surface-lighter border border-primary/40 px-3 py-1.5 rounded-lg text-[10px] font-black text-primary whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-300 z-50 shadow-glow">
+                                ML PIPELINE: {useML ? 'ENABLED' : 'DISABLED'}
+                            </div>
+                        </button>
+
+                        <div className="w-full h-px bg-border/80 shrink-0" />
+
                         <div className="flex flex-col items-center cursor-default group relative w-full" title="Signal Frequency">
                             <Activity size={28} className="text-primary" />
                             <span className="text-[20px] font-black tabular-nums mt-1 text-primary">{realTimeFreq ? realTimeFreq.toFixed(1) : '0.0'}</span>
@@ -384,7 +379,7 @@ export default function SSVEPView({ isConnected, wsEvent }) {
                                 <Settings size={28} className="text-primary animate-pulse" />
                                 <span style={{ letterSpacing: '2.3px' }}>Controls</span>
                             </h2>
-                            <p className="text-xs text-muted">SSVEP Protocol</p>
+                            <p className="text-xs text-muted">SSVEP Protocol (+ML)</p>
                         </div>
                         <button
                             onClick={() => setShowSidebar(false)}
@@ -393,6 +388,68 @@ export default function SSVEPView({ isConnected, wsEvent }) {
                         >
                             <ChevronLeft size={24} />
                         </button>
+                    </div>
+
+                    {/* ML Pipeline Toggle - NOW AT TOP */}
+                    <div className="flex items-center justify-between shrink-0 bg-primary/10 p-3 rounded-xl border border-primary/30 shadow-glow mx-0.5">
+                        <div className="flex items-center gap-2">
+                            <Brain size={22} className={useML ? "text-primary animate-pulse" : "text-muted"} />
+                            <div className="flex flex-col">
+                                <span className={`text-[12px] font-black uppercase tracking-widest ${useML ? "text-primary" : "text-muted"}`}>
+                                    Include ML Pipeline
+                                </span>
+                                <span className="text-[9px] text-muted/60 font-bold uppercase tracking-tighter">LDA Enhancement</span>
+                            </div>
+                        </div>
+                        <button
+                            onClick={() => {
+                                const newState = !useML;
+                                setUseML(newState);
+                                console.log(`[SSVEPView] ML Pipeline inclusion toggled (sidebar): ${newState ? 'ENABLED' : 'DISABLED'}`);
+                                addLog(`ML Pipeline ${newState ? 'Enabled' : 'Disabled'}`, 'SETTINGS');
+                            }}
+                            className={`w-[48px] h-[24px] rounded-full p-1 transition-all duration-300 border-2 ${useML ? 'bg-primary/20 border-primary shadow-[0_0_12px_rgba(var(--primary-rgb),0.3)]' : 'bg-bg border-border'}`}
+                        >
+                            <div className={`w-[14px] h-[14px] rounded-full transition-all duration-300 ${useML ? 'bg-primary translate-x-[22px] shadow-[0_0_8px_var(--primary)]' : 'bg-muted translate-x-0'}`} />
+                        </button>
+                    </div>
+
+                    {/* Detection Analysis - NOW AT TOP */}
+                    <div className="bg-bg/60 border border-primary/40 rounded-xl p-3 shrink-0 backdrop-blur-md shadow-xl border-l-[4px] border-l-primary/60">
+                        <h4 className="text-[11px] font-black text-muted/90 uppercase tracking-widest flex items-center justify-between mb-4">
+                            <div className="flex items-center gap-2">
+                                <Activity size={16} className="text-primary" /> Identification Matrix
+                            </div>
+                            <span className="text-[10px] text-primary/80 font-mono bg-primary/10 px-1.5 rounded">LIVE</span>
+                        </h4>
+                        <div className="flex items-end justify-between h-[90px] gap-2 px-1">
+                            {configs.filter(c => c.enabled).map((cfg, idx) => {
+                                const score = scoreVector[idx] || 0;
+                                const height = Math.min(100, score * 100);
+                                return (
+                                    <div key={cfg.id} className="flex-1 flex flex-col items-center gap-2 group relative h-full">
+                                        <div className="w-full bg-primary/5 rounded-t-lg relative flex-grow overflow-hidden border-x border-t border-primary/10">
+                                            <motion.div
+                                                initial={{ height: 0 }}
+                                                animate={{ height: `${height}%` }}
+                                                transition={{ type: "spring", stiffness: 400, damping: 25 }}
+                                                className={`absolute bottom-0 left-0 right-0 ${height > 40 ? 'bg-primary/70 shadow-[0_0_20px_rgba(var(--primary-rgb),0.5)]' : 'bg-primary/40'}`}
+                                            />
+                                        </div>
+                                        <span className="text-[11px] font-black text-text/70 group-hover:text-primary transition-colors transform group-hover:scale-110">{cfg.freq}</span>
+
+                                        <div className="absolute bottom-[calc(100%+8px)] left-1/2 -translate-x-1/2 bg-surface-lighter border border-primary/40 px-2 py-1.5 rounded-lg text-[10px] font-black text-primary opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-300 z-50 whitespace-nowrap shadow-2xl transform translate-y-2 group-hover:translate-y-0 backdrop-blur-md">
+                                            {cfg.label.toUpperCase()}: {(score * 100).toFixed(1)}%
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                            {configs.filter(c => c.enabled).length === 0 && (
+                                <div className="w-full h-full flex items-center justify-center text-[11px] text-muted italic font-bold">
+                                    No Active Targets
+                                </div>
+                            )}
+                        </div>
                     </div>
 
                     <div className="flex items-center justify-between shrink-0 border-t border-border/50 pt-2 pb-2">
@@ -430,14 +487,15 @@ export default function SSVEPView({ isConnected, wsEvent }) {
                                 <span className="flex items-center gap-2"><Sun size={20} /> Brightness</span>
                                 <span className="text-primary text-xl">{Math.round(brightness * 100)}%</span>
                             </div>
-                            <input
-                                type="range"
-                                min="0.1"
-                                max="1"
-                                step="0.05"
+                            <CustomRangeSlider
+                                min={0.1}
+                                max={1.0}
+                                step={0.05}
                                 value={brightness}
-                                onChange={(e) => setBrightness(parseFloat(e.target.value))}
-                                className="w-full accent-primary cursor-pointer"
+                                onChange={(val) => {
+                                    setBrightness(val);
+                                }}
+                                accentColor="primary"
                             />
                         </div>
 
@@ -473,12 +531,12 @@ export default function SSVEPView({ isConnected, wsEvent }) {
                                 <span className="text-lg font-bold text-muted">Hz</span>
                             </div>
                         </div>
-                        <div className="w-1/2 flex flex-col items-end gap-1">
-                            <div className="flex items-center gap-1.5">
+                        <div className="w-1/2 flex flex-col justify-between items-end gap-1">
+                            <div className="flex items-center gap-1.5 ">
                                 <span className="w-2.5 h-2.5 rounded-full bg-primary animate-pulse shadow-[0_0_8px_var(--primary)]" />
-                                <span className="text-sm font-bold text-primary/80">LIVE</span>
+                                <span className="text-[18px] font-bold text-primary/80 ">LIVE</span>
                             </div>
-                            <div className="w-full mt-2 h-1 bg-bg rounded-full overflow-hidden">
+                            <div className="w-full mt-2 h-[6px] bg-text/25 overflow-hidden">
                                 <div
                                     className="h-full bg-primary transition-all duration-300 shadow-[0_0_8px_var(--primary)]"
                                     style={{ width: `${Math.min((realTimeFreq || 0) * 4, 100)}%` }}

@@ -11,10 +11,10 @@ export default function ServoClawView({ wsEvent, isConnected }) {
     const [rpsActive, setRpsActive] = useState(false);
     const [blinkActive, setBlinkActive] = useState(false);
 
-    const [ clawStatus, setClawStatus ] = useState('Idle');
-    const [ lastAction, setLastAction ] = useState('Waiting for BCI input...');
-    const [ currentAngle, setCurrentAngle ] = useState(97); // 97 is fully closed, 1 is fully open
-    const [ eventLogs, setEventLogs ] = useState([]);
+    const [clawStatus, setClawStatus] = useState('Idle');
+    const [lastAction, setLastAction] = useState('Waiting for BCI input...');
+    const [currentAngle, setCurrentAngle] = useState(97); // 97 is fully closed, 1 is fully open
+    const [eventLogs, setEventLogs] = useState([]);
 
     // Data for models and config
     const [models, setModels] = useState({ eog: [], emg: [] });
@@ -30,16 +30,16 @@ export default function ServoClawView({ wsEvent, isConnected }) {
                     fetch(`${API_BASE_URL}/api/models/emg`),
                     fetch(`${API_BASE_URL}/api/config`)
                 ]);
-                
+
                 const eogModels = await eogRes.json();
                 const emgModels = await emgRes.json();
                 const configData = await configRes.json();
-                
+
                 setModels({
                     eog: eogModels,
                     emg: emgModels
                 });
-                
+
                 if (configData.features && configData.features.EEG) {
                     setEegConfig({
                         rest_threshold: configData.features.EEG.rest_threshold || 0.6,
@@ -59,10 +59,10 @@ export default function ServoClawView({ wsEvent, isConnected }) {
             const res = await fetch(`${API_BASE_URL}/api/config`);
             if (!res.ok) return;
             const config = await res.json();
-            
+
             let changed = false;
             if (!config.features) config.features = {};
-            
+
             // Apply Servo enabled
             if (updates.hasOwnProperty('servoEnabled')) {
                 if (!config.features.Servo) config.features.Servo = {};
@@ -71,14 +71,14 @@ export default function ServoClawView({ wsEvent, isConnected }) {
                     changed = true;
                 }
             }
-            
+
             // Apply EEG config
             if (updates.eeg) {
                 if (!config.features.EEG) config.features.EEG = {};
                 if (updates.eeg.rest_threshold) { config.features.EEG.rest_threshold = updates.eeg.rest_threshold; changed = true; }
                 if (updates.eeg.ratio_threshold) { config.features.EEG.ratio_threshold = updates.eeg.ratio_threshold; changed = true; }
             }
-            
+
             // Apply active models
             if (updates.activeModelEOG || updates.activeModelEMG) {
                 if (!config.active_models) config.active_models = {};
@@ -91,7 +91,7 @@ export default function ServoClawView({ wsEvent, isConnected }) {
                     changed = true;
                 }
             }
-            
+
             if (changed) {
                 await fetch(`${API_BASE_URL}/api/config`, {
                     method: 'POST',
@@ -119,7 +119,7 @@ export default function ServoClawView({ wsEvent, isConnected }) {
     React.useEffect(() => {
         if (!wsEvent || !wsEvent.event) return;
         const e = wsEvent.event;
-        
+
         // Apply throttle for blinks
         if (e === 'SingleBlink' || e === 'DoubleBlink') {
             const now = Date.now();
@@ -149,16 +149,16 @@ export default function ServoClawView({ wsEvent, isConnected }) {
             newAngle = 48;
         } else if (typeof e === 'string' && e.startsWith('TARGET_')) {
             action = `Preset (${e})`;
-            newAngle = 82; 
+            newAngle = 82;
         }
-        
+
         if (action) {
             setClawStatus(`Executing: ${action}`);
             setLastAction(`Last event: ${e}`);
             setCurrentAngle(newAngle);
-            
+
             const timeStr = new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
-            
+
             // Log concise descriptive event
             setEventLogs(prev => [
                 { id: Date.now() + Math.random(), text: `[${timeStr}] Event: ${e} -> ${action}` },
@@ -189,13 +189,13 @@ export default function ServoClawView({ wsEvent, isConnected }) {
 
     const toggleDetection = (detectionType) => {
         soundHandler?.playClick?.();
-        
+
         const newStates = {
             ssvep: detectionType === 'ssvep' ? !ssvepActive : ssvepActive,
             rps: detectionType === 'rps' ? !rpsActive : rpsActive,
             blink: detectionType === 'blink' ? !blinkActive : blinkActive
         };
-        
+
         if (detectionType === 'ssvep') {
             setSsvepActive(newStates.ssvep);
             CalibrationApi.togglePrediction('EEG', newStates.ssvep).catch(err => console.error("SSVEP toggle failed:", err));
@@ -206,7 +206,7 @@ export default function ServoClawView({ wsEvent, isConnected }) {
             setBlinkActive(newStates.blink);
             CalibrationApi.togglePrediction('EOG', newStates.blink).catch(err => console.error("Blink toggle failed:", err));
         }
-        
+
         updateClawStatus(newStates.ssvep, newStates.rps, newStates.blink);
         updateBackendConfig({ servoEnabled: (newStates.ssvep || newStates.rps || newStates.blink) });
     };
@@ -225,13 +225,13 @@ export default function ServoClawView({ wsEvent, isConnected }) {
         soundHandler?.playClick?.();
         setClawStatus(`Executing: ${action}`);
         setLastAction(`Manual: ${action}`);
-        
+
         try {
             await CalibrationApi.sendManualClawCommand(action);
         } catch (e) {
             console.error("Failed manual override", e);
         }
-        
+
         setTimeout(() => {
             updateClawStatus(ssvepActive, rpsActive, blinkActive);
         }, 2000);
@@ -243,14 +243,14 @@ export default function ServoClawView({ wsEvent, isConnected }) {
     const renderDetectionCard = ({ id, title, icon: Icon, active, description, settingsContent }) => {
         return (
             <div className={`p-6 rounded-2xl border transition-all duration-300 flex flex-col items-start gap-4 hover:border-primary/50 relative overflow-hidden ${active ? 'bg-primary/5 border-primary/50 shadow-glow' : 'bg-surface border-border'}`}>
-                <div 
-                    className="flex items-center justify-between w-full cursor-pointer z-10" 
+                <div
+                    className="flex items-center justify-between w-full cursor-pointer z-10"
                     onClick={() => toggleDetection(id)}
                 >
                     <div className={`p-3 rounded-full ${active ? 'bg-primary text-primary-contrast' : 'bg-white/5 text-muted'}`}>
                         <Icon size={24} />
                     </div>
-                    <button 
+                    <button
                         className={`w-[42px] h-[42px] flex items-center justify-center rounded-full border transition-all ${active ? 'bg-red-500/10 border-red-500/50 text-red-500 hover:bg-red-500/20' : 'bg-green-500/10 border-green-500/50 text-green-500 hover:bg-green-500/20'}`}
                         onClick={(e) => { e.stopPropagation(); toggleDetection(id); }}
                     >
@@ -261,7 +261,7 @@ export default function ServoClawView({ wsEvent, isConnected }) {
                     <h3 className={`text-lg font-bold ${active ? 'text-primary' : 'text-text'}`}>{title}</h3>
                     <p className="text-sm text-muted mt-1 leading-relaxed">{description}</p>
                 </div>
-                
+
                 <div className="mt-auto pt-4 w-full border-t border-border flex justify-between items-center text-xs font-medium z-10">
                     <span className="text-muted">Status</span>
                     <span className={active ? "text-green-500 animate-pulse font-bold" : "text-muted"}>
@@ -286,13 +286,12 @@ export default function ServoClawView({ wsEvent, isConnected }) {
                     </p>
                 </div>
                 <div className="flex gap-3">
-                    <button 
+                    <button
                         onClick={toggleAll}
-                        className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-md font-bold transition-colors ${
-                            (ssvepActive || rpsActive || blinkActive) 
-                                ? 'bg-red-500/10 border border-red-500/50 text-red-500 hover:bg-red-500/20' 
-                                : 'bg-primary border border-primary text-primary-contrast shadow-glow hover:opacity-90'
-                        }`}
+                        className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-md font-bold transition-colors ${(ssvepActive || rpsActive || blinkActive)
+                            ? 'bg-red-500/10 border border-red-500/50 text-red-500 hover:bg-red-500/20'
+                            : 'bg-primary border border-primary text-primary-contrast shadow-glow hover:opacity-90'
+                            }`}
                     >
                         {(ssvepActive || rpsActive || blinkActive) ? <Square size={20} /> : <Play size={20} />}
                         {(ssvepActive || rpsActive || blinkActive) ? 'Stop All' : 'Start All Detections'}
@@ -332,12 +331,12 @@ export default function ServoClawView({ wsEvent, isConnected }) {
                             description: 'Detects eye blinks (Single, Double) via EOG.'
                         })}
                     </div>
-                    
+
                     {/* Bottom Section: Logs & Settings */}
                     <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-6">
-                        
+
                         {/* Event Logger */}
-                        <div className="flex flex-col gap-4 h-56 border border-border/50 rounded-2xl bg-surface p-5 shadow-inner">
+                        <div className="flex flex-col gap-4 h-120 border border-border/50 rounded-2xl bg-surface p-5 shadow-inner">
                             <div className="flex items-center justify-between border-b border-border/50 pb-2">
                                 <h2 className="text-sm font-bold opacity-80 flex items-center gap-2 uppercase tracking-widest text-muted">
                                     <Activity size={16} />
@@ -347,7 +346,7 @@ export default function ServoClawView({ wsEvent, isConnected }) {
                                     {eventLogs.length} Events
                                 </span>
                             </div>
-                            
+
                             <div className="flex-1 overflow-y-auto space-y-1.5 pr-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none]">
                                 {eventLogs.length === 0 ? (
                                     <div className="h-full flex items-center justify-center text-muted text-sm italic">
@@ -364,7 +363,7 @@ export default function ServoClawView({ wsEvent, isConnected }) {
                         </div>
 
                         {/* Settings Controls */}
-                        <div className="flex flex-col gap-4 h-56 border border-border/50 rounded-2xl bg-surface p-5 shadow-inner overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none]">
+                        <div className="flex flex-col gap-4 h-full border border-border/50 rounded-2xl bg-surface p-5 shadow-inner [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none]">
                             <h2 className="text-sm font-bold opacity-80 flex items-center gap-2 uppercase tracking-widest text-muted border-b border-border/50 pb-2">
                                 <Settings size={16} />
                                 Modality Config
@@ -377,12 +376,12 @@ export default function ServoClawView({ wsEvent, isConnected }) {
                                         <Zap size={12} className="text-primary/70" />
                                         EOG Active Model
                                     </label>
-                                    <select 
+                                    <select
                                         className="bg-bg border border-border text-sm rounded-md px-3 py-2 w-full outline-none focus:border-primary/50 transition-colors"
                                         value={models.eog.find(m => m.active)?.name || ''}
                                         onChange={(e) => {
-                                            const newEogModels = [...models.eog].map(m => ({...m, active: m.name === e.target.value}));
-                                            setModels({...models, eog: newEogModels});
+                                            const newEogModels = [...models.eog].map(m => ({ ...m, active: m.name === e.target.value }));
+                                            setModels({ ...models, eog: newEogModels });
                                             updateBackendConfig({ activeModelEOG: e.target.value });
                                         }}
                                     >
@@ -399,12 +398,12 @@ export default function ServoClawView({ wsEvent, isConnected }) {
                                         <BrainCircuit size={12} className="text-primary/70" />
                                         EMG Active Model
                                     </label>
-                                    <select 
+                                    <select
                                         className="bg-bg border border-border text-sm rounded-md px-3 py-2 w-full outline-none focus:border-primary/50 transition-colors"
                                         value={models.emg.find(m => m.active)?.name || ''}
                                         onChange={(e) => {
-                                            const newEmgModels = [...models.emg].map(m => ({...m, active: m.name === e.target.value}));
-                                            setModels({...models, emg: newEmgModels});
+                                            const newEmgModels = [...models.emg].map(m => ({ ...m, active: m.name === e.target.value }));
+                                            setModels({ ...models, emg: newEmgModels });
                                             updateBackendConfig({ activeModelEMG: e.target.value });
                                         }}
                                     >
@@ -424,28 +423,28 @@ export default function ServoClawView({ wsEvent, isConnected }) {
                                     <div className="grid grid-cols-2 gap-3">
                                         <div className="flex flex-col gap-1">
                                             <span className="text-xs text-muted/80">Rest Ratio</span>
-                                            <input 
-                                                type="number" 
+                                            <input
+                                                type="number"
                                                 step="0.05"
-                                                className="bg-bg border border-border rounded px-3 py-1.5 text-sm outline-none focus:border-primary/50 transition-colors" 
-                                                value={eegConfig.rest_threshold} 
+                                                className="bg-bg border border-border rounded px-3 py-1.5 text-sm outline-none focus:border-primary/50 transition-colors"
+                                                value={eegConfig.rest_threshold}
                                                 onChange={(e) => {
                                                     const val = parseFloat(e.target.value);
-                                                    setEegConfig(prev => ({...prev, rest_threshold: val}));
+                                                    setEegConfig(prev => ({ ...prev, rest_threshold: val }));
                                                 }}
                                                 onBlur={() => updateBackendConfig({ eeg: eegConfig })}
                                             />
                                         </div>
                                         <div className="flex flex-col gap-1">
                                             <span className="text-xs text-muted/80">Target Ratio</span>
-                                            <input 
-                                                type="number" 
+                                            <input
+                                                type="number"
                                                 step="0.1"
-                                                className="bg-bg border border-border rounded px-3 py-1.5 text-sm outline-none focus:border-primary/50 transition-colors" 
-                                                value={eegConfig.ratio_threshold} 
+                                                className="bg-bg border border-border rounded px-3 py-1.5 text-sm outline-none focus:border-primary/50 transition-colors"
+                                                value={eegConfig.ratio_threshold}
                                                 onChange={(e) => {
                                                     const val = parseFloat(e.target.value);
-                                                    setEegConfig(prev => ({...prev, ratio_threshold: val}));
+                                                    setEegConfig(prev => ({ ...prev, ratio_threshold: val }));
                                                 }}
                                                 onBlur={() => updateBackendConfig({ eeg: eegConfig })}
                                             />
@@ -483,9 +482,9 @@ export default function ServoClawView({ wsEvent, isConnected }) {
                                     <div className="w-12 h-1.5 bg-primary/30 rounded-full" />
                                     <div className="w-8 h-1.5 bg-primary/20 rounded-full" />
                                 </div>
-                                
+
                                 {/* Left Pincer */}
-                                <div 
+                                <div
                                     className="absolute bottom-6 left-1/2 w-8 h-36 origin-bottom transition-transform duration-[600ms] ease-[cubic-bezier(0.34,1.56,0.64,1)] z-0"
                                     style={{ transform: `translateX(-24px) rotate(-${90 * ((97 - currentAngle) / 96)}deg)` }}
                                 >
@@ -494,9 +493,9 @@ export default function ServoClawView({ wsEvent, isConnected }) {
                                         <div className="absolute top-4 right-[-4px] w-2.5 h-16 bg-primary rounded-l-md shadow-[0_0_5px_rgba(var(--color-primary-rgb),0.5)]" />
                                     </div>
                                 </div>
-                                
+
                                 {/* Right Pincer */}
-                                <div 
+                                <div
                                     className="absolute bottom-6 right-1/2 w-8 h-36 origin-bottom transition-transform duration-[600ms] ease-[cubic-bezier(0.34,1.56,0.64,1)] z-0"
                                     style={{ transform: `translateX(24px) rotate(${90 * ((97 - currentAngle) / 96)}deg)` }}
                                 >
@@ -512,7 +511,7 @@ export default function ServoClawView({ wsEvent, isConnected }) {
                                     <span className="text-sm font-black text-primary tracking-widest tabular-nums">{Math.round(currentAngle)}°</span>
                                 </div>
                             </div>
-                            
+
                             <div className="mt-8 text-center bg-bg/50 px-6 py-4 rounded-2xl border border-border/50">
                                 <p className="text-lg font-bold text-text tracking-wide mb-1">{clawStatus}</p>
                                 <p className="text-sm font-medium text-muted">{lastAction}</p>

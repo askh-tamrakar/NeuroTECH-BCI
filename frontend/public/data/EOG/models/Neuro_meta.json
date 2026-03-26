@@ -1,0 +1,1 @@
+{"n_estimators": 100, "max_depth": 5, "min_impurity_decrease": 0.01, "test_size": 0.2, "table_name": "eog_session_Neurobench", "created_at": "2026-03-26T06:48:37.563618", "accuracy": 0.8444444444444444}
