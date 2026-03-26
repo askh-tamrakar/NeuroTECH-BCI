@@ -44,16 +44,14 @@ const MeditationView = ({ result }) => {
     const $ = (id) => container.querySelector(`#${id}`);
 
     /* ── CANVASES ──────────────────────────────── */
-    const radarL = $('med-radar-L');
-    const radarR = $('med-radar-R');
+    const radar = $('med-radar');
     const waveC1 = $('med-wave-1');
     const waveC2 = $('med-wave-2');
-    const ctxL   = radarL?.getContext('2d');
-    const ctxR   = radarR?.getContext('2d');
+    const ctxRadar = radar?.getContext('2d');
     const wCtx1  = waveC1?.getContext('2d');
     const wCtx2  = waveC2?.getContext('2d');
 
-    if (!ctxL || !ctxR || !wCtx1 || !wCtx2) return;
+    if (!ctxRadar || !wCtx1 || !wCtx2) return;
 
     /* ── STATE ─────────────────────────────────── */
     let eegMode        = 'simulate';
@@ -98,7 +96,7 @@ const MeditationView = ({ result }) => {
       canvas.height = rect.height;
     }
     function resizeAll() {
-      [radarL, radarR, waveC1, waveC2].forEach(resizeCanvas);
+      [radar, waveC1, waveC2].forEach(resizeCanvas);
     }
     window.addEventListener('resize', resizeAll);
     // defer first resize so DOM is painted
@@ -318,6 +316,45 @@ const MeditationView = ({ result }) => {
       const cp = $('med-calm-pct');
       if (cp) cp.textContent = (calmSignal * 100).toFixed(0) + '%';
 
+      // Focus Orb Animation
+      const orb = $('med-focus-orb');
+      const orbText = $('med-orb-text');
+      
+      if (orb && orbText) {
+          if (sessionRunning) {
+             const { idx, progress } = phaseInfo;
+             let scale = 1;
+             
+             // Base size 1, Max size 3.5
+             if (idx === 0) { // INHALE
+                 scale = 1 + (2.5 * progress);
+                 orbText.textContent = 'INHALE';
+                 orbText.style.opacity = 1;
+             } else if (idx === 1) { // HOLD
+                 scale = 3.5;
+                 orbText.textContent = 'HOLD';
+                 orbText.style.opacity = 0.5 + Math.sin(Date.now() / 200) * 0.5; // pulse
+             } else if (idx === 2) { // EXHALE
+                 scale = 3.5 - (2.5 * progress);
+                 orbText.textContent = 'EXHALE';
+                 orbText.style.opacity = 1;
+             } else if (idx === 3) { // REST
+                 scale = 1;
+                 orbText.textContent = 'REST';
+                 orbText.style.opacity = 0.5;
+             }
+             
+             orb.style.transform = `scale(${scale})`;
+             const cFactor = Math.floor(calmSignal * 255);
+             orb.style.boxShadow = `0 0 ${20 + calmSignal*60}px rgba(0, ${cFactor}, 255, 0.4)`;
+          } else {
+             orb.style.transform = 'scale(1)';
+             orbText.textContent = 'READY';
+             orbText.style.opacity = 0.5;
+             orb.style.boxShadow = '0 0 40px var(--primary)';
+          }
+      }
+
       // Sidebar indicators
       const colCalm = $('med-col-calm-val');
       if (colCalm) colCalm.textContent = (calmSignal * 100).toFixed(0);
@@ -355,8 +392,7 @@ const MeditationView = ({ result }) => {
       const gl1 = tc('--graph-line-1');
       const gl2 = tc('--graph-line-2');
 
-      drawRadar(ctxL, rawBands, true);
-      drawRadar(ctxR, rawBands, false);
+      drawRadar(ctxRadar, rawBands, true);
       drawWave(wCtx1, wave1Hist, gl1);
       drawWave(wCtx2, wave2Hist, p);
       updateDOM(phaseInfo);
@@ -522,27 +558,41 @@ const MeditationView = ({ result }) => {
       {/* ══ CENTER AREA: Main Charts ═══════════════════════════════ */}
       <div className={`flex-grow flex flex-col transition-all duration-300 ${rightWidth}`}>
           <div className="med-main">
-            {/* Top radar charts row */}
+            {/* Top row: Brain Activity & Focus Orb */}
             <div className="med-charts-row">
-              {/* Left hemisphere */}
+              {/* Brain Activity (Radar) */}
               <div className="med-chart-panel">
                 <div className="med-section-header">
                   <span className="med-section-icon">⬡</span>
                   <span className="med-section-title">Brain Activity</span>
                   <span className="med-section-sub"> · Electroencephalogram (EEG)</span>
                 </div>
-                <div className="med-chart-label">Left Hemisphere</div>
-                <canvas id="med-radar-L" className="med-radar-canvas" />
+                <div className="med-chart-label">Global EEG Power</div>
+                <canvas id="med-radar" className="med-radar-canvas" />
               </div>
 
-              {/* Right hemisphere */}
-              <div className="med-chart-panel">
-                <div className="med-section-header" style={{ opacity: 0, pointerEvents: 'none' }}>
-                  <span className="med-section-icon">⬡</span>
-                  <span className="med-section-title">Brain Activity</span>
+              {/* Focus Bubble (Breathing) */}
+              <div className="med-chart-panel border-l border-border/50">
+                <div className="med-section-header">
+                  <span className="med-section-icon" style={{ marginLeft: '-2px' }}>◎</span>
+                  <span className="med-section-title">Respiration</span>
+                  <span className="med-section-sub"> · Focus Bubble</span>
                 </div>
-                <div className="med-chart-label">Right Hemisphere</div>
-                <canvas id="med-radar-R" className="med-radar-canvas" />
+                
+                <div className="flex-grow flex flex-col items-center justify-center relative bg-bg/20">
+                    <div className="relative w-64 h-64 flex items-center justify-center">
+                        {/* Outer glow ring limits */}
+                        <div className="absolute inset-2 rounded-full border border-primary/20 opacity-50 border-dashed" style={{ boxShadow: 'inset 0 0 40px rgba(0,255,255,0.1)' }} />
+                        
+                        {/* The animated bubble */}
+                        <div id="med-focus-orb" className="w-16 h-16 rounded-full bg-gradient-to-tr from-primary/80 to-primary/30 backdrop-blur-sm transition-transform duration-75 border border-primary/50 flex flex-col items-center justify-center relative overflow-hidden will-change-transform z-10" style={{ transformOrigin: 'center center', boxShadow: '0 0 40px var(--primary)' }}>
+                           {/* Inner sheen */}
+                           <div className="absolute inset-0 bg-white/20 rounded-full w-full h-[30%] -top-[10%] blur-sm pointer-events-none" />
+                        </div>
+                    </div>
+                    
+                    <div id="med-orb-text" className="absolute bottom-8 font-mono text-primary/80 font-bold tracking-[0.3em] uppercase text-xl transition-all">READY</div>
+                </div>
               </div>
             </div>
 
