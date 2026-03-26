@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import Sidebar from '../ui/Sidebar'
 import LiveView from '../views/LiveView'
-import Brain3D from '../ui/3d_Brain'
+import Brain3D from '../ui/Brain3D'
 import FirmwareModal from '../modals/FirmwareModal'
 import { ConfigService } from '../../services/ConfigService'
 import { DataService } from '../../services/DataService'

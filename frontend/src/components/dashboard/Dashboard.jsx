@@ -11,14 +11,13 @@ import RPSGame from '../views/RPSGame'
 import LabView from '../views/LabView'
 import SettingsView from '../views/SettingsView'
 import ServoClawView from '../views/ServoClawView'
-import MeditationView from '../views/MeditationView'
 
 import '../../styles/App.css';
 import ScrollStack, { ScrollStackItem } from '../ui/ScrollStack';
 import PillNav from '../ui/PillNav';
 import Pill from '../ui/Pill';
 import { ConnectionButton } from '../ui/ConnectionButton';
-import Brain3D from '../ui/3d_Brain';
+import Brain3D from '../ui/Brain3D';
 import MobileNav from '../ui/MobileNav';
 
 export default function Dashboard() {

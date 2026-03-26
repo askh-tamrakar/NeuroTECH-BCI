@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Activity, Music, Brain, Wind, AlertTriangle, Eye, Radio } from 'lucide-react';
+import { Activity, Music, Brain, Wind, AlertTriangle, Eye, Radio, Layout } from 'lucide-react';
 import '../../styles/views/EEGDashboard.css';
 
 import SSVEPView from './SSVEPView';
@@ -9,6 +9,7 @@ import MeditationView from './MeditationView';
 import StressView from './StressView';
 import FFTView from './FFTView';
 import BubbleGameView from './BubbleGameView';
+import VisualEEGView from './VisualEEGView';
 
 const EEGDashboard = ({ wsEvent, isConnected, wsUrl }) => {
   const [preset, setPreset] = useState("frontal_fp1");
@@ -43,6 +44,7 @@ const EEGDashboard = ({ wsEvent, isConnected, wsUrl }) => {
       case "stress": return <StressView result={eegResult} />;
       case "fft": return <FFTView wsUrl={wsUrl} />;
       case "bubble": return <BubbleGameView result={eegResult} isConnected={isConnected} />;
+      case "monitor": return <VisualEEGView wsEvent={wsEvent} isConnected={isConnected} />;
       default: return <div className="waiting-container">Select an application...</div>;
     }
   };
@@ -117,6 +119,12 @@ const EEGDashboard = ({ wsEvent, isConnected, wsUrl }) => {
               onClick={() => setCurrentView('bubble')}
             >
               <Activity size={18} /> Bubble Game
+            </div>
+            <div
+              className={`eeg-nav-item ${currentView === 'monitor' ? 'active' : ''}`}
+              onClick={() => setCurrentView('monitor')}
+            >
+              <Layout size={18} /> Live Analytics
             </div>
           </div>
         )}

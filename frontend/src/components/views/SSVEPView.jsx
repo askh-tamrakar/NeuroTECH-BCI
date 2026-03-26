@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Settings, Play, Square, Activity, MousePointer2, Keyboard, Sun, Monitor, Power, Zap, Trash2, History, Target, Menu, ChevronLeft, ChevronUp, ChevronDown, Brain } from 'lucide-react';
+import { Settings, Play, Square, Activity, MousePointer2, Keyboard, Sun, Monitor, Power, Zap, Trash2, History, Target, Menu, ChevronLeft, ChevronUp, ChevronDown, Brain, Eye, Radio, Wind, ChevronRight } from 'lucide-react';
 import { motion } from 'framer-motion';
-import SSVEPStimulus from '../ssvep/Stimulus';
+import SSVEPStimulus from '../ssvep/SSVEPStimulus';
 import { soundHandler } from '../../handlers/SoundHandler';
 import CustomNumberInput from '../ui/CustomNumberInput';
 import CustomSelect from '../ui/CustomSelect';
@@ -15,7 +15,10 @@ const TARGET_DIVISORS = [18, 16, 12, 10, 9, 8];
 function buildDynamicTargets(refreshRate, previousConfigs = []) {
     return TARGET_DIVISORS.map((divisor, index) => {
         const previous = previousConfigs[index] || {};
-        const frequency = Number((refreshRate / divisor).toFixed(2));
+        const isManual = previous.isManual === true;
+        const autoFreq = Number((refreshRate / divisor).toFixed(2));
+        const frequency = isManual ? (previous.freq ?? autoFreq) : autoFreq;
+
         return {
             id: previous.id ?? index,
             freq: frequency,
@@ -26,6 +29,7 @@ function buildDynamicTargets(refreshRate, previousConfigs = []) {
             controlType: previous.controlType || 'Keyboard',
             divisor,
             source: 'dynamic',
+            isManual: isManual
         };
     });
 }
@@ -41,17 +45,40 @@ export default function SSVEPView({ isConnected, wsEvent }) {
         return stored ? parseInt(stored, 10) : 144;
     });
     const [configs, setConfigs] = useState(() => buildDynamicTargets(refreshRate));
-    // Removed auto-detection ref to keep state clean.
+    const refreshDetectedRef = useRef(false);
 
     useEffect(() => {
-        localStorage.setItem('ssvep_brightness', brightness);
-    }, [brightness]);
+        let frameId = null;
+        let cancelled = false;
+        const samples = [];
+        let lastTs = null;
 
-    useEffect(() => {
-        localStorage.setItem('ssvep_refreshRate', refreshRate);
-    }, [refreshRate]);
+        const tick = (ts) => {
+            if (cancelled || refreshDetectedRef.current) return;
+            if (lastTs !== null) {
+                samples.push(ts - lastTs);
+            }
+            lastTs = ts;
 
-    // Removed auto-detection to ensure stability at 144Hz as requested.
+            if (samples.length >= 30) {
+                const average = samples.reduce((sum, value) => sum + value, 0) / samples.length;
+                const estimated = Math.round(1000 / average);
+                if (estimated >= 50 && estimated <= 360) {
+                    refreshDetectedRef.current = true;
+                    setRefreshRate(prev => Math.abs(prev - estimated) > 1 ? estimated : prev);
+                }
+                return;
+            }
+
+            frameId = requestAnimationFrame(tick);
+        };
+
+        frameId = requestAnimationFrame(tick);
+        return () => {
+            cancelled = true;
+            if (frameId) cancelAnimationFrame(frameId);
+        };
+    }, []);
 
     useEffect(() => {
         setConfigs(prev => buildDynamicTargets(refreshRate, prev));
@@ -242,6 +269,8 @@ export default function SSVEPView({ isConnected, wsEvent }) {
         };
     }, []);
 
+    const rightWidth = showSidebar ? 'mr-80' : 'mr-[4.5rem]';
+
     return (
         <div className="w-full flex bg-black overflow-hidden relative h-full">
             {/* Main Stimulus View */}
@@ -282,9 +311,9 @@ export default function SSVEPView({ isConnected, wsEvent }) {
                 )}
             </div>
 
-            {/* Left Sidebar */}
+            {/* Right Sidebar */}
             <div
-                className={`absolute left-0 top-0 bottom-0 z-10 transition-all duration-300 ease-in-out border-r border-border bg-surface/80 backdrop-blur-md flex flex-col h-full ${showSidebar ? 'w-80 overflow-y-auto overflow-x-hidden' : 'w-[4.25rem] overflow-visible'} [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']`}
+                className={`absolute right-0 top-0 bottom-0 z-10 transition-all duration-300 ease-in-out border-l border-border bg-surface/80 backdrop-blur-md flex flex-col h-full ${showSidebar ? 'w-80 overflow-y-auto overflow-x-hidden' : 'w-[4.25rem] overflow-visible'} [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']`}
             >
                 {/* Collapsed Icons Only State */}
                 {!showSidebar && (
@@ -320,26 +349,26 @@ export default function SSVEPView({ isConnected, wsEvent }) {
                         <div className="flex flex-col items-center cursor-default group relative w-full" title="Signal Frequency">
                             <Activity size={28} className="text-primary" />
                             <span className="text-[20px] font-black tabular-nums mt-1 text-primary">{realTimeFreq ? realTimeFreq.toFixed(1) : '0.0'}</span>
-                            <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-1.5 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Live Signal (Hz)</div>
+                            <div className="absolute right-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-1.5 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Live Signal (Hz)</div>
                         </div>
 
                         <button onClick={() => setShowSidebar(true)} title="System Activity" className="hover:text-primary transition-colors group relative">
                             <History size={28} className="text-muted group-hover:text-primary" />
                             {logs.length > 0 && <span className="absolute -top-1 -right-1 w-2 h-2 bg-primary rounded-full animate-pulse blur-[1px]"></span>}
-                            <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">System Activity Logs</div>
+                            <div className="absolute right-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">System Activity Logs</div>
                         </button>
 
                         <div className="w-full h-px bg-border/80 shrink-0" />
 
                         <button onClick={globalRunning ? stopFlicker : startFlicker} title="Start/Stop Manual Simulation" className={`transition-colors group relative p-2 rounded-full ${globalRunning ? 'text-red-500 hover:bg-red-500/20' : 'text-green-500 hover:bg-green-500/20'}`}>
                             {globalRunning ? <Square size={28} /> : <Play size={28} />}
-                            <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-1.5 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">{globalRunning ? "Stop Simulation" : "Start Simulation"}</div>
+                            <div className="absolute right-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-1.5 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">{globalRunning ? "Stop Simulation" : "Start Simulation"}</div>
                         </button>
 
                         {!globalRunning && (
                             <button onClick={runProtocol} title="Run Protocol" className="transition-colors group relative p-2 rounded-full text-primary hover:bg-primary/20">
                                 <Zap size={28} />
-                                <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-surface px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Run Protocol</div>
+                                <div className="absolute right-14 top-1/2 -translate-y-1/2 bg-surface px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Run Protocol</div>
                             </button>
                         )}
 
@@ -347,14 +376,14 @@ export default function SSVEPView({ isConnected, wsEvent }) {
 
                         <button onClick={() => setShowSidebar(true)} title="Targets Settings" className="hover:text-primary transition-colors group relative">
                             <Monitor size={28} className="text-muted group-hover:text-primary" />
-                            <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Targets Settings</div>
+                            <div className="absolute right-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Targets Settings</div>
                         </button>
 
                         {configs.filter(c => c.enabled).map((cfg) => (
                             <div key={cfg.id} className="flex flex-col items-center group relative cursor-help" title={cfg.label}>
                                 <Target size={28} className="text-primary/70 mb-1 group-hover:text-primary transition-colors" />
                                 <span className="text-[18px] font-black text-text/80 group-hover:text-primary">{cfg.freq}</span>
-                                <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">{cfg.label} ({cfg.freq}Hz)</div>
+                                <div className="absolute right-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">{cfg.label} ({cfg.freq}Hz)</div>
                             </div>
                         ))}
 
@@ -363,7 +392,7 @@ export default function SSVEPView({ isConnected, wsEvent }) {
                         <div className="flex flex-col w-full items-center shrink-0">
                             <button className={`w-[42px] h-[42px] flex items-center justify-center rounded-full border transition-all cursor-default shadow-sm group relative ${isConnected ? 'bg-green-500/10 border-green-500/30 text-green-500' : 'bg-red-500/10 border-red-500/30 text-red-500'}`} title={isConnected ? "Sensor Connected" : "Sensor Disconnected"}>
                                 {isConnected ? <Zap size={28} /> : <Power size={28} />}
-                                <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Sensor Status</div>
+                                <div className="absolute right-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Sensor Status</div>
                             </button>
                         </div>
                     </div>
@@ -386,7 +415,7 @@ export default function SSVEPView({ isConnected, wsEvent }) {
                             className="p-2 hover:bg-white/10 rounded-full transition-colors"
                             title="Collapse Sidebar"
                         >
-                            <ChevronLeft size={24} />
+                            <ChevronLeft size={24} className="rotate-180" />
                         </button>
                     </div>
 
@@ -604,9 +633,18 @@ export default function SSVEPView({ isConnected, wsEvent }) {
                                                     <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse shadow-[0_0_5px_currentColor] shrink-0 mx-1" />
                                                 ) : <span className="w-1.5 h-1.5 shrink-0 mx-1" />}
 
-                                                <div className="flex items-center gap-2 shrink-0 rounded-lg border border-primary/20 bg-primary/5 px-2 py-1">
-                                                    <span className="text-[11px] font-bold uppercase tracking-wider text-primary/70">{refreshRate}/{cfg.divisor}</span>
-                                                    <span className="text-sm font-black text-primary">{cfg.freq}Hz</span>
+                                                <div className="flex items-center gap-1 shrink-0 rounded-lg border border-primary/20 bg-primary/5 px-2 py-1">
+                                                    <span className="text-[11px] font-bold uppercase tracking-wider text-primary/70" title="Divisor">
+                                                        {refreshRate}/{cfg.divisor}
+                                                    </span>
+                                                    <input
+                                                        type="number"
+                                                        step="0.01"
+                                                        className="w-[3.5rem] bg-transparent text-sm font-black text-primary text-right outline-none focus:ring-1 focus:ring-primary rounded transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                                        value={cfg.freq}
+                                                        onChange={(e) => updateConfig(cfg.id, { freq: parseFloat(e.target.value) || 0, isManual: true })}
+                                                    />
+                                                    <span className="text-sm font-black text-primary">Hz</span>
                                                 </div>
                                             </div>
 
