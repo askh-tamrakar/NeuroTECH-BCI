@@ -176,7 +176,17 @@ class DatabaseManager:
         if not safe_suffix: safe_suffix = "default"
         
         sensor = sensor_type.upper()
-        table_name = f"{sensor.lower()}_session_{safe_suffix}"
+        suffix = safe_suffix
+        prefix = f"{sensor.lower()}_session_"
+        
+        # Check for case-insensitive match to existing tables
+        tables = self.get_session_tables(sensor)
+        potential_table = f"{prefix}{suffix}"
+        for existing in tables:
+            if existing.lower() == potential_table.lower():
+                return existing # Re-use existing exact casing
+        
+        table_name = potential_table
         
         conn = self.connect(sensor)
         cursor = conn.cursor()
@@ -278,13 +288,24 @@ class DatabaseManager:
             target_table = f"{prefix}{self.sanitize_table_name(target_clean)}"
             
             tables = self.get_session_tables(sensor)
+            # Resolve existing target name if it only differs by case
+            for existing in tables:
+                if existing.lower() == target_table.lower():
+                    target_table = existing
+                    break
             
             # Resolve source tables
             source_tables = []
             for src in source_sessions:
                 src_table = src if src.startswith(prefix) else f"{prefix}{self.sanitize_table_name(src)}"
-                if src_table in tables and src_table != target_table:
-                    source_tables.append(src_table)
+                # Use case-insensitive check to avoid merging table into itself
+                is_duplicate = any(t.lower() == src_table.lower() for t in [target_table])
+                exists = any(t.lower() == src_table.lower() for t in tables)
+                
+                if exists and not is_duplicate:
+                    # Find exact case from tables list
+                    exact_src = next(t for t in tables if t.lower() == src_table.lower())
+                    source_tables.append(exact_src)
             
             if not source_tables:
                 return False

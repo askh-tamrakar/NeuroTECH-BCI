@@ -6,7 +6,7 @@ from scipy import stats as scipy_stats
 from src.server.server.state import state
 from src.server.server.config_manager import load_config
 from src.server.server.session_manager import SessionManager
-from src.feature.ssvep_utils import compute_ssvep_features
+from src.feature.ssvep_utils import DEFAULT_TARGET_FREQS, compute_ssvep_features
 
 from src.feature.extractors.rps_extractor import RPSExtractor
 from src.feature.extractors.blink_extractor import BlinkExtractor
@@ -33,7 +33,7 @@ def extract_eog_features(samples: list, sr: int = 1000) -> dict:
 def extract_eeg_features(samples: list, sr: int = 1000, target_freqs: list | None = None) -> dict:
     cfg = state.config or load_config()
     eeg_cfg = cfg.get("features", {}).get("EEG", {})
-    freqs = target_freqs or eeg_cfg.get("target_freqs", [8, 9, 12, 14.4, 16, 18])
+    freqs = target_freqs or eeg_cfg.get("target_freqs", DEFAULT_TARGET_FREQS)
     num_harmonics = int(eeg_cfg.get("num_harmonics", 4))
     return compute_ssvep_features(samples, sr=sr, target_freqs=freqs, num_harmonics=num_harmonics)
 
@@ -215,8 +215,10 @@ def broadcast_data(socketio):
                         
                         # --- MODE MANAGER HOOK ---
                         try:
-                            # Pass just the first channel's value (Oz or FP1/FP2 depending on preset)
-                            ch_val = channels_data[0]['value'] if 0 in channels_data else 0.0
+                            mode_channel_idx = 0
+                            if getattr(state, 'mode_manager', None):
+                                mode_channel_idx = state.mode_manager.get_channel_index()
+                            ch_val = channels_data[mode_channel_idx]['value'] if mode_channel_idx in channels_data else 0.0
                             mode_result = state.mode_manager.process_sample([ch_val])
                             if mode_result:
                                 socketio.emit('eeg_mode_result', mode_result)

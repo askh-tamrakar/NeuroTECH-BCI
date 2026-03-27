@@ -20,7 +20,7 @@ export default function WindowListPanel({
 }) {
     // Track counts correctly for display
     const recordingCount = windows.filter(w => w.status === 'recording' || w.status === 'pending').length;
-    const processedCount = windows.filter(w => w.status === 'collected').length;
+    const processedCount = windows.filter(w => w.status === 'collected' || w.status === 'saving').length;
     const savedCount = windows.filter(w => w.status === 'saved' || w.status === 'correct').length;
 
     const statsTotal = processedCount + recordingCount + savedCount;

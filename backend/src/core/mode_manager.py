@@ -10,6 +10,7 @@ from .windowing import EEGWindowBuffer
 from .spectral_features import compute_band_powers
 from .feature_vector import compute_feature_vector
 from .fbcca import fbcca
+from ..utils.config import config_manager
 
 # Import Frontal Modules
 from ..modules.music_control import MusicControlModule
@@ -31,23 +32,89 @@ class ModeManager:
         self.preprocessor = None
         self.window_buffer = None
         self.app_module = None
+        self.channel_index = 0
         
         # Stimulus settings (Visual)
-        self.ssvep_freqs = [6.59, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0]
+        self.ssvep_freqs = [8.0, 9.0, 12.0, 14.4, 16.0, 18.0]
+
+    def _resolve_eeg_channel_index(self, preset_name):
+        mapping = config_manager.get_channel_mapping() or {}
+        preset_lower = (preset_name or "").lower()
+
+        def _extract_index(channel_key):
+            try:
+                return int(str(channel_key).replace("ch", ""))
+            except Exception:
+                return None
+
+        def _channel_text(info):
+            parts = [
+                info.get("label"),
+                info.get("name"),
+                info.get("electrode"),
+                info.get("position"),
+                info.get("montage"),
+                info.get("channel"),
+            ]
+            return " ".join(str(part) for part in parts if part).lower()
+
+        eeg_channels = []
+        for channel_key, info in mapping.items():
+            if str(info.get("sensor", "")).upper() != "EEG":
+                continue
+            if info.get("enabled", True) is False:
+                continue
+            index = _extract_index(channel_key)
+            if index is None:
+                continue
+            eeg_channels.append((index, _channel_text(info)))
+
+        eeg_channels.sort(key=lambda item: item[0])
+        if not eeg_channels:
+            return 0
+
+        target_token = None
+        if "fp1" in preset_lower:
+            target_token = "fp1"
+        elif "fp2" in preset_lower:
+            target_token = "fp2"
+        elif "oz" in preset_lower:
+            target_token = "oz"
+
+        if target_token:
+            for index, text in eeg_channels:
+                if target_token in text:
+                    return index
+
+        if len(eeg_channels) == 1:
+            return eeg_channels[0][0]
+
+        if "fp2" in preset_lower:
+            return eeg_channels[min(1, len(eeg_channels) - 1)][0]
+
+        return eeg_channels[0][0]
 
     def set_preset_and_view(self, preset_name, view_name):
         self.preset = preset_name
         self.view = view_name
         
-        if "visual" in preset_name.lower():
+        preset_lower = (preset_name or "").lower()
+        eeg_cfg = config_manager.get_features_for_sensor("EEG")
+        target_freqs = eeg_cfg.get("target_freqs", self.ssvep_freqs)
+        if target_freqs:
+            self.ssvep_freqs = [float(freq) for freq in target_freqs]
+
+        if "visual" in preset_lower or "ssvep" in preset_lower:
             self.mode = "visual"
+            self.channel_index = self._resolve_eeg_channel_index(preset_name)
             self.preprocessor = EEGPreprocessor(mode="visual", sr=self.sr)
             self.window_buffer = EEGWindowBuffer(window_size_sec=1.5, step_size_sec=0.25, sr=self.sr, num_channels=1)
             self.app_module = None # visual uses direct fbcca logic
             log.info(f"ModeManager configured for Visual EEG (Preset: {preset_name})")
             
-        elif "frontal" in preset_name.lower():
+        elif "frontal" in preset_lower:
             self.mode = "frontal"
+            self.channel_index = self._resolve_eeg_channel_index(preset_name)
             self.preprocessor = EEGPreprocessor(mode="frontal", sr=self.sr)
             self.window_buffer = EEGWindowBuffer(window_size_sec=2.0, step_size_sec=0.5, sr=self.sr, num_channels=1)
             
@@ -93,7 +160,9 @@ class ModeManager:
                 return {
                     "type": "visual_result",
                     "target_index": target_idx,
-                    "scores": scores.tolist()
+                    "scores": scores.tolist(),
+                    "source_channel": self.channel_index,
+                    "preset": self.preset,
                 }
                 
             elif self.mode == "frontal" and self.app_module:
@@ -107,7 +176,12 @@ class ModeManager:
                     "type": "frontal_result",
                     "features": features,
                     "band_powers": list(band_powers.values()),
-                    "output": result
+                    "output": result,
+                    "source_channel": self.channel_index,
+                    "preset": self.preset,
                 }
                 
         return None
+
+    def get_channel_index(self):
+        return self.channel_index

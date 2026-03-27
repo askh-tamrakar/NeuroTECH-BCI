@@ -2,21 +2,27 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { Database, Brain } from 'lucide-react';
 
-export default function LabSwitcher({ activeTab, onSwitch }) {
-    const tabs = [
-        { id: 'data', label: 'DATA COLLECTION', icon: Database },
-        { id: 'ml', label: 'ML TRAINING', icon: Brain }
-    ];
+const DEFAULT_TABS = [
+    { id: 'data', label: 'DATA COLLECTION', icon: Database },
+    { id: 'ml', label: 'ML TRAINING', icon: Brain }
+];
+
+export default function CustomSwitchPill({ 
+    activeTab, 
+    onSwitch, 
+    tabs = DEFAULT_TABS,
+    className = "" 
+}) {
 
     return (
-        <div className="flex bg-black/40 backdrop-blur-md border border-white/5 rounded-full p-1.5 relative w-full max-w-[340px] mx-auto shadow-2xl overflow-hidden">
+        <div className={`flex bg-black/40 backdrop-blur-md border border-white/5 rounded-full p-1.5 relative w-full shadow-2xl overflow-hidden ${className}`}>
             {/* Sliding Background Pill */}
             <motion.div
                 className="absolute inset-y-1 rounded-full bg-primary border border-primary/50 shadow-[0_0_20px_rgba(var(--primary-rgb),0.4)]"
                 initial={false}
                 animate={{
-                    left: activeTab === 'data' ? '6px' : '50%',
-                    right: activeTab === 'data' ? '50%' : '6px',
+                    left: tabs.findIndex(t => t.id === activeTab) === 0 ? '6px' : '50%',
+                    right: tabs.findIndex(t => t.id === activeTab) === 0 ? '50%' : '6px',
                 }}
                 transition={{ type: "spring", stiffness: 400, damping: 35 }}
             />

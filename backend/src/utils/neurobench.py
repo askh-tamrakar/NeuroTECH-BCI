@@ -86,7 +86,9 @@ class ChannelGenerator:
     def set_brain_state(self, state_name):
         with self.lock:
             self.current_state = state_name
-            if state_name == "Calm":
+            if state_name == "Focus":
+                self.band_powers = {"delta": 0.02, "theta": 0.06, "alpha": 0.16, "beta": 0.72, "gamma": 0.08}
+            elif state_name == "Calm":
                 self.band_powers = {"delta": 0.05, "theta": 0.1, "alpha": 0.6, "beta": 0.1, "gamma": 0.02}
             elif state_name == "Stress":
                 self.band_powers = {"delta": 0.02, "theta": 0.05, "alpha": 0.1, "beta": 0.7, "gamma": 0.2}
@@ -689,7 +691,7 @@ class MainWindow(QtWidgets.QMainWindow):
         state_h = QtWidgets.QHBoxLayout()
         state_h.addWidget(QtWidgets.QLabel("State:"))
         state_combo = QtWidgets.QComboBox()
-        state_combo.addItems(["Neutral", "Calm", "Stress", "Drowsy", "Deep Sleep"])
+        state_combo.addItems(["Neutral", "Focus", "Calm", "Stress", "Drowsy", "Deep Sleep"])
         state_h.addWidget(state_combo)
         brain_layout.addLayout(state_h)
         

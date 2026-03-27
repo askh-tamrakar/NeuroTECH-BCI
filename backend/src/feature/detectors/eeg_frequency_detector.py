@@ -5,7 +5,7 @@ from pathlib import Path
 import joblib
 import numpy as np
 
-from src.feature.ssvep_utils import compute_ssvep_features
+from src.feature.ssvep_utils import DEFAULT_TARGET_FREQS, compute_ssvep_features
 from src.utils.paths import get_models_dir
 
 
@@ -39,7 +39,7 @@ class EEGFrequencyDetector:
         eeg_config = self.config.get("features", {}).get("EEG", {})
 
         self.sampling_rate = int(self.config.get("sampling_rate", 1000))
-        self.target_freqs = [float(freq) for freq in eeg_config.get("target_freqs", [6.59, 9.0, 12.0, 14.4, 16.0, 18.0])]
+        self.target_freqs = [float(freq) for freq in eeg_config.get("target_freqs", DEFAULT_TARGET_FREQS)]
         self.window_len_sec = float(eeg_config.get("window_len_sec", 1.5))
         self.num_harmonics = int(eeg_config.get("num_harmonics", 4))
         self.rest_threshold = float(eeg_config.get("rest_threshold", 0.6))

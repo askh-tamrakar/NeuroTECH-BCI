@@ -24,7 +24,7 @@ from src.learning.eog_trainer import (
     delete_model as delete_eog_model, 
     load_model as load_eog_model
 )
-from src.learning.eeg_lda_trainer import train_eeg_lda_model
+from src.learning.eeg_lda_trainer import train_eeg_lda_model, evaluate_eeg_lda_model
 
 training_bp = Blueprint('training', __name__)
 
@@ -170,6 +170,16 @@ def api_eval_eog():
         return jsonify(res), 200
     return jsonify(res)
 
+@training_bp.route('/api/model/evaluate/eeg', methods=['POST'])
+def api_eval_eeg():
+    params = request.get_json() or {}
+    table_name = params.get('table_name') or 'eeg_windows'
+    model_name = params.get('model_name')
+    res = evaluate_eeg_lda_model(table_name=table_name, model_name=model_name)
+    if "error" in res:
+        return jsonify(res), 200
+    return jsonify(res)
+
 @training_bp.route('/api/models/emg', methods=['GET'])
 def api_list_models():
     """List all saved EMG models (Inlined logic for stability)."""
@@ -264,6 +274,21 @@ def api_delete_eog_model(model_name):
         result = delete_eog_model(model_name)
         if "errors" in result and result["errors"]:
              return jsonify(result), 400 
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@training_bp.route('/api/models/<sensor>/<model_name>', methods=['DELETE'])
+def api_delete_model_generic(sensor, model_name):
+    """Delete a specific model for any supported sensor."""
+    try:
+        sensor_upper = sensor.upper()
+        if sensor_upper == 'EOG':
+            result = delete_eog_model(model_name)
+        else:
+            result = delete_model(sensor_upper, model_name)
+        if "errors" in result and result["errors"]:
+            return jsonify(result), 400
         return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)}), 500

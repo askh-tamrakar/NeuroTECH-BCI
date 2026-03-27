@@ -81,7 +81,12 @@ export default function SSVEPView({ isConnected, wsEvent }) {
     }, []);
 
     useEffect(() => {
-        setConfigs(prev => buildDynamicTargets(refreshRate, prev));
+        setConfigs(prev => {
+            const isAutoDynamicLayout =
+                prev.length === TARGET_DIVISORS.length &&
+                prev.every(cfg => TARGET_DIVISORS.includes(cfg.divisor));
+            return isAutoDynamicLayout ? buildDynamicTargets(refreshRate, prev) : prev;
+        });
     }, [refreshRate]);
 
     const [globalRunning, setGlobalRunning] = useState(false);
@@ -128,7 +133,7 @@ export default function SSVEPView({ isConnected, wsEvent }) {
                         localStorage.setItem('ssvep_refreshRate', newRefRate);
                     }
                     if (eeg.targets && Array.isArray(eeg.targets) && eeg.targets.length > 0) {
-                        setConfigs(prev => buildDynamicTargets(newRefRate, eeg.targets));
+                        setConfigs(eeg.targets);
                     }
                 }
             })

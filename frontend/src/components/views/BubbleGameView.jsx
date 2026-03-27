@@ -108,6 +108,7 @@ const BubbleGameView = ({ result, isConnected }) => {
           if (activeChannel === 'alpha') val = relAlpha * 100;
           else if (activeChannel === 'theta') val = relTheta * 100;
           else if (activeChannel === 'beta') val = relBeta * 100;
+          else if (typeof res.focus_score === 'number') val = res.focus_score;
           else val = (relBeta / (relTheta + relAlpha + 0.01)) * 50;
           rawSignal = val;
           eegSignal = Math.max(0, Math.min(1, channels[activeChannel] ? channels[activeChannel](rawSignal) : rawSignal / 100));

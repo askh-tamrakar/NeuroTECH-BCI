@@ -144,7 +144,7 @@ function render(elapsed) {
     const h = canvas.height;
     const padding = 40;
     const cols = 3;
-    const rows = 2;
+    const rows = Math.max(1, Math.ceil(configs.length / cols));
     const gridW = (w - (cols + 1) * padding) / cols;
     const gridH = (h - (rows + 1) * padding) / rows;
 

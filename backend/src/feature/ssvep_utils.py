@@ -3,8 +3,8 @@ from scipy.signal import butter, detrend, filtfilt, welch
 from sklearn.cross_decomposition import CCA
 
 
-DEFAULT_TARGET_FREQS = [6.59, 9.0, 12.0, 14.4, 16.0, 18.0]
-FILTER_BANKS = [(6, 60), (12, 60), (18, 60), (24, 60)]
+DEFAULT_TARGET_FREQS = [8.0, 9.0, 12.0, 14.4, 16.0, 18.0]
+FILTER_BANKS = [(6, None), (12, None), (18, None), (24, None)]
 FILTER_WEIGHTS = [1.0, 0.7, 0.4, 0.2]
 
 
@@ -29,7 +29,11 @@ def compute_ssvep_features(samples, sr: int = 1000, target_freqs=None, num_harmo
     if data.size == 0:
         return {}
 
-    targets = [float(freq) for freq in (target_freqs or DEFAULT_TARGET_FREQS)[:6]]
+    targets = [float(freq) for freq in (target_freqs or DEFAULT_TARGET_FREQS)]
+    if not targets:
+        targets = list(DEFAULT_TARGET_FREQS)
+    max_target = max(targets)
+    harmonic_ceiling = min((sr / 2) - 1.0, max(40.0, (max_target * max(1, num_harmonics)) + 6.0))
 
     centered = detrend(data)
     std = float(np.std(centered))
@@ -40,7 +44,7 @@ def compute_ssvep_features(samples, sr: int = 1000, target_freqs=None, num_harmo
 
     filtered_signal = normalized
     try:
-        b_bp, a_bp = butter(4, [2, 60], btype='bandpass', fs=sr)
+        b_bp, a_bp = butter(4, [2, harmonic_ceiling], btype='bandpass', fs=sr)
         filtered_signal = filtfilt(b_bp, a_bp, normalized)
     except Exception:
         pass
@@ -77,7 +81,10 @@ def compute_ssvep_features(samples, sr: int = 1000, target_freqs=None, num_harmo
 
         for (low, high), weight in zip(FILTER_BANKS, FILTER_WEIGHTS):
             try:
-                b_sub, a_sub = butter(4, [low, min(high, sr / 2 - 1)], btype='bandpass', fs=sr)
+                high_cut = min(high or harmonic_ceiling, harmonic_ceiling, (sr / 2) - 1.0)
+                if high_cut <= low:
+                    continue
+                b_sub, a_sub = butter(4, [low, high_cut], btype='bandpass', fs=sr)
                 subband = filtfilt(b_sub, a_sub, filtered_signal).reshape(-1, 1)
                 cca.fit(subband, ref)
                 x_score, y_score = cca.transform(subband, ref)

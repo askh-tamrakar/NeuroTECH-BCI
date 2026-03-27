@@ -43,6 +43,12 @@ const MusicView = ({ result }) => {
     }
   }, [result?.state]);
 
+  useEffect(() => {
+    if (musicHandler.audioElement) {
+      musicHandler.audioElement.muted = isMuted;
+    }
+  }, [isMuted]);
+
   // Visualizer Loop
   useEffect(() => {
     const canvas = canvasRef.current;

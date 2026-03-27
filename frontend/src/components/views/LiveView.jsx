@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react'
 import SignalChart from '../charts/SignalChart'
-import { Radio, Square, Play, Pause, Save, Trash2, Cpu, Settings2, Wifi } from 'lucide-react'
+import { Radio, Square, Play, Pause, Save, Trash2, Cpu, Settings2, Wifi, Power } from 'lucide-react'
+import { CalibrationApi } from '../../services/calibrationApi'
 import '../../styles/live/LiveView.css'
 
 export default function LiveView({ wsData, wsEvent, config, isPaused, wsUrl, recordState, recordHandlers }) {
@@ -19,6 +20,7 @@ export default function LiveView({ wsData, wsEvent, config, isPaused, wsUrl, rec
   const chartRefs = useRef({});
 
   const [annotations, setAnnotations] = useState([])
+  const [allDetectionActive, setAllDetectionActive] = useState(false)
 
   // Channels are 0 and 1
   const activeChannels = [0, 1];
@@ -145,6 +147,12 @@ export default function LiveView({ wsData, wsEvent, config, isPaused, wsUrl, rec
     return () => clearInterval(interval);
   }, [])
 
+  useEffect(() => {
+    return () => {
+      CalibrationApi.togglePrediction('ALL', false).catch(() => { })
+    }
+  }, [])
+
   // (Recording action handlers moved to LiveDashboard.jsx)
 
   return (
@@ -251,6 +259,26 @@ export default function LiveView({ wsData, wsEvent, config, isPaused, wsUrl, rec
           >
             <Cpu size={20} className="text-primary" />
             FIRMWARE
+          </button>
+
+          <button
+            onClick={async () => {
+              const nextState = !allDetectionActive
+              try {
+                await CalibrationApi.togglePrediction('ALL', nextState)
+                setAllDetectionActive(nextState)
+              } catch (error) {
+                console.error('Failed to toggle all detection:', error)
+              }
+            }}
+            className={`px-3 py-1.5 rounded-lg text-[14px] font-bold transition-all flex items-center gap-2 border ${allDetectionActive
+              ? 'bg-primary text-white border-primary shadow-sm'
+              : 'bg-bg/50 border-border text-muted hover:text-text hover:bg-surface/50'
+              }`}
+            title="Start or stop EMG, EOG, and EEG detection together"
+          >
+            <Power size={18} />
+            {allDetectionActive ? 'STOP ALL DETECTION' : 'START ALL DETECTION'}
           </button>
 
           <div>

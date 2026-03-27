@@ -1224,7 +1224,7 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
                     </div>
                 </div>
             </div>
-        </div>
+        </div >
     )
 }
 

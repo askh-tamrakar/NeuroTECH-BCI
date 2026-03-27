@@ -176,6 +176,31 @@ const HyperparametersCard = ({ params, onChange }) => (
     </div>
 );
 
+const EEGSummaryCard = ({ result, params }) => (
+    <div className="card h-full flex flex-col p-4 bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-sm">
+        <h3 className="text-base flex items-center font-bold text-[var(--muted)] uppercase tracking-widest border-b border-[var(--border)] pb-2">
+            <Brain className="mr-2 w-4 h-4" /> EEG LDA
+        </h3>
+        <div className="py-4 space-y-4 text-sm text-[var(--text)]">
+            <div className="flex justify-between items-center">
+                <span className="text-[var(--muted)]">Classifier</span>
+                <span className="font-mono text-[var(--primary)]">{result?.classifier || 'LDA'}</span>
+            </div>
+            <div className="flex justify-between items-center">
+                <span className="text-[var(--muted)]">Test Size</span>
+                <span className="font-mono text-[var(--primary)]">{params?.test_size ?? 0.2}</span>
+            </div>
+            <div className="flex justify-between items-center">
+                <span className="text-[var(--muted)]">Session Source</span>
+                <span className="font-mono text-[var(--primary)] truncate max-w-[10rem]" title={result?.source}>{result?.source || 'N/A'}</span>
+            </div>
+            <div className="rounded-lg border border-[var(--border)] bg-[var(--bg)]/40 p-3 text-xs leading-5 text-[var(--muted)]">
+                EEG uses the score-based SSVEP feature set and trains an LDA model per selected session or the full EEG table.
+            </div>
+        </div>
+    </div>
+);
+
 const RenderClassLabel = ({ label, sensor }) => {
     // EOG Special Icons
     if (sensor === 'EOG') {
@@ -332,36 +357,41 @@ const ControlPanel = ({
         {/* Session Select */}
         <div className="card p-4 bg-[var(--surface)] border border-[var(--border)] rounded-xl flex flex-col gap-2">
             <span className="flex flex-row justify-between">
-                <label className="text-xl flex items-center font-bold text-[var(--muted)] uppercase tracking-wide">
-                    <div className="p-1 flex items-center justify-between gap-2 bg-surface/50">
-                        <div className="flex flex-row items-center gap-2.5">
-                            <span className="flex flex-row text-[22px] items-center font-bold tracking-tight">
-                                <Brain size={24} className="text-primary mr-1" /> ML Training
-                                <button
-                                    onClick={onSwitchLab}
-                                    className="transition-all group flex items-center ml-4 gap-3"
-                                    title="Switch to Data Collection"
-                                >
-                                    < ArrowRightFromLine size={18} className="text-muted group-hover:text-primary transition-all group-hover:translate-x-0.5" />
-                                    <Database size={24} className="text-muted group-hover:text-primary transition-colors" />
-                                </button>
-                            </span>
-                        </div>
+                <div className="p-1 flex items-center justify-between gap-2 bg-surface/50">
+                    <div className="flex flex-row items-center gap-2.5">
+                        <span className="flex flex-row text-[22px] items-center font-bold tracking-tight">
+                            <Brain size={24} className="text-primary mr-1" /> ML Training
+                            <button
+                                onClick={onSwitchLab}
+                                className="transition-all group flex items-center ml-4 gap-3"
+                                title="Switch to Data Collection"
+                            >
+                                < ArrowRightFromLine size={18} className="text-muted group-hover:text-primary transition-all group-hover:translate-x-0.5" />
+                                <Database size={24} className="text-muted group-hover:text-primary transition-colors" />
+                            </button>
+                        </span>
                     </div>
-                </label>
+                </div>
+
                 {/* TABS */}
-                <span className="flex bg-[var(--surface)] rounded-lg p-1 border border-[var(--border)]">
+                <span className="flex bg-[var(--surface)] rounded-s-[20px] rounded-e-[6px] p-1 border border-[var(--border)]">
                     <button
                         onClick={() => { setActiveTab('EMG'); onSessionSelect(null); }}
-                        className={`px-2 py-1.5 rounded-md text-sm font-medium transition-all ${activeTab === 'EMG' ? 'bg-[var(--primary)] text-white shadow' : 'text-[var(--text)] hover:text-[var(--primary)]'} `}
+                        className={`px-1 py-1 rounded-s-[20px] rounded-e-[6px] text-sm font-medium transition-all ${activeTab === 'EMG' ? 'bg-[var(--primary)] text-bg ' : 'text-[var(--text)] hover:text-[var(--primary)]'} `}
                     >
                         <Hand className="inline mr-1 w-4 h-4" /> EMG
                     </button>
                     <button
                         onClick={() => { setActiveTab('EOG'); onSessionSelect(null); }}
-                        className={`px-2 py-1.5 rounded-md text-sm font-medium transition-all ${activeTab === 'EOG' ? 'bg-[var(--primary)] text-white shadow' : 'text-[var(--text)] hover:text-[var(--primary)]'} `}
+                        className={`px-1 py-1 rounded-[6px] text-sm font-medium transition-all ${activeTab === 'EOG' ? 'bg-[var(--primary)] text-bg ' : 'text-[var(--text)] hover:text-[var(--primary)]'} `}
                     >
                         <Eye className="inline mr-1 w-4 h-4" /> EOG
+                    </button>
+                    <button
+                        onClick={() => { setActiveTab('EEG'); onSessionSelect(null); }}
+                        className={`px-1 py-1 rounded-[6px] text-sm font-medium transition-all ${activeTab === 'EEG' ? 'bg-[var(--primary)] text-bg ' : 'text-[var(--text)] hover:text-[var(--primary)]'} `}
+                    >
+                        <Brain className="inline mr-1 w-4 h-4" /> EEG
                     </button>
                 </span>
             </span>
@@ -372,7 +402,7 @@ const ControlPanel = ({
                     value={modelName}
                     onChange={(e) => setModelName(e.target.value)}
                     placeholder={`Name for new ${activeTab} model...`}
-                    className="w-full bg-bg text-text border-[2px] border-border rounded-lg px-4 py-2 text-[16px] focus:border-primary focus:ring-1 focus:ring-primary/30 transition-all outline-none"
+                    className="w-full bg-bg text-text border-[2px] border-border rounded-[6px] px-4 py-2 text-[16px] focus:border-primary focus:ring-1 focus:ring-primary/30 transition-all outline-none"
                 />
                 <div className="absolute right-3 top-1/2 -translate-y-1/2 text-[16px] font-mono text-muted group-focus-within:text-primary">.model</div>
             </div>
@@ -437,46 +467,53 @@ export default function MLTrainingView({ onSwitchLab }) {
 
     // --- GENERIC MODEL STATE ---
     const [models, setModels] = useState([]);
-    const [selectedModelName, setSelectedModelName] = useState(null);
+    const [selectedModels, setSelectedModels] = useState({ EMG: null, EOG: null, EEG: null });
+    const selectedModelName = selectedModels[activeTab];
+
     const [trainModelNameInput, setTrainModelNameInput] = useState('');
 
     // Result States per sensor to persist when switching tabs? 
     // Or just one activeResult? One activeResult is simpler but clears on switch.
     // Let's use a ref or object to cache if we wanted, but state is fine.
-    const [results, setResults] = useState({ EMG: null, EOG: null });
-    const [evalResults, setEvalResults] = useState({ EMG: null, EOG: null });
+    const [results, setResults] = useState({ EMG: null, EOG: null, EEG: null });
+    const [evalResults, setEvalResults] = useState({ EMG: null, EOG: null, EEG: null });
 
     // Params per sensor
     const [params, setParams] = useState({
         EMG: { n_estimators: 100, max_depth: 8, test_size: 0.2, min_impurity_decrease: 0.0 },
-        EOG: { n_estimators: 50, max_depth: 5, test_size: 0.2, min_impurity_decrease: 0.0 }
+        EOG: { n_estimators: 50, max_depth: 5, test_size: 0.2, min_impurity_decrease: 0.0 },
+        EEG: { test_size: 0.2 }
     });
 
     const activeResult = results[activeTab];
     const activeEvalResult = evalResults[activeTab];
     const activeParams = params[activeTab];
 
-    const fetchModels = async () => {
+    const fetchModels = async (forcedName = null) => {
         try {
             const res = await fetch(`${API_BASE_URL}/api/models/${activeTab}`);
             if (res.ok) {
                 const data = await res.json();
                 setModels(data);
 
-                // Auto-load first model if none is active or current selection is invalid
+                // Smarter Auto-load: Only if nothing is selected or current selection is invalid
                 if (data.length > 0) {
                     const activeModel = data.find(m => m.active);
-                    const currentModelExists = data.find(m => m.name === selectedModelName);
+                    const currentName = forcedName || selectedModelName;
+                    const currentModelExists = data.find(m => m.name === currentName);
 
-                    if (activeModel) {
-                        if (!selectedModelName || selectedModelName !== activeModel.name) {
-                            setSelectedModelName(activeModel.name);
+                    if (!currentName || !currentModelExists) {
+                        if (activeModel) {
+                            setSelectedModels(prev => ({ ...prev, [activeTab]: activeModel.name }));
+                        } else if (!currentName) {
+                            // Only force-load the first model if we have NO selection at all (Initial Page Load)
+                            const firstModel = data[0].name;
+                            setSelectedModels(prev => ({ ...prev, [activeTab]: firstModel }));
+                            handleLoadModel(firstModel);
                         }
-                    } else if (!selectedModelName || !currentModelExists) {
-                        const firstModel = data[0].name;
-                        setSelectedModelName(firstModel);
-                        handleLoadModel(firstModel);
                     }
+                    // If we have a currentName and it exists in the list, we DON'T override 
+                    // it with the 'active' flag from the backend yet to avoid race conditions.
                 }
             }
         } catch (e) {
@@ -487,11 +524,10 @@ export default function MLTrainingView({ onSwitchLab }) {
     const handleDeleteModel = async (name) => {
         // Removed confirmation as requested
         try {
-            // Ensure sensor path is lowercase (e.g., 'emg', 'eog') to match backend routes
-            const res = await fetch(`${API_BASE_URL}/api/models/${activeTab.toLowerCase()}/${name}`, { method: 'DELETE' });
+            const res = await fetch(`${API_BASE_URL}/api/models/${activeTab}/${name}`, { method: 'DELETE' });
             if (res.ok) {
                 fetchModels();
-                if (selectedModelName === name) setSelectedModelName(null);
+                if (selectedModelName === name) setSelectedModels(prev => ({ ...prev, [activeTab]: null }));
             }
         } catch (e) {
             console.error("Delete failed: ", e);
@@ -499,9 +535,9 @@ export default function MLTrainingView({ onSwitchLab }) {
     };
 
     const handleLoadModel = async (name) => {
-        setSelectedModelName(name);
-        // Clear previous training result so evaluation shows
-        // setResults(prev => ({ ...prev, [activeTab]: null }));
+        setSelectedModels(prev => ({ ...prev, [activeTab]: name }));
+        // Clear previous training result so evaluation shows instead
+        setResults(prev => ({ ...prev, [activeTab]: null }));
 
         try {
             setEvalLoading(true);
@@ -548,6 +584,7 @@ export default function MLTrainingView({ onSwitchLab }) {
     const [treeLoading, setTreeLoading] = useState(false);
 
     const fetchTree = async (index) => {
+        if (activeTab === 'EEG') return;
         const model = selectedModelName;
         if (!model) return;
 
@@ -611,22 +648,21 @@ export default function MLTrainingView({ onSwitchLab }) {
         // setResults(prev => ({ ...prev, [activeTab]: null }));
 
         try {
-            // Determine endpoint based on tab
-            // We could have a generic endpoint, but we have specific ones.
-            // Let's use specific ones or update backend to have generic.
-            // Creating a map for now.
             const endpointMap = {
                 'EMG': `${API_BASE_URL}/api/train-emg-rf`,
-                'EOG': `${API_BASE_URL}/api/train-eog-rf`
+                'EOG': `${API_BASE_URL}/api/train-eog-rf`,
+                'EEG': `${API_BASE_URL}/api/train-eeg-lda`
             };
+
+            const modelNameFinal = trainModelNameInput.trim();
 
             const res = await fetch(endpointMap[activeTab], {
                 method: 'POST',
                 body: JSON.stringify({
                     ...activeParams,
                     table_name: selectedSession || 'ALL',
-                    model_name: trainModelNameInput.trim(),
-                    sensor: activeTab // Just in case generic
+                    model_name: modelNameFinal,
+                    sensor: activeTab
                 }),
                 headers: { 'Content-Type': 'application/json' }
             });
@@ -634,9 +670,13 @@ export default function MLTrainingView({ onSwitchLab }) {
             if (!res.ok) throw new Error(data.error || 'Training failed');
 
             setResults(prev => ({ ...prev, [activeTab]: { ...data, source: getSourceName(true) } }));
-            fetchModels();
-            setSelectedModelName(trainModelNameInput.trim());
+            // Clear previous evaluation result so training result shows instead
+            setEvalResults(prev => ({ ...prev, [activeTab]: null }));
+            setSelectedModels(prev => ({ ...prev, [activeTab]: modelNameFinal }));
             setTreeIndex(0);
+
+            // Refresh list but without triggering it to override our selection
+            await fetchModels(modelNameFinal);
         } catch (e) { setError(e.message); } finally { setLoading(false); }
     };
 
@@ -647,7 +687,8 @@ export default function MLTrainingView({ onSwitchLab }) {
         try {
             const endpointMap = {
                 'EMG': `${API_BASE_URL}/api/model/evaluate`, // legacy endpoint
-                'EOG': `${API_BASE_URL}/api/model/evaluate/eog`
+                'EOG': `${API_BASE_URL}/api/model/evaluate/eog`,
+                'EEG': `${API_BASE_URL}/api/model/evaluate/eeg`
             };
 
             const res = await fetch(endpointMap[activeTab], {
@@ -674,7 +715,11 @@ export default function MLTrainingView({ onSwitchLab }) {
                     [activeTab]: { ...prev[activeTab], ...data.hyperparameters }
                 }));
             }
-            if (data.model_name) setSelectedModelName(data.model_name);
+
+            // Only update selection if it was null (e.g. initial load) or if we explicitly requested a model
+            if (data.model_name && (!selectedModelName || forceModelName)) {
+                setSelectedModels(prev => ({ ...prev, [activeTab]: data.model_name }));
+            }
         } catch (e) {
             console.log("Eval check info (ignore if just checking):", e);
         } finally { setEvalLoading(false); }
@@ -727,7 +772,7 @@ export default function MLTrainingView({ onSwitchLab }) {
                         </div>
 
                         {/* 3. TOP FEATURES */}
-                        {(activeResult || activeEvalResult)?.feature_importances && (
+                        {Object.keys((activeResult || activeEvalResult)?.feature_importances || {}).length > 0 && (
                             <div className="flex-1 flex-grow-4 min-h-0">
                                 <FeatureImportanceCard importances={(activeResult || activeEvalResult).feature_importances} />
                             </div>
@@ -737,29 +782,57 @@ export default function MLTrainingView({ onSwitchLab }) {
                     {/* MAIN BENTO GRID (Span 9) */}
                     {(activeResult || activeEvalResult) ? (
                         <>
-                            {/* TOP ROW: Hyperparams + Confusion Matrix */}
+                            {activeTab !== 'EEG' ? (
+                                <div className="col-span-12 md:col-span-9 row-span-4 min-h-0 flex flex-col overflow-hidden">
+                                    <DecisionTreeCard
+                                        structure={(activeResult || activeEvalResult).tree_structure}
+                                        treeIndex={treeIndex}
+                                        totalTrees={activeParams.n_estimators}
+                                        onTreeChange={fetchTree}
+                                        loading={loading || treeLoading}
+                                    />
+                                </div>
+                            ) : (
+                                <div className="col-span-12 md:col-span-9 row-span-4 min-h-0 flex flex-col overflow-hidden">
+                                    <div className="card h-full flex flex-col p-6 bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-sm">
+                                        <h3 className="text-base flex items-center font-bold text-[var(--muted)] uppercase tracking-widest border-b border-[var(--border)] pb-2">
+                                            <Brain className="mr-2 w-4 h-4" /> EEG Model Workspace
+                                        </h3>
+                                        <div className="flex-1 grid gap-4 py-4 md:grid-cols-2">
+                                            <div className="rounded-xl border border-[var(--border)] bg-[var(--bg)]/30 p-4">
+                                                <div className="text-xs uppercase tracking-widest text-[var(--muted)]">Model</div>
+                                                <div className="mt-2 text-2xl font-black text-[var(--primary)]">{(activeResult || activeEvalResult).model_name || 'eeg_lda'}</div>
+                                                <div className="mt-2 text-sm text-[var(--muted)]">Classifier: {(activeResult || activeEvalResult).classifier || 'LDA'}</div>
+                                            </div>
+                                            <div className="rounded-xl border border-[var(--border)] bg-[var(--bg)]/30 p-4">
+                                                <div className="text-xs uppercase tracking-widest text-[var(--muted)]">Feature Set</div>
+                                                <div className="mt-2 text-sm leading-6 text-[var(--text)]">
+                                                    score_1..score_6, max/second max score, ratio, mean, std
+                                                </div>
+                                                <div className="mt-2 text-xs text-[var(--muted)]">
+                                                    Session-based EEG LDA evaluation does not expose tree inspection because it is not a forest model.
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
 
-                            {/* BOTTOM ROW: Tree Viz */}
-                            {/* Tree Viz (Span 9, Row 4) - Extended full width */}
-                            <div className="col-span-12 md:col-span-9 row-span-4 min-h-0 flex flex-col overflow-hidden">
-                                <DecisionTreeCard
-                                    structure={(activeResult || activeEvalResult).tree_structure}
-                                    treeIndex={treeIndex}
-                                    totalTrees={activeParams.n_estimators}
-                                    onTreeChange={fetchTree}
-                                    loading={loading || treeLoading}
-                                />
-                            </div>
-                            {/* Hyperparameters (Span 3, Row 2) - Replaces old Accuracy spot */}
                             <div className="col-span-12 md:col-span-3 row-span-2 min-h-0 flex flex-col overflow-hidden">
-                                <HyperparametersCard
-                                    params={activeParams}
-                                    onChange={handleParamChange}
-                                />
+                                {activeTab === 'EEG' ? (
+                                    <EEGSummaryCard
+                                        result={activeResult || activeEvalResult}
+                                        params={activeParams}
+                                    />
+                                ) : (
+                                    <HyperparametersCard
+                                        params={activeParams}
+                                        onChange={handleParamChange}
+                                    />
+                                )}
                             </div>
 
-                            {/* Confusion Matrix (Span 6, Row 2) - Replaces old Features spot */}
-                            <div className="col-span-12 md:col-span-6 row-span-2 min-h-0 flex flex-col overflow-hidden">
+                            <div className={`col-span-12 ${activeTab === 'EEG' ? 'md:col-span-9' : 'md:col-span-6'} row-span-2 min-h-0 flex flex-col overflow-hidden`}>
                                 <ConfusionMatrixCard
                                     matrix={(activeResult || activeEvalResult).confusion_matrix}
                                     labels={(activeResult || activeEvalResult).labels || []}

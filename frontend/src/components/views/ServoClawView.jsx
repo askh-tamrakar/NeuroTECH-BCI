@@ -333,10 +333,10 @@ export default function ServoClawView({ wsEvent, isConnected }) {
                     </div>
 
                     {/* Bottom Section: Logs & Settings */}
-                    <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="mt-4 flex-1 grid grid-cols-1 min-h-0 md:grid-cols-2 gap-6">
 
                         {/* Event Logger */}
-                        <div className="flex flex-col gap-4 h-120 border border-border/50 rounded-2xl bg-surface p-5 shadow-inner">
+                        <div className="flex flex-1 flex-col gap-4 min-h-0 border border-border/50 rounded-2xl bg-surface p-5 shadow-inner">
                             <div className="flex items-center justify-between border-b border-border/50 pb-2">
                                 <h2 className="text-sm font-bold opacity-80 flex items-center gap-2 uppercase tracking-widest text-muted">
                                     <Activity size={16} />

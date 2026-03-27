@@ -4,6 +4,7 @@ import WindowListPanel from '../calibration/WindowListPanel';
 import EEGDataCollectionPanel from '../calibration/EEGDataCollectionPanel';
 import ConfigPanel from '../calibration/ConfigPanel';
 import SessionManagerPanel from '../calibration/SessionManagerPanel';
+import CustomSwitchPill from '../ui/CustomSwitchPill';
 import { CalibrationApi } from '../../services/calibrationApi';
 import CustomSelect from '../ui/CustomSelect';
 import { useSettings } from '../../contexts/SettingsContext';
@@ -477,6 +478,14 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
         setTargetLabel(newTarget);
         soundHandler.playSettingSwitch();
     };
+
+    const handleChannelToggle = useCallback(() => {
+        if (matchingChannels.length < 2) return;
+        const currentIdx = matchingChannels.findIndex(c => c.index === activeChannelIndex);
+        const nextIdx = (currentIdx + 1) % matchingChannels.length;
+        setActiveChannelIndex(matchingChannels[nextIdx].index);
+        soundHandler.playSettingSwitch();
+    }, [matchingChannels, activeChannelIndex]);
 
     const buildWindowMetadata = useCallback((win) => {
         if (activeSensor !== 'EEG') return undefined;
@@ -1029,9 +1038,14 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                 });
             } else if (code === km.deleteLatest) {
                 e.preventDefault();
-                if (readyWindowsRef.current.length > 0) {
-                    const lastReady = readyWindowsRef.current[readyWindowsRef.current.length - 1];
-                    deleteWindow(lastReady.id);
+                const windows = markedWindowsRef.current;
+                if (windows.length > 0) {
+                    // Find latest by startTime to be robust against unshift vs push
+                    let latest = windows[0];
+                    for (let i = 1; i < windows.length; i++) {
+                        if (windows[i].startTime > latest.startTime) latest = windows[i];
+                    }
+                    deleteWindow(latest.id);
                 }
             } else if (code === km.deleteAll) {
                 e.preventDefault();
@@ -1160,7 +1174,7 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                             )}
 
                             {/* Segmented Control for Modes (Image 1 Style) */}
-                            <div className="flex p-1 bg-bg border-2 border-accent/30 rounded-[50px] overflow-hidden shadow-inner">
+                            <div className="flex p-1 bg-bg border-2 border-accent/30 rounded-[20px] overflow-hidden shadow-inner">
                                 {['collection', 'recorded', 'test'].map(m => (
                                     <button
                                         key={m}
@@ -1175,6 +1189,30 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                                 ))}
                             </div>
                         </div>
+
+                        {/* 1.5 CHANNEL FOCUS (EEG Only) */}
+                        {activeSensor === 'EEG' && matchingChannels.length > 1 && (
+                            <div className="space-y-3 animate-in slide-in-from-top-2 duration-300">
+                                <label className="text-[14px] font-bold text-muted uppercase tracking-wider flex items-center gap-1.5 opacity-80">Channel Focus</label>
+                                <div className="flex items-center justify-center gap-3 select-none">
+                                    <span className={`text-[18px] font-black tracking-tight transition-colors ${activeChannelIndex === matchingChannels[0].index ? 'text-primary' : 'text-muted'}`}>
+                                        {matchingChannels[0].label}
+                                    </span>
+
+                                    <button
+                                        onClick={handleChannelToggle}
+                                        className={`w-14 h-7 rounded-full relative transition-colors border-2 border-border bg-bg`}
+                                    >
+                                        <div className={`absolute top-0.5 bottom-0.5 w-5 rounded-full bg-text shadow transition-all ${activeChannelIndex !== matchingChannels[0].index ? 'left-[calc(100%-22px)]' : 'left-0.5'}`} />
+                                    </button>
+
+                                    <span className={`text-[18px] font-black tracking-tight transition-colors ${activeChannelIndex !== matchingChannels[0].index ? 'text-primary' : 'text-muted'}`}>
+                                        {matchingChannels[1].label}
+                                    </span>
+                                </div>
+                            </div>
+                        )}
+
                         <div className="h-[2px] w-full bg-border/95"></div>
 
                         {/* 2. COLLECTION CONTROLS */}
@@ -1404,45 +1442,41 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                 <div className="lg:col-span-3 h-full min-h-0 overflow-hidden shadow-sm flex flex-col bg-card rounded-md">
                     {activeSensor === 'EEG' ? (
                         <>
-                            <div className="flex border-b border-border p-1 bg-muted/30">
-                                <button
-                                    onClick={() => setShowEegWindowList(false)}
-                                    className={`flex-1 px-2 py-1.5 text-xs font-semibold rounded-md transition-colors ${!showEegWindowList ? 'bg-primary text-primary-foreground shadow' : 'text-muted-foreground hover:bg-muted'}`}
-                                >
-                                    Collection View
-                                </button>
-                                <button
-                                    onClick={() => setShowEegWindowList(true)}
-                                    className={`flex-1 px-2 py-1.5 text-xs font-semibold rounded-md transition-colors ${showEegWindowList ? 'bg-primary text-primary-foreground shadow' : 'text-muted-foreground hover:bg-muted'}`}
-                                >
-                                    Window List
-                                </button>
-                            </div>
-                            <div className="flex-1 min-h-0 overflow-hidden">
-                                {showEegWindowList ? (
-                                    <WindowListPanel
-                                        windows={markedWindows}
-                                        onDelete={deleteWindow}
-                                        onMarkMissed={markMissed}
-                                        onHighlight={setHighlightedWindow}
-                                        activeSensor={activeSensor}
-                                        windowProgress={windowProgress}
-                                        autoLimit={autoLimit}
-                                        onAutoLimitChange={setAutoLimit}
-                                        autoCalibrate={autoCalibrate}
-                                        onAutoCalibrateChange={setAutoCalibrate}
-                                        onClearSaved={handleAppendSamples}
-                                        onDeleteAll={handleClearAllWindows}
-                                    />
-                                ) : (
-                                    <EEGDataCollectionPanel
-                                        isCalibrating={isCalibrating}
-                                        targetLabel={targetLabel}
-                                        targetFrequency={selectedEegTarget?.freq || 0}
-                                        onRecord={handleEEGRecord}
-                                        savedCount={markedWindows.filter(w => w.label === targetLabel && (w.status === 'saved' || w.status === 'correct')).length}
-                                    />
-                                )}
+                        <div className="flex flex-col flex-1 gap-2 overflow-hidden">
+                                <CustomSwitchPill
+                                    activeTab={showEegWindowList ? 'list' : 'collection'}
+                                    onSwitch={(id) => setShowEegWindowList(id === 'list')}
+                                    tabs={[
+                                        { id: 'collection', label: 'COLLECTIONS', icon: Zap },
+                                        { id: 'list', label: 'WINDOWS', icon: Database }
+                                    ]}
+                                />
+                                <div className='flex-1 min-h-0 overflow-hidden'>
+                                    {showEegWindowList ? (
+                                        <WindowListPanel
+                                            windows={markedWindows}
+                                            onDelete={deleteWindow}
+                                            onMarkMissed={markMissed}
+                                            onHighlight={setHighlightedWindow}
+                                            activeSensor={activeSensor}
+                                            windowProgress={windowProgress}
+                                            autoLimit={autoLimit}
+                                            onAutoLimitChange={setAutoLimit}
+                                            autoCalibrate={autoCalibrate}
+                                            onAutoCalibrateChange={setAutoCalibrate}
+                                            onClearSaved={handleAppendSamples}
+                                            onDeleteAll={handleClearAllWindows}
+                                        />
+                                    ) : (
+                                        <EEGDataCollectionPanel
+                                            isCalibrating={isCalibrating}
+                                            targetLabel={targetLabel}
+                                            targetFrequency={selectedEegTarget?.freq || 0}
+                                            onRecord={handleEEGRecord}
+                                            savedCount={markedWindows.filter(w => w.label === targetLabel && (w.status === 'saved' || w.status === 'correct')).length}
+                                        />
+                                    )}
+                                </div>
                             </div>
                         </>
                     ) : (

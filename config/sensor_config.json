@@ -3,11 +3,11 @@
   "channel_mapping": {
     "ch0": {
       "enabled": true,
-      "sensor": "EOG"
+      "sensor": "EMG"
     },
     "ch1": {
       "enabled": true,
-      "sensor": "EOG"
+      "sensor": "EEG"
     }
   },
   "display": {
@@ -17,7 +17,7 @@
   },
   "num_channels": 2,
   "active_models": {
-    "EMG": "rps-1200",
+    "EMG": "Neurobench",
     "EOG": "dino-ml"
   }
 }

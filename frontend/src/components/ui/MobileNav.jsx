@@ -1,15 +1,14 @@
 import React from 'react';
-import { Terminal, Gamepad2, Zap, HandMetal, BrainCircuit, Database, Settings2, Bot } from 'lucide-react';
+import { Terminal, Gamepad2, Brain, HandMetal, FlaskConical, Settings2, Bot } from 'lucide-react';
 
 export default function MobileNav({ currentPage, setCurrentPage, mobileMainView, setMobileMainView }) {
     const navItems = [
         { id: 'live', icon: Terminal, label: 'Terminal', href: '#live' },
         { id: 'dino', icon: Gamepad2, label: 'Dino', href: '#dino' },
-        { id: 'ssvep', icon: Zap, label: 'SSVEP', href: '#ssvep' },
+        { id: 'eeg_dashboard', icon: Brain, label: 'EEG', href: '#eeg_dashboard' },
         { id: 'rps', icon: HandMetal, label: 'RPS', href: '#rps' },
-        { id: 'servo_claw', icon: Bot, label: 'Servo', href: '#servo_claw' },
-        { id: 'ml_training', icon: BrainCircuit, label: 'M.L.', href: '#ml_training' },
-        { id: 'data_collection', icon: Database, label: 'Data', href: '#data_collection' }
+        { id: 'lab', icon: FlaskConical, label: 'Lab', href: '#lab' },
+        { id: 'servo_claw', icon: Bot, label: 'Servo', href: '#servo_claw' }
     ]
 
     return (

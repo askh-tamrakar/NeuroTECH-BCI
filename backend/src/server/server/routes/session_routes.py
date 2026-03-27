@@ -394,6 +394,17 @@ def api_eeg_stop():
         session_id = str(uuid.uuid4())
         data_store = state.session.data_store['EEG']
         saved_count = 0
+        eeg_cfg = (state.config or {}).get('features', {}).get('EEG', {})
+        target_freqs = [float(freq) for freq in eeg_cfg.get('target_freqs', [8, 9, 12, 14.4, 16, 18])]
+        channel_mapping = (state.config or {}).get('channel_mapping', {})
+        eeg_channel_index = 0
+        for channel_key, channel_info in channel_mapping.items():
+            if str(channel_info.get('sensor', '')).upper() == 'EEG':
+                try:
+                    eeg_channel_index = int(str(channel_key).replace('ch', ''))
+                except Exception:
+                    eeg_channel_index = 0
+                break
         
         for label_str, samples in data_store.items():
             if len(samples) < 50:
@@ -407,8 +418,8 @@ def api_eeg_stop():
             raw_data = np.array(samples)
             
             sr = state.sr or 1000
-            window_size = int(sr * 1.0) # 1s window for frequency analysis
-            step_size = int(window_size * 0.5)
+            window_size = max(1, int(sr * float(eeg_cfg.get('window_len_sec', 1.5))))
+            step_size = max(1, int(sr * float(eeg_cfg.get('step_sec', 0.25))))
             
             for i in range(0, len(raw_data) - window_size + 1, step_size):
                 window = raw_data[i : i + window_size]
@@ -416,6 +427,10 @@ def api_eeg_stop():
                 # Extract
                 feats = extract_eeg_features(window, sr)
                 feats['timestamp'] = time.time()
+                feats['sample_count'] = int(len(window))
+                feats['window_ms'] = float((len(window) / sr) * 1000.0)
+                feats['channel_index'] = eeg_channel_index
+                feats['target_frequency'] = float(target_freqs[label_int - 1]) if 0 < label_int <= len(target_freqs) else 0.0
                 
                 if db_manager.insert_eeg_window(feats, label_int, session_id, table_name=target_table):
                     saved_count += 1

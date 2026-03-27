@@ -1,7 +1,7 @@
 import numpy as np
 import collections
 from scipy import signal
-from src.feature.ssvep_utils import compute_ssvep_features
+from src.feature.ssvep_utils import DEFAULT_TARGET_FREQS, compute_ssvep_features
 
 class EEGExtractor:
     """
@@ -23,7 +23,7 @@ class EEGExtractor:
         self.window_len_sec = float(eeg_cfg.get("window_len_sec", 1.5))
         self.step_sec = float(eeg_cfg.get("step_sec", 0.25))
         self.num_harmonics = int(eeg_cfg.get("num_harmonics", 4))
-        self.target_freqs = eeg_cfg.get("target_freqs", [6.59, 9.0, 12.0, 14.4, 16.0, 18.0])
+        self.target_freqs = eeg_cfg.get("target_freqs", DEFAULT_TARGET_FREQS)
         self.buffer_size = max(1, int(self.sr * self.window_len_sec))
         self.stride = max(1, int(self.sr * self.step_sec))
         self.freq_bands = eeg_cfg.get("freq_bands", {

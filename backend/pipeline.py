@@ -103,6 +103,13 @@ COMPONENTS = [
         "success_msg": "HID Controller connected and ready"
     },
     {
+        "name": "Servo Actuator",
+        "module": "src.actuation.servo_controller",
+        "color": Theme.FAIL,
+        "ready_pattern": "Connected to StreamManager Relay via TCP.",
+        "success_msg": "Servo Actuator connected to Relay"
+    },
+    {
         "name": "Web Server",
         "module": "src.server.web_server",
         "color": Theme.WARNING,
@@ -119,7 +126,8 @@ def log_process(process, name, color, ready_pattern=None, ready_event=None, succ
     ALLOWLIST = [
         "[event]", "[config]", "[model]", "[session]", "[rec]",
         "error", "exception", "[ok]", "[fail]",
-        "📌", "🚀", "✔", "✘", "♻️", "💾"
+        "📌", "🚀", "✔", "✘", "♻️", "💾",
+        "http", "local", "network", "dev server"
     ]
     
     # Symbols that also indicate important status updates
@@ -170,11 +178,10 @@ def shutdown_handler(signum, frame):
 
 def main():
     parser = argparse.ArgumentParser(description="NeuroTECH System Orchestrator")
-    parser.add_argument("-b", "--build", action="store_true", help="Build frontend before starting")
-    parser.add_argument("-d", "--dev", action="store_true", help="Run in development mode (starts Vite dev server)")
-    parser.add_argument("-r", "--remote", action="store_true", help="Remote Mode: Suppress local frontend and expose API to network")
-    parser.add_argument("-v", "--verbose", action="store_true", help="Show detailed subprocess logs")
-    parser.add_argument("-s", "--servo", action="store_true", help="Enable Servo Actuator component")
+    parser.add_argument("-b", "--build", action="store_true", help="Build frontend and start on port 5005")
+    parser.add_argument("-d", "--dev", action="store_true", help="Start React dev server")
+    parser.add_argument("-r", "--remote", action="store_true", help="Serve remotely (no local frontend)")
+    parser.add_argument("-v", "--verbose", action="store_true", help="Detailed console logs")
     args = parser.parse_args()
 
     # --- STARTUP BANNER ---
@@ -211,30 +218,33 @@ def main():
     # Use generic 'python' if in the correct environment, otherwise sys.executable
     python_exe = sys.executable
     
-    # Diagnostic log for interpreter
-    log_system(f"Using Python Interpreter: {Theme.DIM}{python_exe}{Theme.RESET}", icon=Theme.INFO)
-
-    # --- 1. BUILD PHASE (Optional) ---
-    if args.build:
-        log_system(" Building frontend...", icon=Theme.BUILD)
+    # --- 1. FRONTEND PREPARATION ---
+    # Install dependencies if node_modules missing and user wants to build/dev
+    if (args.build or args.dev) and not (frontend_dir / "node_modules").exists():
+        log_system("Installing frontend dependencies...", icon=Theme.BUILD)
         try:
-            # Install dependencies if node_modules missing
-            if not (frontend_dir / "node_modules").exists():
-                    log_system(" Installing npm dependencies...")
-                    subprocess.run(["npm", "install"], cwd=frontend_dir, shell=True, check=True)
-            
-            # Run Build
-            log_system(" Running npm run build...")
-            subprocess.run(["npm", "run", "build"], cwd=frontend_dir, shell=True, check=True)
-            log_system(" Frontend built successfully!", icon=Theme.SUCCESS)
+            subprocess.run(["npm", "install"], cwd=frontend_dir, shell=True, check=True)
         except Exception as e:
-            log_system(f" Frontend build FAILED: {e}", icon=Theme.ERROR)
-            log_system(" Continuing anyway...", icon=Theme.WARN)
+            log_system(f"Dependency installation failed: {e}", icon=Theme.ERROR)
+
+    if args.build:
+        log_system("Building frontend...", icon=Theme.BUILD)
+        try:
+            # Run Build
+            log_system("Running npm run build...")
+            subprocess.run(["npm", "run", "build"], cwd=frontend_dir, shell=True, check=True)
+            log_system("Frontend built successfully!", icon=Theme.SUCCESS)
+        except Exception as e:
+            log_system(f"Frontend build FAILED: {e}", icon=Theme.ERROR)
+            log_system("Continuing anyway...", icon=Theme.WARN)
     else:
         if args.dev:
-             log_system(" Skipping build (Dev Mode active)...", icon=Theme.INFO)
+             log_system("Skipping build (Dev Mode active)...", icon=Theme.INFO)
         else:
-             log_system(" Skipping build (Using existing 'dist')...", icon=Theme.INFO)
+             log_system("Using existing 'dist' for frontend...", icon=Theme.INFO)
+
+    # Diagnostic log for interpreter
+    log_system(f"Using Python Interpreter: {Theme.DIM}{python_exe}{Theme.RESET}", icon=Theme.INFO)
 
     # Register signal handler
     signal.signal(signal.SIGINT, shutdown_handler)
@@ -245,8 +255,9 @@ def main():
         log_system("Starting Frontend Development Server (Vite)...", icon=Theme.LAUNCH)
         try:
              cmd = ["npm", "run", "dev"]
-             if args.remote:
-                 cmd.extend(["--", "--host"])
+             # If user is in dev mode but also wants external access (maybe via another flag in future)
+             # we can pass --host. For now we only do it if explicitly requested via some mean?
+             # Currently we only do it if remotely is NOT set, which is the current block.
                  
              dev_proc = subprocess.Popen(
                 cmd, 
@@ -272,14 +283,6 @@ def main():
 
     # Dynamic component addition
     active_components = list(COMPONENTS)
-    if args.servo:
-        active_components.append({
-            "name": "Servo Actuator",
-            "module": "src.actuation.servo_controller",
-            "color": Theme.FAIL,
-            "ready_pattern": "Connected to StreamManager Relay via TCP.",
-            "success_msg": "Servo Actuator connected to Relay"
-        })
 
     # --- 3. START BACKEND COMPONENTS ---
     for component in active_components:
