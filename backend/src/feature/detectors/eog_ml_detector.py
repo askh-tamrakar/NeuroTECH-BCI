@@ -22,6 +22,32 @@ class EOGMLDetector:
         # For blinking, we usually want discrete events, so exact classification is key
         
         self.load_model()
+
+    @staticmethod
+    def _normalize_model_name(name: str) -> str:
+        return "".join(ch.lower() for ch in str(name or "") if ch.isalnum())
+
+    def _resolve_model_stem(self, models_dir: Path, model_name: str) -> str | None:
+        """
+        Resolve a requested model name against on-disk stems while being tolerant of
+        spaces / hyphens / underscores. This keeps frontend labels like "dino ml"
+        compatible with files such as "dino-ml.joblib".
+        """
+        requested = self._normalize_model_name(model_name)
+        if not requested:
+            return None
+
+        direct_stem = "".join([c for c in model_name if c.isalnum() or c in ('_', '-')])
+        if direct_stem and (models_dir / f"{direct_stem}.joblib").exists():
+            return direct_stem
+
+        for candidate in models_dir.glob("*.joblib"):
+            if candidate.name.endswith("_scaler.joblib"):
+                continue
+            if self._normalize_model_name(candidate.stem) == requested:
+                return candidate.stem
+
+        return direct_stem or None
         
     def load_model(self, model_name=None, verbose=True):
         try:
@@ -45,7 +71,9 @@ class EOGMLDetector:
             if model_name == "eog_rf" and not (models_dir / "eog_rf.joblib").exists():
                  model_name = "dino-ml"
             
-            clean_name = "".join([c for c in model_name if c.isalnum() or c in ('_', '-')])
+            clean_name = self._resolve_model_stem(models_dir, model_name)
+            if not clean_name:
+                clean_name = "".join([c for c in model_name if c.isalnum() or c in ('_', '-')])
             
             model_path = models_dir / f"{clean_name}.joblib"
             scaler_path = models_dir / f"{clean_name}_scaler.joblib"
@@ -124,6 +152,8 @@ class EOGMLDetector:
             pred_idx = np.argmax(probs)
             confidence = probs[pred_idx]
             
+            # Must stay aligned with the saved EOG sessions / SQLite labels:
+            # 0=Rest, 1=SingleBlink, 2=DoubleBlink
             label_map = {0: 'Rest', 1: 'SingleBlink', 2: 'DoubleBlink'}
             
             pred_label = label_map.get(int(self.model.classes_[pred_idx]), 'Unknown')

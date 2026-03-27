@@ -16,7 +16,7 @@ import sys
 # Standard Labels for Confusion Matrix alignment (Indices)
 # Standard Labels for Confusion Matrix alignment (Indices)
 # 0=Rest, 1=Rock, 2=Paper, 3=Scissors (Assumed based on usage)
-# For EOG: 0=DoubleBlink, 1=SingleBlink, 2=Rest (Inferred from Frontend)
+# For EOG: 0=Rest, 1=SingleBlink, 2=DoubleBlink
 LABELS_MAP = {
     'EMG': [0, 1, 2, 3],
     'EOG': [0, 1, 2],
@@ -25,7 +25,7 @@ LABELS_MAP = {
 
 DISPLAY_LABELS = {
     'EMG': {0: 'Rest', 1: 'Rock', 2: 'Paper', 3: 'Scissors'},
-    'EOG': {0: 'DoubleBlink', 1: 'SingleBlink', 2: 'Rest'},
+    'EOG': {0: 'Rest', 1: 'SingleBlink', 2: 'DoubleBlink'},
     'EEG': {0: 'Rest', 1: 'Target 1', 2: 'Target 2', 3: 'Target 3', 4: 'Target 4', 5: 'Target 5', 6: 'Target 6'}
 }
 

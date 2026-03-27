@@ -27,6 +27,7 @@ const getEventEmoji = (type) => {
 
 export default function DinoView({ isConnected, wsEvent, isPaused }) {
     const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+    const normalizeModelName = useCallback((name) => String(name || '').toLowerCase().replace(/[^a-z0-9]/g, ''), []);
 
     const togglePrediction = useCallback((active) => {
         fetch(`${API_BASE_URL}/api/eog/predict/${active ? 'start' : 'stop'}`, { method: 'POST' })
@@ -213,8 +214,8 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
 
         // When method changes to ML, ensure a model is selected
         if (settings.DETECTION_METHOD === 'ML' && models.length > 0) {
-            // Priority: 'dino ml' > currently selected > active on backend > first available
-            const preferred = models.find(m => m.name === 'dino ml');
+            // Priority: dino-ml > currently selected > active on backend > first available
+            const preferred = models.find(m => normalizeModelName(m.name) === 'dinoml');
             const current = models.find(m => m.name === settings.ACTIVE_MODEL);
             const activeOnBackend = models.find(m => m.active);
 
@@ -225,7 +226,7 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
             }
         }
 
-    }, [settings, models])
+    }, [settings, models, normalizeModelName])
 
     // Load available EOG models
     useEffect(() => {
@@ -234,18 +235,18 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
             .then(data => {
                 setModels(data);
                 if (data.length > 0) {
-                    const dinoModel = data.find(m => m.name === 'dino ml');
+                    const dinoModel = data.find(m => normalizeModelName(m.name) === 'dinoml');
                     const activeModel = data.find(m => m.active);
 
-                    // Prioritize 'dino ml' if no model is set or if it's the expected default
-                    if (!settings.ACTIVE_MODEL || settings.ACTIVE_MODEL === 'dino ml') {
+                    // Prioritize the Dino model if no model is set or if the default placeholder is still selected
+                    if (!settings.ACTIVE_MODEL || normalizeModelName(settings.ACTIVE_MODEL) === 'dinoml') {
                         const target = dinoModel || activeModel || data[0];
                         handleSettingChange('ACTIVE_MODEL', target.name);
                     }
                 }
             })
             .catch(err => console.error("Failed to load EOG models:", err));
-    }, []);
+    }, [normalizeModelName]);
 
     // Push Config to Backend when Detection Method or Model changes
     useEffect(() => {
@@ -304,38 +305,55 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
     ]);
 
     useEffect(() => {
-        fetch(`${API_BASE_URL}/api/config`)
-            .then(res => res.json())
-            .then(config => {
-                const mapping = config.channel_mapping || {};
-                const eogChannels = [];
-                // Check all possible hardware channels
-                ['ch0', 'ch1', 'ch2', 'ch3'].forEach(ch => {
-                    if (mapping[ch] && mapping[ch].sensor === 'EOG' && mapping[ch].enabled) {
-                        eogChannels.push(ch);
-                    }
-                });
+        let cancelled = false;
 
-                if (eogChannels.length === 0) {
-                    setAvailableChannels([{ label: 'No EOG Sensor Mapped', value: 'none' }]);
-                    handleSettingChange('CONTROL_CHANNEL', 'none');
-                } else if (eogChannels.length === 1) {
-                    setAvailableChannels([{ label: `Channel ${eogChannels[0].replace('ch', '')}`, value: eogChannels[0] }]);
-                    handleSettingChange('CONTROL_CHANNEL', eogChannels[0]);
-                } else {
-                    const options = [{ label: 'Select Channel...', value: 'any' }];
-                    eogChannels.forEach(ch => {
-                        options.push({ label: `Channel ${ch.replace('ch', '')}`, value: ch });
+        const refreshEogChannels = () => {
+            fetch(`${API_BASE_URL}/api/config`)
+                .then(res => res.json())
+                .then(config => {
+                    if (cancelled) return;
+
+                    const mapping = config.channel_mapping || {};
+                    const eogChannels = [];
+                    ['ch0', 'ch1', 'ch2', 'ch3'].forEach(ch => {
+                        if (mapping[ch] && mapping[ch].sensor === 'EOG' && mapping[ch].enabled) {
+                            eogChannels.push(ch);
+                        }
                     });
-                    setAvailableChannels(options);
 
-                    if (settingsRef.current.CONTROL_CHANNEL !== 'any' && !eogChannels.includes(settingsRef.current.CONTROL_CHANNEL)) {
-                        handleSettingChange('CONTROL_CHANNEL', 'any');
+                    if (eogChannels.length === 0) {
+                        setAvailableChannels([{ label: 'No EOG Sensor Mapped', value: 'none' }]);
+                        if (settingsRef.current.CONTROL_CHANNEL !== 'none') {
+                            handleSettingChange('CONTROL_CHANNEL', 'none');
+                        }
+                    } else if (eogChannels.length === 1) {
+                        setAvailableChannels([{ label: `Channel ${eogChannels[0].replace('ch', '')}`, value: eogChannels[0] }]);
+                        if (settingsRef.current.CONTROL_CHANNEL !== eogChannels[0]) {
+                            handleSettingChange('CONTROL_CHANNEL', eogChannels[0]);
+                        }
+                    } else {
+                        const options = [{ label: 'Select Channel...', value: 'any' }];
+                        eogChannels.forEach(ch => {
+                            options.push({ label: `Channel ${ch.replace('ch', '')}`, value: ch });
+                        });
+                        setAvailableChannels(options);
+
+                        if (settingsRef.current.CONTROL_CHANNEL !== 'any' && !eogChannels.includes(settingsRef.current.CONTROL_CHANNEL)) {
+                            handleSettingChange('CONTROL_CHANNEL', 'any');
+                        }
                     }
-                }
-            })
-            .catch(err => console.error("Error fetching config for channels", err));
-    }, []);
+                })
+                .catch(err => console.error("Error fetching config for channels", err));
+        };
+
+        refreshEogChannels();
+        const intervalId = setInterval(refreshEogChannels, 2000);
+
+        return () => {
+            cancelled = true;
+            clearInterval(intervalId);
+        };
+    }, [API_BASE_URL]);
 
     useEffect(() => {
         togglePrediction(true);
@@ -677,18 +695,21 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
     }, []);
 
     const handleSinglePress = useCallback((source = 'blink') => {
-        const text = source === 'keyboard' ? "Spacebar (Jump)" : "Blink Detected (Jump)"
+        const currentState = gameStateRef.current;
+        const text =
+            source === 'keyboard'
+                ? "Spacebar (Jump)"
+                : (currentState === 'ready' || currentState === 'gameOver')
+                    ? "Blink Detected (Start)"
+                    : "Blink Detected (Jump)"
         logEvent(text, source === 'keyboard' ? 'keyboard' : 'blink')
         triggerSingleBlink()
 
-        const currentState = gameStateRef.current;
-        if (currentState === 'ready' || currentState === 'gameOver') {
-            startGame();
-        } else if (currentState === 'playing') {
+        if (currentState === 'ready' || currentState === 'gameOver' || currentState === 'playing') {
             soundHandler.playDinoJump();
             jump();
         }
-    }, [startGame, jump, logEvent]);
+    }, [jump, logEvent]);
 
     const handleDoublePress = useCallback((source = 'blink') => {
         const currentState = gameStateRef.current;

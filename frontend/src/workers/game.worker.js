@@ -65,6 +65,7 @@ let moonPhase = 0; // 0 to 1
 let lastSentScore = 0;
 let obstaclesPassed = 0;
 let scoreMultiplier = 1.0;
+let queuedJumpExpiry = 0;
 
 // Visuals State
 let clouds = [];
@@ -234,7 +235,18 @@ function resetGame() {
     distance = 0;
     obstaclesPassed = 0;
     scoreMultiplier = 1.0;
+    queuedJumpExpiry = 0;
+    self.postMessage({ type: 'STATE_UPDATE', payload: 'playing' });
     self.postMessage({ type: 'SCORE_UPDATE', score: 0 });
+}
+
+function canJumpNow() {
+    return dinoY >= -2 && velocity >= 0;
+}
+
+function performJump() {
+    velocity = SETTINGS.JUMP_STRENGTH;
+    queuedJumpExpiry = 0;
 }
 
 function handleInput(action) {
@@ -255,12 +267,16 @@ function handleInput(action) {
         eyeStateTimer = setTimeout(() => { eyeState = 'open'; }, 300);
 
         if (gameState === 'ready' || gameState === 'gameOver') {
-            console.log("[Worker] Resetting game")
+            console.log("[Worker] Resetting game and jumping")
             resetGame();
-        } else if (gameState === 'playing' && dinoY === 0) { // Only jump if on ground (checking exact 0 approx)
-            // Jump logic
+        } else if (gameState === 'playing' && canJumpNow()) {
             console.log("[Worker] Jumping! Strength:", SETTINGS.JUMP_STRENGTH)
-            velocity = SETTINGS.JUMP_STRENGTH;
+            performJump();
+        } else if (gameState === 'playing' && velocity >= 0 && dinoY > -30) {
+            // Small input buffer helps late-arriving blink events still trigger the jump
+            // as soon as the dino lands, without allowing true mid-air double jumps.
+            queuedJumpExpiry = Date.now() + 150;
+            console.log("[Worker] Jump buffered until", queuedJumpExpiry);
         } else {
             console.log("[Worker] Jump ignored. State:", gameState, "Y:", dinoY)
         }
@@ -321,6 +337,11 @@ function updatePhysics(deltaTime) {
         if (dinoY >= 0) {
             dinoY = 0;
             velocity = 0;
+            if (queuedJumpExpiry && Date.now() <= queuedJumpExpiry) {
+                performJump();
+            } else if (queuedJumpExpiry && Date.now() > queuedJumpExpiry) {
+                queuedJumpExpiry = 0;
+            }
         }
 
         // Obstacles

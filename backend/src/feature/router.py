@@ -43,6 +43,7 @@ CONFIG_PATH = CONFIG_DIR / "sensor_config.json"
 
 INPUT_STREAM_NAME = "BioSignals-Processed"
 OUTPUT_STREAM_NAME = "BioSignals-Events"
+CONFIG_POLL_INTERVAL = 0.1
 
 try:
     from ..utils.config import config_manager
@@ -168,7 +169,7 @@ class FeatureRouter:
             try:
                 # 1. Check for Configuration Changes (Model switch, thresh change, etc)
                 # Check every 0.5 seconds regardless of sample rate
-                if time.time() - last_check_time > 0.5:
+                if time.time() - last_check_time > CONFIG_POLL_INTERVAL:
                     current_vhash = config_manager.get_config_version_hash()
                     if current_vhash != self.last_config_vhash:
                         log.info(f"Config changed — reloading pipeline...")

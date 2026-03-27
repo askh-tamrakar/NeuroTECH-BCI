@@ -10,8 +10,8 @@ from sklearn.metrics import accuracy_score, confusion_matrix
 import sys
 import os
 
-# Standard Labels for EOG (Must match frontend)
-# 0, 1, 2 corresponding to DoubleBlink, SingleBlink, Rest
+# Standard Labels for EOG (Must match frontend / saved DB rows)
+# 0=Rest, 1=SingleBlink, 2=DoubleBlink
 STANDARD_LABELS = [0, 1, 2]
 
 # Add project root to sys.path to allow imports from src

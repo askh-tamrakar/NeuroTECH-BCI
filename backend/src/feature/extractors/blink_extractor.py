@@ -24,7 +24,7 @@ class BlinkExtractor:
         self.max_duration_ms = eog_cfg.get("max_duration_ms", 900.0) 
         
         # Hang-time / Grace period to prevent premature window closure
-        self.grace_period_ms = 25.0
+        self.grace_period_ms = eog_cfg.get("grace_period_ms", 15.0)
         self.silence_samples_count = 0
         
         # Buffer for signal (approx 1 second of data)
@@ -170,8 +170,10 @@ class BlinkExtractor:
     def _extract_features(self, window):
         """
         Internal wrapper to maintain compatibility and add timestamp.
+        We use the smart cropper here so the live feature shape stays closer to the
+        training windows saved through the data-collection path.
         """
-        features = BlinkExtractor.extract_features(window, self.sr)
+        features = BlinkExtractor.extract_features_smart(window, self.sr)
         features["timestamp"] = self.current_idx / self.sr
         return features
 
@@ -180,6 +182,7 @@ class BlinkExtractor:
         self.amp_threshold = eog_cfg.get("amp_threshold", self.amp_threshold)
         self.min_duration_ms = eog_cfg.get("min_duration_ms", self.min_duration_ms)
         self.max_duration_ms = eog_cfg.get("max_duration_ms", self.max_duration_ms)
+        self.grace_period_ms = eog_cfg.get("grace_period_ms", self.grace_period_ms)
 
     @staticmethod
     def extract_features_smart(data: list | np.ndarray, sr: int) -> dict:

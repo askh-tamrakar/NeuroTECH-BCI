@@ -233,7 +233,7 @@ class StreamManagerApp:
                         t = threading.Thread(target=self._handle_client, args=(conn, addr), daemon=True)
                         t.start()
                         self.raw_clients.append((conn, addr))
-                        self.connection_var.set(f"Connected (Raw): {len(self.raw_clients)} clients")
+                        self.root.after_idle(lambda: self.connection_var.set(f"Connected (Raw): {len(self.raw_clients)} clients"))
                         
                     elif name == "Processed":
                         self.log(f"Processed Source connected from {addr}")
@@ -252,6 +252,16 @@ class StreamManagerApp:
                     
         except Exception as e:
             self.log(f"{name} Server Error on {port}: {e}")
+
+    @staticmethod
+    def _recv_exact(conn, size):
+        data = bytearray()
+        while len(data) < size:
+            chunk = conn.recv(size - len(data))
+            if not chunk:
+                return None
+            data.extend(chunk)
+        return bytes(data)
             
     def _handle_client(self, conn, addr):
         """
@@ -347,8 +357,8 @@ class StreamManagerApp:
         try:
             while self.is_running:
                 # 1. Read Header (2 bytes)
-                header = conn.recv(2)
-                if not header or len(header) < 2:
+                header = self._recv_exact(conn, 2)
+                if not header:
                     break
                 
                 sync, count = header[0], header[1]
@@ -359,12 +369,9 @@ class StreamManagerApp:
 
                 # 2. Read Payload (Count * 4 bytes)
                 payload_size = count * 4
-                data = b""
-                while len(data) < payload_size:
-                    chunk = conn.recv(payload_size - len(data))
-                    if not chunk:
-                        return
-                    data += chunk
+                data = self._recv_exact(conn, payload_size)
+                if not data:
+                    return
                 
                 # 3. Process
                 fmt = f'<{count}f'
