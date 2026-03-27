@@ -16,11 +16,17 @@ class EOGMLDetector:
         self.config = config
         self.model = None
         self.scaler = None
+        self.last_confidence = 0.0
+        self.feature_columns = [
+            'amplitude', 'duration_ms', 'rise_time_ms', 'fall_time_ms',
+            'asymmetry', 'peak_count', 'kurtosis', 'skewness'
+        ]
         
         # Configuration
         # We can reuse RPS thresholds or define new ones if needed
         # For blinking, we usually want discrete events, so exact classification is key
-        
+
+        self.update_config(config)
         self.load_model()
 
     @staticmethod
@@ -81,6 +87,13 @@ class EOGMLDetector:
             if model_path.exists() and scaler_path.exists():
                 self.model = joblib.load(model_path)
                 self.scaler = joblib.load(scaler_path)
+                if self.online_adaptation_enabled:
+                    try:
+                        from src.calibration.calibration_manager import calibration_manager
+                        calibration_manager.prime_eog_running_stats_from_scaler(self.scaler, self.feature_columns)
+                    except Exception as exc:
+                        if verbose:
+                            print(f"[WARN] EOG online adaptation priming failed: {exc}")
                 if verbose:
                     print(f"\n{'='*50}\n[EOGMLDetector] MODEL LOADED SUCCESSFULLY: {model_name}\n{'='*50}\n", flush=True)
             else:
@@ -103,6 +116,13 @@ class EOGMLDetector:
                     if model_path.exists() and scaler_path.exists():
                         self.model = joblib.load(model_path)
                         self.scaler = joblib.load(scaler_path)
+                        if self.online_adaptation_enabled:
+                            try:
+                                from src.calibration.calibration_manager import calibration_manager
+                                calibration_manager.prime_eog_running_stats_from_scaler(self.scaler, self.feature_columns)
+                            except Exception as exc:
+                                if verbose:
+                                    print(f"[WARN] EOG online adaptation priming failed: {exc}")
                         if verbose:
                             print(f"\n{'='*50}\n[EOGMLDetector] MODEL AUTO-LOADED FALLBACK: {first_model}\n{'='*50}\n", flush=True)
                         
@@ -121,6 +141,24 @@ class EOGMLDetector:
             print(f"[FATAL] Error loading model {model_name}: {e}")
 
         
+    def _transform_features(self, features: dict):
+        row = {
+            col: float(np.nan_to_num(features.get(col, 0.0), nan=0.0, posinf=1e6, neginf=-1e6))
+            for col in self.feature_columns
+        }
+
+        if self.online_adaptation_enabled:
+            try:
+                from src.calibration.calibration_manager import calibration_manager
+                if calibration_manager.eog_running_mean:
+                    normalized = calibration_manager.normalize_eog_features_online(row, self.feature_columns)
+                    return np.asarray([[normalized[col] for col in self.feature_columns]], dtype=float)
+            except Exception as exc:
+                print(f"[EOGMLDetector] Online normalization fallback: {exc}")
+
+        X = pd.DataFrame([[row[col] for col in self.feature_columns]], columns=self.feature_columns)
+        return self.scaler.transform(X)
+
     def predict_class(self, features: dict) -> str | None:
         """
         Predict label from features.
@@ -133,24 +171,13 @@ class EOGMLDetector:
              
         try:
             # 1. Prepare Feature Vector (Must match training order in eog_trainer.py)
-            feature_cols = [
-                'amplitude', 'duration_ms', 'rise_time_ms', 'fall_time_ms',
-                'asymmetry', 'peak_count', 'kurtosis', 'skewness'
-            ]
-            
-            row = []
-            for col in feature_cols:
-                val = features.get(col, 0.0)
-                row.append(val)
-            
-            # 2. Scale
-            X = pd.DataFrame([row], columns=feature_cols)
-            X_scaled = self.scaler.transform(X)
+            X_scaled = self._transform_features(features)
             
             # 3. Predict PROBABILITY
             probs = self.model.predict_proba(X_scaled)[0]
             pred_idx = np.argmax(probs)
             confidence = probs[pred_idx]
+            self.last_confidence = float(confidence)
             
             # Must stay aligned with the saved EOG sessions / SQLite labels:
             # 0=Rest, 1=SingleBlink, 2=DoubleBlink
@@ -179,7 +206,20 @@ class EOGMLDetector:
         # The Extractor only emits when a potential blink is detected.
         # So we just classify it.
         print("detecting by ML ")
-        return self.predict_class(features)
+        prediction = self.predict_class(features)
+
+        if prediction and self.online_adaptation_enabled and self.last_confidence >= self.online_confidence_threshold:
+            try:
+                from src.calibration.calibration_manager import calibration_manager
+                calibration_manager.update_eog_running_stats(
+                    features,
+                    alpha=self.online_alpha,
+                    feature_columns=self.feature_columns,
+                )
+            except Exception as exc:
+                print(f"[EOGMLDetector] Online stats update failed: {exc}")
+
+        return prediction
 
     def update_config(self, config: dict):
         self.config = config
@@ -187,4 +227,7 @@ class EOGMLDetector:
         # FeatureRouter handles this by re-instantiating, or we can check here.
         # But FeatureRouter re-instantiates the whole pipeline on config change.
         # So we don't need to do anything here if FeatureRouter does its job.
-        pass
+        eog_cfg = config.get("features", {}).get("EOG", {})
+        self.online_adaptation_enabled = bool(eog_cfg.get("online_adaptation_enabled", True))
+        self.online_confidence_threshold = float(eog_cfg.get("online_confidence_threshold", 0.9))
+        self.online_alpha = float(eog_cfg.get("online_alpha", 0.004))

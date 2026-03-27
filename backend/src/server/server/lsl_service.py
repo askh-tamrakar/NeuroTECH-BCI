@@ -22,9 +22,9 @@ RAW_STREAM_NAME = "BioSignals-Processed"
 EVENT_STREAM_NAME = "BioSignals-Events"
 
 # Helper for features
-def extract_emg_features(samples: list, sr: int = 1000) -> dict:
+def extract_emg_features(samples: list, sr: int = 1000, prev_features: dict | None = None) -> dict:
     """Extract EMG features matching RPSExtractor."""
-    return RPSExtractor.extract_features(samples, sr)
+    return RPSExtractor.extract_features(samples, sr, prev_features=prev_features)
 
 def extract_eog_features(samples: list, sr: int = 1000) -> dict:
     """Extract EOG blink features matching BlinkExtractor (Smart Crop)."""

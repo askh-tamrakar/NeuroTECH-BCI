@@ -23,7 +23,7 @@ self.onmessage = async function (e) {
             await fetchSessions();
             break;
         case 'FETCH_SESSIONS':
-            await fetchSessions();
+            await fetchSessions(payload?.silent);
             break;
         case 'CREATE_SESSION':
             handleCreate(payload.name);
@@ -39,9 +39,6 @@ self.onmessage = async function (e) {
             break;
         case 'CLEAR_SESSION':
             await handleClearSession(payload.name);
-            break;
-        case 'FETCH_SESSIONS':
-            await fetchSessions(payload?.silent);
             break;
         case 'FETCH_DETAILS':
             await fetchSessionDetails(payload);

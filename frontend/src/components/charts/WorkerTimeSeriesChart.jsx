@@ -5,6 +5,7 @@ const WorkerTimeSeriesChart = forwardRef(({
     config = {},
     timeWindow = 5000,
     activeSensor,
+    displayMode = 'raw',
     activeChannelIndex,
     channelIndex,
     onWindowSelect
@@ -77,6 +78,8 @@ const WorkerTimeSeriesChart = forwardRef(({
                         config: {
                             timeWindow,
                             channelIndex,
+                            activeSensor,
+                            displayMode,
                             ...config
                         }
                     };
@@ -153,7 +156,7 @@ const WorkerTimeSeriesChart = forwardRef(({
                 // We can't reset isTransferred since canvas is dead.
             }, 200); // 200ms buffer
         };
-    }, [config, timeWindow, onWindowSelect]); // Add deps to ensure listener updates
+    }, [config, timeWindow, onWindowSelect, activeSensor, displayMode]); // Add deps to ensure listener updates
 
 
     const handleMouseDown = (e) => {
@@ -187,10 +190,10 @@ const WorkerTimeSeriesChart = forwardRef(({
         if (workerRef.current) {
             workerRef.current.postMessage({
                 type: 'SET_CONFIG',
-                payload: { timeWindow, channelIndex, ...config }
+                payload: { timeWindow, channelIndex, activeSensor, displayMode, ...config }
             });
         }
-    }, [config, timeWindow]);
+    }, [config, timeWindow, activeSensor, displayMode, channelIndex]);
 
     // Expose API
     useImperativeHandle(ref, () => ({

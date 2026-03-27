@@ -29,6 +29,11 @@ class SessionManager:
             'EOG': False,
             'EEG': False
         }
+        self.collection_context = {
+            'EMG': None,
+            'EOG': None,
+            'EEG': None
+        }
         
     def start_recording(self, sensor_type, label, session_name="Default"):
         self.is_recording = True
@@ -78,5 +83,18 @@ class SessionManager:
             "recording": self.is_recording and self.recording_type == sensor_type,
             "current_label": self.current_label if self.recording_type == sensor_type else "",
             "counts": self.counts.get(sensor_type, {}),
-            "session": self.current_session_name if self.recording_type == sensor_type else None
+            "session": self.current_session_name if self.recording_type == sensor_type else None,
+            "collection_context": self.collection_context.get(sensor_type),
         }
+
+    def start_collection_context(self, sensor_type, **context):
+        sensor = str(sensor_type).upper()
+        self.collection_context[sensor] = {"sensor": sensor, **context}
+
+    def stop_collection_context(self, sensor_type):
+        sensor = str(sensor_type).upper()
+        if sensor in self.collection_context:
+            self.collection_context[sensor] = None
+
+    def get_collection_context(self, sensor_type):
+        return self.collection_context.get(str(sensor_type).upper())

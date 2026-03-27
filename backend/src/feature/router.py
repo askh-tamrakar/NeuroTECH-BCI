@@ -213,11 +213,29 @@ class FeatureRouter:
                                     
                                     # 1. Emit Real-time Prediction (Instant Feedback)
                                     # We emit this every frame for the UI
-                                    self._emit_event("emg_prediction", ch_idx, sensor_type, features, ts, extra_data={"label": instant_label})
+                                    self._emit_event(
+                                        "emg_prediction",
+                                        ch_idx,
+                                        sensor_type,
+                                        features,
+                                        ts,
+                                        extra_data={
+                                            "label": instant_label,
+                                            "confidence": getattr(detector, "last_confidence", 0.0),
+                                            "stable_state": getattr(detector, "stable_state", "Rest"),
+                                        }
+                                    )
                                     
                                     # 2. Emit Confirmed Gesture (Game Move)
                                     if confirmed_label:
-                                        self._emit_event(confirmed_label, ch_idx, sensor_type, features, ts)
+                                        self._emit_event(
+                                            confirmed_label,
+                                            ch_idx,
+                                            sensor_type,
+                                            features,
+                                            ts,
+                                            extra_data={"confidence": getattr(detector, "last_confidence", 0.0)}
+                                        )
                                         
                                 elif sensor_type == "EOG":
                                     if isinstance(detection_result, str) and detection_result:

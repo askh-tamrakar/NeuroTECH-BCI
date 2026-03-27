@@ -1,16 +1,64 @@
 from flask import Blueprint, jsonify, request
-import uuid
+import json
 import uuid
 import numpy as np
 import time
 from src.server.server.state import state
 from src.database.db_manager import db_manager
+from src.config.window_config import SESSION_CONFIG, get_window_samples
+from src.feature.extractors.rps_extractor import EMG_FEATURE_COLUMNS
 # from src.server.server.lsl_service import extract_emg_features # If needed for saving EMG buffer
 # Import extract_emg_features from lsl_service to avoid duplication if possible, 
 # but lsl_service.py has it.
 from src.server.server.lsl_service import extract_emg_features, extract_eog_features, extract_eeg_features
 
 session_bp = Blueprint('session', __name__)
+
+EMG_COLLECTION_GAP_MS = 500.0
+
+
+def _resolve_sampling_rate():
+    return float((state.config or {}).get('sampling_rate') or state.sr or SESSION_CONFIG["sampling_rate"])
+
+
+def _normalize_collection_context(sensor_type, payload=None):
+    payload = payload or {}
+    sensor = str(sensor_type).upper()
+    sampling_rate = float(payload.get('sampling_rate') or _resolve_sampling_rate())
+    requested_window_ms = float(payload.get('window_duration_ms') or payload.get('window_ms') or 0)
+    requested_overlap = float(payload.get('overlap') or 0)
+    requested_gap_ms = float(payload.get('gap_duration_ms') or payload.get('gap_ms') or 0)
+
+    if sensor == 'EMG':
+        window_ms = float(SESSION_CONFIG["window_ms"])
+        overlap = requested_overlap if requested_overlap > 0 else 0.0
+        gap_ms = requested_gap_ms if requested_gap_ms > 0 else EMG_COLLECTION_GAP_MS
+    else:
+        window_ms = requested_window_ms
+        overlap = requested_overlap
+        gap_ms = requested_gap_ms
+
+    stride_ms = float(payload.get('stride_ms') or payload.get('session_stride_ms') or 0)
+    if stride_ms <= 0 and window_ms > 0:
+        if overlap > 0:
+            stride_ms = max(1.0, window_ms * (1.0 - overlap))
+        elif gap_ms > 0:
+            stride_ms = window_ms + gap_ms
+        else:
+            stride_ms = window_ms
+
+    return {
+        "mode": payload.get('mode', 'collection'),
+        "label": payload.get('class_label') or payload.get('label'),
+        "session_name": payload.get('session_name', 'Manual_Windows'),
+        "sampling_rate": sampling_rate,
+        "window_duration_ms": window_ms,
+        "overlap": overlap,
+        "stride_ms": stride_ms,
+        "gap_ms": gap_ms,
+        "time_window_ms": float(payload.get('time_window_ms') or payload.get('time_window') or 0),
+        "channel_index": int(payload.get('channel_index', payload.get('channel', 0)) or 0),
+    }
 
 @session_bp.route('/api/sessions/<sensor_type>', methods=['GET'])
 def api_list_sessions(sensor_type):
@@ -143,6 +191,30 @@ def api_merge_multiple_sessions(sensor_type):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+
+@session_bp.route('/api/calibration/start', methods=['POST'])
+def api_start_collection():
+    payload = request.get_json() or {}
+    sensor = str(payload.get('sensor', '')).upper()
+    if sensor not in {'EMG', 'EOG', 'EEG'}:
+        return jsonify({"error": "Valid sensor is required"}), 400
+
+    context = _normalize_collection_context(sensor, payload)
+    state.session.start_collection_context(sensor, **context)
+    return jsonify({"status": "started", "sensor": sensor, "collection_context": context})
+
+
+@session_bp.route('/api/calibration/stop', methods=['POST'])
+def api_stop_collection():
+    payload = request.get_json() or {}
+    sensor = str(payload.get('sensor', '')).upper()
+    if sensor not in {'EMG', 'EOG', 'EEG'}:
+        return jsonify({"error": "Valid sensor is required"}), 400
+
+    context = state.session.get_collection_context(sensor)
+    state.session.stop_collection_context(sensor)
+    return jsonify({"status": "stopped", "sensor": sensor, "collection_context": context})
+
 # --- EMG ENDPOINTS ---
 
 @session_bp.route('/api/emg/start', methods=['POST'])
@@ -169,6 +241,32 @@ def api_emg_stop():
     try:
         session_id = str(uuid.uuid4())
         data_store = state.session.data_store['EMG']
+        collection_context = state.session.get_collection_context('EMG') or {}
+        sr = state.sr or SESSION_CONFIG["sampling_rate"]
+        window_ms = float(collection_context.get('window_duration_ms') or SESSION_CONFIG["window_ms"])
+        requested_stride_ms = float(collection_context.get('stride_ms') or 0)
+        overlap = float(collection_context.get('overlap') or SESSION_CONFIG["overlap"])
+        gap_ms = float(collection_context.get('gap_ms') or 0)
+        window_size = max(1, int((window_ms / 1000.0) * sr))
+        if requested_stride_ms > 0:
+            step_size = max(1, int((requested_stride_ms / 1000.0) * sr))
+        else:
+            _, step_size = get_window_samples({"sampling_rate": sr, "window_ms": window_ms, "overlap": overlap})
+
+        db_manager.save_session_metadata('EMG', target_table, {
+            "sensor": "EMG",
+            "table_name": target_table,
+            "session_name": state.session.current_session_name,
+            "storage_format": "compact_emg_v1",
+            "feature_columns": EMG_FEATURE_COLUMNS,
+            "training_window_ms": float(window_ms),
+            "capture_window_ms": float(window_ms),
+            "sampling_rate": float(sr),
+            "overlap": float(overlap),
+            "stride_ms": float((step_size / sr) * 1000.0),
+            "gap_ms": float(gap_ms),
+            "channel_index": int(collection_context.get('channel_index', 0) or 0),
+        })
         
         saved_count = 0
         
@@ -199,22 +297,34 @@ def api_emg_stop():
             if raw_data.ndim > 1 and raw_data.shape[1] == 1:
                 raw_data = raw_data.flatten()
             
-            # Windowing parameters
-            sr = state.sr or 1000
-            window_size = int(sr * 0.5)  # 0.5s window
-            step_size = int(window_size * 0.5) # 50% overlap
-            
             # Slice and dice
             num_samples = len(raw_data)
             if num_samples < window_size:
                 continue
                 
+            prev_features = None
             for i in range(0, num_samples - window_size + 1, step_size):
                 window = raw_data[i : i + window_size]
                 
                 # Extract features
-                feats = extract_emg_features(window, sr)
+                feats = extract_emg_features(window, sr, prev_features=prev_features)
                 feats['timestamp'] = time.time()
+                feats['channel_index'] = int(collection_context.get('channel_index', 0) or 0)
+                feats['sample_count'] = int(len(window))
+                feats['window_ms'] = float((len(window) / sr) * 1000.0)
+                feats['sampling_rate'] = float(sr)
+                feats['session_window_ms'] = float(window_ms)
+                feats['session_overlap'] = float(overlap)
+                feats['session_stride_ms'] = float((step_size / sr) * 1000.0)
+                feats['gap_ms'] = float(gap_ms)
+                feats['metadata_json'] = json.dumps({
+                    "source": "backend_session_buffer",
+                    "mode": collection_context.get('mode', 'buffer_recording'),
+                    "label": label_str,
+                    "session_name": state.session.current_session_name,
+                    "collection_context": collection_context,
+                })
+                prev_features = feats.copy()
                 
                 # Save to DB (Specific Table)
                 if db_manager.insert_window(feats, label_int, session_id, table_name=target_table):
@@ -227,10 +337,12 @@ def api_emg_stop():
         
         # Finally reset session state
         state.session.reset_recording_state()
+        state.session.stop_collection_context('EMG')
         
     except Exception as e:
         import traceback
         tb_str = traceback.format_exc()
+        state.session.stop_collection_context('EMG')
         print(f"❌ Error processing EMG session: {tb_str}")
         return jsonify({"status": "stopped", "error": str(e), "traceback": tb_str, "saved_windows": 0})
 

@@ -74,7 +74,10 @@ const SignalChart = forwardRef(({
   onRangeChange = null,
   onColorChange = null,
   disabled = false,
-  channelIndex = -1
+  channelIndex = -1,
+  activeSensor,
+  displayMode = 'raw',
+  titleAddon = null
 }, ref) => {
 
   const containerRef = useRef(null)
@@ -125,7 +128,9 @@ const SignalChart = forwardRef(({
               manualRange: autoScaledRange || currentManual,
               showGrid,
               channelIndex,
-              disabled
+              disabled,
+              activeSensor,
+              displayMode
             }
           }
         }, [offscreen]);
@@ -187,11 +192,13 @@ const SignalChart = forwardRef(({
           manualRange: autoScaledRange || currentManual,
           showGrid,
           channelIndex,
-          disabled
+          disabled,
+          activeSensor,
+          displayMode
         }
       });
     }
-  }, [timeWindowMs, color, currentZoom, currentManual, autoScaledRange, showGrid, currentTheme, disabled]);
+  }, [timeWindowMs, color, currentZoom, currentManual, autoScaledRange, showGrid, currentTheme, disabled, activeSensor, displayMode]);
 
   // Sync Annotations
   useEffect(() => {
@@ -262,25 +269,28 @@ const SignalChart = forwardRef(({
   return (
     <div className={`signal-chart-container ${disabled ? 'signal-chart-disabled' : ''}`}>
       <div className="chart-header">
-        <h3 className="chart-title" style={{ position: 'relative' }}>
-          <button
-            onClick={(e) => {
-              e.preventDefault()
-              if (onColorChange) {
-                const currentIndex = DEFAULT_PALETTE.indexOf(color)
-                const nextIndex = (currentIndex + 1) % DEFAULT_PALETTE.length
-                onColorChange(DEFAULT_PALETTE[nextIndex === -1 ? 0 : nextIndex])
-              }
-            }}
-            className="p-1 hover:bg-muted/10 rounded-full transition-colors cursor-pointer group"
-            title="Click to Cycle Color"
-          >
-            <ChartSpline size={32} strokeWidth={3} style={{ color: color }} className="mr-2 group-hover:scale-110 transition-transform" />
-          </button>
-          {graphNo}
-          <span className="channel-color-dot" style={{ backgroundColor: color }}></span>
-          {title}
-        </h3>
+        <div className="flex items-center gap-4 min-w-0">
+          <h3 className="chart-title" style={{ position: 'relative' }}>
+            <button
+              onClick={(e) => {
+                e.preventDefault()
+                if (onColorChange) {
+                  const currentIndex = DEFAULT_PALETTE.indexOf(color)
+                  const nextIndex = (currentIndex + 1) % DEFAULT_PALETTE.length
+                  onColorChange(DEFAULT_PALETTE[nextIndex === -1 ? 0 : nextIndex])
+                }
+              }}
+              className="p-1 hover:bg-muted/10 rounded-full transition-colors cursor-pointer group"
+              title="Click to Cycle Color"
+            >
+              <ChartSpline size={32} strokeWidth={3} style={{ color: color }} className="mr-2 group-hover:scale-110 transition-transform" />
+            </button>
+            {graphNo}
+            <span className="channel-color-dot" style={{ backgroundColor: color }}></span>
+            {title}
+          </h3>
+          {titleAddon && <div className="shrink-0">{titleAddon}</div>}
+        </div>
 
         {/* Middle: Controls Box */}
         <div className="flex items-center gap-6">

@@ -1,0 +1,1 @@
+{"sensor": "EMG", "n_estimators": 180, "max_depth": 8, "min_impurity_decrease": 0.01, "test_size": 0.15, "table_name": "emg_session_samples_3400", "created_at": "2026-03-27T15:34:00.066952", "accuracy": 0.8470588235294118}

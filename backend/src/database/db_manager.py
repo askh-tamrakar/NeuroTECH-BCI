@@ -1,8 +1,32 @@
-
+import json
 import sqlite3
 import re
 from typing import Dict, Optional, List
-from src.utils.paths import get_db_path
+from src.utils.paths import get_base_data_dir, get_db_path
+
+
+COMPACT_EMG_FEATURE_COLUMNS = [
+    "mav",
+    "rms",
+    "iemg",
+    "var",
+    "wl",
+    "zc",
+    "ssc",
+    "mean_freq",
+    "median_freq",
+    "spectral_entropy",
+    "d_mav",
+    "d_rms",
+    "d_iemg",
+    "d_var",
+    "d_wl",
+    "d_zc",
+    "d_ssc",
+    "d_mean_freq",
+    "d_median_freq",
+    "d_spectral_entropy",
+]
 
 class DatabaseManager:
     def __init__(self):
@@ -34,12 +58,14 @@ class DatabaseManager:
         # EMG
         conn = self.connect('EMG')
         self._create_emg_table(conn.cursor(), "emg_windows")
+        self._ensure_emg_columns(conn, "emg_windows")
         conn.commit()
         conn.close()
 
         # EOG
         conn = self.connect('EOG')
         self._create_eog_table(conn.cursor(), "eog_windows")
+        self._ensure_eog_columns(conn, "eog_windows")
         conn.commit()
         conn.close()
 
@@ -67,6 +93,67 @@ class DatabaseManager:
                 skewness REAL NOT NULL,
                 ssc REAL NOT NULL,
                 wamp REAL NOT NULL,
+                zc REAL NOT NULL DEFAULT 0,
+                mean_freq REAL NOT NULL DEFAULT 0,
+                median_freq REAL NOT NULL DEFAULT 0,
+                spectral_entropy REAL NOT NULL DEFAULT 0,
+                d_mav REAL NOT NULL DEFAULT 0,
+                d_rms REAL NOT NULL DEFAULT 0,
+                d_iemg REAL NOT NULL DEFAULT 0,
+                d_var REAL NOT NULL DEFAULT 0,
+                d_wl REAL NOT NULL DEFAULT 0,
+                d_zc REAL NOT NULL DEFAULT 0,
+                d_ssc REAL NOT NULL DEFAULT 0,
+                d_mean_freq REAL NOT NULL DEFAULT 0,
+                d_median_freq REAL NOT NULL DEFAULT 0,
+                d_spectral_entropy REAL NOT NULL DEFAULT 0,
+                channel_index INTEGER DEFAULT 0,
+                sample_count INTEGER DEFAULT 0,
+                window_ms REAL DEFAULT 0,
+                sampling_rate REAL DEFAULT 0,
+                session_window_ms REAL DEFAULT 0,
+                session_overlap REAL DEFAULT 0,
+                session_stride_ms REAL DEFAULT 0,
+                gap_ms REAL DEFAULT 0,
+                metadata_json TEXT DEFAULT '',
+                confidence REAL DEFAULT 0,
+                source TEXT DEFAULT 'manual',
+                corrected_label INTEGER,
+                label INTEGER NOT NULL,
+                session_id TEXT,
+                timestamp REAL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        cursor.execute(f'CREATE INDEX IF NOT EXISTS idx_{table_name}_label ON {table_name}(label)')
+
+    def _create_emg_session_table(self, cursor, table_name):
+        cursor.execute(f'''
+            CREATE TABLE IF NOT EXISTS {table_name} (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                mav REAL NOT NULL,
+                rms REAL NOT NULL,
+                iemg REAL NOT NULL,
+                var REAL NOT NULL,
+                wl REAL NOT NULL,
+                zc REAL NOT NULL DEFAULT 0,
+                ssc REAL NOT NULL DEFAULT 0,
+                mean_freq REAL NOT NULL DEFAULT 0,
+                median_freq REAL NOT NULL DEFAULT 0,
+                spectral_entropy REAL NOT NULL DEFAULT 0,
+                d_mav REAL NOT NULL DEFAULT 0,
+                d_rms REAL NOT NULL DEFAULT 0,
+                d_iemg REAL NOT NULL DEFAULT 0,
+                d_var REAL NOT NULL DEFAULT 0,
+                d_wl REAL NOT NULL DEFAULT 0,
+                d_zc REAL NOT NULL DEFAULT 0,
+                d_ssc REAL NOT NULL DEFAULT 0,
+                d_mean_freq REAL NOT NULL DEFAULT 0,
+                d_median_freq REAL NOT NULL DEFAULT 0,
+                d_spectral_entropy REAL NOT NULL DEFAULT 0,
+                confidence REAL DEFAULT 0,
+                source TEXT DEFAULT 'manual',
+                corrected_label INTEGER,
                 label INTEGER NOT NULL,
                 session_id TEXT,
                 timestamp REAL,
@@ -87,6 +174,9 @@ class DatabaseManager:
                 peak_count INTEGER NOT NULL,
                 kurtosis REAL NOT NULL,
                 skewness REAL NOT NULL,
+                confidence REAL DEFAULT 0,
+                source TEXT DEFAULT 'manual',
+                corrected_label INTEGER,
                 label INTEGER NOT NULL,
                 session_id TEXT,
                 timestamp REAL,
@@ -146,6 +236,63 @@ class DatabaseManager:
             if column_name not in existing:
                 cursor.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}")
 
+    def _ensure_emg_columns(self, conn, table_name: str):
+        self._ensure_columns(conn, table_name, {
+            "zc": "REAL NOT NULL DEFAULT 0",
+            "mean_freq": "REAL NOT NULL DEFAULT 0",
+            "median_freq": "REAL NOT NULL DEFAULT 0",
+            "spectral_entropy": "REAL NOT NULL DEFAULT 0",
+            "d_mav": "REAL NOT NULL DEFAULT 0",
+            "d_rms": "REAL NOT NULL DEFAULT 0",
+            "d_iemg": "REAL NOT NULL DEFAULT 0",
+            "d_var": "REAL NOT NULL DEFAULT 0",
+            "d_wl": "REAL NOT NULL DEFAULT 0",
+            "d_zc": "REAL NOT NULL DEFAULT 0",
+            "d_ssc": "REAL NOT NULL DEFAULT 0",
+            "d_mean_freq": "REAL NOT NULL DEFAULT 0",
+            "d_median_freq": "REAL NOT NULL DEFAULT 0",
+            "d_spectral_entropy": "REAL NOT NULL DEFAULT 0",
+            "channel_index": "INTEGER DEFAULT 0",
+            "sample_count": "INTEGER DEFAULT 0",
+            "window_ms": "REAL DEFAULT 0",
+            "sampling_rate": "REAL DEFAULT 0",
+            "session_window_ms": "REAL DEFAULT 0",
+            "session_overlap": "REAL DEFAULT 0",
+            "session_stride_ms": "REAL DEFAULT 0",
+            "gap_ms": "REAL DEFAULT 0",
+            "metadata_json": "TEXT DEFAULT ''",
+            "confidence": "REAL DEFAULT 0",
+            "source": "TEXT DEFAULT 'manual'",
+            "corrected_label": "INTEGER",
+        })
+
+    def _ensure_emg_session_columns(self, conn, table_name: str):
+        self._ensure_columns(conn, table_name, {
+            "mav": "REAL NOT NULL DEFAULT 0",
+            "rms": "REAL NOT NULL DEFAULT 0",
+            "iemg": "REAL NOT NULL DEFAULT 0",
+            "var": "REAL NOT NULL DEFAULT 0",
+            "wl": "REAL NOT NULL DEFAULT 0",
+            "zc": "REAL NOT NULL DEFAULT 0",
+            "ssc": "REAL NOT NULL DEFAULT 0",
+            "mean_freq": "REAL NOT NULL DEFAULT 0",
+            "median_freq": "REAL NOT NULL DEFAULT 0",
+            "spectral_entropy": "REAL NOT NULL DEFAULT 0",
+            "d_mav": "REAL NOT NULL DEFAULT 0",
+            "d_rms": "REAL NOT NULL DEFAULT 0",
+            "d_iemg": "REAL NOT NULL DEFAULT 0",
+            "d_var": "REAL NOT NULL DEFAULT 0",
+            "d_wl": "REAL NOT NULL DEFAULT 0",
+            "d_zc": "REAL NOT NULL DEFAULT 0",
+            "d_ssc": "REAL NOT NULL DEFAULT 0",
+            "d_mean_freq": "REAL NOT NULL DEFAULT 0",
+            "d_median_freq": "REAL NOT NULL DEFAULT 0",
+            "d_spectral_entropy": "REAL NOT NULL DEFAULT 0",
+            "confidence": "REAL DEFAULT 0",
+            "source": "TEXT DEFAULT 'manual'",
+            "corrected_label": "INTEGER",
+        })
+
     def _ensure_eeg_columns(self, conn, table_name: str):
         self._ensure_columns(conn, table_name, {
             "score_1": "REAL NOT NULL DEFAULT 0",
@@ -167,9 +314,70 @@ class DatabaseManager:
             "metadata_json": "TEXT DEFAULT ''",
         })
 
+    def _ensure_eog_columns(self, conn, table_name: str):
+        self._ensure_columns(conn, table_name, {
+            "confidence": "REAL DEFAULT 0",
+            "source": "TEXT DEFAULT 'manual'",
+            "corrected_label": "INTEGER",
+        })
+
     def sanitize_table_name(self, name: str) -> str:
         safe = re.sub(r'[^a-zA-Z0-9]', '_', name)
         return safe.strip('_')
+
+    def _session_metadata_dir(self, sensor_type: str):
+        sensor = str(sensor_type).upper()
+        path = get_base_data_dir() / sensor / "processed" / "sessions"
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
+    def _session_metadata_path(self, sensor_type: str, session_name: str):
+        sensor = str(sensor_type).upper()
+        prefix = f"{sensor.lower()}_session_"
+        table_name = session_name if session_name.startswith(prefix) else f"{prefix}{self.sanitize_table_name(session_name)}"
+        return self._session_metadata_dir(sensor) / f"{table_name}.json"
+
+    def save_session_metadata(self, sensor_type: str, session_name: str, metadata: Dict):
+        try:
+            path = self._session_metadata_path(sensor_type, session_name)
+            existing = {}
+            if path.exists():
+                try:
+                    existing = json.loads(path.read_text(encoding="utf-8"))
+                except Exception:
+                    existing = {}
+            existing.update(metadata or {})
+            path.write_text(json.dumps(existing, indent=2), encoding="utf-8")
+            return str(path)
+        except Exception as e:
+            print(f"Failed to save session metadata for {session_name}: {e}")
+            return None
+
+    def get_session_metadata(self, sensor_type: str, session_name: str) -> Dict:
+        path = self._session_metadata_path(sensor_type, session_name)
+        if not path.exists():
+            return {}
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            return {}
+
+    def delete_session_metadata(self, sensor_type: str, session_name: str):
+        path = self._session_metadata_path(sensor_type, session_name)
+        try:
+            if path.exists():
+                path.unlink()
+        except Exception as e:
+            print(f"Failed to delete session metadata for {session_name}: {e}")
+
+    def rename_session_metadata(self, sensor_type: str, old_session_name: str, new_session_name: str):
+        old_path = self._session_metadata_path(sensor_type, old_session_name)
+        new_path = self._session_metadata_path(sensor_type, new_session_name)
+        try:
+            if old_path.exists():
+                old_path.replace(new_path)
+        except Exception as e:
+            print(f"Failed to rename session metadata {old_session_name} -> {new_session_name}: {e}")
 
     def create_session_table(self, sensor_type: str, session_name: str) -> str:
         safe_suffix = self.sanitize_table_name(session_name)
@@ -184,6 +392,13 @@ class DatabaseManager:
         potential_table = f"{prefix}{suffix}"
         for existing in tables:
             if existing.lower() == potential_table.lower():
+                if sensor == "EMG":
+                    self.save_session_metadata(sensor, existing, {
+                        "sensor": sensor,
+                        "table_name": existing,
+                        "storage_format": "compact_emg_v1",
+                        "feature_columns": COMPACT_EMG_FEATURE_COLUMNS,
+                    })
                 return existing # Re-use existing exact casing
         
         table_name = potential_table
@@ -192,15 +407,24 @@ class DatabaseManager:
         cursor = conn.cursor()
         
         if sensor == "EMG":
-            self._create_emg_table(cursor, table_name)
+            self._create_emg_session_table(cursor, table_name)
+            self._ensure_emg_session_columns(conn, table_name)
         elif sensor == "EOG":
             self._create_eog_table(cursor, table_name)
+            self._ensure_eog_columns(conn, table_name)
         elif sensor == "EEG":
             self._create_eeg_table(cursor, table_name)
             self._ensure_eeg_columns(conn, table_name)
             
         conn.commit()
         conn.close()
+        if sensor == "EMG":
+            self.save_session_metadata(sensor, table_name, {
+                "sensor": sensor,
+                "table_name": table_name,
+                "storage_format": "compact_emg_v1",
+                "feature_columns": COMPACT_EMG_FEATURE_COLUMNS,
+            })
         return table_name
 
     def get_session_tables(self, sensor_type: str) -> List[str]:
@@ -234,6 +458,7 @@ class DatabaseManager:
             cursor.execute(f"DROP TABLE IF EXISTS {table_name}")
             conn.commit()
             conn.close()
+            self.delete_session_metadata(sensor, table_name)
             print(f"Dropped table: {table_name}")
             return True
         except Exception as e:
@@ -264,6 +489,7 @@ class DatabaseManager:
             cursor.execute(f"ALTER TABLE {old_table_name} RENAME TO {new_table_name}")
             conn.commit()
             conn.close()
+            self.rename_session_metadata(sensor, old_table_name, new_table_name)
             print(f"Renamed table: {old_table_name} to {new_table_name}")
             return True
         except Exception as e:
@@ -317,9 +543,11 @@ class DatabaseManager:
             cursor = conn.cursor()
             
             for source_table in source_tables:
-                # Fetch column names from source to ensure we only insert matching columns
                 cursor.execute(f"PRAGMA table_info({source_table})")
-                columns = [col[1] for col in cursor.fetchall() if col[1] != 'id'] # exclude id to let it auto-increment
+                source_columns = {col[1] for col in cursor.fetchall() if col[1] != 'id'}
+                cursor.execute(f"PRAGMA table_info({target_table})")
+                target_columns = {col[1] for col in cursor.fetchall() if col[1] != 'id'}
+                columns = [col for col in source_columns if col in target_columns]
                 if not columns:
                     continue # Empty or invalid table
                 cols_str = ", ".join(columns)
@@ -328,6 +556,16 @@ class DatabaseManager:
             
             conn.commit()
             conn.close()
+            if sensor == "EMG":
+                merged_sources = [self.get_session_metadata(sensor, source_table) for source_table in source_tables]
+                self.save_session_metadata(sensor, target_table, {
+                    "sensor": sensor,
+                    "table_name": target_table,
+                    "storage_format": "compact_emg_v1",
+                    "feature_columns": COMPACT_EMG_FEATURE_COLUMNS,
+                    "merged_from": source_tables,
+                    "source_metadata": [meta for meta in merged_sources if meta],
+                })
             print(f"Merged tables: {source_tables} into {target_table} (Sources preserved)")
             return True
         except Exception as e:
@@ -416,7 +654,12 @@ class DatabaseManager:
                 results.append(item)
                 
             conn.close()
-            return {"rows": results, "total": total_filtered, "absolute_total": absolute_total}
+            return {
+                "rows": results,
+                "total": total_filtered,
+                "absolute_total": absolute_total,
+                "session_metadata": self.get_session_metadata(sensor, session_name),
+            }
         except Exception as e:
             print(f"Error fetching session data {session_name}: {e}")
             return {"rows": [], "total": 0, "absolute_total": 0}
@@ -460,26 +703,84 @@ class DatabaseManager:
     def insert_window(self, features: Dict[str, float], label: int, session_id: str = None, table_name: str = "emg_windows") -> bool:
         try:
             conn = self.connect('EMG')
+            is_session_table = str(table_name).startswith("emg_session_")
+            if is_session_table:
+                self._ensure_emg_session_columns(conn, table_name)
+            else:
+                self._ensure_emg_columns(conn, table_name)
             cursor = conn.cursor()
-            cursor.execute(f'''
-                INSERT INTO {table_name} (
-                    rms, mav, var, wl, peak, range, iemg, entropy, energy, kurtosis, skewness, ssc, wamp,
-                    label, session_id, timestamp
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (
-                features.get('rms', 0), features.get('mav', 0),
-                features.get('var', 0), features.get('wl', 0), features.get('peak', 0),
-                features.get('range', 0), features.get('iemg', 0), features.get('entropy', 0),
-                features.get('energy', 0), features.get('kurtosis', 0), features.get('skewness', 0),
-                features.get('ssc', 0), features.get('wamp', 0),
-                label, session_id, features.get('timestamp', 0)
-            ))
+            if is_session_table:
+                cursor.execute(f'''
+                    INSERT INTO {table_name} (
+                        mav, rms, iemg, var, wl, zc, ssc, mean_freq, median_freq, spectral_entropy,
+                        d_mav, d_rms, d_iemg, d_var, d_wl, d_zc, d_ssc, d_mean_freq, d_median_freq, d_spectral_entropy,
+                        confidence, source, corrected_label,
+                        label, session_id, timestamp
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    features.get('mav', 0), features.get('rms', 0), features.get('iemg', 0),
+                    features.get('var', 0), features.get('wl', 0), features.get('zc', 0),
+                    features.get('ssc', 0), features.get('mean_freq', 0),
+                    features.get('median_freq', 0), features.get('spectral_entropy', 0),
+                    features.get('d_mav', 0), features.get('d_rms', 0), features.get('d_iemg', 0),
+                    features.get('d_var', 0), features.get('d_wl', 0), features.get('d_zc', 0),
+                    features.get('d_ssc', 0), features.get('d_mean_freq', 0),
+                    features.get('d_median_freq', 0), features.get('d_spectral_entropy', 0),
+                    features.get('confidence', 0), features.get('source', 'manual'),
+                    features.get('corrected_label'),
+                    label, session_id, features.get('timestamp', 0)
+                ))
+            else:
+                cursor.execute(f'''
+                    INSERT INTO {table_name} (
+                        rms, mav, var, wl, peak, range, iemg, entropy, energy, kurtosis, skewness, ssc, wamp,
+                        zc, mean_freq, median_freq, spectral_entropy,
+                        d_mav, d_rms, d_iemg, d_var, d_wl, d_zc, d_ssc, d_mean_freq, d_median_freq, d_spectral_entropy,
+                        channel_index, sample_count, window_ms, sampling_rate, session_window_ms, session_overlap, session_stride_ms, gap_ms, metadata_json,
+                        confidence, source, corrected_label,
+                        label, session_id, timestamp
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    features.get('rms', 0), features.get('mav', 0),
+                    features.get('var', 0), features.get('wl', 0), features.get('peak', 0),
+                    features.get('range', 0), features.get('iemg', 0), features.get('entropy', 0),
+                    features.get('energy', 0), features.get('kurtosis', 0), features.get('skewness', 0),
+                    features.get('ssc', 0), features.get('wamp', 0),
+                    features.get('zc', 0), features.get('mean_freq', 0),
+                    features.get('median_freq', 0), features.get('spectral_entropy', 0),
+                    features.get('d_mav', 0), features.get('d_rms', 0), features.get('d_iemg', 0),
+                    features.get('d_var', 0), features.get('d_wl', 0), features.get('d_zc', 0),
+                    features.get('d_ssc', 0), features.get('d_mean_freq', 0),
+                    features.get('d_median_freq', 0), features.get('d_spectral_entropy', 0),
+                    int(features.get('channel_index', 0) or 0),
+                    int(features.get('sample_count', 0) or 0),
+                    float(features.get('window_ms', 0) or 0),
+                    float(features.get('sampling_rate', 0) or 0),
+                    float(features.get('session_window_ms', 0) or 0),
+                    float(features.get('session_overlap', 0) or 0),
+                    float(features.get('session_stride_ms', 0) or 0),
+                    float(features.get('gap_ms', 0) or 0),
+                    self._serialize_metadata(features.get('metadata_json', features.get('metadata', {}))),
+                    features.get('confidence', 0), features.get('source', 'manual'),
+                    features.get('corrected_label'),
+                    label, session_id, features.get('timestamp', 0)
+                ))
             conn.commit()
             conn.close()
             return True
         except Exception as e:
             print(f"EMG Insert Error: {e}")
             return False
+
+    def _serialize_metadata(self, metadata):
+        if isinstance(metadata, str):
+            return metadata
+        if metadata is None:
+            return ''
+        try:
+            return json.dumps(metadata)
+        except Exception:
+            return ''
 
     def get_counts_by_label(self, table_name: str = "emg_windows") -> Dict[str, int]:
         try:
@@ -508,17 +809,22 @@ class DatabaseManager:
     def insert_eog_window(self, features: Dict[str, float], label: int, session_id: str = None, table_name: str = "eog_windows") -> bool:
         try:
             conn = self.connect('EOG')
+            self._ensure_eog_columns(conn, table_name)
             cursor = conn.cursor()
             cursor.execute(f'''
                 INSERT INTO {table_name} (
                     amplitude, duration_ms, rise_time_ms, fall_time_ms, 
                     asymmetry, peak_count, kurtosis, skewness,
+                    confidence, source, corrected_label,
                     label, session_id, timestamp
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 features.get('amplitude', 0), features.get('duration_ms', 0), features.get('rise_time_ms', 0),
                 features.get('fall_time_ms', 0), features.get('asymmetry', 0), int(features.get('peak_count', 0)),
-                features.get('kurtosis', 0), features.get('skewness', 0), label, session_id, features.get('timestamp', 0)
+                features.get('kurtosis', 0), features.get('skewness', 0),
+                features.get('confidence', 0), features.get('source', 'manual'),
+                features.get('corrected_label'),
+                label, session_id, features.get('timestamp', 0)
             ))
             conn.commit()
             conn.close()

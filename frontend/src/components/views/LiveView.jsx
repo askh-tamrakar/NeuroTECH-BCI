@@ -1,7 +1,12 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react'
 import SignalChart from '../charts/SignalChart'
+import WorkerFFTChart from '../charts/WorkerFFTChart'
+import InlineModeToggle from '../ui/InlineModeToggle'
+import CustomNumberInput from '../ui/CustomNumberInput'
+import FromToRangeInput from '../ui/FromToRangeInput'
 import { Radio, Square, Play, Pause, Save, Trash2, Cpu, Settings2, Wifi, Power } from 'lucide-react'
 import { CalibrationApi } from '../../services/calibrationApi'
+import { formatPowerValue, getPowerScaleHint } from '../../utils/spectrumFormat'
 import '../../styles/live/LiveView.css'
 
 export default function LiveView({ wsData, wsEvent, config, isPaused, wsUrl, recordState, recordHandlers }) {
@@ -21,6 +26,7 @@ export default function LiveView({ wsData, wsEvent, config, isPaused, wsUrl, rec
 
   const [annotations, setAnnotations] = useState([])
   const [allDetectionActive, setAllDetectionActive] = useState(false)
+  const [fftStatsByChannel, setFftStatsByChannel] = useState({})
 
   // Channels are 0 and 1
   const activeChannels = [0, 1];
@@ -114,7 +120,15 @@ export default function LiveView({ wsData, wsEvent, config, isPaused, wsUrl, rec
       activeChannels.forEach((chIdx, i) => {
         if (!next[chIdx]) {
           const defaultColor = ['#3b82f6', '#10b981', '#f59e0b', '#a855f7'][i % 4]
-          next[chIdx] = { zoom: 1, manualRange: "", timeWindowMs: defaultTimeWindowMs, color: defaultColor }
+          next[chIdx] = {
+            zoom: 1,
+            manualRange: "",
+            timeWindowMs: defaultTimeWindowMs,
+            color: defaultColor,
+            graphMode: 'time',
+            emgDisplayMode: 'raw',
+            fftFreqRange: { min: 1, max: 50 }
+          }
           changed = true
         }
       })
@@ -307,28 +321,160 @@ export default function LiveView({ wsData, wsEvent, config, isPaused, wsUrl, rec
           const currentTimeWindow = channelConfig[chIdx]?.timeWindowMs || defaultTimeWindowMs
           const currentChColor = channelConfig[chIdx]?.color || ['#3b82f6', '#10b981', '#f59e0b', '#a855f7'][chIdx % 4]
           const currentSmoothing = channelConfig[chIdx]?.smoothing ?? true
+          const graphMode = channelConfig[chIdx]?.graphMode || 'time'
+          const emgDisplayMode = channelConfig[chIdx]?.emgDisplayMode || 'raw'
+          const fftFreqRange = channelConfig[chIdx]?.fftFreqRange || { min: 1, max: 50 }
+          const isFftMode = sensorName === 'EEG' && graphMode === 'fft'
+          const fftStats = fftStatsByChannel[chIdx] || { min: 0, max: 0, mean: 0 }
+          const fftRangeValue = Number(currentManual) || Math.max(1, Math.ceil((fftStats.max || 1) * 1.15))
+
+          const titleAddon = sensorName === 'EEG'
+            ? (
+              <InlineModeToggle
+                value={graphMode}
+                onChange={(value) => updateChannelConfig(chIdx, 'graphMode', value)}
+                options={[
+                  { id: 'time', label: 'NORMAL' },
+                  { id: 'fft', label: 'FFT' }
+                ]}
+              />
+            )
+            : sensorName === 'EMG'
+              ? (
+                <InlineModeToggle
+                  value={emgDisplayMode}
+                  onChange={(value) => updateChannelConfig(chIdx, 'emgDisplayMode', value)}
+                  options={[
+                    { id: 'raw', label: 'RAW' },
+                    { id: 'envelope', label: 'ENVELOPE' }
+                  ]}
+                />
+              )
+              : null
 
           return (
-            <div key={chIdx} className="channel-wrapper h-full min-h-[300px]">
-              <SignalChart
-                ref={el => chartRefs.current[chIdx] = el}
-                graphNo={`Graph ${chIdx + 1}`}
-                title={`${sensorName}`}
-                disabled={!isEnabled}
-                timeWindowMs={currentTimeWindow}
-                color={currentChColor}
-                height="100%"
-                showGrid={showGrid}
-                annotations={annotations.filter(a => a.channel === `ch${chIdx}`)}
-                currentZoom={currentZoom}
-                currentManual={currentManual}
-                channelIndex={chIdx}
-                smoothing={currentSmoothing}
-                onZoomChange={(z) => { updateChannelConfig(chIdx, 'zoom', z); updateChannelConfig(chIdx, 'manualRange', ""); }}
-                onRangeChange={(val) => updateChannelConfig(chIdx, 'manualRange', val)}
-                onTimeWindowChange={(val) => updateChannelConfig(chIdx, 'timeWindowMs', val)}
-                onColorChange={(val) => updateChannelConfig(chIdx, 'color', val)}
-              />
+            <div key={chIdx} className="channel-wrapper h-full min-h-[300px] flex flex-col">
+              {isFftMode ? (
+                <div className="signal-chart-container">
+                  <div className="chart-header">
+                    <div className="flex items-center gap-4 min-w-0">
+                      <h3 className="chart-title">
+                        Graph {chIdx + 1}
+                        <span className="channel-color-dot" style={{ backgroundColor: currentChColor }}></span>
+                        {sensorName}
+                      </h3>
+                      {titleAddon && <div className="shrink-0">{titleAddon}</div>}
+                    </div>
+
+                    <div className="flex items-center gap-6">
+                      <FromToRangeInput
+                        fromValue={fftFreqRange.min}
+                        toValue={fftFreqRange.max}
+                        onFromChange={(value) => updateChannelConfig(chIdx, 'fftFreqRange', { ...fftFreqRange, min: Math.min(value, fftFreqRange.max - 1) })}
+                        onToChange={(value) => updateChannelConfig(chIdx, 'fftFreqRange', { ...fftFreqRange, max: Math.max(value, fftFreqRange.min + 1) })}
+                        fromMin={0}
+                        fromMax={Math.max(0, fftFreqRange.max - 1)}
+                        toMin={Math.max(1, fftFreqRange.min + 1)}
+                        toMax={500}
+                        unit="Hz"
+                        className="!border-border !bg-bg/80"
+                      />
+                      <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5 text-muted">
+                          <Cpu size={18} />
+                          <span className="text-xs font-bold uppercase tracking-wider">Zoom</span>
+                        </div>
+                        <div className="flex gap-1.5 bg-bg/50 p-1.5 rounded-lg">
+                          {[1, 2, 5, 10, 20, 50].map((z) => (
+                            <button
+                              key={z}
+                              onClick={() => { updateChannelConfig(chIdx, 'zoom', z); updateChannelConfig(chIdx, 'manualRange', "") }}
+                              className={`px-2.5 py-1 rounded text-xs font-bold transition-all border ${currentZoom === z && !currentManual
+                                ? 'bg-primary text-white border-primary shadow-sm'
+                                : 'bg-bg text-muted border-border hover:text-text hover:border-muted/50'
+                                }`}
+                            >
+                              {z}x
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <CustomNumberInput
+                        value={fftRangeValue}
+                        onChange={(value) => updateChannelConfig(chIdx, 'manualRange', String(value))}
+                        min={0}
+                        step={0.1}
+                        accentColor="primary"
+                        className="w-[130px]"
+                        unit="uV^2"
+                      />
+                    </div>
+
+                    <div className="flex items-center gap-4 pl-4 border-l border-border">
+                      <div className="range-display text-[16px] font-bold text-muted tabular-nums">
+                        0-{formatPowerValue(fftRangeValue)}
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted">{getPowerScaleHint()}</div>
+                        <div className="chart-stats flex gap-5">
+                          <div className="stat-item">
+                            <span className="stat-label-chart">Min</span>
+                            <span className="stat-value">{formatPowerValue(fftStats.min)}</span>
+                          </div>
+                          <div className="stat-item">
+                            <span className="stat-label-chart">Max</span>
+                            <span className="stat-value">{formatPowerValue(fftStats.max)}</span>
+                          </div>
+                          <div className="stat-item">
+                            <span className="stat-label-chart">Mean</span>
+                            <span className="stat-value">{formatPowerValue(fftStats.mean)}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="chart-area" style={{ minHeight: 0, overflow: 'hidden', position: 'relative', margin: 0, padding: 0 }}>
+                    <WorkerFFTChart
+                      ref={el => chartRefs.current[chIdx] = el}
+                      channelIndex={chIdx}
+                      config={{
+                        channelIndex: chIdx,
+                        color: currentChColor,
+                        zoom: currentZoom,
+                        manualRange: currentManual,
+                        freqMin: fftFreqRange.min,
+                        freqMax: fftFreqRange.max,
+                        sampleRate: config?.sampling_rate || 1000,
+                        disabled: !isEnabled,
+                      }}
+                      onStatsChange={(stats) => setFftStatsByChannel(prev => ({ ...prev, [chIdx]: stats }))}
+                    />
+                  </div>
+                </div>
+              ) : (
+                <SignalChart
+                  ref={el => chartRefs.current[chIdx] = el}
+                  graphNo={`Graph ${chIdx + 1}`}
+                  title={`${sensorName}`}
+                  disabled={!isEnabled}
+                  timeWindowMs={currentTimeWindow}
+                  color={currentChColor}
+                  height="100%"
+                  showGrid={showGrid}
+                  annotations={annotations.filter(a => a.channel === `ch${chIdx}`)}
+                  currentZoom={currentZoom}
+                  currentManual={currentManual}
+                  channelIndex={chIdx}
+                  smoothing={currentSmoothing}
+                  activeSensor={sensorName}
+                  displayMode={emgDisplayMode}
+                  titleAddon={titleAddon}
+                  onZoomChange={(z) => { updateChannelConfig(chIdx, 'zoom', z); updateChannelConfig(chIdx, 'manualRange', ""); }}
+                  onRangeChange={(val) => updateChannelConfig(chIdx, 'manualRange', val)}
+                  onTimeWindowChange={(val) => updateChannelConfig(chIdx, 'timeWindowMs', val)}
+                  onColorChange={(val) => updateChannelConfig(chIdx, 'color', val)}
+                />
+              )}
             </div>
           )
         })}

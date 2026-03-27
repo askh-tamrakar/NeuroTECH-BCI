@@ -167,6 +167,19 @@ export default function SessionManagerPanel({
         return null;
     }, [sessions, currentSessionName]);
 
+    useEffect(() => {
+        if (!isTestMode || !sessions.length || fullCurrentSessionName) return;
+
+        const preferred = sessions[0];
+        if (!preferred) return;
+
+        const parts = preferred.split('_session_');
+        const clean = parts.length > 1 ? parts[parts.length - 1] : preferred;
+        if (clean !== currentSessionName) {
+            onSessionChange(clean);
+        }
+    }, [sessions, fullCurrentSessionName, isTestMode, currentSessionName, onSessionChange]);
+
     // Reset pagination when session changes
     useEffect(() => {
         if (fullCurrentSessionName) {

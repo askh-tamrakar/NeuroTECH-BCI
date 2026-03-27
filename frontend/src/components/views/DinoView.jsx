@@ -6,7 +6,7 @@ import Counter from '../ui/Counter'
 import {
     ScanEye, SlidersHorizontal, ArrowUp, Pause, Play, Trash2, Wifi, WifiOff, Save, Skull, Trophy, Keyboard, Eye, Gamepad2, Globe, Sparkles, Atom, Ruler, Settings, RotateCcw, ScrollText, Timer, Weight, MoveVertical,
     MoveHorizontal, Maximize, ArrowDownToLine, Grid, Sun, Moon, Cloud, Star, TreePine, Leaf, Hand,
-    Layers, Zap, Clock, ChevronDown, Activity, Target, Radio, Signal, Circle, Camera, Menu, BrainCircuit
+    Layers, Zap, Clock, ChevronDown, Activity, Target, Radio, Signal, Circle, Camera, Menu, BrainCircuit, Check, X
 } from 'lucide-react'
 import { soundHandler } from '../../handlers/SoundHandler'
 
@@ -44,6 +44,8 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
     const [showSettings, setShowSettings] = useState(false)
     const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
     const [models, setModels] = useState([]) // EOG Models
+    const [feedbackPrompt, setFeedbackPrompt] = useState(null)
+    const [feedbackSaving, setFeedbackSaving] = useState(false)
 
     // Game settings (easy mode default)
     const DEFAULT_SETTINGS = {
@@ -138,6 +140,7 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
     const leftEyeRef = useRef(null)
     const rightEyeRef = useRef(null)
     const distanceRef = useRef(0) // Track distance for parallax
+    const pendingActionFeedbackRef = useRef(null)
 
     const settingsRef = useRef(settings)
     useEffect(() => {
@@ -373,9 +376,23 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
 
         if (wsEvent.event === 'SingleBlink') {
             console.log("🦖 Dino: Single Blink Event Received!");
+            pendingActionFeedbackRef.current = {
+                prediction: 'SingleBlink',
+                features: wsEvent.features || null,
+                confidence: wsEvent.confidence || 0,
+                trigger: 'jump',
+                timestamp: Date.now()
+            }
             handleSinglePress('blink');
         } else if (wsEvent.event === 'DoubleBlink') {
             console.log("🦖 Dino: Double Blink Event Received!");
+            pendingActionFeedbackRef.current = {
+                prediction: 'DoubleBlink',
+                features: wsEvent.features || null,
+                confidence: wsEvent.confidence || 0,
+                trigger: 'pause',
+                timestamp: Date.now()
+            }
             handleDoublePress('blink');
         }
     }, [wsEvent, settings.CONTROL_CHANNEL]); // Added settings.CONTROL_CHANNEL to dependency array
@@ -542,8 +559,30 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
                     logEvent(`New Highscore: ${Math.floor(newHigh / 10)}!`, 'highscore')
                 } else if (type === 'SCORE_UPDATE') {
                     setScore(score)
+                } else if (type === 'OBSTACLE_CLEARED') {
+                    const pending = pendingActionFeedbackRef.current
+                    if (pending?.trigger === 'jump' && Date.now() - pending.timestamp <= 3000 && pending.features) {
+                        setFeedbackPrompt({
+                            prediction: pending.prediction,
+                            confidence: pending.confidence,
+                            features: pending.features,
+                            context: 'Successful jump'
+                        })
+                        pendingActionFeedbackRef.current = null
+                    }
                 } else if (type === 'STATE_UPDATE') {
-                    setGameState(e.data.payload)
+                    const nextState = e.data.payload
+                    setGameState(nextState)
+                    const pending = pendingActionFeedbackRef.current
+                    if (nextState === 'paused' && pending?.trigger === 'pause' && Date.now() - pending.timestamp <= 2000 && pending.features) {
+                        setFeedbackPrompt({
+                            prediction: pending.prediction,
+                            confidence: pending.confidence,
+                            features: pending.features,
+                            context: 'Pause triggered'
+                        })
+                        pendingActionFeedbackRef.current = null
+                    }
                 }
             }
         }
@@ -692,10 +731,15 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
         }
         setGameState('ready');
         setScore(0);
+        setFeedbackPrompt(null);
+        pendingActionFeedbackRef.current = null;
     }, []);
 
     const handleSinglePress = useCallback((source = 'blink') => {
         const currentState = gameStateRef.current;
+        if (source !== 'blink') {
+            pendingActionFeedbackRef.current = null;
+        }
         const text =
             source === 'keyboard'
                 ? "Spacebar (Jump)"
@@ -714,6 +758,9 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
     const handleDoublePress = useCallback((source = 'blink') => {
         const currentState = gameStateRef.current;
         if (currentState === 'gameOver') return;
+        if (source !== 'blink') {
+            pendingActionFeedbackRef.current = null;
+        }
 
         const text = source === 'keyboard' ? "Spacebar x2 (Pause)" : "Double Blink (Pause)"
         logEvent(text, 'toggle')
@@ -811,6 +858,32 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
         }
         setTimeout(() => setSavedMessage(''), 2000)
     }
+
+    const submitFeedback = useCallback(async (correctedLabel) => {
+        if (!feedbackPrompt?.features) {
+            setFeedbackPrompt(null)
+            return
+        }
+
+        try {
+            setFeedbackSaving(true)
+            await fetch(`${API_BASE_URL}/api/eog/feedback`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    prediction: feedbackPrompt.prediction,
+                    corrected_label: correctedLabel || feedbackPrompt.prediction,
+                    confidence: feedbackPrompt.confidence,
+                    features: feedbackPrompt.features,
+                })
+            })
+        } catch (error) {
+            console.error("Failed to save EOG feedback:", error)
+        } finally {
+            setFeedbackSaving(false)
+            setFeedbackPrompt(null)
+        }
+    }, [API_BASE_URL, feedbackPrompt])
 
     return (
         <div className="dino-container">
@@ -922,6 +995,48 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
                                         </div>
                                     </div>
                                 </div>
+
+                                {feedbackPrompt && (
+                                    <div className="mt-4 rounded-2xl border border-primary/20 bg-bg/60 p-4 flex flex-col gap-3">
+                                        <div className="flex items-center justify-between gap-3">
+                                            <div>
+                                                <div className="text-xs font-bold uppercase tracking-[0.2em] text-primary">EOG Feedback</div>
+                                                <div className="text-sm font-bold text-text">
+                                                    {feedbackPrompt.context}: {feedbackPrompt.prediction}
+                                                </div>
+                                            </div>
+                                            <div className="text-xs font-mono text-muted">
+                                                {(feedbackPrompt.confidence || 0).toFixed(2)}
+                                            </div>
+                                        </div>
+                                        <div className="flex flex-wrap gap-2">
+                                            <button
+                                                onClick={() => submitFeedback(feedbackPrompt.prediction)}
+                                                disabled={feedbackSaving}
+                                                className="px-3 py-2 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 font-bold text-xs uppercase tracking-wider hover:bg-emerald-500/20 transition-colors disabled:opacity-50 flex items-center gap-2"
+                                            >
+                                                <Check size={14} /> Yes
+                                            </button>
+                                            {['SingleBlink', 'DoubleBlink', 'Rest'].filter((label) => label !== feedbackPrompt.prediction).map((label) => (
+                                                <button
+                                                    key={label}
+                                                    onClick={() => submitFeedback(label)}
+                                                    disabled={feedbackSaving}
+                                                    className="px-3 py-2 rounded-xl bg-surface border border-border text-text font-bold text-xs uppercase tracking-wider hover:border-primary/40 hover:text-primary transition-colors disabled:opacity-50"
+                                                >
+                                                    {label}
+                                                </button>
+                                            ))}
+                                            <button
+                                                onClick={() => setFeedbackPrompt(null)}
+                                                disabled={feedbackSaving}
+                                                className="px-3 py-2 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 font-bold text-xs uppercase tracking-wider hover:bg-red-500/15 transition-colors disabled:opacity-50 flex items-center gap-2"
+                                            >
+                                                <X size={14} /> Dismiss
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
 
                             {/* Canvas */}

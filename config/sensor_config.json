@@ -17,7 +17,8 @@
   },
   "num_channels": 2,
   "active_models": {
-    "EMG": "Neurobench",
-    "EOG": "Dino"
+    "EMG": "long",
+    "EOG": "dino-ml",
+    "EEG": "test"
   }
 }

@@ -22,11 +22,7 @@ broadcast.onmessage = (e) => {
         samples.forEach(s => {
             if (s.channels) {
                 const chObj = s.channels[channelIndex] || s.channels[`ch${channelIndex}`] || s.channels[String(channelIndex)];
-                let val = 0;
-                if (chObj !== undefined) {
-                    if (typeof chObj === 'number') val = chObj;
-                    else val = chObj.value ?? 0;
-                }
+                const val = extractRawValue(chObj);
                 newPoints.push({ time: s.timestamp, value: val });
             }
         });
@@ -65,6 +61,8 @@ let timeOffset = 0;
 let isOffsetInitialized = false;
 
 let animationFrameId = null;
+let envelopeState = 0;
+const ENVELOPE_ALPHA = 0.05;
 
 self.onmessage = function (e) {
     const { type, payload } = e.data;
@@ -89,6 +87,9 @@ self.onmessage = function (e) {
         case 'SET_CONFIG':
             config = { ...config, ...payload };
             if (payload.channelIndex !== undefined) channelIndex = payload.channelIndex;
+            if (payload.displayMode !== undefined || payload.activeSensor !== undefined) {
+                envelopeState = 0;
+            }
 
             // Generate history color automatically if color changed
             if (payload.color && !payload.historyColor) {
@@ -106,6 +107,7 @@ self.onmessage = function (e) {
             break;
         case 'CLEAR_DATA':
             points = [];
+            envelopeState = 0;
             requestRender();
             break;
     }
@@ -136,8 +138,17 @@ function addData(newPoints) {
         timeOffset = timeOffset * 0.98 + currentLag * 0.02; // EMA smoothing
     }
 
+    const normalizedPoints = newPoints.map((point) => {
+        const rawValue = typeof point?.value === 'number' ? point.value : 0;
+        return {
+            ...point,
+            value: rawValue,
+            envelope: updateEnvelope(rawValue)
+        };
+    });
+
     // Append and sort (normally they arrive sorted)
-    points.push(...newPoints);
+    points.push(...normalizedPoints);
 
     // Cull old data (keep 1.5x timeWindow history just in case, plus we need history for sweep)
     // We only visually display up to 1x timeWindow, so keeping 1.2x is safe
@@ -157,6 +168,28 @@ function addData(newPoints) {
         // Fast array slice
         points = points.slice(cutIndex);
     }
+}
+
+function extractRawValue(chObj) {
+    let rawValue = 0;
+    if (chObj !== undefined) {
+        if (typeof chObj === 'number') rawValue = chObj;
+        else rawValue = chObj.value ?? 0;
+    }
+    return rawValue;
+}
+
+function updateEnvelope(rawValue) {
+    const absValue = Math.abs(rawValue);
+    envelopeState += ENVELOPE_ALPHA * (absValue - envelopeState);
+    return envelopeState;
+}
+
+function getPointValue(point) {
+    if (config.activeSensor === 'EMG' && config.displayMode === 'envelope') {
+        return point.envelope ?? Math.abs(point.value ?? 0);
+    }
+    return point.value ?? 0;
 }
 
 // Stats reporting loop
@@ -180,9 +213,10 @@ function checkStats(nowTime) {
                 const p = points[i];
                 if (p.time < cutoff) break;
 
-                sum += p.value;
-                if (p.value < min) min = p.value;
-                if (p.value > max) max = p.value;
+                const pointValue = getPointValue(p);
+                sum += pointValue;
+                if (pointValue < min) min = pointValue;
+                if (pointValue > max) max = pointValue;
                 count++;
             }
 
@@ -247,8 +281,9 @@ function draw() {
         let minInView = Infinity;
         for (let i = points.length - 1; i >= 0; i--) {
             if (points[i].time < rangeStart) break;
-            if (points[i].value > maxInView) maxInView = points[i].value;
-            if (points[i].value < minInView) minInView = points[i].value;
+            const pointValue = getPointValue(points[i]);
+            if (pointValue > maxInView) maxInView = pointValue;
+            if (pointValue < minInView) minInView = pointValue;
         }
 
         if (maxInView > yMax || minInView < yMin) {
@@ -351,7 +386,7 @@ function draw() {
         for (let i = startIdx; i <= endIdx; i++) {
             const p = points[i];
             const px = timeToPx(p.time);
-            const py = valToPy(p.value);
+            const py = valToPy(getPointValue(p));
 
             if (i === startIdx || Math.abs(px - lastPx) > plW * 0.5) {
                 ctx.moveTo(px, py);
@@ -446,7 +481,7 @@ function draw() {
         annotations.forEach(ann => {
             if (latestTs - ann.x < timeWindow * 1.5) {
                 const px = pL + ((ann.x % timeWindow) / timeWindow) * plW;
-                const annY = ann.y !== undefined ? ann.y : (points.length > 0 ? points[points.length - 1].value : 0);
+                const annY = ann.y !== undefined ? ann.y : (points.length > 0 ? getPointValue(points[points.length - 1]) : 0);
                 const py = valToPy(annY);
 
                 ctx.fillStyle = ann.color || "red";
@@ -482,7 +517,7 @@ function draw() {
 
     // Pointer (Glow dot at current value)
     if (points.length > 0) {
-        const latestVal = points[points.length - 1].value;
+        const latestVal = getPointValue(points[points.length - 1]);
         const py = valToPy(latestVal);
         ctx.fillStyle = config.color;
 

@@ -1,0 +1,21 @@
+{
+  "sensor": "EEG",
+  "classifier": "LDA",
+  "feature_order": [
+    "score_1",
+    "score_2",
+    "score_3",
+    "score_4",
+    "score_5",
+    "score_6",
+    "max_score",
+    "second_max_score",
+    "score_ratio",
+    "score_mean",
+    "score_std"
+  ],
+  "test_size": 0.2,
+  "table_name": "eeg_session_TesT",
+  "created_at": "2026-03-27T20:19:37.632186",
+  "accuracy": 1.0
+}

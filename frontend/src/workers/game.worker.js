@@ -368,7 +368,7 @@ function updatePhysics(deltaTime) {
                 obs.passed = true;
                 obstaclesPassed++;
                 scoreMultiplier = 1.0 + (obstaclesPassed * SETTINGS.OBSTACLE_BONUS_FACTOR);
-                // Optional: Log or visual feedback could go here
+                self.postMessage({ type: 'OBSTACLE_CLEARED', obstaclesPassed });
             }
         });
 

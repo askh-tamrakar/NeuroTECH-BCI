@@ -6,7 +6,8 @@ import os
 import socket
 from pathlib import Path
 from src.server.server.state import state
-from src.server.server.lsl_service import extract_emg_features
+from src.server.server.lsl_service import extract_emg_features, extract_eog_features
+from src.database.db_manager import db_manager
 
 prediction_bp = Blueprint('prediction', __name__)
 
@@ -155,6 +156,89 @@ def get_history():
         
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@prediction_bp.route('/api/emg/feedback', methods=['POST'])
+def save_emg_feedback():
+    try:
+        payload = request.get_json() or {}
+        prediction = payload.get('prediction')
+        corrected_label = payload.get('corrected_label') or prediction
+        features = payload.get('features') or {}
+        confidence = float(payload.get('confidence', 0.0) or 0.0)
+
+        if not corrected_label or not features:
+            return jsonify({"error": "prediction/corrected_label and features are required"}), 400
+
+        label_map = {"Rest": 0, "Rock": 1, "Paper": 2, "Scissors": 3}
+        save_label = label_map.get(str(corrected_label), 0)
+        corrected_int = label_map.get(str(corrected_label), 0)
+
+        save_features = dict(features)
+        save_features["timestamp"] = time.time()
+        save_features["confidence"] = confidence
+        save_features["source"] = "feedback"
+        save_features["corrected_label"] = corrected_int if corrected_label != prediction else None
+
+        db_manager.insert_window(
+            save_features,
+            save_label,
+            session_id=f"feedback_{int(time.time())}",
+            table_name="emg_windows",
+        )
+
+        try:
+            from src.calibration.calibration_manager import calibration_manager
+            calibration_manager.update_emg_running_stats(save_features)
+        except Exception:
+            pass
+
+        return jsonify({"status": "saved", "label": corrected_label, "prediction": prediction})
+    except Exception as e:
+        import traceback
+        tb = traceback.format_exc()
+        return jsonify({"error": str(e), "traceback": tb}), 500
+
+@prediction_bp.route('/api/eog/feedback', methods=['POST'])
+def save_eog_feedback():
+    try:
+        payload = request.get_json() or {}
+        prediction = payload.get('prediction')
+        corrected_label = payload.get('corrected_label') or prediction
+        features = payload.get('features') or {}
+        confidence = float(payload.get('confidence', 0.0) or 0.0)
+
+        if not corrected_label or not features:
+            return jsonify({"error": "prediction/corrected_label and features are required"}), 400
+
+        label_map = {"Rest": 0, "SingleBlink": 1, "DoubleBlink": 2}
+        save_label = label_map.get(str(corrected_label), 0)
+        corrected_int = label_map.get(str(corrected_label), 0)
+
+        save_features = dict(features)
+        save_features["timestamp"] = time.time()
+        save_features["confidence"] = confidence
+        save_features["source"] = "feedback"
+        save_features["corrected_label"] = corrected_int if corrected_label != prediction else None
+
+        db_manager.insert_eog_window(
+            save_features,
+            save_label,
+            session_id=f"feedback_{int(time.time())}",
+            table_name="eog_windows",
+        )
+
+        try:
+            from src.calibration.calibration_manager import calibration_manager
+            calibration_manager.update_eog_running_stats(save_features)
+        except Exception:
+            pass
+
+        return jsonify({"status": "saved", "label": corrected_label, "prediction": prediction})
+    except Exception as e:
+        import traceback
+        tb = traceback.format_exc()
+        return jsonify({"error": str(e), "traceback": tb}), 500
 
 @prediction_bp.route('/api/prediction/sessions', methods=['GET'])
 def get_sessions_mock():

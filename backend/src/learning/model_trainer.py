@@ -36,6 +36,7 @@ sys.path.append(str(PROJECT_ROOT))
 # Now we can import from src
 from src.learning.tree_utils import tree_to_json
 from src.database.db_manager import db_manager
+from src.feature.extractors.rps_extractor import EMG_FEATURE_COLUMNS
 
 # Paths
 from src.utils.paths import get_base_data_dir
@@ -58,10 +59,14 @@ ACTIVE_MODEL_NAMES = {
     'EEG': None
 }
 
+LEGACY_EMG_FEATURE_COLUMNS = [
+    'rms', 'mav', 'var', 'wl', 'peak', 'range', 'iemg', 'entropy', 'energy', 'kurtosis', 'skewness', 'ssc', 'wamp'
+]
+
 def get_feature_cols(sensor):
     sensor = sensor.upper()
     if sensor == 'EMG':
-        return ['rms', 'mav', 'var', 'wl', 'peak', 'range', 'iemg', 'entropy', 'energy', 'kurtosis', 'skewness', 'ssc', 'wamp']
+        return list(EMG_FEATURE_COLUMNS)
     elif sensor == 'EOG':
         # EOG features from BlinkExtractor
         return ['duration_ms', 'max_amplitude', 'min_amplitude', 'peak_to_peak', 'variance', 'kurtosis', 'skewness', 'entropy', 'activity_sum']
@@ -73,6 +78,17 @@ def get_feature_cols(sensor):
              'bp_alpha', 'bp_beta', 'bp_gamma', 'mean', 'std'
          ]
     return []
+
+def resolve_feature_cols(sensor, model=None, scaler=None):
+    sensor = sensor.upper()
+    feature_cols = get_feature_cols(sensor)
+    if sensor == 'EMG':
+        expected = getattr(scaler, 'n_features_in_', None)
+        if expected is None and model is not None:
+            expected = getattr(model, 'n_features_in_', None)
+        if expected == len(LEGACY_EMG_FEATURE_COLUMNS):
+            return LEGACY_EMG_FEATURE_COLUMNS
+    return feature_cols
 
 def get_model_paths(sensor, model_name):
     """Returns dict of paths for a given model name."""
@@ -87,6 +103,49 @@ def get_model_paths(sensor, model_name):
         "meta": sensor_dir / f"{clean_name}_meta.json"
     }
 
+
+def _collect_emg_session_profile(df):
+    if df.empty:
+        return {}
+
+    def normalized_values(primary_column, default_value, fallback_column=None):
+        if primary_column not in df.columns and (not fallback_column or fallback_column not in df.columns):
+            return [default_value]
+
+        if fallback_column and fallback_column in df.columns:
+            base = pd.to_numeric(df[fallback_column], errors='coerce')
+        else:
+            base = pd.Series([default_value] * len(df))
+
+        if primary_column in df.columns:
+            series = pd.to_numeric(df[primary_column], errors='coerce')
+            series = series.where(series > 0, base)
+        else:
+            series = base
+
+        series = series.fillna(default_value).replace(0, default_value)
+        values = sorted({round(float(v), 4) for v in series.tolist()})
+        return values or [default_value]
+
+    return {
+        "window_ms": normalized_values('session_window_ms', 300.0, fallback_column='window_ms'),
+        "sampling_rate": normalized_values('sampling_rate', 1000.0),
+        "stride_ms": normalized_values('session_stride_ms', 300.0),
+    }
+
+
+def _validate_emg_session_profile(df, table_name):
+    profile = _collect_emg_session_profile(df)
+    mixed_fields = {key: values for key, values in profile.items() if len(values) > 1}
+    if mixed_fields:
+        return {
+            "error": (
+                f"EMG table {table_name} mixes collection configs. "
+                f"Found {mixed_fields}. Split sessions by window settings before training."
+            )
+        }
+    return profile
+
 def train_model(sensor, n_estimators=100, max_depth=None, min_impurity_decrease=0.0, test_size=0.2, table_name=None, model_name=None):
     """
     Generic training function for any sensor.
@@ -100,7 +159,13 @@ def train_model(sensor, n_estimators=100, max_depth=None, min_impurity_decrease=
     if not table_name:
         table_name = f"{sensor.lower()}_windows"
     if not model_name:
-        model_name = f"{sensor.lower()}_rf"
+        model_name = f"{sensor.lower()}_rf_model" if sensor == 'EMG' else f"{sensor.lower()}_rf"
+
+    if sensor == 'EMG':
+        if n_estimators == 100:
+            n_estimators = 200
+        if max_depth is None:
+            max_depth = 15
 
     conn = db_manager.connect(sensor)
     df = pd.DataFrame()
@@ -124,6 +189,12 @@ def train_model(sensor, n_estimators=100, max_depth=None, min_impurity_decrease=
 
     if df.empty:
         return {"error": "Database is empty. Collect data first."}
+
+    session_profile = None
+    if sensor == 'EMG':
+        session_profile = _validate_emg_session_profile(df, table_name)
+        if isinstance(session_profile, dict) and "error" in session_profile:
+            return session_profile
 
     # Prepare Features and Labels
     feature_cols = get_feature_cols(sensor)
@@ -213,11 +284,12 @@ def train_model(sensor, n_estimators=100, max_depth=None, min_impurity_decrease=
         "tree_structure": tree_struct,
         "n_samples": len(y_test),
         "model_path": str(paths["model"]),
-        "model_name": model_name
+        "model_name": model_name,
+        "session_profile": session_profile
     }
 
 # Wrappers for backward compatibility / specific use cases
-def train_emg_model(n_estimators=100, max_depth=None, min_impurity_decrease=0.0, test_size=0.2, table_name="emg_windows", model_name="emg_rf"):
+def train_emg_model(n_estimators=200, max_depth=15, min_impurity_decrease=0.0, test_size=0.2, table_name="emg_windows", model_name="emg_rf_model"):
     return train_model('EMG', n_estimators, max_depth, min_impurity_decrease, test_size, table_name, model_name)
 
 def train_eog_model(n_estimators=100, max_depth=None, min_impurity_decrease=0.0, test_size=0.2, table_name="eog_windows", model_name="eog_rf"):
@@ -353,7 +425,7 @@ def evaluate_saved_model(sensor='EMG', table_name=None, model_name=None):
         else:
              return {"error": f"No {sensor} model selected or loaded."}
 
-    feature_cols = get_feature_cols(sensor)
+    feature_cols = resolve_feature_cols(sensor, model=display_model, scaler=display_scaler)
     meta = {}
     if paths and paths["meta"].exists():
         try:
@@ -440,7 +512,7 @@ def get_model_tree_structure(sensor='EMG', model_name=None, tree_index=0):
         if tree_index < 0 or tree_index >= len(model.estimators_):
             return {"error": f"Tree index {tree_index} out of bounds"}
             
-        feature_cols = get_feature_cols(sensor)
+        feature_cols = resolve_feature_cols(sensor, model=model)
         tree_struct = tree_to_json(model.estimators_[tree_index], feature_cols)
         
         return {
@@ -454,7 +526,7 @@ def get_model_tree_structure(sensor='EMG', model_name=None, tree_index=0):
 
 # Initial load try
 try:
-    load_model('EMG', 'emg_rf')
+    load_model('EMG', 'emg_rf_model')
 except: pass
 try:
     load_model('EOG', 'eog_rf')

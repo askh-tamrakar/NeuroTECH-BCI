@@ -22,11 +22,7 @@ broadcast.onmessage = (e) => {
         samples.forEach(s => {
             if (s.channels) {
                 const chObj = s.channels[channelIndex] || s.channels[`ch${channelIndex}`] || s.channels[String(channelIndex)];
-                let val = 0;
-                if (chObj !== undefined) {
-                    if (typeof chObj === 'number') val = chObj;
-                    else val = chObj.value ?? 0;
-                }
+                const val = extractRawValue(chObj);
                 newPoints.push({ time: s.timestamp, value: val });
             }
         });
@@ -56,6 +52,8 @@ let config = {
 // Scanner State
 let scannerX = null;
 let scannerValue = null;
+let envelopeState = 0;
+const ENVELOPE_ALPHA = 0.05;
 
 // Animation
 let animationFrameId = null;
@@ -92,6 +90,9 @@ self.onmessage = function (e) {
         case 'SET_CONFIG':
             config = { ...config, ...payload };
             if (payload.channelIndex !== undefined) channelIndex = payload.channelIndex;
+            if (payload.displayMode !== undefined || payload.activeSensor !== undefined) {
+                envelopeState = 0;
+            }
             requestRender();
             break;
         case 'SET_SCANNER':
@@ -107,6 +108,7 @@ self.onmessage = function (e) {
             break;
         case 'CLEAR_DATA':
             points = [];
+            envelopeState = 0;
             requestRender();
             break;
     }
@@ -170,10 +172,41 @@ function addData(newPoints) {
         timeOffset = timeOffset * 0.98 + currentLag * 0.02;
     }
 
-    points.push(...newPoints);
+    const normalizedPoints = newPoints.map((point) => {
+        const rawValue = typeof point?.value === 'number' ? point.value : 0;
+        return {
+            ...point,
+            value: rawValue,
+            envelope: updateEnvelope(rawValue)
+        };
+    });
+
+    points.push(...normalizedPoints);
     if (points.length > MAX_POINTS) {
         points = points.slice(points.length - MAX_POINTS);
     }
+}
+
+function extractRawValue(chObj) {
+    let rawValue = 0;
+    if (chObj !== undefined) {
+        if (typeof chObj === 'number') rawValue = chObj;
+        else rawValue = chObj.value ?? 0;
+    }
+    return rawValue;
+}
+
+function updateEnvelope(rawValue) {
+    const absValue = Math.abs(rawValue);
+    envelopeState += ENVELOPE_ALPHA * (absValue - envelopeState);
+    return envelopeState;
+}
+
+function getPointValue(point) {
+    if (config.activeSensor === 'EMG' && config.displayMode === 'envelope') {
+        return point.envelope ?? Math.abs(point.value ?? 0);
+    }
+    return point.value ?? 0;
 }
 
 function handleGetSamples(payload, idPromise) {
@@ -363,7 +396,9 @@ function draw() {
 
                 const totalT = pFut.time - pPast.time;
                 const ratio = totalT !== 0 ? (now - pPast.time) / totalT : 0;
-                const interpVal = pPast.value + (pFut.value - pPast.value) * ratio;
+                const interpPast = getPointValue(pPast);
+                const interpFuture = getPointValue(pFut);
+                const interpVal = interpPast + (interpFuture - interpPast) * ratio;
 
                 startX = timeToPx(centerTimeOffset); // Exact center
                 startY = valToPy(interpVal);
@@ -371,7 +406,7 @@ function draw() {
                 // Just start at the latest point (visual lag, but honest)
                 const age = now - points[i].time;
                 startX = timeToPx(centerTimeOffset - age);
-                startY = valToPy(points[i].value);
+                startY = valToPy(getPointValue(points[i]));
             }
 
             ctx.moveTo(startX, startY);
@@ -385,7 +420,7 @@ function draw() {
                 if (x_ms < -200) break; // Optimization
 
                 const x = timeToPx(x_ms);
-                const y = valToPy(p.value);
+                const y = valToPy(getPointValue(p));
 
                 ctx.lineTo(x, y);
             }
@@ -411,7 +446,7 @@ function draw() {
 
     // 2. Current Value Dot
     if (points.length > 0) {
-        const lastVal = points[points.length - 1].value;
+        const lastVal = getPointValue(points[points.length - 1]);
         const y_px = valToPy(lastVal);
 
         ctx.fillStyle = config.lineColor;

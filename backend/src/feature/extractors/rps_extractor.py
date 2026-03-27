@@ -1,142 +1,181 @@
-import numpy as np
 import collections
+import numpy as np
 from scipy import stats
+from scipy.signal import butter, lfilter
+
+from src.config.window_config import SESSION_CONFIG, get_window_samples
+
+
+EMG_BASE_FEATURES = [
+    "mav",
+    "rms",
+    "iemg",
+    "var",
+    "wl",
+    "zc",
+    "ssc",
+    "mean_freq",
+    "median_freq",
+    "spectral_entropy",
+]
+
+EMG_FEATURE_COLUMNS = EMG_BASE_FEATURES + [f"d_{name}" for name in EMG_BASE_FEATURES]
+
+
+def _safe_div(num: float, den: float) -> float:
+    return float(num / den) if abs(den) > 1e-12 else 0.0
+
+
+def _zero_crossings(signal: np.ndarray, threshold: float = 1e-6) -> float:
+    centered = signal.copy()
+    centered[np.abs(centered) < threshold] = 0.0
+    return float(np.sum((centered[:-1] * centered[1:]) < 0))
+
+
+def _slope_sign_changes(signal: np.ndarray, threshold: float = 1e-6) -> float:
+    if signal.size < 3:
+        return 0.0
+    diff = np.diff(signal)
+    return float(np.sum((diff[:-1] * diff[1:]) < -threshold))
+
+
+def _median_frequency(freqs: np.ndarray, power: np.ndarray) -> float:
+    total_power = float(np.sum(power))
+    if total_power <= 0:
+        return 0.0
+    cumulative = np.cumsum(power)
+    idx = int(np.searchsorted(cumulative, total_power * 0.5, side="left"))
+    idx = min(idx, len(freqs) - 1)
+    return float(freqs[idx])
+
+
+def _spectral_entropy(power: np.ndarray) -> float:
+    power_sum = float(np.sum(power))
+    if power_sum <= 0:
+        return 0.0
+    prob = power / power_sum
+    prob = prob[prob > 0]
+    if prob.size == 0:
+        return 0.0
+    return float(-np.sum(prob * np.log2(prob)))
+
+
+def _compute_envelope(raw_signal: np.ndarray, sr: int, cutoff_hz: float = 8.0) -> np.ndarray:
+    if raw_signal.size == 0:
+        return raw_signal
+    rectified = np.abs(raw_signal)
+    nyq = sr / 2.0
+    wn = min(max(cutoff_hz / nyq, 1e-6), 0.99)
+    b, a = butter(4, wn, btype="low", analog=False)
+    return lfilter(b, a, rectified)
+
 
 class RPSExtractor:
     """
-    Feature Extractor for EMG Rock-Paper-Scissors.
-    Extracts time-domain features from a sliding window.
+    Fixed-window EMG feature extractor for Rock/Paper/Scissors.
+    The extractor consumes the filtered EMG stream and derives an envelope per
+    window so training and real-time detection share the same feature recipe.
     """
-    
+
+    FEATURE_COLUMNS = EMG_FEATURE_COLUMNS
+
     def __init__(self, channel_index: int, config: dict, sr: int):
         self.channel_index = channel_index
-        self.sr = sr
-        
-        # Window settings are time-based so changing the system sampling rate
-        # preserves the same model/input timing semantics.
-        self.window_seconds = 1.0
-        self.update_period_seconds = 0.125
-        self.buffer_size = max(1, int(self.sr * self.window_seconds))
-        self.stride = max(1, int(self.sr * self.update_period_seconds))
-        
-        self.buffer = collections.deque(maxlen=self.buffer_size)
+        self.sr = int(sr)
+
+        session_cfg = dict(SESSION_CONFIG)
+        session_cfg["sampling_rate"] = self.sr
+        self.window_size, self.stride = get_window_samples(session_cfg)
+
+        self.buffer = collections.deque(maxlen=self.window_size)
         self.sample_count = 0
-        
+        self.prev_features = None
+
     def process(self, sample_val: float):
-        """
-        Process a single sample.
-        Returns features if window is ready, else None.
-        """
-        self.buffer.append(sample_val)
+        self.buffer.append(float(sample_val))
         self.sample_count += 1
-        
-        # Only extract when buffer is full and at stride matches
-        if len(self.buffer) == self.buffer_size and self.sample_count % self.stride == 0:
-            return self._extract_features(list(self.buffer))
-            
+
+        if len(self.buffer) == self.window_size and self.sample_count % self.stride == 0:
+            return self._extract_features(np.asarray(self.buffer, dtype=float))
+
         return None
 
     @staticmethod
-    def extract_features(window: list | np.ndarray, sr: int = None) -> dict:
-        """
-        Static method for stateless feature extraction.
-        """
-        if not window or len(window) == 0:
+    def extract_features(
+        raw_signal: list | np.ndarray,
+        sr: int = 1000,
+        prev_features: dict | None = None,
+    ) -> dict:
+        if raw_signal is None or len(raw_signal) == 0:
             return {}
 
-        # 0. Robustness: Convert to numpy and handle NaN/Inf in raw data
-        data = np.nan_to_num(np.array(window), nan=0.0, posinf=0.0, neginf=0.0)
-        
-        # 1. RMS (Root Mean Square)
-        rms = np.sqrt(np.mean(data**2))
-        
-        # 2. MAV (Mean Absolute Value)
-        mav = np.mean(np.abs(data))
-        
-        # 3. Variance
-        var = np.var(data)
-        
-        # 4. WL (Waveform Length)
-        diff = np.diff(data)
-        wl = np.sum(np.abs(diff))
-        
-        # 5. Peak (Max Absolute Amplitude)
-        peak = np.max(np.abs(data))
-        
-        # 6. Range (Max - Min)
-        rng = np.ptp(data)
-        
-        # 7. IEMG (Integrated EMG)
-        iemg = np.sum(np.abs(data))
-        
-        # 8. Entropy (Approximate entropy via histogram)
-        try:
-            # BUG FIX: If all data points are same, range is 0. 
-            # np.histogram with density=True will have divide-by-zero or inf density.
-            # We add a tiny jitter to force a valid distribution or handle it.
-            if rng == 0:
-                entropy = 0.0
-            else:
-                hist, _ = np.histogram(data, bins=10, density=True)
-                # Remove zeros to avoid log(0)
-                hist = hist[hist > 0]
-                entropy = -np.sum(hist * np.log2(hist))
-        except:
-            entropy = 0.0
-        
-        # 9. Energy
-        energy = np.sum(data**2)
+        raw = np.nan_to_num(np.asarray(raw_signal, dtype=float), nan=0.0, posinf=0.0, neginf=0.0)
+        envelope = _compute_envelope(raw, sr)
 
-        # 10. Kurtosis (Peakedness)
-        kurt = stats.kurtosis(data)
+        mav = float(np.mean(np.abs(envelope)))
+        rms = float(np.sqrt(np.mean(envelope ** 2)))
+        iemg = float(np.sum(np.abs(envelope)))
+        var = float(np.var(envelope))
 
-        # 11. Skewness (Asymmetry)
-        skew = stats.skew(data)
+        wl = float(np.sum(np.abs(np.diff(raw)))) if raw.size > 1 else 0.0
+        zc = _zero_crossings(raw)
+        ssc = _slope_sign_changes(raw)
 
-        # 12. SSC (Slope Sign Changes)
-        ssc = np.sum(((diff[:-1] * diff[1:]) < 0))
+        fft_vals = np.fft.rfft(raw)
+        power = np.abs(fft_vals) ** 2
+        freqs = np.fft.rfftfreq(raw.size, d=1.0 / sr)
+        total_power = float(np.sum(power))
 
-        # 13. WAMP (Willison Amplitude)
-        wamp_threshold = 0.0001
-        wamp = np.sum(np.abs(diff) > wamp_threshold)
-        
-        # GLOBAL ROBUSTNESS: 
-        # Ensure all values are finite and fit in float32 for sklearn.
-        # We use a large finite number for inf/NaN.
-        raw_features = {
-            "rms": rms,
+        mean_freq = _safe_div(float(np.sum(freqs * power)), total_power)
+        median_freq = _median_frequency(freqs, power)
+        spectral_entropy = _spectral_entropy(power)
+
+        base_features = {
             "mav": mav,
+            "rms": rms,
+            "iemg": iemg,
             "var": var,
             "wl": wl,
-            "peak": peak,
-            "range": rng,
-            "iemg": iemg,
-            "entropy": entropy,
-            "energy": energy,
-            "kurtosis": kurt,
-            "skewness": skew,
+            "zc": zc,
             "ssc": ssc,
-            "wamp": wamp,
+            "mean_freq": mean_freq,
+            "median_freq": median_freq,
+            "spectral_entropy": spectral_entropy,
         }
-        
-        cleaned_features = {}
-        for k, v in raw_features.items():
-            # Convert to float, handle NaN/Inf, clip to a sane large range
-            val = np.nan_to_num(v, nan=0.0, posinf=1e6, neginf=-1e6)
-            # sklearn's float32 goes up to ~3.4e38, but 1e6 is very safe for these features
-            # except IEMG/Energy which might be larger, but still safe.
-            cleaned_features[k] = float(val)
 
-        return cleaned_features
+        features = {}
+        for key in EMG_BASE_FEATURES:
+            value = np.nan_to_num(base_features[key], nan=0.0, posinf=1e6, neginf=-1e6)
+            features[key] = float(value)
 
-    def _extract_features(self, window):
-        """
-        Internal wrapper to maintain compatibility and add timestamp.
-        """
-        features = RPSExtractor.extract_features(window, self.sr)
+        if prev_features:
+            for key in EMG_BASE_FEATURES:
+                prev_val = float(prev_features.get(key, 0.0))
+                features[f"d_{key}"] = float(features[key] - prev_val)
+        else:
+            for key in EMG_BASE_FEATURES:
+                features[f"d_{key}"] = 0.0
+
+        # Legacy compatibility fields still used in a few old paths/UI panels.
+        features["peak"] = float(np.max(np.abs(raw))) if raw.size else 0.0
+        features["range"] = float(np.ptp(raw)) if raw.size else 0.0
+        features["energy"] = float(np.sum(raw ** 2))
+        features["entropy"] = spectral_entropy
+        features["kurtosis"] = float(np.nan_to_num(stats.kurtosis(raw), nan=0.0))
+        features["skewness"] = float(np.nan_to_num(stats.skew(raw), nan=0.0))
+        features["wamp"] = float(np.sum(np.abs(np.diff(raw)) > 1e-6)) if raw.size > 1 else 0.0
+
+        return features
+
+    def _extract_features(self, raw_window: np.ndarray):
+        features = RPSExtractor.extract_features(raw_window, self.sr, prev_features=self.prev_features)
         features["timestamp"] = self.sample_count / self.sr
+        self.prev_features = {key: features[key] for key in EMG_BASE_FEATURES}
         return features
 
     def update_config(self, config: dict):
-        # Currently no dynamic config needed for extractor, but defined for interface consistency
-        pass
+        session_cfg = dict(SESSION_CONFIG)
+        session_cfg["sampling_rate"] = self.sr
+        self.window_size, self.stride = get_window_samples(session_cfg)
+        old_buffer = list(self.buffer)[-self.window_size:]
+        self.buffer = collections.deque(old_buffer, maxlen=self.window_size)

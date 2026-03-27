@@ -77,11 +77,9 @@ const SavedModelsList = ({ models, selectedModelName, onSelect, onDelete }) => (
 );
 
 const SplitAccuracyCard = ({ accuracy, n_samples, source, models, selectedModelName, onSelectModel, onDeleteModel }) => (
-    <div className="card h-full flex flex-col p-4 bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-sm hover:shadow-md transition-shadow">
-
-        <div className="flex-1 flex flex-row gap-2 min-h-0 w-full">
-            {/* LEFT: List */}
-            <div className="w-1/2 border-r border-[var(--border)] pr-2">
+    <div className="card h-full min-h-[18rem] flex flex-col p-4 bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-sm hover:shadow-md transition-shadow">
+        <div className="flex-1 flex flex-col md:flex-row gap-3 min-h-0 w-full">
+            <div className="min-h-[11rem] md:min-h-0 md:w-1/2 md:border-r md:border-[var(--border)] md:pr-3">
                 <SavedModelsList
                     models={models}
                     selectedModelName={selectedModelName}
@@ -90,8 +88,7 @@ const SplitAccuracyCard = ({ accuracy, n_samples, source, models, selectedModelN
                 />
             </div>
 
-            {/* RIGHT: Accuracy Display */}
-            <div className="w-1/2 border-[var(--border)]">
+            <div className="min-h-[11rem] md:min-h-0 md:w-1/2">
                 <div className="flex flex-col h-full overflow-hidden">
                     <h3 className="text-lg flex justify-around items-center font-bold text-[var(--muted)] uppercase tracking-widest border-b border-[var(--border)] pb-2">
                         <span className=' flex flex-row items-center'>
@@ -119,7 +116,7 @@ const SplitAccuracyCard = ({ accuracy, n_samples, source, models, selectedModelN
 );
 
 const FeatureImportanceCard = ({ importances }) => (
-    <div className="card h-full flex flex-col p-4 bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-sm scrollbar-thin">
+    <div className="card h-full min-h-[18rem] flex flex-col p-4 bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-sm scrollbar-thin">
         <h3 className="text-base flex items-center font-bold text-[var(--muted)] uppercase tracking-widest mb-4 border-b border-[var(--border)] pb-2">
             <ListOrdered className="mr-2 w-4 h-4" /> Top Features
         </h3>
@@ -176,26 +173,112 @@ const HyperparametersCard = ({ params, onChange }) => (
     </div>
 );
 
-const EEGSummaryCard = ({ result, params }) => (
+const EEGHeroCard = ({ result, selectedSessionName }) => (
+    <div className="card h-full flex flex-col p-5 bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-sm">
+        <div className="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-4 border-b border-[var(--border)] pb-3">
+            <div>
+                <h3 className="text-base flex items-center font-bold text-[var(--muted)] uppercase tracking-widest">
+                    <Brain className="mr-2 w-4 h-4" /> EEG Model Workspace
+                </h3>
+                <div className="mt-3 text-3xl font-black text-[var(--primary)]">
+                    {result?.model_name || 'eeg_lda'}
+                </div>
+                <div className="mt-1 text-sm text-[var(--muted)]">
+                    LDA classifier for SSVEP score-space classification
+                </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2 w-full xl:w-auto xl:min-w-[220px]">
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--bg)]/35 p-3">
+                    <div className="text-[10px] uppercase tracking-[0.24em] text-[var(--muted)]">Accuracy</div>
+                    <div className="mt-2 text-2xl font-black text-[var(--primary)]">
+                        {result?.accuracy !== undefined && result?.accuracy !== null ? `${(result.accuracy * 100).toFixed(1)}%` : '--'}
+                    </div>
+                </div>
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--bg)]/35 p-3">
+                    <div className="text-[10px] uppercase tracking-[0.24em] text-[var(--muted)]">Samples</div>
+                    <div className="mt-2 text-2xl font-black text-[var(--text)]">{result?.n_samples ?? '--'}</div>
+                </div>
+            </div>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3 pt-4">
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--bg)]/25 p-3">
+                <div className="text-[10px] uppercase tracking-[0.24em] text-[var(--muted)]">Classifier</div>
+                <div className="mt-2 text-lg font-black text-[var(--primary)]">{result?.classifier || 'LDA'}</div>
+            </div>
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--bg)]/25 p-3">
+                <div className="text-[10px] uppercase tracking-[0.24em] text-[var(--muted)]">Session Source</div>
+                <div className="mt-2 text-sm font-bold text-[var(--text)] break-words" title={selectedSessionName}>{selectedSessionName || 'All Available Data'}</div>
+            </div>
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--bg)]/25 p-3">
+                <div className="text-[10px] uppercase tracking-[0.24em] text-[var(--muted)]">Detection Model</div>
+                <div className="mt-2 text-sm font-bold text-[var(--text)] break-words" title={result?.model_name}>{result?.model_name || 'Not Loaded Yet'}</div>
+            </div>
+        </div>
+    </div>
+);
+
+const EEGParametersCard = ({ params, result }) => (
     <div className="card h-full flex flex-col p-4 bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-sm">
         <h3 className="text-base flex items-center font-bold text-[var(--muted)] uppercase tracking-widest border-b border-[var(--border)] pb-2">
-            <Brain className="mr-2 w-4 h-4" /> EEG LDA
+            <Sliders className="mr-2 w-4 h-4" /> EEG Parameters
         </h3>
         <div className="py-4 space-y-4 text-sm text-[var(--text)]">
-            <div className="flex justify-between items-center">
+            <div className="flex flex-col gap-1 sm:flex-row sm:justify-between sm:items-center">
                 <span className="text-[var(--muted)]">Classifier</span>
                 <span className="font-mono text-[var(--primary)]">{result?.classifier || 'LDA'}</span>
             </div>
-            <div className="flex justify-between items-center">
+            <div className="flex flex-col gap-1 sm:flex-row sm:justify-between sm:items-center">
                 <span className="text-[var(--muted)]">Test Size</span>
                 <span className="font-mono text-[var(--primary)]">{params?.test_size ?? 0.2}</span>
             </div>
-            <div className="flex justify-between items-center">
-                <span className="text-[var(--muted)]">Session Source</span>
-                <span className="font-mono text-[var(--primary)] truncate max-w-[10rem]" title={result?.source}>{result?.source || 'N/A'}</span>
+            <div className="rounded-lg border border-[var(--border)] bg-[var(--bg)]/35 p-3 text-xs leading-5 text-[var(--muted)]">
+                EEG training uses the score-based SSVEP feature vector and scales it before fitting the LDA boundary.
             </div>
-            <div className="rounded-lg border border-[var(--border)] bg-[var(--bg)]/40 p-3 text-xs leading-5 text-[var(--muted)]">
-                EEG uses the score-based SSVEP feature set and trains an LDA model per selected session or the full EEG table.
+        </div>
+    </div>
+);
+
+const EEGFeatureSetCard = ({ result }) => {
+    const featureOrder = result?.feature_order || result?.hyperparameters?.feature_order || [];
+
+    return (
+        <div className="card h-full flex flex-col p-4 bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-sm">
+            <h3 className="text-base flex items-center font-bold text-[var(--muted)] uppercase tracking-widest border-b border-[var(--border)] pb-2">
+                <ListOrdered className="mr-2 w-4 h-4" /> Feature Set
+            </h3>
+            <div className="py-4 flex-1 flex flex-col gap-3">
+                <div className="grid gap-2 sm:grid-cols-2">
+                    {featureOrder.map((feature) => (
+                        <div key={feature} className="rounded-lg border border-[var(--border)] bg-[var(--bg)]/30 px-3 py-2 text-xs font-mono text-[var(--text)]">
+                            {feature}
+                        </div>
+                    ))}
+                </div>
+                <div className="rounded-lg border border-[var(--border)] bg-[var(--bg)]/35 p-3 text-xs leading-5 text-[var(--muted)]">
+                    These are the SSVEP score features sent into LDA. Tree inspection is intentionally unavailable because EEG is not using a forest model here.
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const EEGDataInfoCard = ({ result, selectedSessionName }) => (
+    <div className="card h-full flex flex-col p-4 bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-sm">
+        <h3 className="text-base flex items-center font-bold text-[var(--muted)] uppercase tracking-widest border-b border-[var(--border)] pb-2">
+            <Database className="mr-2 w-4 h-4" /> EEG Training Data
+        </h3>
+        <div className="py-4 space-y-3 text-sm text-[var(--text)]">
+            <div className="flex flex-col gap-1 sm:flex-row sm:justify-between sm:items-center">
+                <span className="text-[var(--muted)]">Selected Session</span>
+                <span className="font-mono text-[var(--primary)] break-words text-right max-w-[14rem]" title={selectedSessionName}>{selectedSessionName || 'All Available Data'}</span>
+            </div>
+            <div className="flex flex-col gap-1 sm:flex-row sm:justify-between sm:items-center">
+                <span className="text-[var(--muted)]">Model File</span>
+                <span className="font-mono text-[var(--primary)] break-words text-right max-w-[14rem]" title={result?.model_path}>{result?.model_path ? result.model_path.split(/[\\/]/).pop() : '--'}</span>
+            </div>
+            <div className="rounded-lg border border-[var(--border)] bg-[var(--bg)]/35 p-3 text-xs leading-5 text-[var(--muted)]">
+                Train on one EEG session when you want a clean subject-specific model. Use all available EEG rows when you want a broader but less controlled model.
             </div>
         </div>
     </div>
@@ -220,7 +303,7 @@ const RenderClassLabel = ({ label, sensor }) => {
 
 const ConfusionMatrixCard = ({ matrix, labels, n_samples, sensor }) => (
     <div className="card h-full flex flex-col p-4 bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-sm">
-        <div className="flex justify-between items-center border-b border-[var(--border)] pb-2">
+        <div className="flex flex-wrap justify-between items-center gap-2 border-b border-[var(--border)] pb-2">
             <h3 className="text-sm flex items-center font-bold text-[var(--muted)] uppercase tracking-widest">
                 <Grid3X3 className="mr-2 w-4 h-4" /> Confusion Matrix
                 {n_samples !== undefined && <span className="ml-2 text-xs normal-case opacity-70">({n_samples} samples)</span>}
@@ -231,9 +314,12 @@ const ConfusionMatrixCard = ({ matrix, labels, n_samples, sensor }) => (
                 <span className="font-bold text-[var(--primary)]">Pred</span>
             </div>
         </div>
-        <div className="flex-grow overflow-hidden flex flex-col h-full py-4 relative">
+        <div
+            className="flex-grow overflow-auto flex flex-col h-full py-4 relative [&::-webkit-scrollbar]:hidden"
+            style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+        >
             {matrix ? (
-                <table className="w-full h-full text-[16px] text-center text-[var(--text)] border-collapse table-fixed">
+                <table className="min-w-[28rem] w-full h-full text-sm md:text-base text-center text-[var(--text)] border-collapse table-fixed">
                     <thead>
                         <tr>
                             <th className="p-2 w-24 text-left text-[var(--muted)] font-normal italic border-b border-[var(--border)] bg-[var(--bg)]/30">Class</th>
@@ -281,9 +367,9 @@ const getDepth = (node) => {
 const DecisionTreeCard = ({ structure, treeIndex, totalTrees, onTreeChange, loading }) => {
     const depth = getDepth(structure);
     return (
-        <div className="card h-full flex flex-col p-0 bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-sm overflow-hidden relative group">
-            <div className="absolute top-4 left-4 z-10 bg-[var(--bg)]/90 backdrop-blur px-3 py-2 rounded border border-[var(--border)] shadow-sm flex flex-col gap-2">
-                <div className="flex justify-between items-center gap-4">
+        <div className="card h-full min-h-[24rem] flex flex-col p-0 bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-sm overflow-hidden relative group">
+            <div className="absolute top-3 left-3 right-3 z-10 bg-[var(--bg)]/90 backdrop-blur px-3 py-2 rounded border border-[var(--border)] shadow-sm flex flex-col gap-2 md:right-auto">
+                <div className="flex flex-wrap justify-between items-center gap-3">
                     <h3 className="text-sm flex items-center font-bold text-[var(--text)]">
                         <Network className="mr-2 w-4 h-4" /> Decision Tree Visualization
                     </h3>
@@ -318,7 +404,10 @@ const DecisionTreeCard = ({ structure, treeIndex, totalTrees, onTreeChange, load
                 )}
             </div>
 
-            <div className={`w-full h-full bg-[var(--bg)] transition-opacity ${loading ? 'opacity-50' : 'opacity-100'}`} style={{ minHeight: '400px' }}>
+            <div
+                className={`w-full h-full overflow-auto bg-[var(--bg)] transition-opacity [&::-webkit-scrollbar]:hidden ${loading ? 'opacity-50' : 'opacity-100'}`}
+                style={{ minHeight: '24rem', scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+            >
                 {structure ? (
                     <Tree
                         /* key={treeIndex} Force re-render removed to keep zoom */
@@ -354,12 +443,11 @@ const ControlPanel = ({
     onSwitchLab
 }) => (
     <div className="space-y-4">
-        {/* Session Select */}
         <div className="card p-4 bg-[var(--surface)] border border-[var(--border)] rounded-xl flex flex-col gap-2">
-            <span className="flex flex-row justify-between">
+            <div className="flex flex-col gap-3">
                 <div className="p-1 flex items-center justify-between gap-2 bg-surface/50">
                     <div className="flex flex-row items-center gap-2.5">
-                        <span className="flex flex-row text-[22px] items-center font-bold tracking-tight">
+                        <span className="flex flex-row flex-wrap text-[22px] items-center font-bold tracking-tight">
                             <Brain size={24} className="text-primary mr-1" /> ML Training
                             <button
                                 onClick={onSwitchLab}
@@ -373,28 +461,27 @@ const ControlPanel = ({
                     </div>
                 </div>
 
-                {/* TABS */}
-                <span className="flex bg-[var(--surface)] rounded-s-[20px] rounded-e-[6px] p-1 border border-[var(--border)]">
+                <div className="flex flex-wrap bg-[var(--surface)] rounded-[20px] p-1 border border-[var(--border)] gap-1">
                     <button
                         onClick={() => { setActiveTab('EMG'); onSessionSelect(null); }}
-                        className={`px-1 py-1 rounded-s-[20px] rounded-e-[6px] text-sm font-medium transition-all ${activeTab === 'EMG' ? 'bg-[var(--primary)] text-bg ' : 'text-[var(--text)] hover:text-[var(--primary)]'} `}
+                        className={`px-3 py-1.5 rounded-[16px] text-sm font-medium transition-all ${activeTab === 'EMG' ? 'bg-[var(--primary)] text-bg ' : 'text-[var(--text)] hover:text-[var(--primary)]'} `}
                     >
                         <Hand className="inline mr-1 w-4 h-4" /> EMG
                     </button>
                     <button
                         onClick={() => { setActiveTab('EOG'); onSessionSelect(null); }}
-                        className={`px-1 py-1 rounded-[6px] text-sm font-medium transition-all ${activeTab === 'EOG' ? 'bg-[var(--primary)] text-bg ' : 'text-[var(--text)] hover:text-[var(--primary)]'} `}
+                        className={`px-3 py-1.5 rounded-[16px] text-sm font-medium transition-all ${activeTab === 'EOG' ? 'bg-[var(--primary)] text-bg ' : 'text-[var(--text)] hover:text-[var(--primary)]'} `}
                     >
                         <Eye className="inline mr-1 w-4 h-4" /> EOG
                     </button>
                     <button
                         onClick={() => { setActiveTab('EEG'); onSessionSelect(null); }}
-                        className={`px-1 py-1 rounded-[6px] text-sm font-medium transition-all ${activeTab === 'EEG' ? 'bg-[var(--primary)] text-bg ' : 'text-[var(--text)] hover:text-[var(--primary)]'} `}
+                        className={`px-3 py-1.5 rounded-[16px] text-sm font-medium transition-all ${activeTab === 'EEG' ? 'bg-[var(--primary)] text-bg ' : 'text-[var(--text)] hover:text-[var(--primary)]'} `}
                     >
                         <Brain className="inline mr-1 w-4 h-4" /> EEG
                     </button>
-                </span>
-            </span>
+                </div>
+            </div>
 
             <div className="relative group">
                 <input
@@ -407,7 +494,7 @@ const ControlPanel = ({
                 <div className="absolute right-3 top-1/2 -translate-y-1/2 text-[16px] font-mono text-muted group-focus-within:text-primary">.model</div>
             </div>
 
-            <div className="flex gap-2">
+            <div className="flex flex-col sm:flex-row gap-2">
                 <CustomSelect
                     className="flex"
                     value={selectedSession || ''}
@@ -488,6 +575,9 @@ export default function MLTrainingView({ onSwitchLab }) {
     const activeResult = results[activeTab];
     const activeEvalResult = evalResults[activeTab];
     const activeParams = params[activeTab];
+    const selectedSessionName = selectedSession
+        ? (availableSessions.find(s => s.table === selectedSession)?.name || selectedSession)
+        : 'All Available Data';
 
     const fetchModels = async (forcedName = null) => {
         try {
@@ -728,19 +818,18 @@ export default function MLTrainingView({ onSwitchLab }) {
 
 
     return (
-        <div className="font-sans w-full flex-1 min-h-0 p-4 flex flex-col items-stretch overflow-hidden">
-            {/* ERROR DISPLAY */}
+        <div className="font-sans w-full flex-1 min-h-0 p-3 sm:p-4 flex flex-col items-stretch overflow-hidden">
             {error && <div className="w-full bg-red-900/20 border border-red-500 text-red-200 py-2 rounded mb-4 flex justify-between items-center shrink-0 text-sm px-4">
                 <span><strong>Error:</strong> {error}</span>
                 <button onClick={() => setError(null)} className="underline">Dismiss</button>
             </div>}
 
-            {/* CONTENT scrollable container */}
-            <div className="flex-1 w-full min-h-0 overflow-hidden">
-                <div className="h-full grid grid-cols-12 grid-rows-6 gap-4">
-                    {/* LEFT SIDEBAR CONTROLS (Span 3) - NOW CONTAINS ACCURACY & FEATURES TOO */}
-                    <div className="col-span-12 lg:col-span-3 row-span-6 flex flex-col gap-4 min-h-0">
-                        {/* 1. CONTROLS */}
+            <div
+                className="flex-1 w-full min-h-0 overflow-y-auto overflow-x-hidden pr-1 [&::-webkit-scrollbar]:hidden"
+                style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+            >
+                <div className="grid gap-4 xl:grid-cols-[minmax(320px,360px)_minmax(0,1fr)] items-start">
+                    <div className="flex flex-col gap-4 min-w-0">
                         <div className="shrink-0">
                             <ControlPanel
                                 onTrain={handleTrain}
@@ -758,8 +847,7 @@ export default function MLTrainingView({ onSwitchLab }) {
                             />
                         </div>
 
-                        {/* 2. ACCURACY - SPLIT PANEL */}
-                        <div className="shrink-0 h-64">
+                        <div className="shrink-0 min-w-0">
                             <SplitAccuracyCard
                                 accuracy={(activeResult || activeEvalResult)?.accuracy}
                                 n_samples={(activeResult || activeEvalResult)?.n_samples}
@@ -771,86 +859,82 @@ export default function MLTrainingView({ onSwitchLab }) {
                             />
                         </div>
 
-                        {/* 3. TOP FEATURES */}
                         {Object.keys((activeResult || activeEvalResult)?.feature_importances || {}).length > 0 && (
-                            <div className="flex-1 flex-grow-4 min-h-0">
+                            <div className="min-w-0">
                                 <FeatureImportanceCard importances={(activeResult || activeEvalResult).feature_importances} />
                             </div>
                         )}
                     </div>
 
-                    {/* MAIN BENTO GRID (Span 9) */}
-                    {(activeResult || activeEvalResult) ? (
-                        <>
-                            {activeTab !== 'EEG' ? (
-                                <div className="col-span-12 md:col-span-9 row-span-4 min-h-0 flex flex-col overflow-hidden">
-                                    <DecisionTreeCard
-                                        structure={(activeResult || activeEvalResult).tree_structure}
-                                        treeIndex={treeIndex}
-                                        totalTrees={activeParams.n_estimators}
-                                        onTreeChange={fetchTree}
-                                        loading={loading || treeLoading}
-                                    />
-                                </div>
-                            ) : (
-                                <div className="col-span-12 md:col-span-9 row-span-4 min-h-0 flex flex-col overflow-hidden">
-                                    <div className="card h-full flex flex-col p-6 bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-sm">
-                                        <h3 className="text-base flex items-center font-bold text-[var(--muted)] uppercase tracking-widest border-b border-[var(--border)] pb-2">
-                                            <Brain className="mr-2 w-4 h-4" /> EEG Model Workspace
-                                        </h3>
-                                        <div className="flex-1 grid gap-4 py-4 md:grid-cols-2">
-                                            <div className="rounded-xl border border-[var(--border)] bg-[var(--bg)]/30 p-4">
-                                                <div className="text-xs uppercase tracking-widest text-[var(--muted)]">Model</div>
-                                                <div className="mt-2 text-2xl font-black text-[var(--primary)]">{(activeResult || activeEvalResult).model_name || 'eeg_lda'}</div>
-                                                <div className="mt-2 text-sm text-[var(--muted)]">Classifier: {(activeResult || activeEvalResult).classifier || 'LDA'}</div>
-                                            </div>
-                                            <div className="rounded-xl border border-[var(--border)] bg-[var(--bg)]/30 p-4">
-                                                <div className="text-xs uppercase tracking-widest text-[var(--muted)]">Feature Set</div>
-                                                <div className="mt-2 text-sm leading-6 text-[var(--text)]">
-                                                    score_1..score_6, max/second max score, ratio, mean, std
-                                                </div>
-                                                <div className="mt-2 text-xs text-[var(--muted)]">
-                                                    Session-based EEG LDA evaluation does not expose tree inspection because it is not a forest model.
-                                                </div>
-                                            </div>
-                                        </div>
+                    <div className="min-w-0">
+                        {(activeResult || activeEvalResult) ? (
+                            activeTab === 'EEG' ? (
+                                <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-12">
+                                    <div className="md:col-span-2 2xl:col-span-12 min-w-0">
+                                        <EEGHeroCard
+                                            result={activeResult || activeEvalResult}
+                                            selectedSessionName={selectedSessionName}
+                                        />
+                                    </div>
+                                    <div className="min-w-0 2xl:col-span-3">
+                                        <EEGParametersCard
+                                            result={activeResult || activeEvalResult}
+                                            params={activeParams}
+                                        />
+                                    </div>
+                                    <div className="min-w-0 2xl:col-span-4">
+                                        <EEGDataInfoCard
+                                            result={activeResult || activeEvalResult}
+                                            selectedSessionName={selectedSessionName}
+                                        />
+                                    </div>
+                                    <div className="md:col-span-2 2xl:col-span-5 min-w-0">
+                                        <EEGFeatureSetCard result={activeResult || activeEvalResult} />
+                                    </div>
+                                    <div className="md:col-span-2 2xl:col-span-12 min-w-0">
+                                        <ConfusionMatrixCard
+                                            matrix={(activeResult || activeEvalResult).confusion_matrix}
+                                            labels={(activeResult || activeEvalResult).labels || []}
+                                            n_samples={(activeResult || activeEvalResult).n_samples}
+                                            sensor={activeTab}
+                                        />
                                     </div>
                                 </div>
-                            )}
-
-                            <div className="col-span-12 md:col-span-3 row-span-2 min-h-0 flex flex-col overflow-hidden">
-                                {activeTab === 'EEG' ? (
-                                    <EEGSummaryCard
-                                        result={activeResult || activeEvalResult}
-                                        params={activeParams}
-                                    />
-                                ) : (
-                                    <HyperparametersCard
-                                        params={activeParams}
-                                        onChange={handleParamChange}
-                                    />
-                                )}
-                            </div>
-
-                            <div className={`col-span-12 ${activeTab === 'EEG' ? 'md:col-span-9' : 'md:col-span-6'} row-span-2 min-h-0 flex flex-col overflow-hidden`}>
-                                <ConfusionMatrixCard
-                                    matrix={(activeResult || activeEvalResult).confusion_matrix}
-                                    labels={(activeResult || activeEvalResult).labels || []}
-                                    n_samples={(activeResult || activeEvalResult).n_samples}
-                                    sensor={activeTab}
-                                />
-                            </div>
-                        </>
-                    ) : (
-                        <div className="col-span-12 lg:col-span-9 row-span-6 card border-2 border-dashed border-[var(--border)] rounded-xl flex flex-col items-center justify-center text-[var(--muted)] bg-[var(--surface)]/50">
-                            {/* Empty state showing Hyperparams Card as preview/setup if desired, or just empty */}
-                            <div className="text-center">
+                            ) : (
+                                <div className="grid gap-4 md:grid-cols-9">
+                                    <div className="min-w-0 md:col-span-9">
+                                        <DecisionTreeCard
+                                            structure={(activeResult || activeEvalResult).tree_structure}
+                                            treeIndex={treeIndex}
+                                            totalTrees={activeParams.n_estimators}
+                                            onTreeChange={fetchTree}
+                                            loading={loading || treeLoading}
+                                        />
+                                    </div>
+                                    <div className="min-w-0 md:col-span-3">
+                                        <HyperparametersCard
+                                            params={activeParams}
+                                            onChange={handleParamChange}
+                                        />
+                                    </div>
+                                    <div className="min-w-0 md:col-span-6">
+                                        <ConfusionMatrixCard
+                                            matrix={(activeResult || activeEvalResult).confusion_matrix}
+                                            labels={(activeResult || activeEvalResult).labels || []}
+                                            n_samples={(activeResult || activeEvalResult).n_samples}
+                                            sensor={activeTab}
+                                        />
+                                    </div>
+                                </div>
+                            )
+                        ) : (
+                            <div className="card border-2 border-dashed border-[var(--border)] rounded-xl flex flex-col items-center justify-center text-[var(--muted)] bg-[var(--surface)]/50 min-h-[26rem] p-8 text-center">
                                 <div className="text-6xl mb-6 opacity-20 flex justify-center"><PieChart className="w-24 h-24" /></div>
                                 <p className="text-lg font-medium">Model workspace empty</p>
                                 <p className="text-sm opacity-70">Train a new model or load an existing one from the sidebar.</p>
                             </div>
-                        </div>
-                    )}
+                        )}
+                    </div>
                 </div>
             </div>
         </div>

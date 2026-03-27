@@ -77,10 +77,26 @@ export const CalibrationApi = {
      * @param {string} classLabel 
      * @param {number} windowDurationMs 
      */
-    async startCalibration(sensorType, mode, classLabel, windowDurationMs) {
+    async startCalibration(sensorType, mode, classLabel, windowDurationMs, sessionName = null, extra = {}) {
         console.log(`[CalibrationApi] Starting ${mode} calibration for ${sensorType} (${classLabel})`);
-        // Mock command back to backend
-        return { success: true, sessionId: Date.now().toString() };
+        const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+        const response = await fetch(`${API_BASE_URL}/api/calibration/start`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                sensor: sensorType,
+                mode,
+                class_label: classLabel,
+                window_duration_ms: windowDurationMs,
+                session_name: sessionName,
+                ...extra
+            })
+        });
+        if (!response.ok) {
+            const txt = await response.text();
+            throw new Error(`Failed to start calibration: ${response.status} ${txt}`);
+        }
+        return response.json();
     },
 
     /**
@@ -89,7 +105,17 @@ export const CalibrationApi = {
      */
     async stopCalibration(sensorType) {
         console.log(`[CalibrationApi] Stopping calibration for ${sensorType}`);
-        return { success: true };
+        const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+        const response = await fetch(`${API_BASE_URL}/api/calibration/stop`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sensor: sensorType })
+        });
+        if (!response.ok) {
+            const txt = await response.text();
+            throw new Error(`Failed to stop calibration: ${response.status} ${txt}`);
+        }
+        return response.json();
     },
 
     /**

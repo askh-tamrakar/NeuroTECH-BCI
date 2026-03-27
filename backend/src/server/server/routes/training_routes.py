@@ -2,6 +2,7 @@ from flask import Blueprint, jsonify, request
 import json
 import time
 import numpy as np
+import pandas as pd
 from src.server.server.state import state
 from src.server.server.config_manager import load_config, save_config
 from src.server.server.extensions import socketio
@@ -25,6 +26,8 @@ from src.learning.eog_trainer import (
     load_model as load_eog_model
 )
 from src.learning.eeg_lda_trainer import train_eeg_lda_model, evaluate_eeg_lda_model
+from src.config.window_config import SESSION_CONFIG
+from src.feature.extractors.rps_extractor import EMG_FEATURE_COLUMNS
 
 training_bp = Blueprint('training', __name__)
 
@@ -65,15 +68,15 @@ def api_train_emg():
         except Exception as e:
             print(f"DB Check failed: {e}")
 
-        n_est = int(params.get('n_estimators', 100))
+        n_est = int(params.get('n_estimators', 200))
         max_d = params.get('max_depth')
-        if max_d == 'None' or max_d is None: max_d = None
+        if max_d == 'None' or max_d is None: max_d = 15
         else: max_d = int(max_d)
         
         test_size = float(params.get('test_size', 0.2))
         min_impurity_decrease = float(params.get('min_impurity_decrease', 0.0))
         
-        model_name = params.get('model_name', 'emg_rf')
+        model_name = params.get('model_name', 'emg_rf_model')
         
         result = train_emg_model(
             n_estimators=n_est, 
@@ -278,6 +281,77 @@ def api_delete_eog_model(model_name):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+
+@training_bp.route('/api/emg/calibrate-scaler', methods=['POST'])
+def api_calibrate_emg_scaler():
+    try:
+        from src.calibration.calibration_manager import calibration_manager
+        params = request.get_json() or {}
+        table_name = params.get('table_name', 'emg_windows')
+        model_name = params.get('model_name', 'emg_rf_model')
+        if table_name == 'ALL':
+            table_name = 'emg_windows'
+
+        conn = db_manager.connect('EMG')
+        cursor = conn.cursor()
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table_name,))
+        if not cursor.fetchone():
+            conn.close()
+            return jsonify({"error": f"Table {table_name} not found"}), 404
+
+        rows = pd.read_sql_query(f"SELECT * FROM {table_name}", conn)
+        conn.close()
+
+        if rows.empty:
+            return jsonify({"error": "No EMG rows available for scaler calibration"}), 400
+
+        feature_rows = rows.to_dict(orient='records')
+        scaler_path = calibration_manager.calibrate_emg_scaler(feature_rows, model_name=model_name)
+        try:
+            from src.utils.config import config_manager
+            config_manager.set_active_model('EMG', model_name)
+            if state.rps_detector:
+                state.rps_detector.load_model(model_name, verbose=False)
+        except Exception:
+            pass
+        return jsonify({"status": "success", "table_name": table_name, "scaler_path": scaler_path, "samples": len(feature_rows)})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@training_bp.route('/api/eog/calibrate-scaler', methods=['POST'])
+def api_calibrate_eog_scaler():
+    try:
+        from src.calibration.calibration_manager import calibration_manager
+        params = request.get_json() or {}
+        table_name = params.get('table_name', 'eog_windows')
+        model_name = params.get('model_name', 'eog_rf')
+        if table_name == 'ALL':
+            table_name = 'eog_windows'
+
+        conn = db_manager.connect('EOG')
+        cursor = conn.cursor()
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table_name,))
+        if not cursor.fetchone():
+            conn.close()
+            return jsonify({"error": f"Table {table_name} not found"}), 404
+
+        rows = pd.read_sql_query(f"SELECT * FROM {table_name}", conn)
+        conn.close()
+
+        if rows.empty:
+            return jsonify({"error": "No EOG rows available for scaler calibration"}), 400
+
+        feature_rows = rows.to_dict(orient='records')
+        scaler_path = calibration_manager.calibrate_eog_scaler(feature_rows, model_name=model_name)
+        try:
+            from src.utils.config import config_manager
+            config_manager.set_active_model('EOG', model_name)
+        except Exception:
+            pass
+        return jsonify({"status": "success", "table_name": table_name, "scaler_path": scaler_path, "samples": len(feature_rows)})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @training_bp.route('/api/models/<sensor>/<model_name>', methods=['DELETE'])
 def api_delete_model_generic(sensor, model_name):
     """Delete a specific model for any supported sensor."""
@@ -406,13 +480,36 @@ def api_save_window():
             return jsonify({"error": "Feature extraction failed"}), 400
 
         sensor_upper = str(sensor).upper()
+        collection_context = state.session.get_collection_context(sensor_upper) if hasattr(state.session, 'get_collection_context') else None
+        effective_metadata = dict(collection_context or {})
+        effective_metadata.update(metadata)
 
-        if sensor_upper == 'EEG':
-            features['target_frequency'] = float(metadata.get('targetFrequency', metadata.get('frequency', 0)) or 0)
-            features['channel_index'] = int(metadata.get('channelIndex', payload.get('channel', 0)) or 0)
-            features['sample_count'] = int(metadata.get('sampleCount', len(samples)) or len(samples))
-            features['window_ms'] = float(metadata.get('windowMs', (len(samples) / sr) * 1000.0) or 0)
-            features['metadata_json'] = json.dumps(metadata)
+        if sensor_upper == 'EMG':
+            window_ms = float(effective_metadata.get('windowMs', effective_metadata.get('window_duration_ms', SESSION_CONFIG["window_ms"])) or SESSION_CONFIG["window_ms"])
+            overlap = float(effective_metadata.get('sessionOverlap', effective_metadata.get('overlap', 0.0)) or 0.0)
+            stride_ms = float(
+                effective_metadata.get('strideMs', effective_metadata.get('session_stride_ms', 0)) or 0
+            )
+            gap_ms = float(effective_metadata.get('gapMs', effective_metadata.get('gap_ms', 500.0)) or 500.0)
+            if stride_ms <= 0:
+                stride_ms = window_ms * (1.0 - overlap) if overlap > 0 else window_ms + gap_ms
+
+            features['channel_index'] = int(effective_metadata.get('channelIndex', effective_metadata.get('channel_index', payload.get('channel', 0))) or 0)
+            features['sample_count'] = int(effective_metadata.get('sampleCount', len(samples)) or len(samples))
+            features['window_ms'] = float(window_ms)
+            features['sampling_rate'] = float(effective_metadata.get('samplingRate', effective_metadata.get('sampling_rate', sr)) or sr)
+            features['session_window_ms'] = float(effective_metadata.get('sessionWindowMs', effective_metadata.get('window_duration_ms', window_ms)) or window_ms)
+            features['session_overlap'] = float(overlap)
+            features['session_stride_ms'] = float(stride_ms)
+            features['gap_ms'] = float(gap_ms)
+            features['metadata_json'] = json.dumps(effective_metadata)
+            features['source'] = str(effective_metadata.get('source', 'manual_window'))
+        elif sensor_upper == 'EEG':
+            features['target_frequency'] = float(effective_metadata.get('targetFrequency', effective_metadata.get('frequency', 0)) or 0)
+            features['channel_index'] = int(effective_metadata.get('channelIndex', payload.get('channel', 0)) or 0)
+            features['sample_count'] = int(effective_metadata.get('sampleCount', len(samples)) or len(samples))
+            features['window_ms'] = float(effective_metadata.get('windowMs', (len(samples) / sr) * 1000.0) or 0)
+            features['metadata_json'] = json.dumps(effective_metadata)
 
         ts = time.time()
         features['timestamp'] = ts
@@ -427,6 +524,21 @@ def api_save_window():
         if not session_name: session_name = 'Manual_Windows'
         
         table_name = db_manager.create_session_table(sensor, session_name)
+        if sensor_upper == 'EMG':
+            db_manager.save_session_metadata('EMG', table_name, {
+                "sensor": "EMG",
+                "table_name": table_name,
+                "session_name": session_name,
+                "storage_format": "compact_emg_v1",
+                "feature_columns": EMG_FEATURE_COLUMNS,
+                "training_window_ms": float(features.get('session_window_ms', SESSION_CONFIG["window_ms"])),
+                "capture_window_ms": float(features.get('window_ms', SESSION_CONFIG["window_ms"])),
+                "sampling_rate": float(features.get('sampling_rate', sr)),
+                "overlap": float(features.get('session_overlap', 0.0)),
+                "stride_ms": float(features.get('session_stride_ms', 0.0)),
+                "gap_ms": float(features.get('gap_ms', 0.0)),
+                "channel_index": int(features.get('channel_index', 0) or 0),
+            })
         
         label_map = {
             'Rest': 0, 'Rock': 1, 'Paper': 2, 'Scissors': 3, 

@@ -110,6 +110,10 @@ const RPSGame = ({ wsEvent }) => {
     // Models
     const [models, setModels] = useState([]);
     const [selectedModel, setSelectedModel] = useState('');
+    const [lastDetectionMeta, setLastDetectionMeta] = useState(null);
+    const [feedbackPending, setFeedbackPending] = useState(false);
+    const [showCorrectionPicker, setShowCorrectionPicker] = useState(false);
+    const [feedbackSaving, setFeedbackSaving] = useState(false);
 
     // Stats
     const [score, setScore] = useState({ player: 0, computer: 0 });
@@ -151,6 +155,9 @@ const RPSGame = ({ wsEvent }) => {
     const resetGame = useCallback(() => {
         setPlayerMove(null);
         setResult(null);
+        setLastDetectionMeta(null);
+        setFeedbackPending(false);
+        setShowCorrectionPicker(false);
         processingRef.current = false;
         pickComputerMove();
 
@@ -169,6 +176,9 @@ const RPSGame = ({ wsEvent }) => {
         setMatchWinner(null);
         setPlayerMove(null);
         setResult(null);
+        setLastDetectionMeta(null);
+        setFeedbackPending(false);
+        setShowCorrectionPicker(false);
         processingRef.current = false;
         pickComputerMove();
         setGameState('idle');
@@ -234,7 +244,7 @@ const RPSGame = ({ wsEvent }) => {
         if (!wsEvent) return;
 
         // Unified Real-time prediction handling
-        if (wsEvent.event === 'emg_prediction') {
+        if (wsEvent.event === 'emg_prediction' || wsEvent.type === 'emg_prediction') {
             setCurrentPrediction(String(wsEvent.label || 'REST').toUpperCase());
             return;
         }
@@ -260,10 +270,11 @@ const RPSGame = ({ wsEvent }) => {
         if (!wsEvent || manualMode) return;
 
         const eventName = String(wsEvent.event || '').toUpperCase();
+        const livePrediction = String(wsEvent.label || '').toUpperCase();
 
         // Check for Auto-Restart Logic (Waiting for Rest)
         if (gameState === 'waiting_for_rest') {
-            if (eventName === 'REST') {
+            if (eventName === 'REST' || (eventName === 'EMG_PREDICTION' && livePrediction === 'REST')) {
                 setGameState('waiting');
             }
             return;
@@ -274,11 +285,11 @@ const RPSGame = ({ wsEvent }) => {
 
         // Filter for RPS events
         if (MOVES.includes(eventName)) {
-            handlePlayerMove(eventName);
+            handlePlayerMove(eventName, wsEvent);
         }
     }, [wsEvent, gameState, manualMode]);
 
-    const handlePlayerMove = (pMove) => {
+    const handlePlayerMove = (pMove, detectedEvent = null) => {
         // prevent double-processing or moving if match is over
         if (processingRef.current || matchWinner) return;
         processingRef.current = true;
@@ -287,6 +298,13 @@ const RPSGame = ({ wsEvent }) => {
         setPlayerMove(pMove);
         setComputerMove(cMove); // Ensure it's set in state for rendering
         soundHandler.playRPSMove(); // Play sound on move selection
+        setLastDetectionMeta(detectedEvent ? {
+            prediction: pMove,
+            confidence: detectedEvent.confidence || 0,
+            features: detectedEvent.features || null
+        } : null);
+        setFeedbackPending(Boolean(!manualMode && detectedEvent?.features));
+        setShowCorrectionPicker(false);
 
         // Log manual gesture for UI
         if (manualMode) {
@@ -326,6 +344,34 @@ const RPSGame = ({ wsEvent }) => {
         // Only allow when waiting and not currently processing
         if (gameState !== 'waiting' || processingRef.current || matchWinner) return;
         handlePlayerMove(move);
+    };
+
+    const submitFeedback = async (correctedLabel = null) => {
+        if (!lastDetectionMeta?.features) {
+            setFeedbackPending(false);
+            setShowCorrectionPicker(false);
+            return;
+        }
+
+        try {
+            setFeedbackSaving(true);
+            await fetch(`${API_BASE_URL}/api/emg/feedback`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    prediction: lastDetectionMeta.prediction,
+                    corrected_label: correctedLabel || lastDetectionMeta.prediction,
+                    confidence: lastDetectionMeta.confidence,
+                    features: lastDetectionMeta.features,
+                })
+            });
+        } catch (err) {
+            console.error("Failed to save EMG feedback:", err);
+        } finally {
+            setFeedbackSaving(false);
+            setFeedbackPending(false);
+            setShowCorrectionPicker(false);
+        }
     };
 
     const toggleManualMode = () => {
@@ -539,6 +585,46 @@ const RPSGame = ({ wsEvent }) => {
                         <div className="vs-badge shrink-0">VS</div>
                         {renderCard('computer', computerMove, gameState !== 'waiting')}
                     </div>
+
+                    {feedbackPending && lastDetectionMeta && (
+                        <div className="mt-6 flex flex-col items-center gap-3 bg-surface/70 border border-border rounded-2xl px-5 py-4 shadow-xl animate-in fade-in duration-300">
+                            <div className="text-sm font-bold uppercase tracking-widest text-muted">Detection Feedback</div>
+                            <div className="text-base text-text text-center">
+                                Detected: <span className="font-black text-primary">{lastDetectionMeta.prediction}</span>
+                            </div>
+                            {!showCorrectionPicker ? (
+                                <div className="flex gap-3">
+                                    <button
+                                        onClick={() => submitFeedback()}
+                                        disabled={feedbackSaving}
+                                        className="px-4 py-2 rounded-xl bg-green-500/10 border border-green-500/30 text-green-400 font-bold hover:bg-green-500/20 transition-colors"
+                                    >
+                                        YES
+                                    </button>
+                                    <button
+                                        onClick={() => setShowCorrectionPicker(true)}
+                                        disabled={feedbackSaving}
+                                        className="px-4 py-2 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 font-bold hover:bg-red-500/20 transition-colors"
+                                    >
+                                        NO
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="flex flex-wrap items-center justify-center gap-2">
+                                    {MOVES.map((move) => (
+                                        <button
+                                            key={move}
+                                            onClick={() => submitFeedback(move)}
+                                            disabled={feedbackSaving}
+                                            className="px-3 py-2 rounded-xl bg-primary/10 border border-primary/30 text-primary font-bold hover:bg-primary/20 transition-colors"
+                                        >
+                                            {move}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </div>
             </div>
 
