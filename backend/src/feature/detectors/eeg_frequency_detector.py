@@ -1,6 +1,5 @@
 import time
 from collections import deque
-from pathlib import Path
 
 import joblib
 import numpy as np
@@ -26,6 +25,7 @@ class EEGFrequencyDetector:
         "score_ratio",
         "score_mean",
         "score_std",
+        "peak_freq",
     ]
 
     def __init__(self, config: dict):
@@ -47,6 +47,9 @@ class EEGFrequencyDetector:
         self.debounce_ms = int(eeg_config.get("debounce_ms", 500))
         self.smoothing_windows = int(eeg_config.get("smoothing_windows", 7))
         self.classifier_mode = str(eeg_config.get("classifier", "fbcca")).lower()
+        self.use_ml_pipeline = bool(eeg_config.get("use_ml_pipeline", self.classifier_mode == "lda"))
+        self.peak_snap_tolerance_hz = float(eeg_config.get("peak_snap_tolerance_hz", 0.75))
+        self.peak_support_ratio = float(eeg_config.get("peak_support_ratio", 0.25))
         self.window_samples = int(self.window_len_sec * self.sampling_rate)
 
         self.prediction_history = deque(maxlen=max(1, self.smoothing_windows))
@@ -92,8 +95,8 @@ class EEGFrequencyDetector:
             return f"TARGET_{str(freq).replace('.', '_')}HZ"
         return "REST"
 
-    def _fbcca_decision(self, features: dict) -> tuple[str, float, float]:
-        score_vector = np.asarray(features.get("score_vector") or [
+    def _base_score_vector(self, features: dict) -> np.ndarray:
+        return np.asarray(features.get("score_vector") or [
             features.get("score_1", 0.0),
             features.get("score_2", 0.0),
             features.get("score_3", 0.0),
@@ -102,25 +105,130 @@ class EEGFrequencyDetector:
             features.get("score_6", 0.0),
         ], dtype=float)
 
+    def _hybrid_score_vector(self, features: dict) -> np.ndarray:
+        hybrid_vector = np.asarray(features.get("hybrid_score_vector") or [], dtype=float)
+        if hybrid_vector.size:
+            return hybrid_vector
+
+        base_vector = self._base_score_vector(features)
+        peak_alignment = np.asarray(features.get("peak_alignment_vector") or np.zeros_like(base_vector), dtype=float)
+        if base_vector.size == 0:
+            return base_vector
+
+        total = float(np.sum(base_vector))
+        normalized = (base_vector / total) if total > 1e-12 else base_vector
+        return (0.72 * normalized) + (0.28 * peak_alignment)
+
+    def _alias_penalty_vector(self, features: dict, size: int) -> np.ndarray:
+        peak_freq = float(features.get("peak_freq", 0.0) or 0.0)
+        if peak_freq <= 0 or size <= 0:
+            return np.zeros(size, dtype=float)
+
+        target_arr = np.asarray(self.target_freqs[:size], dtype=float)
+        if target_arr.size == 0:
+            return np.zeros(size, dtype=float)
+
+        sigma = max(0.55, self.peak_snap_tolerance_hz)
+        direct_alignment = np.exp(-0.5 * ((peak_freq - target_arr) / sigma) ** 2)
+        subharmonic_alignment = np.exp(-0.5 * ((peak_freq - (target_arr / 2.0)) / sigma) ** 2)
+        harmonic_alignment = np.exp(-0.5 * ((peak_freq - (target_arr * 2.0)) / sigma) ** 2)
+        return np.maximum(subharmonic_alignment, harmonic_alignment) * (1.0 - direct_alignment)
+
+    def _resolved_score_vector(self, features: dict) -> tuple[np.ndarray, np.ndarray]:
+        hybrid_vector = self._hybrid_score_vector(features)
+        if hybrid_vector.size == 0:
+            return hybrid_vector, np.asarray([], dtype=float)
+
+        alias_penalty = self._alias_penalty_vector(features, hybrid_vector.size)
+        resolved = np.clip(hybrid_vector - (0.38 * alias_penalty), 0.0, None)
+        total = float(np.sum(resolved))
+        if total > 1e-12:
+            resolved = resolved / total
+        return resolved, alias_penalty
+
+    def _peak_guided_target_idx(self, features: dict, base_scores: np.ndarray, hybrid_scores: np.ndarray) -> int | None:
+        peak_freq = float(features.get("peak_freq", 0.0) or 0.0)
+        if peak_freq <= 0 or not len(self.target_freqs):
+            return None
+
+        target_arr = np.asarray(self.target_freqs[:len(base_scores)], dtype=float)
+        if target_arr.size == 0:
+            return None
+
+        peak_idx = int(np.argmin(np.abs(target_arr - peak_freq)))
+        peak_distance = float(abs(target_arr[peak_idx] - peak_freq))
+        if peak_distance > self.peak_snap_tolerance_hz:
+            return None
+
+        best_score = float(np.max(base_scores)) if base_scores.size else 0.0
+        support_score = float(base_scores[peak_idx]) if peak_idx < len(base_scores) else 0.0
+        hybrid_best = int(np.argmax(hybrid_scores)) if hybrid_scores.size else peak_idx
+
+        if peak_idx == hybrid_best:
+            return peak_idx
+        if best_score <= 1e-8:
+            return peak_idx
+        if support_score >= best_score * self.peak_support_ratio:
+            return peak_idx
+        return None
+
+    def _fbcca_decision(self, features: dict) -> tuple[str, float, float, dict]:
+        score_vector = self._base_score_vector(features)
+
         if score_vector.size == 0 or np.all(score_vector <= 0):
-            return "REST", 0.0, 0.0
+            return "REST", 0.0, 0.0, {
+                "raw_scores": score_vector.tolist(),
+                "hybrid_scores": [],
+                "alias_penalties": [],
+                "peak_guided_idx": None,
+                "peak_freq": float(features.get("peak_freq", 0.0) or 0.0),
+            }
 
-        best_idx = int(np.argmax(score_vector))
-        best_score = float(score_vector[best_idx])
-        second_best = float(np.partition(score_vector, -2)[-2]) if score_vector.size > 1 else 0.0
+        hybrid_vector, alias_penalty = self._resolved_score_vector(features)
+        if hybrid_vector.size != score_vector.size:
+            hybrid_vector = score_vector.copy()
+            alias_penalty = np.zeros_like(score_vector)
+
+        best_idx = int(np.argmax(hybrid_vector))
+        best_score = float(hybrid_vector[best_idx])
+        support_score = float(score_vector[best_idx])
+        second_best = float(np.partition(hybrid_vector, -2)[-2]) if hybrid_vector.size > 1 else 0.0
         ratio = float(best_score / second_best) if second_best > 1e-8 else float(best_score)
+        peak_guided_idx = self._peak_guided_target_idx(features, score_vector, hybrid_vector)
+        if peak_guided_idx is not None:
+            best_idx = peak_guided_idx
+            best_score = float(hybrid_vector[best_idx])
+            support_score = float(score_vector[best_idx])
+            second_best = float(np.partition(hybrid_vector, -2)[-2]) if hybrid_vector.size > 1 else 0.0
+            ratio = float(best_score / second_best) if second_best > 1e-8 else float(best_score)
 
-        if best_score < self.rest_threshold or ratio < self.ratio_threshold:
-            return "REST", best_score, ratio
+        if support_score < self.rest_threshold or ratio < self.ratio_threshold:
+            return "REST", best_score, ratio, {
+                "raw_scores": score_vector.tolist(),
+                "hybrid_scores": hybrid_vector.tolist(),
+                "alias_penalties": alias_penalty.tolist(),
+                "peak_guided_idx": peak_guided_idx,
+                "peak_freq": float(features.get("peak_freq", 0.0) or 0.0),
+            }
 
         event_name = self._normalize_event(best_idx + 1)
-        return event_name, best_score, ratio
+        return event_name, best_score, ratio, {
+            "raw_scores": score_vector.tolist(),
+            "hybrid_scores": hybrid_vector.tolist(),
+            "alias_penalties": alias_penalty.tolist(),
+            "peak_guided_idx": best_idx,
+            "peak_freq": float(features.get("peak_freq", 0.0) or 0.0),
+        }
 
     def _lda_decision(self, features: dict) -> tuple[str, float]:
         if self.model is None:
             return "REST", 0.0
 
-        vector = np.array([[float(features.get(key, 0.0)) for key in self.FEATURE_ORDER]], dtype=float)
+        expected = getattr(self.scaler, "n_features_in_", None)
+        if expected is None:
+            expected = getattr(self.model, "n_features_in_", None)
+        feature_order = self.FEATURE_ORDER[: int(expected)] if expected else self.FEATURE_ORDER
+        vector = np.array([[float(features.get(key, 0.0)) for key in feature_order]], dtype=float)
         if self.scaler is not None:
             vector = self.scaler.transform(vector)
 
@@ -151,13 +259,22 @@ class EEGFrequencyDetector:
         elif "score_vector" not in features:
             return None
 
-        fbcca_event, fbcca_score, ratio = self._fbcca_decision(features)
+        fbcca_event, fbcca_score, ratio, fbcca_meta = self._fbcca_decision(features)
         live_event = fbcca_event
         confidence = fbcca_score
 
-        if self.classifier_mode == "lda" and self.model is not None:
+        if self.use_ml_pipeline and self.classifier_mode == "lda" and self.model is not None:
             lda_event, lda_confidence = self._lda_decision(features)
-            if lda_event != "REST" and lda_confidence >= self.rest_threshold:
+            if (
+                fbcca_event != "REST"
+                and lda_event != "REST"
+                and lda_event != fbcca_event
+                and fbcca_meta.get("peak_guided_idx") is not None
+                and abs(float(features.get("peak_freq", 0.0) or 0.0) - self.target_freqs[fbcca_meta["peak_guided_idx"]]) <= self.peak_snap_tolerance_hz
+            ):
+                live_event = fbcca_event
+                confidence = max(fbcca_score, lda_confidence)
+            elif lda_event != "REST" and lda_confidence >= self.rest_threshold:
                 live_event = lda_event
                 confidence = lda_confidence
             elif fbcca_event == "REST":
@@ -187,6 +304,12 @@ class EEGFrequencyDetector:
         enriched_features["detector_confidence"] = confidence
         enriched_features["score_ratio_runtime"] = ratio
         enriched_features["peak_freq"] = features.get("peak_freq", 0.0)
+        enriched_features["hybrid_score_vector"] = fbcca_meta.get("hybrid_scores", features.get("hybrid_score_vector", []))
+        enriched_features["score_vector_raw"] = fbcca_meta.get("raw_scores", features.get("score_vector", []))
+        enriched_features["alias_penalty_vector"] = fbcca_meta.get("alias_penalties", [])
+        enriched_features["display_score_vector"] = fbcca_meta.get("hybrid_scores", features.get("hybrid_score_vector", []))
+        enriched_features["peak_guided_target_idx"] = fbcca_meta.get("peak_guided_idx")
+        enriched_features["ml_enabled"] = self.use_ml_pipeline
 
         return smoothed_event, confirmed, enriched_features
 

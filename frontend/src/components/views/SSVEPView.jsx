@@ -105,6 +105,9 @@ export default function SSVEPView({ isConnected, wsEvent }) {
     const [trials, setTrials] = useState([]);
     const [useML, setUseML] = useState(true);
     const [scoreVector, setScoreVector] = useState([]);
+    const [availableModels, setAvailableModels] = useState([]);
+    const [selectedModel, setSelectedModel] = useState('');
+    const [predictedFreq, setPredictedFreq] = useState(0);
 
     const addLog = useCallback((message, type = 'INFO') => {
         const time = new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -126,6 +129,9 @@ export default function SSVEPView({ isConnected, wsEvent }) {
             .then(data => {
                 const eeg = data?.features?.EEG;
                 if (eeg) {
+                    setUseML(typeof eeg.use_ml_pipeline === 'boolean'
+                        ? eeg.use_ml_pipeline
+                        : String(eeg.classifier || 'fbcca').toLowerCase() === 'lda');
                     let newRefRate = refreshRate;
                     if (eeg.refresh_rate) {
                         newRefRate = eeg.refresh_rate;
@@ -136,6 +142,9 @@ export default function SSVEPView({ isConnected, wsEvent }) {
                         setConfigs(eeg.targets);
                     }
                 }
+                if (data?.active_models?.EEG) {
+                    setSelectedModel(data.active_models.EEG);
+                }
             })
             .catch(err => console.error("Failed to load generic config for SSVEP", err))
             .finally(() => setIsConfigLoaded(true));
@@ -143,11 +152,37 @@ export default function SSVEPView({ isConnected, wsEvent }) {
     }, []);
 
     useEffect(() => {
+        fetch('/api/models/EEG')
+            .then(res => res.json())
+            .then(data => {
+                if (!Array.isArray(data)) return;
+                setAvailableModels(data);
+                const activeModel = data.find(model => model.active);
+                setSelectedModel(prev => prev || activeModel?.name || data[0]?.name || '');
+            })
+            .catch(err => console.error('Failed to load EEG models for SSVEP', err));
+    }, []);
+
+    useEffect(() => {
+        if (!selectedModel) return;
+        fetch('/api/models/EEG/load', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ model_name: selectedModel })
+        }).catch(err => console.error('Failed to activate EEG model for SSVEP', err));
+    }, [selectedModel]);
+
+    useEffect(() => {
         if (!wsEvent) return;
 
         let freqValue = null;
-        if (wsEvent.event === 'eeg_prediction' && wsEvent.frequency !== undefined) {
+        let predictedValue = null;
+        if (wsEvent.event === 'eeg_prediction' && wsEvent.peak_frequency !== undefined) {
+            freqValue = wsEvent.peak_frequency;
+            predictedValue = wsEvent.predicted_frequency ?? wsEvent.frequency;
+        } else if (wsEvent.event === 'eeg_prediction' && wsEvent.frequency !== undefined) {
             freqValue = wsEvent.frequency;
+            predictedValue = wsEvent.predicted_frequency ?? wsEvent.frequency;
         } else if (typeof wsEvent.event === 'string' && wsEvent.event.startsWith('TARGET_')) {
             const numStr = wsEvent.event.replace('TARGET_', '').replace('HZ', '').replace('_', '.');
             freqValue = parseFloat(numStr);
@@ -158,8 +193,17 @@ export default function SSVEPView({ isConnected, wsEvent }) {
         if (freqValue !== null) {
             setRealTimeFreq(freqValue);
         }
+        if (predictedValue !== null && predictedValue !== undefined) {
+            setPredictedFreq(predictedValue || 0);
+        }
 
-        if (wsEvent.features?.score_vector) {
+        if (wsEvent.features?.display_score_vector) {
+            setScoreVector(wsEvent.features.display_score_vector);
+        } else if (wsEvent.features?.hybrid_score_vector) {
+            setScoreVector(wsEvent.features.hybrid_score_vector);
+        } else if (wsEvent.features?.normalized_score_vector) {
+            setScoreVector(wsEvent.features.normalized_score_vector);
+        } else if (wsEvent.features?.score_vector) {
             setScoreVector(wsEvent.features.score_vector);
         }
 
@@ -205,12 +249,16 @@ export default function SSVEPView({ isConnected, wsEvent }) {
                             rest_threshold: 0.6,
                             ratio_threshold: 1.2,
                             classifier: useML ? 'lda' : 'fbcca',
+                            use_ml_pipeline: useML,
                             num_harmonics: 4,
                             window_len_sec: 1.5,
                             step_sec: 0.25,
                             smoothing_windows: 7,
                             refresh_rate: refreshRate
                         }
+                    },
+                    active_models: {
+                        EEG: selectedModel || null
                     }
                 };
 
@@ -230,7 +278,7 @@ export default function SSVEPView({ isConnected, wsEvent }) {
 
         const timeoutId = setTimeout(syncConfig, 500);
         return () => clearTimeout(timeoutId);
-    }, [configs, refreshRate, isConfigLoaded, useML]);
+    }, [configs, refreshRate, isConfigLoaded, useML, selectedModel]);
 
     // --- Controls ---
     const startFlicker = () => {
@@ -447,6 +495,23 @@ export default function SSVEPView({ isConnected, wsEvent }) {
                             <div className={`w-[14px] h-[14px] rounded-full transition-all duration-300 ${useML ? 'bg-primary translate-x-[22px] shadow-[0_0_8px_var(--primary)]' : 'bg-muted translate-x-0'}`} />
                         </button>
                     </div>
+                    <div className="shrink-0 bg-bg/40 border border-primary/20 rounded-xl p-3">
+                        <div className="flex items-center justify-between mb-2">
+                            <span className="text-[11px] font-black uppercase tracking-widest text-muted/80">EEG Model</span>
+                            <span className="text-[10px] font-mono text-primary/80">{useML ? 'ACTIVE IN PIPELINE' : 'STANDBY'}</span>
+                        </div>
+                        <CustomSelect
+                            options={availableModels.map(model => ({ value: model.name, label: model.name }))}
+                            value={selectedModel}
+                            onChange={(value) => {
+                                setSelectedModel(value);
+                                addLog(`EEG model selected: ${value}`, 'SETTINGS');
+                            }}
+                            placeholder={availableModels.length ? 'Select EEG model...' : 'No EEG models'}
+                            disabled={!availableModels.length}
+                            triggerClassName="!px-3 !py-2 !h-[2.25rem] !text-xs !font-bold !rounded-[8px]"
+                        />
+                    </div>
 
                     {/* Detection Analysis - NOW AT TOP */}
                     <div className="bg-bg/60 border border-primary/40 rounded-xl p-3 shrink-0 backdrop-blur-md shadow-xl border-l-[4px] border-l-primary/60">
@@ -563,6 +628,9 @@ export default function SSVEPView({ isConnected, wsEvent }) {
                                     {realTimeFreq ? realTimeFreq.toFixed(2) : '0.00'}
                                 </span>
                                 <span className="text-lg font-bold text-muted">Hz</span>
+                            </div>
+                            <div className="text-[11px] font-bold uppercase tracking-widest text-muted/70 mt-1">
+                                Pred {predictedFreq ? predictedFreq.toFixed(2) : '0.00'} Hz
                             </div>
                         </div>
                         <div className="w-1/2 flex flex-col justify-between items-end gap-1">

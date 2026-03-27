@@ -264,7 +264,9 @@ class FeatureRouter:
                                         runtime_features,
                                         ts,
                                         extra_data={
-                                            "frequency": live_freq,
+                                            "frequency": float(runtime_features.get("peak_freq", live_freq) or live_freq),
+                                            "predicted_frequency": live_freq,
+                                            "peak_frequency": float(runtime_features.get("peak_freq", 0.0) or 0.0),
                                             "confidence": runtime_features.get("detector_confidence", 0.0),
                                         }
                                     )

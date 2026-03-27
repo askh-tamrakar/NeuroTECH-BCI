@@ -137,11 +137,15 @@ def api_train_eeg_lda():
             table_name = 'eeg_windows'
         test_size = float(params.get('test_size', 0.2))
         model_name = params.get('model_name', 'eeg_lda')
+        solver = params.get('solver', 'eigen')
+        shrinkage = params.get('shrinkage', 'auto')
 
         result = train_eeg_lda_model(
             table_name=table_name,
             test_size=test_size,
             model_name=model_name,
+            solver=solver,
+            shrinkage=shrinkage,
         )
         if "error" in result:
             return jsonify(result), 400

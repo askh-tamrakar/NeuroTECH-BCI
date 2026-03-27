@@ -215,6 +215,7 @@ class DatabaseManager:
                 score_mean REAL NOT NULL DEFAULT 0,
                 score_std REAL NOT NULL DEFAULT 0,
                 dominant_freq REAL NOT NULL DEFAULT 0,
+                peak_freq REAL NOT NULL DEFAULT 0,
                 target_frequency REAL DEFAULT 0,
                 channel_index INTEGER DEFAULT 0,
                 sample_count INTEGER DEFAULT 0,
@@ -307,6 +308,7 @@ class DatabaseManager:
             "score_mean": "REAL NOT NULL DEFAULT 0",
             "score_std": "REAL NOT NULL DEFAULT 0",
             "dominant_freq": "REAL NOT NULL DEFAULT 0",
+            "peak_freq": "REAL NOT NULL DEFAULT 0",
             "target_frequency": "REAL DEFAULT 0",
             "channel_index": "INTEGER DEFAULT 0",
             "sample_count": "INTEGER DEFAULT 0",
@@ -857,10 +859,10 @@ class DatabaseManager:
                     rel_delta, rel_theta, rel_alpha, rel_beta, rel_gamma,
                     mean, std, max, min,
                     score_1, score_2, score_3, score_4, score_5, score_6,
-                    max_score, second_max_score, score_ratio, score_mean, score_std, dominant_freq,
+                    max_score, second_max_score, score_ratio, score_mean, score_std, dominant_freq, peak_freq,
                     target_frequency, channel_index, sample_count, window_ms, metadata_json,
                     label, session_id, timestamp
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 features.get('bp_delta', 0), features.get('bp_theta', 0),
                 features.get('bp_alpha', 0), features.get('bp_beta', 0),
@@ -875,6 +877,7 @@ class DatabaseManager:
                 features.get('max_score', 0), features.get('second_max_score', 0),
                 features.get('score_ratio', 0), features.get('score_mean', 0),
                 features.get('score_std', 0), features.get('dominant_freq', 0),
+                features.get('peak_freq', 0),
                 features.get('target_frequency', 0), features.get('channel_index', 0),
                 features.get('sample_count', 0), features.get('window_ms', 0),
                 features.get('metadata_json', ''),

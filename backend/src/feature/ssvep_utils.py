@@ -6,6 +6,7 @@ from sklearn.cross_decomposition import CCA
 DEFAULT_TARGET_FREQS = [8.0, 9.0, 12.0, 14.4, 16.0, 18.0]
 FILTER_BANKS = [(6, None), (12, None), (18, None), (24, None)]
 FILTER_WEIGHTS = [1.0, 0.7, 0.4, 0.2]
+PEAK_ASSIST_SIGMA_HZ = 0.65
 
 
 def generate_reference(freq: float, sr: int, num_samples: int, num_harmonics: int) -> np.ndarray:
@@ -100,11 +101,25 @@ def compute_ssvep_features(samples, sr: int = 1000, target_freqs=None, num_harmo
     scores_arr = np.asarray(padded_scores, dtype=float)
     score_sum = float(np.sum(scores_arr))
     normalized_scores = (scores_arr / score_sum) if score_sum > 1e-12 else scores_arr
+    peak_alignment = np.zeros_like(scores_arr, dtype=float)
+    if peak_freq > 0 and len(targets) > 0:
+        padded_targets = list(targets[:6]) + [0.0] * max(0, 6 - len(targets))
+        target_arr = np.asarray(padded_targets, dtype=float)
+        valid_mask = target_arr > 0
+        if np.any(valid_mask):
+            peak_alignment[valid_mask] = np.exp(-0.5 * ((peak_freq - target_arr[valid_mask]) / PEAK_ASSIST_SIGMA_HZ) ** 2)
+            alignment_sum = float(np.sum(peak_alignment[valid_mask]))
+            if alignment_sum > 1e-12:
+                peak_alignment[valid_mask] = peak_alignment[valid_mask] / alignment_sum
+
+    hybrid_scores = (0.72 * normalized_scores) + (0.28 * peak_alignment)
     sorted_scores = np.sort(scores_arr)
     max_score = float(sorted_scores[-1]) if sorted_scores.size else 0.0
     second_max = float(sorted_scores[-2]) if sorted_scores.size > 1 else 0.0
     dominant_idx = int(np.argmax(scores_arr)) if scores_arr.size else 0
-    dominant_freq = float(targets[dominant_idx]) if targets else 0.0
+    dominant_freq = float(targets[dominant_idx]) if 0 <= dominant_idx < len(targets) else 0.0
+    hybrid_idx = int(np.argmax(hybrid_scores)) if hybrid_scores.size else 0
+    peak_target_freq = float(targets[hybrid_idx]) if 0 <= hybrid_idx < len(targets) else 0.0
 
     feature_map = {
         "raw_window": data.tolist(),
@@ -139,6 +154,9 @@ def compute_ssvep_features(samples, sr: int = 1000, target_freqs=None, num_harmo
         "target_freqs": targets,
         "score_vector": scores_arr.tolist(),
         "normalized_score_vector": normalized_scores.tolist(),
+        "peak_alignment_vector": peak_alignment.tolist(),
+        "hybrid_score_vector": hybrid_scores.tolist(),
+        "peak_target_freq": peak_target_freq,
     }
 
     return feature_map

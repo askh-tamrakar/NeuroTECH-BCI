@@ -74,7 +74,7 @@ def get_feature_cols(sensor):
          return [
              'score_1', 'score_2', 'score_3', 'score_4', 'score_5', 'score_6',
              'max_score', 'second_max_score', 'score_ratio', 'score_mean', 'score_std',
-             'dominant_freq', 'target_frequency',
+             'dominant_freq', 'peak_freq', 'target_frequency',
              'bp_alpha', 'bp_beta', 'bp_gamma', 'mean', 'std'
          ]
     return []
@@ -304,6 +304,8 @@ def list_saved_models(sensor='EMG'):
     models = []
     sensor = sensor.upper()
     sensor_dir = MODELS_ROOT / sensor / "models"
+    from src.utils.config import config_manager
+    active_name = config_manager.get_active_model(sensor)
     
     if not sensor_dir.exists():
         return []
@@ -329,7 +331,8 @@ def list_saved_models(sensor='EMG'):
             "path": str(p),
             "created_at": meta.get("created_at"),
             "accuracy": meta.get("accuracy"),
-            "hyperparameters": {k:v for k,v in meta.items() if k not in ["created_at", "accuracy"]}
+            "hyperparameters": {k:v for k,v in meta.items() if k not in ["created_at", "accuracy"]},
+            "active": (name == active_name),
         })
         
     models.sort(key=lambda x: x.get("created_at") or "", reverse=True)
