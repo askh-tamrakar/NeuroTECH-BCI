@@ -122,6 +122,7 @@ const RPSGame = ({ wsEvent }) => {
     // Refs for logic
     const computerMoveRef = useRef(null);
     const processingRef = useRef(false);
+    const resetIntervalRef = useRef(null);
 
     // Initialize Computer Move
     const pickComputerMove = useCallback(() => {
@@ -152,7 +153,16 @@ const RPSGame = ({ wsEvent }) => {
             .catch(err => console.error("Prediction toggle failed:", err));
     };
 
+    const clearResetCountdown = useCallback(() => {
+        if (resetIntervalRef.current) {
+            clearInterval(resetIntervalRef.current);
+            resetIntervalRef.current = null;
+        }
+        setCountdown(0);
+    }, []);
+
     const resetGame = useCallback(() => {
+        clearResetCountdown();
         setPlayerMove(null);
         setResult(null);
         setLastDetectionMeta(null);
@@ -169,9 +179,10 @@ const RPSGame = ({ wsEvent }) => {
             // Disable prediction when game sends to idle
             togglePrediction(false);
         }
-    }, [pickComputerMove, manualMode]);
+    }, [clearResetCountdown, pickComputerMove, manualMode]);
 
     const resetMatch = useCallback(() => {
+        clearResetCountdown();
         setScore({ player: 0, computer: 0 });
         setMatchWinner(null);
         setPlayerMove(null);
@@ -183,7 +194,21 @@ const RPSGame = ({ wsEvent }) => {
         pickComputerMove();
         setGameState('idle');
         togglePrediction(false);
-    }, [pickComputerMove]);
+    }, [clearResetCountdown, pickComputerMove]);
+
+    const startResetCountdown = useCallback(() => {
+        clearResetCountdown();
+        let count = 3;
+        setCountdown(count);
+        resetIntervalRef.current = setInterval(() => {
+            count -= 1;
+            setCountdown(count);
+            if (count <= 0) {
+                clearResetCountdown();
+                resetGame();
+            }
+        }, 1000);
+    }, [clearResetCountdown, resetGame]);
 
     // Connect on mount
     useEffect(() => {
@@ -269,7 +294,7 @@ const RPSGame = ({ wsEvent }) => {
     useEffect(() => {
         if (!wsEvent || manualMode) return;
 
-        const eventName = String(wsEvent.event || '').toUpperCase();
+        const eventName = String(wsEvent.event || wsEvent.type || '').toUpperCase();
         const livePrediction = String(wsEvent.label || '').toUpperCase();
 
         // Check for Auto-Restart Logic (Waiting for Rest)
@@ -326,17 +351,9 @@ const RPSGame = ({ wsEvent }) => {
 
         setGameState('revealed');
 
-        // Auto reset after 3 seconds
-        let count = 3;
-        setCountdown(count);
-        const interval = setInterval(() => {
-            count--;
-            setCountdown(count);
-            if (count <= 0) {
-                clearInterval(interval);
-                resetGame();
-            }
-        }, 1000);
+        if (!feedbackPending && !(detectedEvent?.features && !manualMode)) {
+            startResetCountdown();
+        }
     };
 
     // Manual UI helpers
@@ -371,6 +388,9 @@ const RPSGame = ({ wsEvent }) => {
             setFeedbackSaving(false);
             setFeedbackPending(false);
             setShowCorrectionPicker(false);
+            if (!matchWinner) {
+                resetGame();
+            }
         }
     };
 
@@ -404,6 +424,10 @@ const RPSGame = ({ wsEvent }) => {
         return () => window.removeEventListener('keydown', onKeyDown);
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [manualMode, gameState, matchWinner]);
+
+    useEffect(() => {
+        return () => clearResetCountdown();
+    }, [clearResetCountdown]);
 
     const determineWinner = (p, c) => {
         let endMatch = false;
@@ -535,7 +559,7 @@ const RPSGame = ({ wsEvent }) => {
                             <div>Player: <strong>{score.player}</strong></div>
                             <div>Computer: <strong>{score.computer}</strong></div>
                         </div>
-                        {gameState !== 'waiting' && result && (
+                        {gameState !== 'waiting' && result && countdown > 0 && (
                             <div className="mt-2 text-center animate-in slide-in-from-top duration-300">
                                 <div className="text-muted font-mono tracking-widest text-sm md:text-lg">
                                     RESETTING IN {countdown}...

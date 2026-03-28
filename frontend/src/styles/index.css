@@ -1011,6 +1011,41 @@ body {
     --ground-line: var(--accent);
   }
 
+  .root,
+  .theme-yellow-dark,
+  .theme-yellow,
+  .theme-vibrant,
+  .theme-blush,
+  .theme-rose,
+  .theme-violet,
+  .theme-olive,
+  .theme-ocean,
+  .theme-sunset,
+  .theme-forest,
+  .theme-slate,
+  .theme-plum,
+  .theme-ember {
+    --window-pending-bg: rgba(245, 158, 11, 0.14);
+    --window-pending-border: rgba(245, 158, 11, 0.35);
+    --window-pending-border-strong: rgba(245, 158, 11, 0.68);
+    --window-pending-line: #f59e0b;
+
+    --window-collected-bg: rgba(56, 189, 248, 0.12);
+    --window-collected-border: rgba(56, 189, 248, 0.35);
+    --window-collected-border-strong: rgba(56, 189, 248, 0.68);
+    --window-collected-line: #38bdf8;
+
+    --window-saved-bg: rgba(16, 185, 129, 0.12);
+    --window-saved-border: rgba(16, 185, 129, 0.35);
+    --window-saved-border-strong: rgba(16, 185, 129, 0.68);
+    --window-saved-line: #10b981;
+
+    --window-error-bg: rgba(244, 63, 94, 0.12);
+    --window-error-border: rgba(244, 63, 94, 0.35);
+    --window-error-border-strong: rgba(244, 63, 94, 0.68);
+    --window-error-line: #f43f5e;
+  }
+
 
 }
 

@@ -25,20 +25,26 @@ def _normalize_collection_context(sensor_type, payload=None):
     payload = payload or {}
     sensor = str(sensor_type).upper()
     sampling_rate = float(payload.get('sampling_rate') or _resolve_sampling_rate())
+    has_requested_window = any(key in payload for key in ('window_duration_ms', 'window_ms'))
+    has_requested_overlap = 'overlap' in payload or 'session_overlap' in payload
+    has_requested_gap = 'gap_duration_ms' in payload or 'gap_ms' in payload
+    has_requested_stride = 'stride_ms' in payload or 'session_stride_ms' in payload
+
     requested_window_ms = float(payload.get('window_duration_ms') or payload.get('window_ms') or 0)
-    requested_overlap = float(payload.get('overlap') or 0)
-    requested_gap_ms = float(payload.get('gap_duration_ms') or payload.get('gap_ms') or 0)
+    requested_overlap = float(payload.get('overlap') if 'overlap' in payload else payload.get('session_overlap') or 0)
+    requested_gap_ms = float(payload.get('gap_duration_ms') if 'gap_duration_ms' in payload else payload.get('gap_ms') or 0)
+    requested_stride_ms = float(payload.get('stride_ms') if 'stride_ms' in payload else payload.get('session_stride_ms') or 0)
 
     if sensor == 'EMG':
-        window_ms = float(SESSION_CONFIG["window_ms"])
-        overlap = requested_overlap if requested_overlap > 0 else 0.0
-        gap_ms = requested_gap_ms if requested_gap_ms > 0 else EMG_COLLECTION_GAP_MS
+        window_ms = requested_window_ms if has_requested_window and requested_window_ms > 0 else float(SESSION_CONFIG["window_ms"])
+        overlap = requested_overlap if has_requested_overlap else float(SESSION_CONFIG.get("overlap", 0.0))
+        gap_ms = requested_gap_ms if has_requested_gap else EMG_COLLECTION_GAP_MS
+        stride_ms = requested_stride_ms if has_requested_stride else float(SESSION_CONFIG.get("stride_ms", 0.0) or 0.0)
     else:
-        window_ms = requested_window_ms
-        overlap = requested_overlap
-        gap_ms = requested_gap_ms
-
-    stride_ms = float(payload.get('stride_ms') or payload.get('session_stride_ms') or 0)
+        window_ms = requested_window_ms if has_requested_window else 0.0
+        overlap = requested_overlap if has_requested_overlap else 0.0
+        gap_ms = requested_gap_ms if has_requested_gap else 0.0
+        stride_ms = requested_stride_ms if has_requested_stride else 0.0
     if stride_ms <= 0 and window_ms > 0:
         if overlap > 0:
             stride_ms = max(1.0, window_ms * (1.0 - overlap))
@@ -257,7 +263,7 @@ def api_emg_stop():
             "sensor": "EMG",
             "table_name": target_table,
             "session_name": state.session.current_session_name,
-            "storage_format": "compact_emg_v1",
+            "storage_format": "compact_emg_v2",
             "feature_columns": EMG_FEATURE_COLUMNS,
             "training_window_ms": float(window_ms),
             "capture_window_ms": float(window_ms),
@@ -266,6 +272,7 @@ def api_emg_stop():
             "stride_ms": float((step_size / sr) * 1000.0),
             "gap_ms": float(gap_ms),
             "channel_index": int(collection_context.get('channel_index', 0) or 0),
+            "source": "backend_session_buffer",
         })
         
         saved_count = 0

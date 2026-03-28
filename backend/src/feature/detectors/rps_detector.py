@@ -18,10 +18,12 @@ LEGACY_EMG_FEATURE_COLUMNS = [
 
 class RPSDetector:
     """
-    Real-time EMG detector with temporal voting + state transition filtering.
-
-    This replaces the old "collect until rest then emit" logic that could reopen
-    multiple overlapping gesture episodes and confirm the same action twice.
+    Real-time EMG detector that mirrors the gesture episode workflow used by
+    the earlier high-accuracy EMG pipeline:
+    - smooth instant predictions for UI feedback
+    - open a gesture episode only after repeated active windows
+    - collect votes while the gesture stays active
+    - confirm once on release back to rest
     """
 
     def __init__(self, config: dict):
@@ -31,11 +33,16 @@ class RPSDetector:
         self.feature_columns = list(EMG_FEATURE_COLUMNS)
 
         self.pred_queue = deque(maxlen=5)
-        self.candidate_state = "Rest"
-        self.candidate_count = 0
-        self.stable_state = "Rest"
+        self.episode_candidates = []
+        self.collecting_candidates = False
+        self.last_live_label = "Rest"
+        self.active_candidate = "Rest"
+        self.active_count = 0
+        self.rest_count = 0
         self.last_confidence = 0.0
         self.last_saved = 0.0
+        self.last_confirmed_at = 0.0
+        self.last_vote_ratio = 0.0
 
         self.update_config(config)
         self.load_model()
@@ -159,29 +166,80 @@ class RPSDetector:
         self.pred_queue.append(label)
         return Counter(self.pred_queue).most_common(1)[0][0]
 
-    def _update_stable_state(self, majority_label: str) -> str | None:
-        if majority_label == self.candidate_state:
-            self.candidate_count += 1
+    def _reset_episode(self):
+        self.collecting_candidates = False
+        self.episode_candidates = []
+        self.active_candidate = "Rest"
+        self.active_count = 0
+        self.rest_count = 0
+        self.last_live_label = "Rest"
+        self.last_vote_ratio = 0.0
+
+    def _resolve_episode(self) -> str | None:
+        if not self.episode_candidates:
+            return None
+
+        counts = Counter(self.episode_candidates)
+        winning_label, winning_votes = counts.most_common(1)[0]
+        total_votes = sum(counts.values())
+        vote_ratio = float(winning_votes / total_votes) if total_votes > 0 else 0.0
+        self.last_vote_ratio = vote_ratio
+
+        if total_votes < self.min_episode_votes:
+            return None
+        if vote_ratio < self.min_episode_majority_ratio:
+            return None
+        return winning_label
+
+    def _update_episode(self, majority_label: str) -> tuple[str, str | None]:
+        confirmed_label = None
+        if (
+            majority_label in ACTIVE_GESTURES
+            and not self.collecting_candidates
+            and (time.time() - self.last_confirmed_at) < self.confirmation_cooldown_sec
+        ):
+            self.last_live_label = "Rest"
+            return self.last_live_label, None
+
+        if majority_label in ACTIVE_GESTURES:
+            self.rest_count = 0
+
+            if not self.collecting_candidates:
+                if majority_label == self.active_candidate:
+                    self.active_count += 1
+                else:
+                    self.active_candidate = majority_label
+                    self.active_count = 1
+
+                if self.active_count >= self.activation_count:
+                    self.collecting_candidates = True
+                    self.episode_candidates = [majority_label]
+                    self.last_live_label = majority_label
+                else:
+                    self.last_live_label = "Rest"
+            else:
+                self.episode_candidates.append(majority_label)
+                self.last_live_label = Counter(self.episode_candidates).most_common(1)[0][0]
         else:
-            self.candidate_state = majority_label
-            self.candidate_count = 1
+            self.active_candidate = "Rest"
+            self.active_count = 0
 
-        if self.candidate_count < self.stable_count:
-            return None
+            if self.collecting_candidates:
+                self.rest_count += 1
+                if self.rest_count >= self.release_count:
+                    confirmed_label = self._resolve_episode()
+                    self.last_confirmed_at = time.time()
+                    self._reset_episode()
+                else:
+                    # Keep the UI "active" until the release windows complete.
+                    self.last_live_label = Counter(self.episode_candidates).most_common(1)[0][0]
+            else:
+                self.last_live_label = "Rest"
 
-        if self.stable_state == self.candidate_state:
-            return None
-
-        previous_state = self.stable_state
-        self.stable_state = self.candidate_state
-
-        if previous_state == "Rest" and self.stable_state in ACTIVE_GESTURES:
-            return self.stable_state
-
-        return None
+        return self.last_live_label, confirmed_label
 
     def _maybe_store_adaptive(self, features: dict, prediction: str, confidence: float):
-        if confidence <= self.adaptive_confidence_threshold or prediction != self.stable_state:
+        if prediction not in ACTIVE_GESTURES or confidence <= self.adaptive_confidence_threshold:
             return
 
         now = time.time()
@@ -207,14 +265,14 @@ class RPSDetector:
                 print(f"[RPSDetector] Adaptive save failed: {e}")
                 self._last_adaptive_err = now
 
-    def _maybe_update_online_stats(self, features: dict, majority: str, confirmed_label: str | None, confidence: float):
+    def _maybe_update_online_stats(self, features: dict, live_label: str, confirmed_label: str | None, confidence: float):
         if not self.online_adaptation_enabled or self.feature_columns != EMG_FEATURE_COLUMNS:
             return
 
         try:
             from src.calibration.calibration_manager import calibration_manager
 
-            if majority == "Rest" and self.stable_state == "Rest":
+            if live_label == "Rest" and not self.collecting_candidates:
                 calibration_manager.update_emg_running_stats(
                     features,
                     alpha=self.online_rest_alpha,
@@ -240,23 +298,29 @@ class RPSDetector:
             predicted_label = "Rest"
 
         majority = self._temporal_vote(predicted_label)
-        confirmed_label = self._update_stable_state(majority)
-        self._maybe_update_online_stats(features, majority, confirmed_label, confidence)
+        live_label, confirmed_label = self._update_episode(majority)
+        self._maybe_update_online_stats(features, live_label, confirmed_label, confidence)
 
         if confirmed_label:
             self._maybe_store_adaptive(features, confirmed_label, confidence)
+        elif time.time() - self.last_confirmed_at < self.confirmation_cooldown_sec:
+            live_label = "Rest"
 
-        return majority, confirmed_label
+        return live_label, confirmed_label
 
     def update_config(self, config: dict):
         self.config = config
         rps_cfg = config.get("features", {}).get("RPS", {})
         self.confidence_threshold = float(rps_cfg.get("confidence_threshold", 0.6))
         self.voting_window = int(rps_cfg.get("voting_window", 5))
-        self.stable_count = int(rps_cfg.get("stable_count", 3))
+        self.activation_count = int(rps_cfg.get("activation_count", rps_cfg.get("stable_count", 3)))
+        self.release_count = int(rps_cfg.get("release_count", 2))
+        self.confirmation_cooldown_sec = float(rps_cfg.get("confirmation_cooldown_sec", 0.6))
+        self.min_episode_votes = int(rps_cfg.get("min_episode_votes", max(self.activation_count, 4)))
+        self.min_episode_majority_ratio = float(rps_cfg.get("min_episode_majority_ratio", 0.55))
         self.adaptive_confidence_threshold = float(rps_cfg.get("adaptive_confidence_threshold", 0.90))
         self.adaptive_rate_limit_sec = float(rps_cfg.get("adaptive_rate_limit_sec", 1.0))
-        self.online_adaptation_enabled = bool(rps_cfg.get("online_adaptation_enabled", True))
+        self.online_adaptation_enabled = bool(rps_cfg.get("online_adaptation_enabled", False))
         self.online_confidence_threshold = float(rps_cfg.get("online_confidence_threshold", 0.92))
         self.online_rest_alpha = float(rps_cfg.get("online_rest_alpha", 0.01))
         self.online_active_alpha = float(rps_cfg.get("online_active_alpha", 0.003))

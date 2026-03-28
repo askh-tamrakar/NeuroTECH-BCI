@@ -8,7 +8,6 @@ import { Trash2, Activity, Cpu, Zap, ListOrdered, ListX } from 'lucide-react';
 export default function WindowListPanel({
     windows = [],
     onDelete,
-    onHighlight,
     activeSensor,
     autoLimit = 30,
     onAutoLimitChange,
@@ -16,11 +15,10 @@ export default function WindowListPanel({
     onAutoCalibrateChange,
     onClearSaved,
     onDeleteAll,
-    windowProgress = {}
 }) {
     // Track counts correctly for display
     const recordingCount = windows.filter(w => w.status === 'recording' || w.status === 'pending').length;
-    const processedCount = windows.filter(w => w.status === 'collected' || w.status === 'saving').length;
+    const processedCount = windows.filter(w => w.status === 'collected').length;
     const savedCount = windows.filter(w => w.status === 'saved' || w.status === 'correct').length;
 
     const statsTotal = processedCount + recordingCount + savedCount;
@@ -53,6 +51,39 @@ export default function WindowListPanel({
     const targetCount = autoLimit || 30;
     const activeCount = recordingCount + processedCount; // Use the calculated counts
     const progress = Math.min(100, (processedCount / targetCount) * 100);
+
+    const getWindowTone = (status) => {
+        if (status === 'recording' || status === 'pending') {
+            return {
+                card: 'bg-[var(--window-pending-bg)] border-[var(--window-pending-border)] hover:border-[var(--window-pending-border-strong)]',
+                dot: 'bg-[var(--window-pending-line)]',
+                text: 'text-[var(--window-pending-line)]',
+                line: 'var(--window-pending-line)'
+            };
+        }
+        if (status === 'collected') {
+            return {
+                card: 'bg-[var(--window-collected-bg)] border-[var(--window-collected-border)] hover:border-[var(--window-collected-border-strong)]',
+                dot: 'bg-[var(--window-collected-line)]',
+                text: 'text-[var(--window-collected-line)]',
+                line: 'var(--window-collected-line)'
+            };
+        }
+        if (status === 'saved' || status === 'correct') {
+            return {
+                card: 'bg-[var(--window-saved-bg)] border-[var(--window-saved-border)] hover:border-[var(--window-saved-border-strong)]',
+                dot: 'bg-[var(--window-saved-line)]',
+                text: 'text-[var(--window-saved-line)]',
+                line: 'var(--window-saved-line)'
+            };
+        }
+        return {
+            card: 'bg-[var(--window-error-bg)] border-[var(--window-error-border)] hover:border-[var(--window-error-border-strong)]',
+            dot: 'bg-[var(--window-error-line)]',
+            text: 'text-[var(--window-error-line)]',
+            line: 'var(--window-error-line)'
+        };
+    };
 
     return (
         <div className="flex flex-col h-full bg-[var(--surface)] border-2 border-[var(--border)] rounded-xl overflow-hidden shadow-card animate-in fade-in duration-300">
@@ -89,8 +120,8 @@ export default function WindowListPanel({
                 <div className="flex justify-between items-end">
                     <div className="flex gap-3 text-[14px] font-mono text-[var(--text-secondary)] uppercase tracking-widest">
                         <span>Total: <span className="text-[var(--text)]">{statsTotal}</span></span>
-                        <span>Processed: <span className="text-blue-400">{processedCount}</span></span>
-                        <span>Saved: <span className="text-emerald-400">{savedCount}</span></span>
+                        <span>Processed: <span className="text-[var(--window-collected-line)]">{processedCount}</span></span>
+                        <span>Saved: <span className="text-[var(--window-saved-line)]">{savedCount}</span></span>
                     </div>
                     <div className="flex items-center gap-2">
                         <button
@@ -121,22 +152,12 @@ export default function WindowListPanel({
                         <span className="text-2xl">No windows collected yet</span>
                     </div>
                 ) : (
-                    windows.slice().reverse().map((win, index) => (
+                    windows.slice().reverse().map((win, index) => {
+                        const tone = getWindowTone(win.status);
+                        return (
                         <div
                             key={win.id || index}
-                            onClick={() => onHighlight?.(win)}
-                            className={`py-1 px-2 flex flex-col gap-0 rounded-lg border transition-all cursor-pointer group hover:translate-x-1 animate-in slide-in-from-right-4 fade-in duration-300 ${(win.status === 'recording' || win.status === 'pending')
-                                ? 'bg-yellow-500/5 border-yellow-500/50 hover:border-yellow-500' // Yellow (Pending)
-                                : (win.status === 'collected')
-                                    ? 'bg-blue-500/5 border-blue-500/50 hover:border-blue-500' // Blue (Ready)
-                                    : (win.status === 'saving')
-                                        ? 'bg-purple-500/5 border-purple-500/50 hover:border-purple-500' // Purple (Saving)
-                                        : (win.status === 'saved' || win.status === 'correct')
-                                            ? 'bg-emerald-500/5 border-emerald-500/50 hover:border-emerald-500' // Green (Saved)
-                                            : (win.status === 'error' || win.status === 'incorrect')
-                                                ? 'bg-red-500/5 border-red-500/50 hover:border-red-500' // Red (Error)
-                                                : 'bg-black/5 border-gray-600 hover:border-black' // Black (Unknown)
-                                }`}
+                            className={`py-1 px-2 flex flex-col gap-0 rounded-lg border transition-all group hover:translate-x-1 animate-in slide-in-from-right-4 fade-in duration-300 ${tone.card}`}
                         >
                             <div className="flex justify-between items-center">
                                 <div className="flex flex-col gap-2">
@@ -145,27 +166,14 @@ export default function WindowListPanel({
 
                                     {/* Status Indicator */}
                                     <div className="flex items-center gap-1">
-                                        <span className={`w-1.5 h-1.5 rounded-full ${(win.status === 'recording' || win.status === 'pending') ? 'bg-yellow-500' :
-                                            (win.status === 'collected') ? 'bg-blue-500' :
-                                                (win.status === 'saving') ? 'bg-purple-500 animate-pulse' :
-                                                    (win.status === 'saved' || win.status === 'correct') ? 'bg-emerald-500' :
-                                                        (win.status === 'error' || win.status === 'incorrect') ? 'bg-red-500' :
-                                                            'bg-gray-600'
-                                            }`}></span>
-                                        <span className={`text-xs uppercase ${(win.status === 'recording' || win.status === 'pending') ? 'text-yellow-500' :
-                                            (win.status === 'collected') ? 'text-blue-500' :
-                                                (win.status === 'saving') ? 'text-purple-500' :
-                                                    (win.status === 'saved' || win.status === 'correct') ? 'text-emerald-500' :
-                                                        (win.status === 'error' || win.status === 'incorrect') ? 'text-red-500' :
-                                                            'text-[var(--text-secondary)]'
-                                            }`}>
+                                        <span className={`w-1.5 h-1.5 rounded-full ${tone.dot}`}></span>
+                                        <span className={`text-xs uppercase ${tone.text}`}>
                                             {(win.status === 'recording' || win.status === 'pending') ? 'Recording' :
                                                 (win.status === 'collected') ? 'Ready' :
-                                                    (win.status === 'saving') ? 'Saving...' :
-                                                        (win.status === 'saved') ? 'Saved' :
-                                                            (win.status === 'correct') ? 'Correct' :
-                                                                (win.status === 'incorrect') ? 'Incorrect' :
-                                                                    'Error'}
+                                                    (win.status === 'saved') ? 'Saved' :
+                                                        (win.status === 'correct') ? 'Correct' :
+                                                            (win.status === 'incorrect') ? 'Incorrect' :
+                                                                'Error'}
                                         </span>
                                     </div>
                                 </div>
@@ -173,14 +181,7 @@ export default function WindowListPanel({
                                 <div className="flex flex-col gap-2 content-center">
                                     {/* Graph */}
                                     <div className="w-24 h-8 flex items-center">
-                                        <Sparkline data={win.samples} color={
-                                            (win.status === 'recording' || win.status === 'pending') ? '#eab308' :
-                                                (win.status === 'collected') ? '#3b82f6' :
-                                                    (win.status === 'saving') ? '#a855f7' :
-                                                        (win.status === 'saved' || win.status === 'correct') ? '#10b981' :
-                                                            (win.status === 'error' || win.status === 'incorrect') ? '#ef4444' :
-                                                                '#6b7280'
-                                        } />
+                                        <Sparkline data={win.samples} color={tone.line} />
                                     </div>
                                     <span className="text-xs text-[var(--text-secondary)] font-mono">
                                         {(win.endTime - win.startTime).toFixed(0)}ms
@@ -199,7 +200,7 @@ export default function WindowListPanel({
                                 </div>
                             </div>
                         </div>
-                    ))
+                    )})
                 )}
             </div>
 
@@ -213,7 +214,7 @@ export default function WindowListPanel({
                         : 'bg-emerald-500 text-white hover:opacity-90 shadow-glow'
                         }`}
                 >
-                    Append Sample
+                    Save Windows
                 </button>
             </div>
         </div >

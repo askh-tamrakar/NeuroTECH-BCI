@@ -15,6 +15,7 @@ let windowInterval = null;
 let markedWindows = [];
 let latestSignalTime = Date.now();
 const MAX_WINDOWS = 2000;
+const PREVIEW_POINTS = 72;
 
 // --- Message Handler ---
 self.onmessage = function (e) {
@@ -61,10 +62,6 @@ self.onmessage = function (e) {
         case 'WINDOW_COLLECTED':
             handleWindowCollected(payload);
             break;
-        case 'MARK_WINDOWS_SAVING':
-            markedWindows = markedWindows.map(w => payload.includes(w.id) ? { ...w, status: 'saving' } : w);
-            notifyWindowsUpdate();
-            break;
         case 'DELETE_WINDOW':
             markedWindows = markedWindows.filter(w => w.id !== payload);
             notifyWindowsUpdate();
@@ -72,6 +69,15 @@ self.onmessage = function (e) {
         case 'CLEAR_ALL_WINDOWS':
             markedWindows = [];
             notifyWindowsUpdate();
+            break;
+        case 'GET_WINDOWS_FULL':
+            self.postMessage({
+                type: 'WINDOWS_FULL_RESULT',
+                payload: {
+                    requestId: payload?.requestId,
+                    windows: getFullWindows(payload?.ids || []),
+                }
+            });
             break;
     }
 };
@@ -106,7 +112,8 @@ function startAutoWindowing() {
             label: labelForWindow,
             channel: activeChannelIndex,
             status: 'pending',
-            samples: []
+            samples: [],
+            captureWindowMs: windowDuration
         };
 
         markedWindows = [...markedWindows, newWindow].slice(-MAX_WINDOWS);
@@ -141,12 +148,21 @@ function getLabelForWindow() {
 }
 
 function handleWindowCollected(collectedWindow) {
-    // Merge updates to preserve label, sensor, channel etc.
-    markedWindows = markedWindows.map(w => w.id === collectedWindow.id ? { ...w, ...collectedWindow } : w);
+    const nextWindow = mergeWindow(collectedWindow);
+    const existingIndex = markedWindows.findIndex((window) => window.id === nextWindow.id);
+
+    if (existingIndex === -1) {
+        markedWindows = [...markedWindows, nextWindow].slice(-MAX_WINDOWS);
+    } else {
+        markedWindows = markedWindows.map((window, index) => (
+            index === existingIndex ? nextWindow : window
+        ));
+    }
+
     notifyWindowsUpdate();
 
     // Check if we should auto-append in the main thread/where API lives
-    if (autoCalibrate && collectedWindow.status === 'collected' && collectedWindow.label === targetLabel) {
+    if (autoCalibrate && nextWindow.status === 'collected' && nextWindow.label === targetLabel) {
         const readyBatchCount = markedWindows.filter(w => w.status === 'collected' && w.label === targetLabel).length;
         if (readyBatchCount >= autoLimit) {
             self.postMessage({ type: 'TRIGGER_AUTO_APPEND' });
@@ -157,6 +173,79 @@ function handleWindowCollected(collectedWindow) {
 function notifyWindowsUpdate() {
     self.postMessage({
         type: 'WINDOWS_UPDATED',
-        payload: markedWindows
+        payload: markedWindows.map(toWindowSummary)
+    });
+}
+
+function mergeWindow(collectedWindow) {
+    const existing = markedWindows.find((window) => window.id === collectedWindow.id) || {};
+    const merged = {
+        ...existing,
+        ...collectedWindow,
+    };
+
+    if (collectedWindow.sampleMode === 'preview') {
+        if (Array.isArray(collectedWindow.samples)) {
+            merged.previewSamples = collectedWindow.samples.slice();
+        }
+        if (!Array.isArray(merged.samples) && Array.isArray(existing.samples)) {
+            merged.samples = existing.samples;
+        }
+    } else if (Array.isArray(collectedWindow.samples)) {
+        merged.samples = collectedWindow.samples.slice();
+        merged.previewSamples = downsampleSamples(collectedWindow.samples);
+    }
+
+    if (!Array.isArray(merged.previewSamples)) {
+        merged.previewSamples = downsampleSamples(merged.samples || []);
+    }
+
+    if (Array.isArray(collectedWindow.timestamps) && collectedWindow.sampleMode !== 'preview') {
+        merged.timestamps = collectedWindow.timestamps.slice();
+    }
+
+    return merged;
+}
+
+function toWindowSummary(window) {
+    const {
+        samples,
+        timestamps,
+        previewSamples,
+        ...rest
+    } = window;
+
+    return {
+        ...rest,
+        samples: Array.isArray(previewSamples) ? previewSamples.slice() : downsampleSamples(samples || []),
+    };
+}
+
+function getFullWindows(ids) {
+    if (!Array.isArray(ids) || ids.length === 0) {
+        return markedWindows.map(cloneWindow);
+    }
+    const idSet = new Set(ids);
+    return markedWindows.filter((window) => idSet.has(window.id)).map(cloneWindow);
+}
+
+function cloneWindow(window) {
+    return {
+        ...window,
+        samples: Array.isArray(window.samples) ? window.samples.slice() : [],
+        timestamps: Array.isArray(window.timestamps) ? window.timestamps.slice() : [],
+        previewSamples: Array.isArray(window.previewSamples) ? window.previewSamples.slice() : [],
+    };
+}
+
+function downsampleSamples(samples, maxPoints = PREVIEW_POINTS) {
+    if (!Array.isArray(samples) || samples.length === 0) return [];
+    if (samples.length <= maxPoints) return samples.slice();
+    if (maxPoints <= 1) return [Number(samples[0] || 0)];
+
+    const lastIndex = samples.length - 1;
+    return Array.from({ length: maxPoints }, (_, index) => {
+        const sourceIndex = Math.round((index / (maxPoints - 1)) * lastIndex);
+        return Number(samples[sourceIndex] || 0);
     });
 }

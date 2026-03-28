@@ -146,6 +146,23 @@ def _validate_emg_session_profile(df, table_name):
         }
     return profile
 
+
+def _filter_emg_training_rows(df, table_name):
+    if df.empty:
+        return df
+
+    if table_name != "emg_windows":
+        return df
+
+    filtered = df.copy()
+    if 'sample_count' in filtered.columns:
+        sample_count = pd.to_numeric(filtered['sample_count'], errors='coerce').fillna(0)
+        filtered = filtered.loc[sample_count > 0]
+    if 'session_window_ms' in filtered.columns:
+        session_window = pd.to_numeric(filtered['session_window_ms'], errors='coerce').fillna(0)
+        filtered = filtered.loc[session_window > 0]
+    return filtered
+
 def train_model(sensor, n_estimators=100, max_depth=None, min_impurity_decrease=0.0, test_size=0.2, table_name=None, model_name=None):
     """
     Generic training function for any sensor.
@@ -192,6 +209,9 @@ def train_model(sensor, n_estimators=100, max_depth=None, min_impurity_decrease=
 
     session_profile = None
     if sensor == 'EMG':
+        df = _filter_emg_training_rows(df, table_name)
+        if df.empty:
+            return {"error": f"EMG table {table_name} has no valid session-style rows after filtering legacy data."}
         session_profile = _validate_emg_session_profile(df, table_name)
         if isinstance(session_profile, dict) and "error" in session_profile:
             return session_profile
@@ -461,6 +481,11 @@ def evaluate_saved_model(sensor='EMG', table_name=None, model_name=None):
 
     if df.empty:
          return {**base_response, "warning": f"Table {table_name} is empty."}
+
+    if sensor == 'EMG':
+        df = _filter_emg_training_rows(df, table_name)
+        if df.empty:
+            return {**base_response, "warning": f"Table {table_name} has no valid EMG rows after legacy filtering."}
 
     # Prepare Features
     missing_cols = [c for c in feature_cols if c not in df.columns]

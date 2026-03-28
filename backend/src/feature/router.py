@@ -222,7 +222,7 @@ class FeatureRouter:
                                         extra_data={
                                             "label": instant_label,
                                             "confidence": getattr(detector, "last_confidence", 0.0),
-                                            "stable_state": getattr(detector, "stable_state", "Rest"),
+                                            "collecting": getattr(detector, "collecting_candidates", False),
                                         }
                                     )
                                     

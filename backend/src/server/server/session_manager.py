@@ -34,6 +34,11 @@ class SessionManager:
             'EOG': None,
             'EEG': None
         }
+        self.collection_runtime = {
+            'EMG': {},
+            'EOG': {},
+            'EEG': {}
+        }
         
     def start_recording(self, sensor_type, label, session_name="Default"):
         self.is_recording = True
@@ -90,11 +95,27 @@ class SessionManager:
     def start_collection_context(self, sensor_type, **context):
         sensor = str(sensor_type).upper()
         self.collection_context[sensor] = {"sensor": sensor, **context}
+        self.collection_runtime[sensor] = {}
 
     def stop_collection_context(self, sensor_type):
         sensor = str(sensor_type).upper()
         if sensor in self.collection_context:
             self.collection_context[sensor] = None
+        if sensor in self.collection_runtime:
+            self.collection_runtime[sensor] = {}
 
     def get_collection_context(self, sensor_type):
         return self.collection_context.get(str(sensor_type).upper())
+
+    def get_collection_runtime(self, sensor_type):
+        return self.collection_runtime.get(str(sensor_type).upper(), {})
+
+    def set_collection_runtime_value(self, sensor_type, key, value):
+        sensor = str(sensor_type).upper()
+        if sensor not in self.collection_runtime:
+            self.collection_runtime[sensor] = {}
+        self.collection_runtime[sensor][key] = value
+
+    def get_collection_runtime_value(self, sensor_type, key, default=None):
+        sensor = str(sensor_type).upper()
+        return self.collection_runtime.get(sensor, {}).get(key, default)

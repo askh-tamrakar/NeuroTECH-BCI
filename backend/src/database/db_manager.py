@@ -28,6 +28,34 @@ COMPACT_EMG_FEATURE_COLUMNS = [
     "d_spectral_entropy",
 ]
 
+COMPACT_EMG_SESSION_COLUMN_DEFS = {
+    "id": "INTEGER PRIMARY KEY AUTOINCREMENT",
+    "mav": "REAL NOT NULL",
+    "rms": "REAL NOT NULL",
+    "iemg": "REAL NOT NULL",
+    "var": "REAL NOT NULL",
+    "wl": "REAL NOT NULL",
+    "zc": "REAL NOT NULL DEFAULT 0",
+    "ssc": "REAL NOT NULL DEFAULT 0",
+    "mean_freq": "REAL NOT NULL DEFAULT 0",
+    "median_freq": "REAL NOT NULL DEFAULT 0",
+    "spectral_entropy": "REAL NOT NULL DEFAULT 0",
+    "d_mav": "REAL NOT NULL DEFAULT 0",
+    "d_rms": "REAL NOT NULL DEFAULT 0",
+    "d_iemg": "REAL NOT NULL DEFAULT 0",
+    "d_var": "REAL NOT NULL DEFAULT 0",
+    "d_wl": "REAL NOT NULL DEFAULT 0",
+    "d_zc": "REAL NOT NULL DEFAULT 0",
+    "d_ssc": "REAL NOT NULL DEFAULT 0",
+    "d_mean_freq": "REAL NOT NULL DEFAULT 0",
+    "d_median_freq": "REAL NOT NULL DEFAULT 0",
+    "d_spectral_entropy": "REAL NOT NULL DEFAULT 0",
+    "label": "INTEGER NOT NULL",
+    "session_id": "TEXT",
+    "timestamp": "REAL",
+    "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+}
+
 class DatabaseManager:
     def __init__(self):
         
@@ -59,6 +87,7 @@ class DatabaseManager:
         conn = self.connect('EMG')
         self._create_emg_table(conn.cursor(), "emg_windows")
         self._ensure_emg_columns(conn, "emg_windows")
+        self._migrate_emg_session_tables(conn)
         conn.commit()
         conn.close()
 
@@ -128,36 +157,12 @@ class DatabaseManager:
         cursor.execute(f'CREATE INDEX IF NOT EXISTS idx_{table_name}_label ON {table_name}(label)')
 
     def _create_emg_session_table(self, cursor, table_name):
+        columns_sql = ",\n                ".join(
+            f"{column} {definition}" for column, definition in COMPACT_EMG_SESSION_COLUMN_DEFS.items()
+        )
         cursor.execute(f'''
             CREATE TABLE IF NOT EXISTS {table_name} (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                mav REAL NOT NULL,
-                rms REAL NOT NULL,
-                iemg REAL NOT NULL,
-                var REAL NOT NULL,
-                wl REAL NOT NULL,
-                zc REAL NOT NULL DEFAULT 0,
-                ssc REAL NOT NULL DEFAULT 0,
-                mean_freq REAL NOT NULL DEFAULT 0,
-                median_freq REAL NOT NULL DEFAULT 0,
-                spectral_entropy REAL NOT NULL DEFAULT 0,
-                d_mav REAL NOT NULL DEFAULT 0,
-                d_rms REAL NOT NULL DEFAULT 0,
-                d_iemg REAL NOT NULL DEFAULT 0,
-                d_var REAL NOT NULL DEFAULT 0,
-                d_wl REAL NOT NULL DEFAULT 0,
-                d_zc REAL NOT NULL DEFAULT 0,
-                d_ssc REAL NOT NULL DEFAULT 0,
-                d_mean_freq REAL NOT NULL DEFAULT 0,
-                d_median_freq REAL NOT NULL DEFAULT 0,
-                d_spectral_entropy REAL NOT NULL DEFAULT 0,
-                confidence REAL DEFAULT 0,
-                source TEXT DEFAULT 'manual',
-                corrected_label INTEGER,
-                label INTEGER NOT NULL,
-                session_id TEXT,
-                timestamp REAL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                {columns_sql}
             )
         ''')
         cursor.execute(f'CREATE INDEX IF NOT EXISTS idx_{table_name}_label ON {table_name}(label)')
@@ -289,10 +294,113 @@ class DatabaseManager:
             "d_mean_freq": "REAL NOT NULL DEFAULT 0",
             "d_median_freq": "REAL NOT NULL DEFAULT 0",
             "d_spectral_entropy": "REAL NOT NULL DEFAULT 0",
-            "confidence": "REAL DEFAULT 0",
-            "source": "TEXT DEFAULT 'manual'",
-            "corrected_label": "INTEGER",
         })
+
+    def _migrate_emg_session_tables(self, conn):
+        cursor = conn.cursor()
+        session_tables = [
+            row[0]
+            for row in cursor.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'emg_session_%' ORDER BY name"
+            ).fetchall()
+        ]
+
+        desired_columns = list(COMPACT_EMG_SESSION_COLUMN_DEFS.keys())
+
+        for table_name in session_tables:
+            cursor.execute(f"PRAGMA table_info({table_name})")
+            existing_columns = [row[1] for row in cursor.fetchall()]
+            extras = {'confidence', 'source', 'corrected_label'} & set(existing_columns)
+            if not extras:
+                continue
+
+            temp_table = f"{table_name}__compact_tmp"
+            cursor.execute(f"DROP TABLE IF EXISTS {temp_table}")
+            self._create_emg_session_table(cursor, temp_table)
+
+            select_exprs = []
+            insert_columns = []
+            existing_set = set(existing_columns)
+            default_by_column = {
+                "id": "NULL",
+                "label": "0",
+                "session_id": "''",
+                "timestamp": "0",
+                "created_at": "CURRENT_TIMESTAMP",
+            }
+            default_by_column.update({column: "0" for column in COMPACT_EMG_FEATURE_COLUMNS})
+
+            for column in desired_columns:
+                insert_columns.append(column)
+                if column in existing_set:
+                    select_exprs.append(column)
+                else:
+                    select_exprs.append(f"{default_by_column.get(column, '0')} AS {column}")
+
+            cursor.execute(
+                f'''
+                    INSERT INTO {temp_table} ({", ".join(insert_columns)})
+                    SELECT {", ".join(select_exprs)}
+                    FROM {table_name}
+                '''
+            )
+            cursor.execute(f"DROP TABLE {table_name}")
+            cursor.execute(f"ALTER TABLE {temp_table} RENAME TO {table_name}")
+            cursor.execute(f'CREATE INDEX IF NOT EXISTS idx_{table_name}_label ON {table_name}(label)')
+            self.save_session_metadata('EMG', table_name, {
+                "sensor": "EMG",
+                "table_name": table_name,
+                "storage_format": "compact_emg_v2",
+                "feature_columns": COMPACT_EMG_FEATURE_COLUMNS,
+            })
+
+            self._backfill_emg_session_deltas(conn, table_name)
+
+        for table_name in session_tables:
+            self._backfill_emg_session_deltas(conn, table_name)
+
+    def _backfill_emg_session_deltas(self, conn, table_name: str):
+        cursor = conn.cursor()
+        delta_columns = [f"d_{column}" for column in COMPACT_EMG_FEATURE_COLUMNS[:10]]
+        cursor.execute(
+            f'''
+                SELECT COUNT(*)
+                FROM {table_name}
+                WHERE {" OR ".join(f"ABS({column}) > 1e-12" for column in delta_columns)}
+            '''
+        )
+        if cursor.fetchone()[0] > 0:
+            return
+
+        base_columns = COMPACT_EMG_FEATURE_COLUMNS[:10]
+        select_columns = ["id"] + base_columns
+        rows = cursor.execute(
+            f"SELECT {', '.join(select_columns)} FROM {table_name} ORDER BY id"
+        ).fetchall()
+        if not rows:
+            return
+
+        updates = []
+        previous = None
+        for row in rows:
+            row_id = row[0]
+            current = {column: float(value or 0.0) for column, value in zip(base_columns, row[1:])}
+            if previous is None:
+                deltas = [0.0] * len(base_columns)
+            else:
+                deltas = [current[column] - previous[column] for column in base_columns]
+            updates.append((*deltas, row_id))
+            previous = current
+
+        cursor.executemany(
+            f'''
+                UPDATE {table_name}
+                SET d_mav = ?, d_rms = ?, d_iemg = ?, d_var = ?, d_wl = ?,
+                    d_zc = ?, d_ssc = ?, d_mean_freq = ?, d_median_freq = ?, d_spectral_entropy = ?
+                WHERE id = ?
+            ''',
+            updates
+        )
 
     def _ensure_eeg_columns(self, conn, table_name: str):
         self._ensure_columns(conn, table_name, {
@@ -398,7 +506,7 @@ class DatabaseManager:
                     self.save_session_metadata(sensor, existing, {
                         "sensor": sensor,
                         "table_name": existing,
-                        "storage_format": "compact_emg_v1",
+                        "storage_format": "compact_emg_v2",
                         "feature_columns": COMPACT_EMG_FEATURE_COLUMNS,
                     })
                 return existing # Re-use existing exact casing
@@ -424,7 +532,7 @@ class DatabaseManager:
             self.save_session_metadata(sensor, table_name, {
                 "sensor": sensor,
                 "table_name": table_name,
-                "storage_format": "compact_emg_v1",
+                "storage_format": "compact_emg_v2",
                 "feature_columns": COMPACT_EMG_FEATURE_COLUMNS,
             })
         return table_name
@@ -649,7 +757,10 @@ class DatabaseManager:
                 }
                 
                 # Collect remaining columns as features for display
-                excluded = {'id', 'label', 'session_id', 'timestamp', 'created_at', 'metadata_json'}
+                excluded = {
+                    'id', 'label', 'session_id', 'timestamp', 'created_at', 'metadata_json',
+                    'confidence', 'source', 'corrected_label'
+                }
                 features = {k: v for k, v in r_dict.items() if k not in excluded}
                 
                 item['features'] = features
@@ -716,9 +827,8 @@ class DatabaseManager:
                     INSERT INTO {table_name} (
                         mav, rms, iemg, var, wl, zc, ssc, mean_freq, median_freq, spectral_entropy,
                         d_mav, d_rms, d_iemg, d_var, d_wl, d_zc, d_ssc, d_mean_freq, d_median_freq, d_spectral_entropy,
-                        confidence, source, corrected_label,
                         label, session_id, timestamp
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
                     features.get('mav', 0), features.get('rms', 0), features.get('iemg', 0),
                     features.get('var', 0), features.get('wl', 0), features.get('zc', 0),
@@ -728,8 +838,6 @@ class DatabaseManager:
                     features.get('d_var', 0), features.get('d_wl', 0), features.get('d_zc', 0),
                     features.get('d_ssc', 0), features.get('d_mean_freq', 0),
                     features.get('d_median_freq', 0), features.get('d_spectral_entropy', 0),
-                    features.get('confidence', 0), features.get('source', 'manual'),
-                    features.get('corrected_label'),
                     label, session_id, features.get('timestamp', 0)
                 ))
             else:

@@ -46,7 +46,13 @@ let config = {
     textColor: 'var(--graph-text, #888888)',
     surface: 'var(--panel-bg, #1e1e1e)',
     themeAxisColor: 'var(--graph-text, #9ca3af)',
-    themeColor: 'var(--graph-grid, #333)'
+    themeColor: 'var(--graph-grid, #333)',
+    windowStyles: {
+        pending: { fill: 'rgba(245, 158, 11, 0.18)', stroke: '#f59e0b', text: '#f8fafc' },
+        collected: { fill: 'rgba(56, 189, 248, 0.18)', stroke: '#38bdf8', text: '#f8fafc' },
+        saved: { fill: 'rgba(16, 185, 129, 0.16)', stroke: '#10b981', text: '#f8fafc' },
+        error: { fill: 'rgba(244, 63, 94, 0.16)', stroke: '#f43f5e', text: '#f8fafc' }
+    }
 };
 
 // Scanner State
@@ -118,8 +124,7 @@ function handleCalcSelection(payload) {
     const { x1, x2 } = payload;
     if (points.length === 0) return;
 
-    // Use wall-clock time adjusted by latency
-    const now = Date.now() - (config.offset || 0) - timeOffset;
+    const now = getRenderNow();
     const timeWindow = config.timeWindow;
     const centerTimeOffset = timeWindow / 2;
 
@@ -142,6 +147,13 @@ function handleCalcSelection(payload) {
             end: Math.max(t1, t2)
         }
     });
+}
+
+function getRenderNow() {
+    if (points.length > 0) {
+        return points[points.length - 1].time;
+    }
+    return Date.now() - (config.offset || 0) - timeOffset;
 }
 
 function init(payload) {
@@ -211,7 +223,9 @@ function getPointValue(point) {
 
 function handleGetSamples(payload, idPromise) {
     const { start, end } = payload;
-    const result = points.filter(p => p.time >= start && p.time <= end);
+    const result = points
+        .filter(p => p.time >= start && p.time <= end)
+        .map((point) => ({ time: point.time, value: point.value }));
     self.postMessage({
         type: 'GET_SAMPLES_RESULT',
         idPromise,
@@ -252,8 +266,7 @@ function draw() {
         return;
     }
 
-    // Use wall-clock time adjusted by auto-latency compensation
-    const now = Date.now() - (config.offset || 0) - timeOffset;
+    const now = getRenderNow();
     const timeWindow = config.timeWindow;
     const centerTimeOffset = timeWindow / 2;
 
@@ -311,25 +324,17 @@ function draw() {
             // "Saved" = Red/Blue
             // "Error" = Gray
 
-            let fill = 'var(--selection-bg, rgba(255, 255, 255, 0.05))';
-            let stroke = 'var(--selection-border, rgba(255, 255, 255, 0.2))';
+            const styleKey = (win.status === 'recording' || win.status === 'pending')
+                ? 'pending'
+                : (win.status === 'collected')
+                    ? 'collected'
+                    : (win.status === 'saved' || win.status === 'correct' || win.status === 'incorrect')
+                        ? 'saved'
+                        : 'error';
+            const windowStyle = config.windowStyles?.[styleKey] || config.windowStyles?.pending || {};
 
-            if (win.status === 'collected') {
-                fill = 'rgba(16, 185, 129, 0.25)'; // Green-500
-                stroke = '#10b981';
-            } else if (win.status === 'pending') {
-                fill = 'rgba(245, 158, 11, 0.25)'; // Amber-500
-                stroke = '#f59e0b';
-            } else if (win.status === 'recording') {
-                fill = 'rgba(59, 130, 246, 0.25)'; // Blue-500
-                stroke = '#3b82f6';
-            } else if (win.status === 'saved') {
-                fill = 'rgba(124, 58, 237, 0.25)'; // Violet-600
-                stroke = '#7c3aed';
-            } else if (win.status === 'error') {
-                fill = 'rgba(156, 163, 175, 0.25)'; // Gray-400
-                stroke = '#9ca3af';
-            }
+            const fill = windowStyle.fill || 'rgba(255, 255, 255, 0.08)';
+            const stroke = windowStyle.stroke || '#ffffff';
 
             ctx.fillStyle = fill;
 
@@ -346,7 +351,7 @@ function draw() {
             // Label
             if (win.label) {
                 ctx.save();
-                ctx.fillStyle = '#ffffff'; // Always use white for high contrast on dark windows
+                ctx.fillStyle = windowStyle.text || '#ffffff';
                 ctx.globalAlpha = 0.9;
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
@@ -354,10 +359,11 @@ function draw() {
                 const centerX = px1 + wFunc / 2;
                 const centerY = yTop + hRegion / 2;
 
-                const fontSize = win.label.length > 10 ? 24 : 36; // Larger font
+                const fontSize = win.label.length > 10 ? 16 : 20;
                 ctx.font = `bold ${fontSize}px sans-serif`;
-
-                ctx.fillText(win.label, centerX, centerY);
+                if (Math.abs(wFunc) > 50) {
+                    ctx.fillText(win.label, centerX, centerY);
+                }
                 ctx.restore();
             }
         }
@@ -376,6 +382,7 @@ function draw() {
 
     ctx.beginPath();
 
+    let cursorValue = null;
     if (points.length > 0) {
         // Find the newest point that is NOT in the future relative to 'now'
         let i = points.length - 1;
@@ -402,11 +409,13 @@ function draw() {
 
                 startX = timeToPx(centerTimeOffset); // Exact center
                 startY = valToPy(interpVal);
+                cursorValue = interpVal;
             } else {
                 // Just start at the latest point (visual lag, but honest)
                 const age = now - points[i].time;
                 startX = timeToPx(centerTimeOffset - age);
                 startY = valToPy(getPointValue(points[i]));
+                cursorValue = getPointValue(points[i]);
             }
 
             ctx.moveTo(startX, startY);
@@ -446,8 +455,7 @@ function draw() {
 
     // 2. Current Value Dot
     if (points.length > 0) {
-        const lastVal = getPointValue(points[points.length - 1]);
-        const y_px = valToPy(lastVal);
+        const y_px = valToPy(cursorValue ?? getPointValue(points[points.length - 1]));
 
         ctx.fillStyle = config.lineColor;
         ctx.shadowBlur = 10; // Neon glow

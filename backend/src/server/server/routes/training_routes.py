@@ -27,7 +27,7 @@ from src.learning.eog_trainer import (
 )
 from src.learning.eeg_lda_trainer import train_eeg_lda_model, evaluate_eeg_lda_model
 from src.config.window_config import SESSION_CONFIG
-from src.feature.extractors.rps_extractor import EMG_FEATURE_COLUMNS
+from src.feature.extractors.rps_extractor import EMG_BASE_FEATURES, EMG_FEATURE_COLUMNS
 
 training_bp = Blueprint('training', __name__)
 
@@ -123,7 +123,7 @@ def api_train_eog():
         )
         if "error" in result:
              return jsonify(result), 400
-        return jsonify(result)
+        return result, 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -460,13 +460,10 @@ def api_get_tree():
         return jsonify({"error": str(e)}), 500
 
 
-@training_bp.route('/api/window', methods=['POST'])
-def api_save_window():
-    """Accept a recorded window, save as CSV/DB, compute features and update config thresholds."""
+def _save_window_payload(payload):
     try:
-        payload = request.get_json()
         if not payload:
-            return jsonify({"error": "No payload provided"}), 400
+            return {"error": "No payload provided"}, 400
 
         sensor = payload.get('sensor')
         action = payload.get('action')
@@ -475,18 +472,36 @@ def api_save_window():
         metadata = payload.get('metadata', {}) or {}
 
         if sensor is None or action is None or samples is None:
-            return jsonify({"error": "Missing required fields: sensor, action, samples"}), 400
+            return {"error": "Missing required fields: sensor, action, samples"}, 400
 
-        # Compute features
         sr = state.config.get('sampling_rate', 1000) if state.config else 1000
-        features = extract_features_wrapper(sensor, samples, sr)
-        if not features:
-            return jsonify({"error": "Feature extraction failed"}), 400
-
         sensor_upper = str(sensor).upper()
         collection_context = state.session.get_collection_context(sensor_upper) if hasattr(state.session, 'get_collection_context') else None
         effective_metadata = dict(collection_context or {})
         effective_metadata.update(metadata)
+        collection_mode = str(
+            effective_metadata.get('collectionMode')
+            or effective_metadata.get('mode')
+            or 'collection'
+        ).lower()
+
+        # Compute features
+        if sensor_upper == 'EMG':
+            prev_features = None
+            if hasattr(state.session, 'get_collection_runtime_value') and collection_mode == 'collection':
+                prev_features = state.session.get_collection_runtime_value('EMG', 'prev_features')
+            features = extract_emg_features(samples, sr, prev_features=prev_features)
+            if features and hasattr(state.session, 'set_collection_runtime_value') and collection_mode == 'collection':
+                state.session.set_collection_runtime_value(
+                    'EMG',
+                    'prev_features',
+                    {key: features.get(key, 0.0) for key in EMG_BASE_FEATURES}
+                )
+        else:
+            features = extract_features_wrapper(sensor, samples, sr)
+
+        if not features:
+            return {"error": "Feature extraction failed"}, 400
 
         if sensor_upper == 'EMG':
             window_ms = float(effective_metadata.get('windowMs', effective_metadata.get('window_duration_ms', SESSION_CONFIG["window_ms"])) or SESSION_CONFIG["window_ms"])
@@ -542,6 +557,7 @@ def api_save_window():
                 "stride_ms": float(features.get('session_stride_ms', 0.0)),
                 "gap_ms": float(features.get('gap_ms', 0.0)),
                 "channel_index": int(features.get('channel_index', 0) or 0),
+                "source": str(effective_metadata.get('source', 'frontend_auto_window')),
             })
         
         label_map = {
@@ -661,6 +677,73 @@ def api_save_window():
         tb = traceback.format_exc()
         print(f"❌ Error saving window: {tb}")
         return jsonify({"error": str(e), "traceback": tb}), 500
+
+
+@training_bp.route('/api/window', methods=['POST'])
+def api_save_window():
+    """Accept a recorded window, save as CSV/DB, compute features and update config thresholds."""
+    payload = request.get_json()
+    response = _save_window_payload(payload)
+    if isinstance(response, tuple):
+        result, status = response
+        return jsonify(result), status
+    return response
+
+
+@training_bp.route('/api/windows/batch', methods=['POST'])
+def api_save_windows_batch():
+    """Persist multiple windows in one request to reduce collection/save latency."""
+    try:
+        payload = request.get_json() or {}
+        windows = payload.get('windows') or []
+        if not windows:
+            return jsonify({"error": "No windows provided"}), 400
+
+        shared_sensor = payload.get('sensor')
+        shared_session_name = payload.get('session_name') or payload.get('sessionName')
+        shared_mode = payload.get('mode')
+
+        results = []
+        saved_count = 0
+        error_count = 0
+
+        for index, window in enumerate(windows):
+            window_payload = dict(window or {})
+            if shared_sensor and not window_payload.get('sensor'):
+                window_payload['sensor'] = shared_sensor
+            if shared_session_name and not (window_payload.get('session_name') or window_payload.get('sessionName')):
+                window_payload['session_name'] = shared_session_name
+            if shared_mode and not window_payload.get('mode'):
+                window_payload['mode'] = shared_mode
+
+            response = _save_window_payload(window_payload)
+            if isinstance(response, tuple):
+                result, status = response
+            else:
+                result = response.get_json() if hasattr(response, "get_json") else {"error": "Unknown save response"}
+                status = getattr(response, "status_code", 200)
+            results.append({
+                "index": index,
+                "id": window_payload.get('id'),
+                **result,
+            })
+            if status >= 400:
+                error_count += 1
+            else:
+                saved_count += 1
+
+        response_status = 200 if error_count == 0 else (207 if saved_count > 0 else 400)
+        response_state = "success" if error_count == 0 else ("partial_success" if saved_count > 0 else "error")
+        return jsonify({
+            "status": response_state,
+            "saved_count": saved_count,
+            "error_count": error_count,
+            "results": results,
+        }), response_status
+    except Exception as e:
+        import traceback
+        tb = traceback.format_exc()
+        return {"error": str(e), "traceback": tb}, 500
 
 
 @training_bp.route('/api/calibrate', methods=['POST'])

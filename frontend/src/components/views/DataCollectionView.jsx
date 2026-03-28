@@ -23,6 +23,7 @@ import { soundHandler } from '../../handlers/SoundHandler'
 // Workers
 import SessionWorker from '../../workers/session.worker.js?worker';
 import WindowWorker from '../../workers/window.worker.js?worker';
+import SaveWorker from '../../workers/save.worker.js?worker';
 
 const DEFAULT_PALETTE = [
     '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6',
@@ -30,14 +31,25 @@ const DEFAULT_PALETTE = [
 ];
 
 const EMG_COLLECTION_GAP_MS = 500;
-const EMG_SESSION_WINDOW_MS = 300;
-const EMG_SESSION_OVERLAP = 0.5;
+const WINDOW_PREVIEW_POINTS = 72;
 
 const SENSOR_LABELS = {
     EMG: ['Rock', 'Paper', 'Scissors', 'Rest'],
     EOG: ['SingleBlink', 'DoubleBlink', 'Rest'],
     EEG: ['Target 1', 'Target 2', 'Target 3', 'Target 4', 'Target 5', 'Target 6', 'Rest'],
 };
+
+function downsampleSamples(samples, maxPoints = WINDOW_PREVIEW_POINTS) {
+    if (!Array.isArray(samples) || samples.length === 0) return [];
+    if (samples.length <= maxPoints) return samples.slice();
+    if (maxPoints <= 1) return [Number(samples[0] || 0)];
+
+    const lastIndex = samples.length - 1;
+    return Array.from({ length: maxPoints }, (_, index) => {
+        const sourceIndex = Math.round((index / (maxPoints - 1)) * lastIndex);
+        return Number(samples[sourceIndex] || 0);
+    });
+}
 
 import AutoCalibrationWizard from '../calibration/AutoCalibrationWizard';
 
@@ -48,6 +60,7 @@ import AutoCalibrationWizard from '../calibration/AutoCalibrationWizard';
 export default function DataCollectionView({ wsData, wsEvent, config: initialConfig, wsUrl, onSwitchLab }) {
     const { settings, updateSettings } = useSettings();
     const { currentTheme } = useTheme();
+    const API_BASE_URL = import.meta.env.VITE_API_URL || '';
 
     // Top-level states
     const [activeSensor, setActiveSensor] = useState('EMG'); // 'EMG' | 'EOG' | 'EEG'
@@ -57,7 +70,6 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
     const [isCalibrating, setIsCalibrating] = useState(false);
     const [showWizard, setShowWizard] = useState(false);
     const [runInProgress, setRunInProgress] = useState(false);
-    const [windowProgress, setWindowProgress] = useState({});
 
     // Data states
     // Data states (chartData removed for Worker optimization)
@@ -65,10 +77,7 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
 
     const [markedWindows, setMarkedWindows] = useState([]);
     const [showEegWindowList, setShowEegWindowList] = useState(false); // Toggle between collection panel and list
-    const [readyWindows, setReadyWindows] = useState([]); // Windows waiting to be appended
-    const [bufferWindows, setBufferWindows] = useState([]); // History of processed windows
     const [activeWindow, setActiveWindow] = useState(null);
-    const [highlightedWindow, setHighlightedWindow] = useState(null); // New: for inspection
     const [targetLabel, setTargetLabel] = useState('Rock'); // e.g., 'Rock', 'Paper', etc.
 
     const [totalPredictedCount, setTotalPredictedCount] = useState(0);
@@ -77,6 +86,11 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
     const sessionWorkerRef = useRef(null);
     const windowWorkerRef = useRef(null);
     const dataWorkerRef = useRef(null);
+    const saveWorkerRef = useRef(null);
+    const pendingSaveRequestRef = useRef(null);
+    const handleAppendSamplesRef = useRef(null);
+    const windowRequestIdRef = useRef(0);
+    const pendingWindowRequestsRef = useRef(new Map());
 
     // Session Management State (Managed by Worker)
     const [sessions, setSessions] = useState([]);
@@ -95,7 +109,7 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
     const [appendMode, setAppendMode] = useState(false);
     const [autoLimit, setAutoLimit] = useState(settings?.collectionState?.autoLimit || 30);
     const [autoCalibrate, setAutoCalibrate] = useState(settings?.collectionState?.autoCalibrate || false); // Auto-calibration toggle
-    const [windowDuration, setWindowDuration] = useState(settings?.collectionState?.windowDuration || 300); // ms
+    const [windowDuration, setWindowDuration] = useState(settings?.collectionState?.windowDuration || 900); // ms
     const [timeWindow, setTimeWindow] = useState(settings?.collectionState?.timeWindow || 5000); // visible sweep window length for calibration plot
     const [graphMode, setGraphMode] = useState(settings?.collectionState?.graphMode || 'time');
     const [emgDisplayMode, setEmgDisplayMode] = useState(settings?.collectionState?.emgDisplayMode || 'raw');
@@ -113,7 +127,6 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
     const activeChannelIndexRef = useRef(activeChannelIndex); // Ref for channel
     const targetLabelRef = useRef(targetLabel);
     const markedWindowsRef = useRef(markedWindows);
-    const readyWindowsRef = useRef(readyWindows);
     const sessionNameRef = useRef(sessionName);
     const sessionInputRef = useRef(null); // Ref for focusing session name input
 
@@ -123,7 +136,7 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
     useEffect(() => { activeSensorRef.current = activeSensor; }, [activeSensor]);
     useEffect(() => {
         if (activeSensor === 'EMG' && windowDuration < 600) {
-            setWindowDuration(1200);
+            setWindowDuration(900);
         }
     }, [activeSensor, windowDuration]);
     useEffect(() => {
@@ -134,7 +147,6 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
     useEffect(() => { activeChannelIndexRef.current = activeChannelIndex; }, [activeChannelIndex]);
     useEffect(() => { targetLabelRef.current = targetLabel; }, [targetLabel]);
     useEffect(() => { markedWindowsRef.current = markedWindows; }, [markedWindows]);
-    useEffect(() => { readyWindowsRef.current = readyWindows; }, [readyWindows]);
     const autoLimitRef = useRef(autoLimit);
     useEffect(() => { autoLimitRef.current = autoLimit; }, [autoLimit]);
     useEffect(() => { sessionNameRef.current = sessionName; }, [sessionName]);
@@ -170,12 +182,10 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
     // Auto-select first matching channel when sensor changes
     // Auto-select first matching channel when sensor changes
     useEffect(() => {
-        console.log('[DataCollectionView] matchingChannels:', matchingChannels);
         if (matchingChannels.length > 0) {
             // If current selection is not in the new list, reset to first match
             const exists = matchingChannels.find(c => c.index === activeChannelIndex);
             if (!exists) {
-                console.log(`[DataCollectionView] Auto-switching channel from ${activeChannelIndex} to ${matchingChannels[0].index} for sensor ${activeSensor}`);
                 setActiveChannelIndex(matchingChannels[0].index);
             }
         } else {
@@ -273,6 +283,7 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
     useEffect(() => {
         sessionWorkerRef.current = new SessionWorker();
         windowWorkerRef.current = new WindowWorker();
+        saveWorkerRef.current = new SaveWorker();
 
         sessionWorkerRef.current.onmessage = (e) => {
             const { type, payload } = e.data;
@@ -348,7 +359,15 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                                     const timestamps = samplesPoints.map(p => p.time);
                                     windowWorkerRef.current.postMessage({
                                         type: 'WINDOW_COLLECTED',
-                                        payload: { id, startTime: start, endTime: end, samples, timestamps, status: 'collected' }
+                                        payload: {
+                                            id,
+                                            startTime: start,
+                                            endTime: end,
+                                            samples,
+                                            timestamps,
+                                            status: 'collected',
+                                            captureWindowMs: end - start
+                                        }
                                     });
                                 }
                             } catch (err) {
@@ -358,9 +377,33 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                     }, delay);
                     break;
                 case 'TRIGGER_AUTO_APPEND':
-                    handleAppendSamples();
+                    handleAppendSamplesRef.current?.();
                     break;
+                case 'WINDOWS_FULL_RESULT': {
+                    const requestId = payload?.requestId;
+                    if (pendingWindowRequestsRef.current.has(requestId)) {
+                        const resolve = pendingWindowRequestsRef.current.get(requestId);
+                        pendingWindowRequestsRef.current.delete(requestId);
+                        resolve(payload?.windows || []);
+                    }
+                    break;
+                }
             }
+        };
+
+        saveWorkerRef.current.onmessage = (e) => {
+            const { type, payload } = e.data || {};
+            const pending = pendingSaveRequestRef.current;
+            if (!pending || payload?.requestId !== pending.requestId) {
+                return;
+            }
+
+            if (type === 'SAVE_WINDOWS_COMPLETE') {
+                pending.resolve(payload);
+            } else if (type === 'SAVE_WINDOWS_ERROR') {
+                pending.reject(new Error(payload?.error || 'Batch save failed'));
+            }
+            pendingSaveRequestRef.current = null;
         };
 
         // Initial Worker Config
@@ -383,6 +426,7 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
         return () => {
             sessionWorkerRef.current?.terminate();
             windowWorkerRef.current?.terminate();
+            saveWorkerRef.current?.terminate();
         };
     }, []);
 
@@ -518,7 +562,7 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
             setTimeWindow(prev => Math.max(prev, 8000));
             setAutoLimit(prev => Math.max(prev, 24));
         } else if (sensor === 'EMG') {
-            setWindowDuration(prev => [900, 1200, 1500, 1800].includes(prev) ? prev : 1200);
+            setWindowDuration(prev => [900, 1200, 1500, 1800].includes(prev) ? prev : 900);
         } else if (sensor !== 'EEG' && mode === 'recorded') {
             setMode('collection');
         }
@@ -540,18 +584,21 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
 
     const buildWindowMetadata = useCallback((win) => {
         if (activeSensor === 'EMG') {
-            const actualWindowMs = win.endTime && win.startTime
-                ? Math.max(0, win.endTime - win.startTime)
-                : EMG_SESSION_WINDOW_MS;
+            const captureWindowMs = Number(
+                win.captureWindowMs
+                || (win.endTime && win.startTime ? Math.max(0, win.endTime - win.startTime) : windowDuration)
+                || windowDuration
+            );
             return {
                 collectionMode: mode,
                 channelIndex: win.channel ?? activeChannelIndex,
                 sampleCount: Array.isArray(win.samples) ? win.samples.length : 0,
-                windowMs: actualWindowMs,
-                sessionWindowMs: EMG_SESSION_WINDOW_MS,
-                sessionOverlap: EMG_SESSION_OVERLAP,
-                strideMs: EMG_SESSION_WINDOW_MS * (1 - EMG_SESSION_OVERLAP),
-                gapMs: 0,
+                windowMs: captureWindowMs,
+                captureWindowMs,
+                sessionWindowMs: captureWindowMs,
+                sessionOverlap: 0,
+                strideMs: captureWindowMs + EMG_COLLECTION_GAP_MS,
+                gapMs: EMG_COLLECTION_GAP_MS,
                 samplingRate: Number(config?.sampling_rate || 1000),
                 source: 'frontend_auto_window',
             };
@@ -579,8 +626,8 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
         CalibrationApi.startCalibration(activeSensor, mode, label, windowDuration, sessionName, {
             channel_index: activeChannelIndex,
             time_window_ms: timeWindow,
-            gap_duration_ms: activeSensor === 'EMG' ? 0 : 0,
-            overlap: activeSensor === 'EMG' ? EMG_SESSION_OVERLAP : 0,
+            gap_duration_ms: activeSensor === 'EMG' ? EMG_COLLECTION_GAP_MS : 0,
+            overlap: 0,
         })
             .catch(e => console.error("Start Calib API failed", e));
 
@@ -694,7 +741,7 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                     channel: activeChannelIndex,
                     samples: seg.samples,
                     timestamps: seg.timestamps,
-                    status: 'saving'
+                    status: 'collected'
                 };
                 tempWindows.push(newWindow);
 
@@ -719,7 +766,7 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                 );
             });
 
-            // Add all as 'saving'
+            // Add all as collected until the backend save resolves
             setMarkedWindows(prev => [...tempWindows, ...prev]);
 
             // Execute all API requests concurrently
@@ -753,45 +800,6 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
         }
     }, [activeSensor, activeChannelIndex, sessionName, eegTargets, selectedEegTarget, refreshSessionData]);
 
-    const createEmgSegmentsForSave = useCallback((win) => {
-        if (activeSensor !== 'EMG') return [win];
-
-        const sampleRate = Number(config?.sampling_rate || 1000);
-        const segmentSamples = Math.max(1, Math.round((EMG_SESSION_WINDOW_MS / 1000) * sampleRate));
-        const strideSamples = Math.max(1, Math.round(segmentSamples * (1 - EMG_SESSION_OVERLAP)));
-        const samples = Array.isArray(win.samples) ? win.samples : [];
-        const timestamps = Array.isArray(win.timestamps) ? win.timestamps : [];
-
-        if (samples.length <= segmentSamples) {
-            return [{
-                ...win,
-                startTime: win.startTime,
-                endTime: win.startTime + (samples.length / sampleRate) * 1000,
-            }];
-        }
-
-        const segments = [];
-        for (let startIdx = 0; startIdx + segmentSamples <= samples.length; startIdx += strideSamples) {
-            const endIdx = startIdx + segmentSamples;
-            const segmentTimestamps = timestamps.length === samples.length
-                ? timestamps.slice(startIdx, endIdx)
-                : [];
-            const segmentStart = segmentTimestamps[0] ?? (win.startTime + (startIdx / sampleRate) * 1000);
-            const segmentEnd = segmentTimestamps[segmentTimestamps.length - 1] ?? (segmentStart + EMG_SESSION_WINDOW_MS);
-
-            segments.push({
-                ...win,
-                id: `${win.id}_${startIdx}`,
-                samples: samples.slice(startIdx, endIdx),
-                timestamps: segmentTimestamps,
-                startTime: segmentStart,
-                endTime: segmentEnd,
-            });
-        }
-
-        return segments.length ? segments : [win];
-    }, [activeSensor, config]);
-
     function refreshSessionData(silent = false) {
         sessionWorkerRef.current?.postMessage({ type: 'FETCH_SESSIONS', payload: { silent } });
 
@@ -807,80 +815,146 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
         });
     }
 
+    const requestFullWindows = useCallback((windowIds) => {
+        return new Promise((resolve, reject) => {
+            if (!windowWorkerRef.current) {
+                reject(new Error('Window worker not ready'));
+                return;
+            }
+
+            const requestId = `windows_${windowRequestIdRef.current++}`;
+            pendingWindowRequestsRef.current.set(requestId, resolve);
+
+            windowWorkerRef.current.postMessage({
+                type: 'GET_WINDOWS_FULL',
+                payload: {
+                    requestId,
+                    ids: Array.isArray(windowIds) ? windowIds : [],
+                }
+            });
+        });
+    }, []);
+
+    const dispatchBatchSave = useCallback((windowsToSave) => {
+        return new Promise((resolve, reject) => {
+            if (!saveWorkerRef.current) {
+                reject(new Error('Save worker not ready'));
+                return;
+            }
+
+            const requestId = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+            pendingSaveRequestRef.current = {
+                requestId,
+                resolve,
+                reject,
+                windowIds: windowsToSave.map((window) => window.id)
+            };
+
+            saveWorkerRef.current.postMessage({
+                type: 'SAVE_WINDOWS',
+                payload: {
+                    requestId,
+                    apiBaseUrl: API_BASE_URL,
+                    sensor: activeSensor,
+                    mode,
+                    session_name: sessionName,
+                    windows: windowsToSave.map((window) => ({
+                        id: window.id,
+                        sensor: activeSensor,
+                        action: window.label,
+                        channel: window.channel,
+                        samples: window.samples,
+                        timestamps: window.timestamps,
+                        metadata: buildWindowMetadata(window),
+                    })),
+                }
+            });
+        });
+    }, [API_BASE_URL, activeSensor, buildWindowMetadata, mode, sessionName]);
+
 
 
 
     /**
-     * Saves all 'collected' (Green) windows from readyWindows to the database.
+     * Saves all collected windows to the database.
      */
     const handleAppendSamples = useCallback(async () => {
         if (appendLockRef.current) return;
         const toAppend = markedWindows.filter(w => w.status === 'collected');
         if (!toAppend || toAppend.length === 0) return;
 
+        const pendingIds = toAppend.map((window) => window.id);
+
         appendLockRef.current = true;
         setRunInProgress(true);
 
-        // Optimistically update React state synchronously to prevent race conditions
-        setMarkedWindows(prev => prev.map(w =>
-            toAppend.find(t => t.id === w.id) ? { ...w, status: 'saving' } : w
-        ));
-
-        // Also inform the worker to ensure its state tracking matches
-        windowWorkerRef.current?.postMessage({
-            type: 'MARK_WINDOWS_SAVING',
-            payload: toAppend.map(w => w.id)
-        });
-
         try {
-            for (const win of toAppend) {
-                try {
-                    let resp;
-                    if (mode === 'test') {
-                        const testWindow = activeSensor === 'EMG'
-                            ? createEmgSegmentsForSave(win)[Math.floor(createEmgSegmentsForSave(win).length / 2)] || win
-                            : win;
-                        resp = await CalibrationApi.sendPredictionWindow(activeSensor, {
-                            action: win.label,
-                            samples: testWindow.samples
-                        });
-                    } else {
-                        const windowsToPersist = activeSensor === 'EMG'
-                            ? createEmgSegmentsForSave(win)
-                            : [win];
+            const fullWindows = await requestFullWindows(pendingIds);
+            const fullWindowsById = new Map(fullWindows.map((window) => [window.id, window]));
 
-                        for (const persistedWindow of windowsToPersist) {
-                            resp = await CalibrationApi.sendWindow(activeSensor, {
-                                action: persistedWindow.label,
-                                channel: persistedWindow.channel,
-                                samples: persistedWindow.samples,
-                                timestamps: persistedWindow.timestamps,
-                                metadata: buildWindowMetadata(persistedWindow),
-                            }, sessionName);
+            if (mode === 'test') {
+                for (const win of toAppend) {
+                    try {
+                        const fullWindow = fullWindowsById.get(win.id);
+                        if (!fullWindow) {
+                            throw new Error(`Missing full samples for window ${win.id}`);
                         }
+
+                        const resp = await CalibrationApi.sendPredictionWindow(activeSensor, {
+                            action: fullWindow.label,
+                            samples: fullWindow.samples
+                        });
+
+                        windowWorkerRef.current?.postMessage({
+                            type: 'WINDOW_COLLECTED',
+                            payload: {
+                                id: win.id,
+                                status: resp.match ? 'correct' : 'incorrect',
+                                features: resp.features,
+                                predictedLabel: resp.predicted_label,
+                            }
+                        });
+                    } catch (err) {
+                        console.error("Error saving test window:", win.id, err);
+                        windowWorkerRef.current?.postMessage({
+                            type: 'WINDOW_COLLECTED',
+                            payload: { id: win.id, status: 'error' }
+                        });
                     }
-
-                    const status = (mode === 'test') ? (resp.match ? 'correct' : 'incorrect') : 'saved';
-                    windowWorkerRef.current?.postMessage({
-                        type: 'WINDOW_COLLECTED',
-                        payload: { ...win, status, features: resp.features, predictedLabel: resp.predicted_label }
-                    });
-
-                } catch (err) {
-                    console.error("Error saving window:", win.id, err);
-                    windowWorkerRef.current?.postMessage({
-                        type: 'WINDOW_COLLECTED',
-                        payload: { ...win, status: 'error' }
-                    });
                 }
+            } else {
+                const windowsForSave = pendingIds
+                    .map((id) => fullWindowsById.get(id))
+                    .filter(Boolean);
+                const batchResult = await dispatchBatchSave(windowsForSave);
+                const byId = new Map((batchResult.results || []).map((result) => [result.id, result]));
+
+                toAppend.forEach((win) => {
+                    const saveResult = byId.get(win.id);
+                    const isError = !saveResult || saveResult.error;
+                    windowWorkerRef.current?.postMessage({
+                        type: 'WINDOW_COLLECTED',
+                        payload: {
+                            id: win.id,
+                            status: isError ? 'error' : 'saved',
+                            features: saveResult?.features,
+                            predictedLabel: saveResult?.predicted_label,
+                        }
+                    });
+                });
             }
+
             setDataLastUpdated(Date.now());
             refreshSessionData(true);
         } finally {
             setRunInProgress(false);
             appendLockRef.current = false;
         }
-    }, [mode, activeSensor, sessionName, markedWindows, buildWindowMetadata, createEmgSegmentsForSave, refreshSessionData]);
+    }, [mode, activeSensor, markedWindows, dispatchBatchSave, refreshSessionData, requestFullWindows]);
+
+    useEffect(() => {
+        handleAppendSamplesRef.current = handleAppendSamples;
+    }, [handleAppendSamples]);
 
     const deleteWindow = (id) => {
         windowWorkerRef.current?.postMessage({ type: 'DELETE_WINDOW', payload: id });
@@ -888,8 +962,8 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
 
     const handleClearAllWindows = () => {
         windowWorkerRef.current?.postMessage({ type: 'CLEAR_ALL_WINDOWS' });
-        setBufferWindows([]);
         setTotalPredictedCount(0);
+        setActiveWindow(null);
     };
 
     const markMissed = (id) => {
@@ -916,7 +990,8 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                 label: targetGestureLabel,
                 channel: activeChannelIndex,
                 status: 'pending',
-                samples: []
+                samples: [],
+                captureWindowMs: currentDur
             };
 
             setMarkedWindows(prev => [...prev, newWindow].slice(-MAX_WINDOWS));
@@ -944,8 +1019,6 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                     const samples = samplesPoints.map(p => p.value);
                     const timestamps = samplesPoints.map(p => p.time);
 
-                    setWindowProgress(prev => ({ ...prev, [newWindow.id]: { status: 'saving' } }));
-
                     const resp = await CalibrationApi.sendWindow(activeSensor, {
                         action: targetGestureLabel,
                         channel: activeChannelIndex,
@@ -957,10 +1030,9 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                             samples,
                             startTime: shiftedStart,
                             endTime: shiftedEnd,
+                            captureWindowMs: currentDur,
                         }),
                     }, sessionName);
-
-                    setWindowProgress(prev => ({ ...prev, [newWindow.id]: { status: 'saved' } }));
 
                     setMarkedWindows(prev => prev.map(w => {
                         if (w.id === newWindow.id) {
@@ -971,7 +1043,7 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                                 features: resp.features,
                                 startTime: shiftedStart,
                                 endTime: shiftedEnd,
-                                samples: samples
+                                samples: downsampleSamples(samples)
                             };
                         }
                         return w;
@@ -984,7 +1056,9 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
 
                 } catch (e) {
                     console.error("Test record failed:", e);
-                    setWindowProgress(prev => ({ ...prev, [newWindow.id]: { status: 'error' } }));
+                    setMarkedWindows(prev => prev.map(w =>
+                        w.id === newWindow.id ? { ...w, status: 'error' } : w
+                    ));
                     reject(e);
                 } finally {
                     setRunInProgress(false);
@@ -1070,7 +1144,6 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
 
         // Count valid active samples (ready to save)
         const readyBatchCount = markedWindows.filter(w => w.status === 'collected' && w.label === targetLabel).length;
-        console.log(`[AutoEffect] Ready Batch: ${readyBatchCount}, Limit: ${autoLimit}`);
 
         // Check Limit (Batch Size)
         if (readyBatchCount >= autoLimit) {
@@ -1112,11 +1185,21 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
 
 
     // Sync Windows to Worker
+    const overlayWindows = useMemo(() => (
+        markedWindows.map(({ id, startTime, endTime, status, label }) => ({
+            id,
+            startTime,
+            endTime,
+            status,
+            label
+        }))
+    ), [markedWindows]);
+
     useEffect(() => {
         if (chartRef.current?.updateWindows) {
-            chartRef.current.updateWindows(markedWindows);
+            chartRef.current.updateWindows(overlayWindows);
         }
-    }, [markedWindows]);
+    }, [overlayWindows]);
 
     // Derived state instead of useEffect -> setState (Double render fix)
     const frameTime = React.useMemo(() => {
@@ -1241,8 +1324,33 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
 
         // Match the Live Graph axis color perfectly
         const axisColor = currentTheme?.colors?.['--muted'] || '#9ca3af';
+        const computedStyle = typeof window !== 'undefined'
+            ? window.getComputedStyle(document.documentElement)
+            : null;
 
         const defaultChannelColor = ['#3b82f6', '#10b981', '#f59e0b', '#a855f7'][activeChannelIndex % 4];
+        const windowStyles = {
+            pending: {
+                fill: computedStyle?.getPropertyValue('--window-pending-bg')?.trim() || 'rgba(245, 158, 11, 0.14)',
+                stroke: computedStyle?.getPropertyValue('--window-pending-border-strong')?.trim() || '#f59e0b',
+                text: currentTheme?.colors?.['--text'] || '#ffffff'
+            },
+            collected: {
+                fill: computedStyle?.getPropertyValue('--window-collected-bg')?.trim() || 'rgba(56, 189, 248, 0.12)',
+                stroke: computedStyle?.getPropertyValue('--window-collected-border-strong')?.trim() || '#38bdf8',
+                text: currentTheme?.colors?.['--text'] || '#ffffff'
+            },
+            saved: {
+                fill: computedStyle?.getPropertyValue('--window-saved-bg')?.trim() || 'rgba(16, 185, 129, 0.12)',
+                stroke: computedStyle?.getPropertyValue('--window-saved-border-strong')?.trim() || '#10b981',
+                text: currentTheme?.colors?.['--text'] || '#ffffff'
+            },
+            error: {
+                fill: computedStyle?.getPropertyValue('--window-error-bg')?.trim() || 'rgba(244, 63, 94, 0.12)',
+                stroke: computedStyle?.getPropertyValue('--window-error-border-strong')?.trim() || '#f43f5e',
+                text: currentTheme?.colors?.['--text'] || '#ffffff'
+            }
+        };
 
         return {
             yMin: currentYDomain[0],
@@ -1251,7 +1359,8 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
             bgColor: 'transparent',
             gridColor: '#444',
             themeColor: themeColor, // Pass theme color to worker
-            themeAxisColor: axisColor // Match SignalChart.jsx exactly
+            themeAxisColor: axisColor, // Match SignalChart.jsx exactly
+            windowStyles
         };
     }, [currentYDomain, activeChannelIndex, customLineColor, currentTheme]);
 
@@ -1445,7 +1554,7 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                                     />
                                     {activeSensor === 'EMG' && (
                                         <div className="rounded-lg border border-border/70 bg-surface/60 p-2 text-[11px] leading-relaxed text-muted">
-                                            Each {windowDuration} ms capture burst is saved as overlapping {EMG_SESSION_WINDOW_MS} ms EMG slices for training and calibration.
+                                            Each {windowDuration} ms capture burst is saved as one EMG training window to match the live detector and reduce save lag.
                                         </div>
                                     )}
                                 </div>
@@ -1743,9 +1852,7 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                                             windows={markedWindows}
                                             onDelete={deleteWindow}
                                             onMarkMissed={markMissed}
-                                            onHighlight={setHighlightedWindow}
                                             activeSensor={activeSensor}
-                                            windowProgress={windowProgress}
                                             autoLimit={autoLimit}
                                             onAutoLimitChange={setAutoLimit}
                                             autoCalibrate={autoCalibrate}
@@ -1770,9 +1877,7 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                             windows={markedWindows}
                             onDelete={deleteWindow}
                             onMarkMissed={markMissed}
-                            onHighlight={setHighlightedWindow}
                             activeSensor={activeSensor}
-                            windowProgress={windowProgress}
                             autoLimit={autoLimit}
                             onAutoLimitChange={setAutoLimit}
                             autoCalibrate={autoCalibrate}
