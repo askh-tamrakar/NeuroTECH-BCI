@@ -868,8 +868,9 @@ export function ThemeProvider({ children }) {
         // Save current theme selection
         localStorage.setItem('theme', currentThemeId);
 
-        // Save all themes (data)
-        localStorage.setItem('bci_all_themes', JSON.stringify(themes));
+        // Save only custom themes to prevent modifications to defaults from persisting
+        const customThemesOnly = themes.filter(t => t.type === 'custom');
+        localStorage.setItem('bci_all_themes', JSON.stringify(customThemesOnly));
 
         // Apply variables to root
         const root = document.documentElement;
@@ -952,6 +953,15 @@ export function ThemeProvider({ children }) {
         }
     };
 
+    const resetThemeColors = (id) => {
+        const original = DEFAULT_THEMES.find(t => t.id === id);
+        if (!original) return;
+        setThemes(prev => prev.map(t => {
+            if (t.id !== id) return t;
+            return { ...t, colors: { ...original.colors } };
+        }));
+    };
+
     return (
         <ThemeContext.Provider value={{
             themes,
@@ -962,7 +972,8 @@ export function ThemeProvider({ children }) {
             updateTheme,
             updateThemeColor,
             removeTheme,
-            resetThemes
+            resetThemes,
+            resetThemeColors
         }}>
             {children}
         </ThemeContext.Provider>

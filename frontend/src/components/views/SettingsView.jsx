@@ -30,7 +30,13 @@ import {
   Menu,
   ChevronLeft,
   Activity,
-  UserPlus
+  UserPlus,
+  ChevronUp,
+  ChevronDown,
+  Minimize2,
+  Maximize2,
+  Eye,
+  EyeOff
 } from 'lucide-react'
 import { useSettings } from '../../contexts/SettingsContext'
 import { soundHandler } from '../../handlers/SoundHandler'
@@ -54,7 +60,82 @@ const ColorInput = ({ label, value, onChange }) => (
   </div>
 );
 
-export default function SettingsView({ latency = 0, localWs = '', setLocalWs = () => { }, ngrokWs = '', setNgrokWs = () => { }, connect = () => { }, activeSection: controlledSection, onSectionChange }) {
+// Color Manipulation Helpers
+const hexToHsl = (hex) => {
+  let r = parseInt(hex.slice(1, 3), 16) / 255;
+  let g = parseInt(hex.slice(3, 5), 16) / 255;
+  let b = parseInt(hex.slice(5, 7), 16) / 255;
+  let max = Math.max(r, g, b), min = Math.min(r, g, b);
+  let h, s, l = (max + min) / 2;
+  if (max === min) h = s = 0;
+  else {
+    let d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    switch (max) {
+      case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+      case g: h = (b - r) / d + 2; break;
+      case b: h = (r - g) / d + 4; break;
+    }
+    h /= 6;
+  }
+  return [h, s, l];
+};
+
+const hslToHex = (h, s, l) => {
+  let r, g, b;
+  if (s === 0) r = g = b = l;
+  else {
+    const hue2rgb = (p, q, t) => {
+      if (t < 0) t += 1;
+      if (t > 1) t -= 1;
+      if (t < 1 / 6) return p + (q - p) * 6 * t;
+      if (t < 1 / 2) return q;
+      if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+      return p;
+    };
+    let q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+    let p = 2 * l - q;
+    r = hue2rgb(p, q, h + 1 / 3);
+    g = hue2rgb(p, q, h);
+    b = hue2rgb(p, q, h - 1 / 3);
+  }
+  const toHex = x => {
+    const hex = Math.round(x * 255).toString(16);
+    return hex.length === 1 ? '0' + hex : hex;
+  };
+  return `#${toHex(r).padStart(2, '0')}${toHex(g).padStart(2, '0')}${toHex(b).padStart(2, '0')}`;
+};
+
+const adjustLightness = (hex, amount) => {
+  try {
+    const [h, s, l] = hexToHsl(hex);
+    const newL = Math.max(0, Math.min(1, l + amount));
+    return hslToHex(h, s, newL);
+  } catch (e) { return hex; }
+};
+
+const adjustSaturation = (hex, amount) => {
+  try {
+    const [h, s, l] = hexToHsl(hex);
+    const newS = Math.max(0, Math.min(1, s + amount));
+    return hslToHex(h, newS, l);
+  } catch (e) { return hex; }
+};
+
+const generateRandomHex = () => {
+  return '#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0');
+};
+
+export default function SettingsView({
+  latency = 0,
+  localWs = '',
+  setLocalWs = () => { },
+  ngrokWs = '',
+  setNgrokWs = () => { },
+  connect = () => { },
+  activeSection: controlledSection,
+  onSectionChange
+}) {
   const {
     themes,
     currentTheme,
@@ -64,7 +145,8 @@ export default function SettingsView({ latency = 0, localWs = '', setLocalWs = (
     updateTheme,
     updateThemeColor,
     removeTheme,
-    resetThemes
+    resetThemes,
+    resetThemeColors
   } = useTheme()
 
   const { user, logout } = useAuth()
@@ -94,6 +176,18 @@ export default function SettingsView({ latency = 0, localWs = '', setLocalWs = (
   // Keybinding state
   const [listeningKeyFor, setListeningKeyFor] = useState(null);
 
+  // Appearance Preview state
+  const [previewLineWidth1, setPreviewLineWidth1] = useState(65);
+  const [previewLineWidth2, setPreviewLineWidth2] = useState(45);
+  const [showPreviewLines, setShowPreviewLines] = useState(true);
+  const [showTuning, setShowTuning] = useState(false);
+
+  // Emergency Restore: Ensure original colors are applied on mount
+  useEffect(() => {
+    if (currentTheme?.type === 'default') {
+      resetThemeColors(currentThemeId);
+    }
+  }, []);
   useEffect(() => {
     let frameCount = 0;
     let lastTime = performance.now();
@@ -404,18 +498,88 @@ export default function SettingsView({ latency = 0, localWs = '', setLocalWs = (
                       </div>
                     ))}
                   </div>
-                  <div className="h-px bg-gradient-to-r from-transparent via-primary/50 to-transparent" />
-                  <div className="bg-surface/80 rounded-xl px-4 py-3.5 border border-border flex items-center gap-3.5">
-                    <div className="text-[11px] font-semibold tracking-[0.08em] uppercase text-muted shrink-0">Active</div>
-                    <div className="flex-1 flex flex-col gap-1.5">
-                      <div className="h-1.5 rounded-full" style={{ width: '65%', backgroundColor: currentTheme.colors['--primary'] || 'var(--primary)' }} />
-                      <div className="h-1.5 rounded-full" style={{ width: '45%', backgroundColor: currentTheme.colors['--accent'] || 'var(--accent)' }} />
+                  <div className="bg-surface/80 rounded-xl px-4 py-3.5 border border-border flex flex-col gap-3">
+                    <div className="flex items-center gap-3.5 w-full">
+                      <div className="text-[11px] font-semibold tracking-[0.08em] uppercase text-muted shrink-0">Active</div>
+                      <div className="flex-1 flex flex-col gap-1.5 min-h-[16px] justify-center">
+                        <div className="h-1.5 rounded-full transition-all duration-300" style={{ width: `${previewLineWidth1}%`, backgroundColor: currentTheme.colors['--primary'] || 'var(--primary)' }} />
+                        <div className="h-1.5 rounded-full transition-all duration-300" style={{ width: `${previewLineWidth2}%`, backgroundColor: currentTheme.colors['--accent'] || 'var(--accent)' }} />
+                      </div>
+                      <div className="flex gap-2 items-center">
+                        <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: currentTheme.colors['--bg'] || 'var(--bg)' }} />
+                        <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: currentTheme.colors['--primary'] || 'var(--primary)' }} />
+                        <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: currentTheme.colors['--accent'] || 'var(--accent)' }} />
+                        <div className="h-4 w-px bg-border/50 mx-1" />
+                        <button
+                          onClick={() => setShowTuning(!showTuning)}
+                          className={`p-1.5 rounded-md transition-all ${showTuning ? 'text-primary' : 'text-muted hover:text-text'}`}
+                          title="Tune Lines"
+                        >
+                          <Settings size={14} className={showTuning ? 'animate-spin-slow' : ''} />
+                        </button>
+                      </div>
                     </div>
-                    <div className="flex gap-2">
-                      <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: currentTheme.colors['--bg'] || 'var(--bg)' }} />
-                      <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: currentTheme.colors['--primary'] || 'var(--primary)' }} />
-                      <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: currentTheme.colors['--accent'] || 'var(--accent)' }} />
-                    </div>
+
+                    {showTuning && (
+                      <div className="flex flex-col gap-3 pt-3 border-t border-border/10 animate-in fade-in slide-in-from-top-1 duration-200">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="flex flex-col gap-1.5">
+                            <div className="flex justify-between text-[8px] font-bold text-muted uppercase">
+                              <span>Line 1 Scale</span>
+                              <span className="text-primary">{previewLineWidth1}%</span>
+                            </div>
+                            <input type="range" min="5" max="100" value={previewLineWidth1} onChange={(e) => setPreviewLineWidth1(parseInt(e.target.value))} className="w-full h-1 bg-surface-hover rounded-full appearance-none cursor-pointer" style={{ accentColor: 'var(--primary)' }} />
+                          </div>
+                          <div className="flex flex-col gap-1.5">
+                            <div className="flex justify-between text-[8px] font-bold text-primary uppercase">
+                              <span>Line 2 Scale</span>
+                              <span className="text-accent">{previewLineWidth2}%</span>
+                            </div>
+                            <input type="range" min="5" max="100" value={previewLineWidth2} onChange={(e) => setPreviewLineWidth2(parseInt(e.target.value))} className="w-full h-1 bg-surface-hover rounded-full appearance-none cursor-pointer" style={{ accentColor: 'var(--accent)' }} />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="flex flex-col gap-1.5">
+                            <div className="flex justify-between text-[8px] font-bold uppercase text-primary">
+                              <span>Primary Intensity</span>
+                              <span>{(hexToHsl(currentTheme.colors['--primary'] || '#000000')[1] * 100).toFixed(0)}%</span>
+                            </div>
+                            <input
+                              type="range" min="0" max="1" step="0.01"
+                              value={hexToHsl(currentTheme.colors['--primary'] || '#000000')[1]}
+                              onChange={(e) => {
+                                const [h, s, l] = hexToHsl(currentTheme.colors['--primary']);
+                                updateThemeColor(currentThemeId, '--primary', hslToHex(h, parseFloat(e.target.value), l));
+                              }}
+                              className="w-full h-1 bg-surface-hover rounded-full appearance-none cursor-pointer" style={{ accentColor: 'var(--primary)' }}
+                            />
+                          </div>
+                          <div className="flex flex-col gap-1.5">
+                            <div className="flex justify-between text-[8px] font-bold uppercase text-accent">
+                              <span>Accent Intensity</span>
+                              <span>{(hexToHsl(currentTheme.colors['--accent'] || '#000000')[1] * 100).toFixed(0)}%</span>
+                            </div>
+                            <input
+                              type="range" min="0" max="1" step="0.01"
+                              value={hexToHsl(currentTheme.colors['--accent'] || '#000000')[1]}
+                              onChange={(e) => {
+                                const [h, s, l] = hexToHsl(currentTheme.colors['--accent']);
+                                updateThemeColor(currentThemeId, '--accent', hslToHex(h, parseFloat(e.target.value), l));
+                              }}
+                              className="w-full h-1 bg-surface-hover rounded-full appearance-none cursor-pointer" style={{ accentColor: 'var(--accent)' }}
+                            />
+                          </div>
+                        </div>
+
+                        <button
+                          onClick={() => { resetThemeColors(currentThemeId); setShowTuning(false); }}
+                          className="text-[9px] font-bold text-primary self-center hover:underline flex items-center gap-1 opacity-70 hover:opacity-100 py-1"
+                        >
+                          <RefreshCw size={10} /> Full Restore (Source Colors)
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -451,11 +615,37 @@ export default function SettingsView({ latency = 0, localWs = '', setLocalWs = (
                         { label: 'Accent Highlight', key: '--accent' },
                         { label: 'Vector Border Edge', key: '--border' }
                       ].map(({ label, key }) => (
-                        <div key={key} className="flex items-center justify-between py-3 border-b border-border/50 last:border-0">
-                          <span className="text-[14px] font-medium">{label}</span>
+                        <div key={key} className="flex items-center justify-between py-3 border-b border-border/50 last:border-0 group">
+                          <div className="flex flex-col">
+                            <span className="text-[14px] font-medium transition-colors group-hover:text-primary">{label}</span>
+                            <span className="text-[10px] text-muted font-mono uppercase tracking-tighter opacity-0 group-hover:opacity-100 transition-opacity">{key}</span>
+                          </div>
                           <div className="flex items-center gap-2">
-                            <span className="text-[12px] text-muted font-mono">{currentTheme.colors[key]}</span>
-                            <input type="color" value={currentTheme.colors[key]} onChange={(e) => updateThemeColor(currentThemeId, key, e.target.value)} className="w-[30px] h-[30px] rounded-lg border border-border cursor-pointer p-0 bg-transparent shrink-0" />
+                            <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all mr-2">
+                              <button
+                                onClick={() => updateThemeColor(currentThemeId, key, adjustLightness(currentTheme.colors[key], 0.05))}
+                                className="p-1 rounded bg-surface border border-border hover:text-primary transition-all"
+                                title="Shift Up"
+                              >
+                                <ChevronUp size={12} />
+                              </button>
+                              <button
+                                onClick={() => updateThemeColor(currentThemeId, key, adjustLightness(currentTheme.colors[key], -0.05))}
+                                className="p-1 rounded bg-surface border border-border hover:text-primary transition-all"
+                                title="Shift Down"
+                              >
+                                <ChevronDown size={12} />
+                              </button>
+                              <button
+                                onClick={() => updateThemeColor(currentThemeId, key, generateRandomHex())}
+                                className="p-1 rounded bg-surface border border-border hover:text-primary transition-all"
+                                title="Randomize"
+                              >
+                                <RefreshCw size={12} />
+                              </button>
+                            </div>
+                            <span className="text-[12px] text-muted font-mono min-w-[65px] text-right">{currentTheme.colors[key]}</span>
+                            <input type="color" value={currentTheme.colors[key]} onChange={(e) => updateThemeColor(currentThemeId, key, e.target.value)} className="w-[32px] h-[32px] rounded-lg border border-border cursor-pointer p-0 bg-transparent shrink-0 hover:scale-110 transition-transform" />
                           </div>
                         </div>
                       ))}
