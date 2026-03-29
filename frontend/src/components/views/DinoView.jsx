@@ -6,7 +6,7 @@ import Counter from '../ui/display/Counter'
 import {
     ScanEye, SlidersHorizontal, ArrowUp, Pause, Play, Trash2, Wifi, WifiOff, Save, Skull, Trophy, Keyboard, Eye, Gamepad2, Globe, Sparkles, Atom, Ruler, Settings, RotateCcw, ScrollText, Timer, Weight, MoveVertical,
     MoveHorizontal, Maximize, ArrowDownToLine, Grid, Sun, Moon, Cloud, Star, TreePine, Leaf, Hand,
-    Layers, Zap, Clock, ChevronDown, Activity, Target, Radio, Signal, Circle, Camera, Menu, BrainCircuit, Check, X
+    Layers, Zap, Clock, ChevronDown, Activity, Target, Radio, Signal, Circle, Camera, Menu, BrainCircuit, Check, X, ChevronRight, ChevronLeft
 } from 'lucide-react'
 import { soundHandler } from '../../handlers/SoundHandler'
 
@@ -35,6 +35,12 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
     }, [API_BASE_URL]);
 
     // Game state
+    const [cactusJump, setCactusJump] = useState(0)
+    const [bestCactusJump, setBestCactusJump] = useState(
+        parseInt(localStorage.getItem('dino_best_cactus')) || 0
+    )
+    const [isNewJumpRecord, setIsNewJumpRecord] = useState(false)
+    const [isNewScoreRecord, setIsNewScoreRecord] = useState(false)
     const [gameState, setGameState] = useState('ready') // ready, playing, paused, gameOver
     const [score, setScore] = useState(0)
     const [highScore, setHighScore] = useState(
@@ -549,6 +555,9 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
                 if (type === 'GAME_OVER') {
                     setGameState('gameOver')
                     soundHandler.playDinoDead();
+                    setIsNewScoreRecord(false);
+                    setIsNewJumpRecord(false);
+                    setCactusJump(0)
                     if (score !== undefined) {
                         scoreRef.current = score
                         logEvent(`Game Over! Score: ${Math.floor(score / 10)}`, 'gameover')
@@ -559,7 +568,25 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
                     logEvent(`New Highscore: ${Math.floor(newHigh / 10)}!`, 'highscore')
                 } else if (type === 'SCORE_UPDATE') {
                     setScore(score)
+                    if (score > highScore) {
+                        setHighScore(score)
+                    }
+                    setIsNewScoreRecord(score > 0 && score > highScore)
                 } else if (type === 'OBSTACLE_CLEARED') {
+                    // Increment jump counter and check for new best
+                    setCactusJump(prev => {
+                        const next = prev + 1
+                        setBestCactusJump(best => {
+                            if (next > best) {
+                                localStorage.setItem('dino_best_cactus', next.toString())
+                                setIsNewJumpRecord(true)
+                                return next
+                            }
+                            return best
+                        })
+                        return next
+                    })
+                    logEvent('Obstacle cleared! +1', 'jump')
                     const pending = pendingActionFeedbackRef.current
                     if (pending?.trigger === 'jump' && Date.now() - pending.timestamp <= 3000 && pending.features) {
                         setFeedbackPrompt({
@@ -731,6 +758,9 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
         }
         setGameState('ready');
         setScore(0);
+        setCactusJump(0);
+        setIsNewScoreRecord(false);
+        setIsNewJumpRecord(false);
         setFeedbackPrompt(null);
         pendingActionFeedbackRef.current = null;
     }, []);
@@ -895,10 +925,10 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
                             <div className="flex items-center gap-2">
                                 <button
                                     onClick={() => setIsSidebarCollapsed(true)}
-                                    className={`p-2 hover:bg-white/10 rounded-full transition-all duration-300 text-muted hover:text-text ${isSidebarCollapsed ? 'hidden' : 'opacity-100 scale-100 w-[40px]'}`}
+                                    className={`pt-2 px-1 pb-1 rounded-full transition-all duration-300 text-muted hover:text-text ${isSidebarCollapsed ? 'hidden' : 'opacity-100 scale-100 w-[40px]'}`}
                                     title="Collapse Sidebar"
                                 >
-                                    <Menu size={24} />
+                                    <Menu size={36} className='hover:text-text' />
                                 </button>
                                 <button
                                     onPointerDown={() => !isSidebarCollapsed && setShowSettings(!showSettings)}
@@ -957,40 +987,58 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
                                     </svg>
                                 </div>
 
-                                <div className="game-stats-container">
-                                    {/* Left Side: Status & Score */}
-                                    <div className="stat-group-left">
-                                        <div className="stat-block stat-block-start mb-1">
-                                            <span className="stat-label flex items-center gap-1"><Activity size={24} /> Status</span>
-                                            <div className={`stat-value-status ${gameState}`}>
-                                                {gameState}
+                                <div className="game-stats-container-left">
+                                    {/* Far Left: Status */}
+                                    <div className="stat-group-status">
+                                        <div className="stat-block-column">
+                                            <span className="stat-label flex items-center gap-2">
+                                                <Activity size={26} className="text-primary" /> STATUS
+                                            </span>
+                                            <div className={`stat-value-large ${gameState}`}>
+                                                {gameState.toUpperCase()}
                                             </div>
-                                        </div>
-                                        <div className="stat-block-row stat-block-start">
-                                            <span className="stat-label flex items-center gap-1"><Target size={24} /> Score :</span>
-                                            <Counter value={Math.floor(score / 10)} fontSize="clamp(1.5rem, 3.5vw, 3rem)" places={[10000, 1000, 100, 10, 1]} className="stat-counter-large" style={{ lineHeight: 1 }} />
                                         </div>
                                     </div>
 
-                                    {/* Middle Spacer to avoid eye collision */}
-                                    <div className="hidden lg:block" style={{ width: '24rem', flexShrink: 0 }}></div>
-
-                                    {/* Right Side: Best & Sensor */}
-                                    <div className="stat-group-right">
-                                        <div className="stat-block-row stat-block-end">
-                                            <Counter
-                                                value={Math.floor(highScore / 10)}
-                                                fontSize="clamp(1.5rem, 3.5vw, 3rem)"
-                                                places={[10000, 1000, 100, 10, 1]}
-                                                className="stat-counter-large"
-                                                style={{ lineHeight: 1 }}
-                                            />
-                                            <span className="stat-label flex items-center gap-1">: Best <Trophy size={24} className="text-yellow-500 mb-1" /></span>
+                                    {/* Left Center: Cactus Jump & Best Cactus Jump */}
+                                    <div className="stat-group-center">
+                                        <div className="stat-row-centered">
+                                            <span className='stat-row-centered stat-info'>JUMP  <ChevronRight /></span>
+                                            <Counter value={cactusJump} fontSize="1.6rem" places={[100, 10, 1]} className="stat-counter-primary-light" style={{ lineHeight: 1 }} />
+                                            <TreePine size={34} className="text-primary/40 mx-2" />
+                                            <span className={isNewJumpRecord ? 'record-glow' : ''}>
+                                                <Counter value={bestCactusJump} fontSize="1.6rem" places={[100, 10, 1]} className="stat-counter-primary-light" style={{ lineHeight: 1 }} />
+                                            </span>
+                                            <span className='stat-row-centered stat-info'> <ChevronLeft />  BEST</span>
                                         </div>
-                                        <div className="stat-block stat-block-end mb-1">
-                                            <span className="stat-label flex items-center gap-1"><Radio size={24} /> Sensor</span>
-                                            <div className={`stat-value-sensor ${(isConnected && settings.CONTROL_CHANNEL !== 'none') ? 'text-green-500' : 'text-red-500'}`}>
-                                                {(isConnected && settings.CONTROL_CHANNEL !== 'none') ? 'Connected' : 'Disconnected'}
+                                    </div>
+                                </div>
+
+                                {/* Middle Spacer to avoid absolute eyes collision */}
+                                <div className="eyes-spacer-block"></div>
+
+                                <div className="game-stats-container-right">
+                                    {/* Right Center: Score & Best Score */}
+                                    <div className="stat-group-center">
+                                        <div className="stat-row-centered">
+                                            <span className='stat-row-centered stat-info'>BEST <ChevronRight /></span>
+                                            <span className={isNewScoreRecord ? 'record-glow' : ''}>
+                                                <Counter value={Math.floor(highScore / 10)} fontSize="1.6rem" places={[10000, 1000, 100, 10, 1]} className="stat-counter-primary-light" style={{ lineHeight: 1 }} />
+                                            </span>
+                                            <Target size={34} className="text-primary/40 mx-2" />
+                                            <Counter value={Math.floor(score / 10)} fontSize="1.6rem" places={[10000, 1000, 100, 10, 1]} className="stat-counter-primary-light" style={{ lineHeight: 1 }} />
+                                            <span className='stat-row-centered stat-info'> <ChevronLeft />  SCORE</span>
+                                        </div>
+                                    </div>
+
+                                    {/* Far Right: Sensor Status */}
+                                    <div className="stat-group-sensor">
+                                        <div className="stat-block-column">
+                                            <span className="stat-label flex items-center gap-2">
+                                                SENSOR <Radio size={26} className="text-primary" />
+                                            </span>
+                                            <div className={`stat-value-large ${isConnected ? 'connected' : 'disconnected'}`}>
+                                                {isConnected ? 'CONNECTED' : 'OFFLINE'}
                                             </div>
                                         </div>
                                     </div>
@@ -1248,12 +1296,19 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
                                             <div className="space-y-3 pt-2">
                                                 <SettingToggle label="Manual Controls (Space)" value={settings.ENABLE_MANUAL_CONTROLS} onChange={(v) => handleSettingChange('ENABLE_MANUAL_CONTROLS', v)} icon={Hand} />
                                                 <SettingInput label="Obstacle Bonus" value={settings.OBSTACLE_BONUS_FACTOR} onChange={(v) => handleSettingChange('OBSTACLE_BONUS_FACTOR', v)} min="0" max="0.5" step="0.005" icon={Zap} />
-                                                <div className="flex justify-between items-center text-xs pt-1 border-t border-border">
-                                                    <span className="text-muted flex items-center gap-1"><Trophy size={10} /> Highscore: {Math.floor(highScore / 10)}</span>
+                                                <div className="flex flex-row justify-between items-center text-xs pt-1 border-t border-border">
+                                                    <div>
+                                                        <span className="text-muted flex items-center gap-1"><Trophy size={10} /> HighScore: {Math.floor(highScore / 10)} </span>
+                                                        <span className='text-muted flex items-center gap-1'><TreePine size={10} />BestJump: {Math.floor(bestCactusJump)}</span>
+                                                    </div>
                                                     <button
                                                         onClick={() => {
                                                             localStorage.setItem('dino_highscore', '0')
+                                                            localStorage.setItem('dino_best_cactus', '0')
                                                             setHighScore(0)
+                                                            setScore(0)
+                                                            setCactusJump(0)
+                                                            setBestCactusJump(0)
                                                             setSavedMessage('Score Reset!')
                                                             setTimeout(() => setSavedMessage(''), 2000)
                                                         }}

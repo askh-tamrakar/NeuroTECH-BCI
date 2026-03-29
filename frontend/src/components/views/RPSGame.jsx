@@ -284,7 +284,7 @@ const RPSGame = ({ wsEvent }) => {
                 time: new Date().toLocaleTimeString(),
                 name: eventName,
                 channel: wsEvent.channel
-            }, ...prev].slice(0, 15));
+            }, ...prev].slice(0, 10));
         }
     }, [wsEvent]);
 
@@ -338,7 +338,7 @@ const RPSGame = ({ wsEvent }) => {
                 time: new Date().toLocaleTimeString(),
                 name: pMove,
                 channel: 'Manual'
-            }, ...prev].slice(0, 15));
+            }, ...prev].slice(0, 10));
         }
 
         const matchEnded = determineWinner(pMove, cMove);
@@ -422,7 +422,7 @@ const RPSGame = ({ wsEvent }) => {
 
         window.addEventListener('keydown', onKeyDown);
         return () => window.removeEventListener('keydown', onKeyDown);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [manualMode, gameState, matchWinner]);
 
     useEffect(() => {
@@ -537,7 +537,7 @@ const RPSGame = ({ wsEvent }) => {
                                 STOP
                             </button>
                         )}
-                        
+
                         {gameState === 'waiting' && !manualMode && (
                             <span className="pulse text-lg md:text-xl font-bold">
                                 {currentPrediction === 'REST' || currentPrediction === 'UNKNOWN'
@@ -729,7 +729,7 @@ const RPSGame = ({ wsEvent }) => {
                     {/* Header */}
                     <div className="flex items-center justify-between shrink-0 mb-2">
                         <div>
-                            <h2 className="text-2xl font-bold text-text mb-1 flex items-center gap-3">
+                            <h2 className="text-2xl font-bold text-text mb-1 pt-2.5 flex items-center gap-3">
                                 <Gamepad2 size={28} className="text-primary animate-pulse" />
                                 <span style={{ letterSpacing: '2.3px' }}>Controls</span>
                             </h2>
@@ -740,7 +740,7 @@ const RPSGame = ({ wsEvent }) => {
                             className="p-2 hover:bg-white/10 rounded-full transition-colors"
                             title="Collapse Sidebar"
                         >
-                            <ChevronLeft size={24} />
+                            <ChevronLeft size={36} />
                         </button>
                     </div>
 
@@ -814,25 +814,25 @@ const RPSGame = ({ wsEvent }) => {
                     </button>
 
                     {/* Event Log Panel */}
-                    <div className="w-full h-full flex flex-col bg-surface/30 border border-text/40 rounded-2xl p-6 backdrop-blur-md shadow-2xl">
+                    <div className="w-full h-full flex flex-col bg-surface/30 border border-text/40 rounded-2xl p-4 backdrop-blur-md shadow-2xl">
                         <div className="text-sm font-bold text-muted uppercase tracking-wider mb-4 flex justify-between items-center pb-3 border-b border-text/40 flex-shrink-0">
                             <span>Event Log</span>
-                            <span className="text-[11px] opacity-60">Last 15 events</span>
+                            <span className="text-[11px] opacity-60">Last 10 events</span>
                         </div>
-                        <div className="space-y-2 font-mono text-base overflow-y-auto flex-1 pr-2 custom-scrollbar">
+                        <div className="space-y-1.5 font-mono text-xs overflow-y-auto flex-1 pr-2 custom-scrollbar">
                             {eventLogs.length === 0 ? (
-                                <div className="text-muted/50 italic py-4 text-center">No events received yet...</div>
+                                <div className="text-muted/50 italic py-4 text-center text-xs">No events received yet...</div>
                             ) : (
                                 eventLogs.map((log) => (
-                                    <div key={log.id} className="flex gap-4 py-2 border-b border-white/5 last:border-0 hover:bg-white/5 px-3 rounded text-base">
-                                        <span className="text-muted">{log.time}</span>
-                                        <span className={`font-bold ${log.name === 'ROCK' ? 'text-amber-400' :
+                                    <div key={log.id} className="flex gap-3 py-1.5 border-b border-white/5 last:border-0 hover:bg-white/5 px-2 rounded text-xs">
+                                        <span className="text-muted text-[12px] shrink-0">{log.time}</span>
+                                        <span className={`font-bold text-[18px] ${log.name === 'ROCK' ? 'text-amber-400' :
                                             log.name === 'PAPER' ? 'text-blue-400' :
                                                 log.name === 'SCISSORS' ? 'text-pink-400' : 'text-text'
                                             }`}>
                                             {log.name}
                                         </span>
-                                        <span className="text-muted ml-auto text-xs">{log.channel}</span>
+                                        <span className="text-muted ml-auto text-[15px] shrink-0">{log.channel}</span>
                                     </div>
                                 ))
                             )}

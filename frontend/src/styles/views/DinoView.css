@@ -223,45 +223,65 @@
     background-color: rgba(var(--bg-rgb), 0.2);
     backdrop-filter: blur(2px);
     border-radius: 0.75rem;
-    padding: 1rem;
-    border: 1px solid var(--border);
+    padding: 2px;
+    border: 2px solid var(--border);
     position: relative;
     margin-top: 0;
-    flex-shrink: 0;
+    flex-shrink: 1;
     width: 100%;
-    min-height: 100px;
+    min-height: 120px;
     display: flex;
-    align-items: center;
+    justify-content: space-between;
 }
 
-.game-stats-container {
+.game-stats-container-left {
     display: flex;
     justify-content: space-between;
     align-items: center;
     width: 100%;
-    gap: 1rem;
+    gap: 4rem;
     padding-left: 1rem;
     padding-right: 1rem;
 }
 
-.stat-group-left {
+.game-stats-container-right {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    gap: 2rem;
-    text-align: left;
-    flex: 1;
+    width: 100%;
+    gap: 4rem;
+    padding-left: 1rem;
+    padding-right: 1rem;
 }
 
-.stat-group-right {
+.stat-group-status {
     display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 2rem;
-    text-align: right;
-    flex: 1;
+    justify-content: flex-start;
 }
 
+.stat-group-sensor {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.stat-group-center {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.stat-row-centered {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+}
+
+.eyes-spacer-block {
+    /* Purely for grid spacing to avoid overlapping eyes */
+    flex: 0 0 340px;
+    height: 10px;
+}
 
 .stat-block {
     display: flex;
@@ -288,6 +308,14 @@
     margin-bottom: 0.25rem;
 }
 
+.stat-info {
+    font-size: 16px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text);
+}
+
 .stat-label {
     color: var(--text);
     font-family: monospace;
@@ -304,26 +332,49 @@
     text-transform: capitalize;
 }
 
-.stat-value-status.playing {
-    color: var(--text-success, #22c55e);
-    animation: pulse 2s infinite;
+.stat-value-large {
+    font-weight: 900;
+    font-size: 18px;
+    letter-spacing: 0.01em;
+    line-height: 1;
 }
 
-.stat-value-status.ready {
+.stat-value-large.ready {
     color: var(--accent);
 }
 
-.stat-value-status.paused {
+.stat-value-large.playing {
+    color: var(--primary);
+    animation: pulse 2s infinite;
+}
+
+.stat-value-large.paused {
     color: #f59e0b;
-    animation: pulse 3s infinite;
 }
 
-.stat-value-status.gameOver {
-    color: var(--text-error, #ef4444);
+.stat-value-large.gameOver {
+    color: #ef4444;
 }
 
-.stat-value-status.default {
-    color: var(--text);
+.stat-value-large.connected {
+    color: #22c55e;
+}
+
+.stat-value-large.disconnected {
+    color: #ef4444;
+}
+
+.stat-counter-primary-light {
+    color: var(--primary);
+    opacity: 0.9;
+    filter: brightness(1.2);
+}
+
+.stat-block-column {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+    text-align: center;
 }
 
 .stat-value-sensor {
@@ -439,3 +490,25 @@
     height: 21px;
     flex-shrink: 0;
 }
+
+/* =============================================
+   Record-Breaking Heartbeat Glow Animation
+   Applied to the "best" counter when the player
+   is actively beating their personal record.
+   ============================================= */
+@keyframes record-heartbeat {
+    0%   { opacity: 1; transform: scale(1);    filter: drop-shadow(0 0 0px var(--primary)); }
+    14%  { opacity: 1; transform: scale(1.15); filter: drop-shadow(0 0 8px var(--primary)); }
+    28%  { opacity: 1; transform: scale(1.05); filter: drop-shadow(0 0 4px var(--primary)); }
+    42%  { opacity: 1; transform: scale(1.18); filter: drop-shadow(0 0 14px var(--primary)); }
+    70%  { opacity: 1; transform: scale(1);    filter: drop-shadow(0 0 2px var(--primary)); }
+    100% { opacity: 1; transform: scale(1);    filter: drop-shadow(0 0 0px var(--primary)); }
+}
+
+.record-glow {
+    display: inline-flex;
+    align-items: center;
+    animation: record-heartbeat 0.9s ease-in-out infinite;
+    color: var(--primary);
+    will-change: transform, filter;
+}
