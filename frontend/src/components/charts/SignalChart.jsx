@@ -1,7 +1,7 @@
 // SignalChart.jsx
 import React, { useEffect, useRef, useImperativeHandle, forwardRef, useState } from 'react'
 import { ChartSpline, ZoomIn, ArrowUpDown, ArrowDown, ArrowUp, Sigma, Clock, Minus, Plus, Activity, ChevronUp, ChevronDown } from 'lucide-react'
-import ElasticSlider from '../ui/ElasticSlider'
+import ElasticSlider from '../ui/inputs/ElasticSlider'
 import { useTheme } from '../../contexts/ThemeContext'
 import '../../styles/live/SignalChart.css'
 

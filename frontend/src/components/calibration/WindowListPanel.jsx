@@ -1,6 +1,6 @@
 import React from 'react';
 import { Trash2, Activity, Cpu, Zap, ListOrdered, ListX } from 'lucide-react';
-import CustomNumberInput from '../ui/CustomNumberInput'
+import CustomNumberInput from '../ui/inputs/CustomNumberInput'
 
 
 /**

@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { useTheme } from '../../contexts/ThemeContext';
+import { useTheme } from '../../../contexts/ThemeContext';
 
 const CursorHandler = () => {
     const { currentTheme } = useTheme();

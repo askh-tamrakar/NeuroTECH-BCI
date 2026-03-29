@@ -5,7 +5,7 @@ import {
     ArrowRightFromLine
 } from 'lucide-react';
 import { soundHandler } from '../../handlers/SoundHandler';
-import CustomSelect from '../ui/CustomSelect';
+import CustomSelect from '../ui/inputs/CustomSelect';
 
 const TabButton = ({ active, onClick, children }) => (
     <button

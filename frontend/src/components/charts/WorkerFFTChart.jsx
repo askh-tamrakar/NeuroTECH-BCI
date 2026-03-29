@@ -4,7 +4,7 @@ import {
     ArrowUpDown, ChevronUp, ChevronDown, ChartSpline, Sigma, ArrowUp, ArrowDown
 } from 'lucide-react';
 import { formatAmplitudeValue } from '../../utils/spectrumFormat';
-import RangeSlider from '../ui/RangeSlider';
+import RangeSlider from '../ui/inputs/RangeSlider';
 
 const DEFAULT_PALETTE = [
     '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6',

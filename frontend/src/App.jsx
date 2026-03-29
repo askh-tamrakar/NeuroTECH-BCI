@@ -35,14 +35,16 @@ function AppContent() {
   return user ? <Dashboard /> : <LoginPage />
 }
 
-import CursorHandler from './components/ui/CursorHandler';
+import CursorHandler from './components/ui/overlays/CursorHandler';
 import ErrorBoundary from './components/ErrorBoundary';
+import PWAInstallPrompt from './components/PWAInstallPrompt';
 
 
 export default function App() {
   return (
     <>
       <CursorHandler />
+      <PWAInstallPrompt />
       <ErrorBoundary>
         <AuthProvider>
           <AppContent />

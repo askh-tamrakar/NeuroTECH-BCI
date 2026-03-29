@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import DataCollectionView from './DataCollectionView';
-import MLTrainingView from './MLTrainingView';
+import DataCollectionView from '../lab/DataCollectionView';
+import MLTrainingView from '../lab/MLTrainingView';
 
 export default function LabView(props) {
     const [activeTab, setActiveTab] = useState('data'); // 'data' | 'ml'

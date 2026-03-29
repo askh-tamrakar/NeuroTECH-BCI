@@ -1,5 +1,5 @@
 import { useRef, useEffect, useCallback } from 'react';
-import '../../styles/index.css';
+import '../../../styles/index.css';
 
 const ClickSpark = ({
     sparkColor = '#fff',

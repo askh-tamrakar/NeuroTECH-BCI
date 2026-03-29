@@ -3,9 +3,9 @@ import { Settings, Play, Square, Activity, MousePointer2, Keyboard, Sun, Monitor
 import { motion } from 'framer-motion';
 import SSVEPStimulus from '../ssvep/SSVEPStimulus';
 import { soundHandler } from '../../handlers/SoundHandler';
-import CustomNumberInput from '../ui/CustomNumberInput';
-import CustomSelect from '../ui/CustomSelect';
-import CustomSlider from '../ui/CustomSlider';
+import CustomNumberInput from '../ui/inputs/CustomNumberInput';
+import CustomSelect from '../ui/inputs/CustomSelect';
+import CustomSlider from '../ui/inputs/CustomSlider';
 import { CalibrationApi } from '../../services/calibrationApi';
 
 const COMMON_KEYS = ['None', 'W', 'A', 'S', 'D', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'Enter', 'Escape', 'P', 'Q', '0', '1', '2', '3'];

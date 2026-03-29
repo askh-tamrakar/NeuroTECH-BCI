@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 // Imports
 import { Camera, CameraOff, SwitchCamera, ZoomIn } from 'lucide-react';
-import '../../styles/ui/CameraPanel.css';
+import '../../../styles/ui/CameraPanel.css';
 const CameraPanel = ({ initialCameraOn = true }) => {
     const videoRef = useRef(null);
     const [error, setError] = useState(null);

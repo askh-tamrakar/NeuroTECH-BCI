@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { soundHandler } from '../../handlers/SoundHandler';
+import { soundHandler } from '../../../handlers/SoundHandler';
 
 export default function CustomSlider({ min, max, step, value, onChange, onFinalChange, accentColor = 'primary' }) {
-    const activeColorHex = 
-        accentColor === 'primary' ? 'var(--primary)' : 
-        accentColor === 'emerald' ? '#10b981' : 
-        accentColor === 'orange' ? '#f97316' : 
-        accentColor === 'red' ? '#ef4444' : 'var(--primary)';
+    const activeColorHex =
+        accentColor === 'primary' ? 'var(--primary)' :
+            accentColor === 'emerald' ? '#10b981' :
+                accentColor === 'orange' ? '#f97316' :
+                    accentColor === 'red' ? '#ef4444' : 'var(--primary)';
 
     const [localValue, setLocalValue] = useState(value);
 
@@ -45,9 +45,9 @@ export default function CustomSlider({ min, max, step, value, onChange, onFinalC
             {/* Background Track */}
             <div className="absolute w-full h-[6px] bg-bg rounded-full overflow-hidden shrink-0">
                 {/* Fill Track */}
-                <div 
+                <div
                     className="h-full relative rounded-full transition-all duration-75 ease-linear shrink-0"
-                    style={{ 
+                    style={{
                         width: `${percentage}%`,
                         backgroundColor: activeColorHex,
                         boxShadow: `0 0 8px ${activeColorHex}40`
@@ -70,7 +70,7 @@ export default function CustomSlider({ min, max, step, value, onChange, onFinalC
             />
 
             {/* Custom Thumb */}
-            <motion.div 
+            <motion.div
                 className="absolute w-5 h-5 rounded-full pointer-events-none z-0 shadow-lg border-2 border-surface"
                 style={{
                     left: `calc(${percentage}% - 10px)`,

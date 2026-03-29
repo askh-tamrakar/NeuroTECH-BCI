@@ -3,7 +3,7 @@ import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import App from './App.jsx'
 import './styles/index.css'
-import ClickSpark from './components/ui/ClickSpark'
+import ClickSpark from './components/ui/overlays/ClickSpark'
 import { ThemeProvider } from './contexts/ThemeContext'
 import { SettingsProvider } from './contexts/SettingsContext'
 

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { BrainCircuit, Activity, ImageIcon, Menu, ChevronLeft, Gamepad2, Settings, History, ScrollText, Zap, Trophy, Keyboard, Radio, HandFist, Hand, Scissors } from 'lucide-react';
 import { soundHandler } from '../../handlers/SoundHandler';
-import CustomSelect from '../ui/CustomSelect';
+import CustomSelect from '../ui/inputs/CustomSelect';
 import '../../styles/views/RPSGame.css';
 
 const MOVES = ['ROCK', 'PAPER', 'SCISSORS'];

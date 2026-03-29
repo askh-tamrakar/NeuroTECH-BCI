@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import '../../styles/views/DinoView.css'
-import CameraPanel from '../ui/CameraPanel'
-import CustomSelect from '../ui/CustomSelect'
-import Counter from '../ui/Counter'
+import CameraPanel from '../ui/panels/CameraPanel'
+import CustomSelect from '../ui/inputs/CustomSelect'
+import Counter from '../ui/display/Counter'
 import {
     ScanEye, SlidersHorizontal, ArrowUp, Pause, Play, Trash2, Wifi, WifiOff, Save, Skull, Trophy, Keyboard, Eye, Gamepad2, Globe, Sparkles, Atom, Ruler, Settings, RotateCcw, ScrollText, Timer, Weight, MoveVertical,
     MoveHorizontal, Maximize, ArrowDownToLine, Grid, Sun, Moon, Cloud, Star, TreePine, Leaf, Hand,

@@ -13,12 +13,12 @@ import SettingsView from '../views/SettingsView'
 import ServoClawView from '../views/ServoClawView'
 
 import '../../styles/App.css';
-import ScrollStack, { ScrollStackItem } from '../ui/ScrollStack';
-import PillNav from '../ui/PillNav';
-import Pill from '../ui/Pill';
-import { ConnectionButton } from '../ui/ConnectionButton';
-import Brain3D from '../ui/Brain3D';
-import MobileNav from '../ui/MobileNav';
+import ScrollStack, { ScrollStackItem } from '../ui/navigation/ScrollStack';
+import PillNav from '../ui/navigation/PillNav';
+import Pill from '../ui/navigation/Pill';
+import { ConnectionButton } from '../ui/display/ConnectionButton';
+import Brain3D from '../ui/display/Brain3D';
+import MobileNav from '../ui/navigation/MobileNav';
 
 export default function Dashboard() {
   const { user, logout } = useAuth()

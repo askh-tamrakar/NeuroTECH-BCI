@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import AnimatedList from '../ui/AnimatedList';
-import CustomSelect from '../ui/CustomSelect';
+import AnimatedList from '../ui/display/AnimatedList';
+import CustomSelect from '../ui/inputs/CustomSelect';
 import { Trash, ClipboardX, Trash2, FolderPlus, RefreshCw, Edit2, GitMerge, Check, X, ArchiveX, ArrowUpDown, ArrowUp, ArrowDown, ListFilter, ArrowDownToLine, ArrowUpToLine } from 'lucide-react';
 
 export default function SessionManagerPanel({

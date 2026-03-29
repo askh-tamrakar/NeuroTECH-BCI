@@ -2,10 +2,10 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Activity, Music, Wind, Eye, Grid } from 'lucide-react';
 import '../../styles/views/EEGDashboard.css';
 
-import SSVEPView from './SSVEPView';
-import MusicView from './MusicView';
-import MeditationView from './MeditationView';
-import BubbleGameView from './BubbleGameView';
+import SSVEPView from '../eeg/SSVEPView';
+import MusicView from '../eeg/MusicView';
+import MeditationView from '../eeg/MeditationView';
+import BubbleGameView from '../eeg/BubbleGameView';
 
 const OVERVIEW_APPS = [
   { id: 'music', title: 'Music Control', icon: Music, desc: 'Control playback using frontal lobe focus states.' },

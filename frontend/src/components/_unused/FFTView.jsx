@@ -6,7 +6,7 @@ import FFTWorker from '../../workers/fft.worker.js?worker';
 const FFTView = ({ wsUrl }) => {
     const [spectra, setSpectra] = useState({});
     const [selectedChannel, setSelectedChannel] = useState('ch1');
-
+    
     // Connect to WebSockets to ensure data flows even if LiveView is unmounted
     useEffect(() => {
         if (!wsUrl) return;
@@ -18,10 +18,10 @@ const FFTView = ({ wsUrl }) => {
             dataWorker.terminate();
         };
     }, [wsUrl]);
-
+    
     useEffect(() => {
         const worker = new FFTWorker();
-
+        
         worker.onmessage = (e) => {
             if (e.data.type === 'FFT_RESULT') {
                 setSpectra(e.data.payload);
@@ -40,7 +40,7 @@ const FFTView = ({ wsUrl }) => {
 
     const chartData = useMemo(() => {
         if (!spectra[selectedChannel]) return [];
-
+        
         // Filter out extreme frequencies (keep 1Hz to 50Hz for normal EEG/SSVEP analysis)
         return spectra[selectedChannel].filter(d => d.freq >= 1 && d.freq <= 50);
     }, [spectra, selectedChannel]);
@@ -84,34 +84,34 @@ const FFTView = ({ wsUrl }) => {
                     <ResponsiveContainer width="100%" height="100%">
                         <LineChart data={chartData} margin={{ top: 10, right: 10, left: 10, bottom: 20 }}>
                             <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
-                            <XAxis
-                                dataKey="freq"
-                                stroke="#9ca3af"
+                            <XAxis 
+                                dataKey="freq" 
+                                stroke="#9ca3af" 
                                 tick={{ fill: '#9ca3af', fontSize: 12 }}
                                 tickCount={25}
                                 type="number"
                                 domain={[1, 50]}
                                 label={{ value: 'Frequency (Hz)', position: 'insideBottom', offset: -10, fill: '#9ca3af' }}
                             />
-                            <YAxis
-                                stroke="#9ca3af"
-                                tick={{ fill: '#9ca3af', fontSize: 12 }}
+                            <YAxis 
+                                stroke="#9ca3af" 
+                                tick={{ fill: '#9ca3af', fontSize: 12 }} 
                                 tickFormatter={(val) => val.toExponential(1)}
                                 label={{ value: 'Power', angle: -90, position: 'insideLeft', fill: '#9ca3af' }}
                             />
-                            <Tooltip
+                            <Tooltip 
                                 contentStyle={{ backgroundColor: 'rgba(0,0,0,0.8)', border: '1px solid #a855f7', borderRadius: '8px' }}
                                 itemStyle={{ color: '#a855f7', fontWeight: 'bold' }}
                                 labelStyle={{ color: '#fff' }}
                                 formatter={(value) => [value.toExponential(2), 'Power']}
                                 labelFormatter={(label) => `${label} Hz`}
                             />
-                            <Line
-                                type="monotone"
-                                dataKey="power"
-                                stroke="#a855f7"
-                                strokeWidth={2}
-                                dot={false}
+                            <Line 
+                                type="monotone" 
+                                dataKey="power" 
+                                stroke="#a855f7" 
+                                strokeWidth={2} 
+                                dot={false} 
                                 activeDot={{ r: 6, fill: '#d946ef', stroke: '#fff', strokeWidth: 2 }}
                                 isAnimationActive={false}
                             />
@@ -123,7 +123,7 @@ const FFTView = ({ wsUrl }) => {
                         <p style={{ marginTop: '15px', color: '#9ca3af' }}>Waiting for EEG stream from worker...</p>
                     </div>
                 )}
-
+                
                 {chartData.length > 0 && (
                     <div style={{ position: 'absolute', top: '20px', right: '30px', background: 'rgba(0,0,0,0.6)', padding: '5px 10px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)' }}>
                         <span style={{ fontSize: '0.8rem', color: '#9ca3af' }}>Live Render: </span>

@@ -1,6 +1,6 @@
 import React from 'react';
 import { ArrowDownToLine, ArrowUpToLine } from 'lucide-react';
-import CustomNumberInput from './CustomNumberInput';
+import CustomNumberInput from '../inputs/CustomNumberInput';
 
 export default function FromToRangeInput({
     fromValue,
