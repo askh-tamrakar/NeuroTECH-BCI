@@ -1,0 +1,15 @@
+node_modules/
+dist/
+build/
+.env
+.env.*
+*.log
+build_log.txt
+patch_hotkeys.py
+setup-components.cjs
+check_lucide.cjs
+oldpackage.json
+.DS_Store
+.vscode/
+.idea/
+public/data/

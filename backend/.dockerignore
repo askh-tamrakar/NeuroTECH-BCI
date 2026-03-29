@@ -1,0 +1,41 @@
+# Python artifacts
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+*.egg
+.eggs/
+
+# Virtual environments / Conda
+.venv/
+env/
+venv/
+conda-env/
+
+# Testing / formatting
+.tox/
+.pytest_cache/
+htmlcov/
+coverage/
+.mypy_cache/
+.ruff_cache/
+
+# Logs & local data
+logs/
+bci_data/
+*.log
+
+# IDE
+.vscode/
+.idea/
+
+# Build artifacts
+build/
+dist/
+
+# Misc
+.DS_Store
+*.bak
+*.sqlite3
+build_log.txt
