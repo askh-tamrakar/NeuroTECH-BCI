@@ -166,8 +166,12 @@ def broadcast_events(socketio):
             # Explicitly yield thread control
             socketio.sleep(0.01)
 
+        except (ConnectionResetError, BrokenPipeError):
+             # These are expected when a client disconnects; be silent.
+             socketio.sleep(0.1)
         except Exception as e:
-             if "timeout" not in str(e).lower():
+             err_str = str(e).lower()
+             if "timeout" not in err_str and "10054" not in err_str:
                  print(f"⚠️  Event Loop Error: {e}", flush=True)
                  state.event_inlet = None
              socketio.sleep(0.01)
@@ -270,7 +274,11 @@ def broadcast_data(socketio):
             # and prevents CPU pegging, while pull_chunk handles the buffering.
             socketio.sleep(0.01)
 
+        except (ConnectionResetError, BrokenPipeError):
+            # Silent on disconnect
+            socketio.sleep(0.1)
         except Exception as e:
-            if "timeout" not in str(e).lower():
+            err_str = str(e).lower()
+            if "timeout" not in err_str and "10054" not in err_str:
                 print(f"⚠️  Error broadcasting: {e}", flush=True)
             socketio.sleep(0.01)

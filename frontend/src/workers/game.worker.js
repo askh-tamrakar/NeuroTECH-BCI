@@ -224,7 +224,13 @@ function initVisuals() {
 
 // --- Logic ---
 
+let lastGameOverTime = 0;
+
 function resetGame() {
+    // Prevent accidental restart if collision just happened (within 500ms)
+    // to avoid jump-start loops from buffered inputs.
+    if (Date.now() - lastGameOverTime < 500) return;
+
     gameState = 'playing';
     score = 0;
     lastSentScore = 0;
@@ -238,6 +244,7 @@ function resetGame() {
     queuedJumpExpiry = 0;
     self.postMessage({ type: 'STATE_UPDATE', payload: 'playing' });
     self.postMessage({ type: 'SCORE_UPDATE', score: 0 });
+    self.postMessage({ type: 'OBSTACLE_CLEARED', obstaclesPassed: 0 });
 }
 
 function canJumpNow() {
@@ -413,6 +420,7 @@ function updatePhysics(deltaTime) {
 
             if (dinoRight > obsLeft && dinoLeft < obsRight && dinoBottom > obsTop && dinoTop < obsBottom) {
                 gameState = 'gameOver';
+                lastGameOverTime = Date.now(); // Record the time of game over
                 if (score > highScore) {
                     highScore = score;
                     self.postMessage({ type: 'HIGHSCORE_UPDATE', highScore });

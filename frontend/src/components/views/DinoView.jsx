@@ -149,9 +149,20 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
     const pendingActionFeedbackRef = useRef(null)
 
     const settingsRef = useRef(settings)
+    const highScoreRef = useRef(highScore)
+    const bestCactusJumpRef = useRef(bestCactusJump)
+
     useEffect(() => {
         settingsRef.current = settings
     }, [settings])
+
+    useEffect(() => {
+        highScoreRef.current = highScore
+    }, [highScore])
+
+    useEffect(() => {
+        bestCactusJumpRef.current = bestCactusJump
+    }, [bestCactusJump])
 
     // Visuals Refs
     const gameTimeRef = useRef(0) // 0 to 1 (0=dawn, 0.25=noon, 0.5=dusk, 0.75=midnight)
@@ -557,9 +568,9 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
                     soundHandler.playDinoDead();
                     setIsNewScoreRecord(false);
                     setIsNewJumpRecord(false);
-                    setCactusJump(0)
                     if (score !== undefined) {
                         scoreRef.current = score
+                        setScore(score) // Explicitly set score state to show final result
                         logEvent(`Game Over! Score: ${Math.floor(score / 10)}`, 'gameover')
                     }
                 } else if (type === 'HIGHSCORE_UPDATE') {
@@ -568,25 +579,28 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
                     logEvent(`New Highscore: ${Math.floor(newHigh / 10)}!`, 'highscore')
                 } else if (type === 'SCORE_UPDATE') {
                     setScore(score)
-                    if (score > highScore) {
+                    // Use ref to avoid stale closure comparison
+                    if (score > highScoreRef.current) {
                         setHighScore(score)
                     }
-                    setIsNewScoreRecord(score > 0 && score > highScore)
+                    setIsNewScoreRecord(score > 0 && score > highScoreRef.current)
                 } else if (type === 'OBSTACLE_CLEARED') {
-                    // Increment jump counter and check for new best
+                    const obstaclesPassedVal = e.data.obstaclesPassed;
+                    // Reset or increment based on worker message
                     setCactusJump(prev => {
-                        const next = prev + 1
-                        setBestCactusJump(best => {
-                            if (next > best) {
-                                localStorage.setItem('dino_best_cactus', next.toString())
-                                setIsNewJumpRecord(true)
-                                return next
-                            }
-                            return best
-                        })
+                        const next = (obstaclesPassedVal !== undefined && obstaclesPassedVal === 0) ? 0 : prev + 1;
+                        
+                        // Only update best if we are actually progressing
+                        if (next > 0 && next > bestCactusJumpRef.current) {
+                            localStorage.setItem('dino_best_cactus', next.toString())
+                            setIsNewJumpRecord(true)
+                            setBestCactusJump(next)
+                        }
                         return next
                     })
-                    logEvent('Obstacle cleared! +1', 'jump')
+                    if (obstaclesPassedVal !== 0) {
+                        logEvent('Obstacle cleared! +1', 'jump')
+                    }
                     const pending = pendingActionFeedbackRef.current
                     if (pending?.trigger === 'jump' && Date.now() - pending.timestamp <= 3000 && pending.features) {
                         setFeedbackPrompt({
@@ -757,8 +771,6 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
             workerRef.current.postMessage({ type: 'INPUT', payload: { action: 'reset' } });
         }
         setGameState('ready');
-        setScore(0);
-        setCactusJump(0);
         setIsNewScoreRecord(false);
         setIsNewJumpRecord(false);
         setFeedbackPrompt(null);

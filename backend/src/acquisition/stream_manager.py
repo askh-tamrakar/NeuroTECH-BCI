@@ -340,6 +340,9 @@ class StreamManagerApp:
                         self.log(f"Parse error: {e}")
                         buffer = buffer[1:] # Skip 1 byte and retry
                         
+        except (ConnectionResetError, BrokenPipeError):
+            # Silent on disconnect
+            pass
         except Exception as e:
             self.log(f"Client connection error ({addr}): {e}")
         finally:
@@ -381,6 +384,9 @@ class StreamManagerApp:
                 if self.lsl_processed:
                     self.lsl_processed.push_sample(samples)
                     
+        except (ConnectionResetError, BrokenPipeError):
+            # Silent on disconnect
+            pass
         except Exception as e:
             self.log(f"Processed Handler Error: {e}")
         finally:
@@ -419,6 +425,9 @@ class StreamManagerApp:
                     
                     buffer = buffer[line_end+1:]
 
+        except (ConnectionResetError, BrokenPipeError):
+            # Silent on disconnect
+            pass
         except Exception as e:
             self.log(f"Relay Handler Error: {e}")
         finally:
