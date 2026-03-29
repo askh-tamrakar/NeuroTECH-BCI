@@ -115,7 +115,7 @@ export default defineConfig({
         ]
       },
       devOptions: {
-        enabled: false // Only active in production build
+        enabled: true
       }
     })
   ],
@@ -140,6 +140,6 @@ export default defineConfig({
     allowedHosts: ["squelchingly-thriftier-cecile.ngrok-free.dev"]
   },
   build: {
-    chunkSizeWarningLimit: 1500, // Supress >500kb size warnings for large interactive web apps
+    chunkSizeWarningLimit: 2500, // Supress >500kb size warnings for large interactive web apps
   }
 })
