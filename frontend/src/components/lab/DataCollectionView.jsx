@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import WorkerTimeSeriesChart from '../charts/WorkerTimeSeriesChart';
 import WorkerFFTChart from '../charts/WorkerFFTChart';
-import WindowListPanel from '../calibration/WindowListPanel';
-import EEGDataCollectionPanel from '../calibration/EEGDataCollectionPanel';
-import ConfigPanel from '../calibration/ConfigPanel';
-import SessionManagerPanel from '../calibration/SessionManagerPanel';
+import WindowListPanel from '../data_collection/WindowListPanel';
+import EEGDataCollectionPanel from '../data_collection/EEGDataCollectionPanel';
+import ConfigPanel from '../data_collection/ConfigPanel';
+import SessionManagerPanel from '../data_collection/SessionManagerPanel';
 import CustomSwitchPill from '../ui/inputs/CustomSwitchPill';
 import InlineModeToggle from '../ui/inputs/InlineModeToggle';
 import { CalibrationApi } from '../../services/calibrationApi';
@@ -53,7 +53,7 @@ function downsampleSamples(samples, maxPoints = WINDOW_PREVIEW_POINTS) {
     });
 }
 
-import AutoCalibrationWizard from '../calibration/AutoCalibrationWizard';
+import AutoCalibrationWizard from '../data_collection/AutoCalibrationWizard';
 
 /**
  * DataCollectionView

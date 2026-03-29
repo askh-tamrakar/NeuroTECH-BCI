@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Settings, Play, Square, Activity, MousePointer2, Keyboard, Sun, Monitor, Power, Zap, Trash2, History, Target, Menu, ChevronLeft, ChevronUp, ChevronDown, Brain, Eye, Radio, Wind, ChevronRight } from 'lucide-react';
 import { motion } from 'framer-motion';
-import SSVEPStimulus from '../ssvep/SSVEPStimulus';
+import SSVEPStimulus from './SSVEPStimulus';
 import { soundHandler } from '../../handlers/SoundHandler';
 import CustomNumberInput from '../ui/inputs/CustomNumberInput';
 import CustomSelect from '../ui/inputs/CustomSelect';

@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react'
-import Sidebar from '../ui/navigation/Sidebar'
+import Sidebar from '../live/Sidebar'
 import LiveView from '../live/LiveView'
 import Brain3D from '../ui/display/Brain3D'
-import FirmwareModal from '../modals/FirmwareModal'
+import FirmwareModal from '../ui/overlays/FirmwareModal'
 import { ConfigService } from '../../services/ConfigService'
 import { DataService } from '../../services/DataService'
 import '../../styles/live/LiveDashboard.css'
@@ -26,7 +26,7 @@ export default function LiveDashboard({ wsData, wsConfig, wsEvent, sendMessage, 
     const [isSaving, setIsSaving] = useState(false)
     const [isConfirmationPending, setIsConfirmationPending] = useState(false)
     const [isFirmwareModalOpen, setIsFirmwareModalOpen] = useState(false)
-    
+
     // Use Ref for Performance
     const recordedDataRef = useRef([])
 
@@ -208,7 +208,7 @@ export default function LiveDashboard({ wsData, wsConfig, wsEvent, sendMessage, 
                 setMobileMainView={setMobileMainView}
                 recordState={recordState}
                 recordHandlers={recordHandlers}
-                connectionProps={{status, latency, connect, disconnect}}
+                connectionProps={{ status, latency, connect, disconnect }}
                 className={`sidebar-fixed z-30 transition-all ${isMobileSettings ? 'absolute inset-0 w-full' : ''}`}
             />
 
@@ -233,9 +233,9 @@ export default function LiveDashboard({ wsData, wsConfig, wsEvent, sendMessage, 
             </main>
 
             {/* Modals */}
-            <FirmwareModal 
-                isOpen={isFirmwareModalOpen} 
-                onClose={() => setIsFirmwareModalOpen(false)} 
+            <FirmwareModal
+                isOpen={isFirmwareModalOpen}
+                onClose={() => setIsFirmwareModalOpen(false)}
             />
         </div>
     )

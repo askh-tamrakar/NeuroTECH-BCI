@@ -5,12 +5,12 @@ import {
     Pause, ListOrdered, Timer, Activity, CheckCircle, Network,
     Radio, Square, Save, Trash2, Brain, Menu, X
 } from 'lucide-react';
-import ElectricBorder from '../overlays/ElectricBorder';
-import CustomSelect from '../inputs/CustomSelect';
-import CustomSlider from '../inputs/CustomSlider';
-import CustomNumberInput from '../inputs/CustomNumberInput';
-import RangeSlider from '../inputs/RangeSlider';
-import { soundHandler } from '../../../handlers/SoundHandler';
+import ElectricBorder from '../ui/overlays/ElectricBorder';
+import CustomSelect from '../ui/inputs/CustomSelect';
+import CustomSlider from '../ui/inputs/CustomSlider';
+import CustomNumberInput from '../ui/inputs/CustomNumberInput';
+import RangeSlider from '../ui/inputs/RangeSlider';
+import { soundHandler } from '../../handlers/SoundHandler';
 
 export default function Sidebar({
     config,

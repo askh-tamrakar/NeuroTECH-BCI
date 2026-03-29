@@ -1,24 +1,23 @@
 import React, { useState, useEffect } from 'react'
-import { useAuth } from '../../contexts/AuthContext'
-import { useWebSocket } from '../../hooks/useWebSocket'
-import { useTheme } from '../../contexts/ThemeContext'
-import { useSettings } from '../../contexts/SettingsContext'
-import { Github, UserPlus } from 'lucide-react'
-import LiveDashboard from '../views/LiveDashboard'
-import DinoView from '../views/DinoView'
-import EEGDashboard from '../views/EEGDashboard'
-import RPSGame from '../views/RPSGame'
-import LabView from '../views/LabView'
-import SettingsView from '../views/SettingsView'
-import ServoClawView from '../views/ServoClawView'
+import { useAuth } from '../contexts/AuthContext'
+import { useWebSocket } from '../hooks/useWebSocket'
+import { useTheme } from '../contexts/ThemeContext'
+import { useSettings } from '../contexts/SettingsContext'
+import LiveDashboard from './views/LiveDashboard'
+import DinoView from './views/DinoView'
+import EEGDashboard from './views/EEGDashboard'
+import RPSGame from './views/RPSGame'
+import LabView from './views/LabView'
+import SettingsView from './views/SettingsView'
+import ServoClawView from './views/ServoClawView'
 
-import '../../styles/App.css';
-import ScrollStack, { ScrollStackItem } from '../ui/navigation/ScrollStack';
-import PillNav from '../ui/navigation/PillNav';
-import Pill from '../ui/navigation/Pill';
-import { ConnectionButton } from '../ui/display/ConnectionButton';
-import Brain3D from '../ui/display/Brain3D';
-import MobileNav from '../ui/navigation/MobileNav';
+import '../styles/App.css';
+import ScrollStack, { ScrollStackItem } from './ui/navigation/ScrollStack';
+import PillNav from './ui/navigation/PillNav';
+import Pill from './ui/navigation/Pill';
+import { ConnectionButton } from './ui/display/ConnectionButton';
+import Brain3D from './ui/display/Brain3D';
+import MobileNav from './ui/navigation/MobileNav';
 
 export default function Dashboard() {
   const { user, logout } = useAuth()

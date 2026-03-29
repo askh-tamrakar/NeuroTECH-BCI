@@ -4,31 +4,31 @@ import { X, Copy, Download, Check, Cpu, Calendar, Info, Code, Zap, Loader2 } fro
 
 const SyntaxHighlighted = ({ content }) => {
   const lines = content.split('\n');
-  
+
   return (
     <pre className="font-mono text-lg leading-relaxed p-6 inline-block min-w-full">
-        {lines.map((line, i) => {
-          if (line.trim().startsWith('//') || line.trim().startsWith('/*') || line.trim().startsWith('*')) {
-            return <div key={i} className="text-muted/30 italic">{line}</div>;
-          }
-          if (line.trim().startsWith('#')) {
-            return <div key={i} className="text-secondary font-bold">{line}</div>;
-          }
-          if (line.includes('(') && line.includes(')')) {
-            const parts = line.split(/(\(|\))/);
-            return (
-              <div key={i} className="whitespace-pre">
-                <span className="text-primary/90 font-bold">{parts[0]}</span>
-                <span className="text-text/20">(</span>
-                <span className="text-accent italic">{parts[2]}</span>
-                <span className="text-text/20">)</span>
-                <span className="text-text/60">{parts.slice(4).join('')}</span>
-              </div>
-            );
-          }
-          return <div key={i} className="text-text/80 whitespace-pre">{line}</div>;
-        })}
-      </pre>
+      {lines.map((line, i) => {
+        if (line.trim().startsWith('//') || line.trim().startsWith('/*') || line.trim().startsWith('*')) {
+          return <div key={i} className="text-muted/30 italic">{line}</div>;
+        }
+        if (line.trim().startsWith('#')) {
+          return <div key={i} className="text-secondary font-bold">{line}</div>;
+        }
+        if (line.includes('(') && line.includes(')')) {
+          const parts = line.split(/(\(|\))/);
+          return (
+            <div key={i} className="whitespace-pre">
+              <span className="text-primary/90 font-bold">{parts[0]}</span>
+              <span className="text-text/20">(</span>
+              <span className="text-accent italic">{parts[2]}</span>
+              <span className="text-text/20">)</span>
+              <span className="text-text/60">{parts.slice(4).join('')}</span>
+            </div>
+          );
+        }
+        return <div key={i} className="text-text/80 whitespace-pre">{line}</div>;
+      })}
+    </pre>
   );
 };
 
@@ -145,7 +145,7 @@ export default function FirmwareModal({ isOpen, onClose }) {
             onClick={onClose}
             className="absolute inset-0 bg-black/80 backdrop-blur-xl"
           />
-          
+
           <motion.div
             initial={{ scale: 0.95, opacity: 0, y: 30 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
@@ -156,13 +156,13 @@ export default function FirmwareModal({ isOpen, onClose }) {
             }}
           >
             {/* Theme Vibrant Gradient Layer */}
-            <div className="absolute inset-0 opacity-[0.05] pointer-events-none" 
-              style={{ background: 'linear-gradient(45deg, var(--primary) 0%, var(--accent) 50%, var(--secondary) 100%)' }} 
+            <div className="absolute inset-0 opacity-[0.05] pointer-events-none"
+              style={{ background: 'linear-gradient(45deg, var(--primary) 0%, var(--accent) 50%, var(--secondary) 100%)' }}
             />
-            
+
             {/* Vibrant Texture Overlay */}
             <div className="absolute inset-0 pointer-events-none opacity-[0.02] mix-blend-overlay" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=\'0 0 200 200\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'noiseFilter\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.65\' numOctaves=\'3\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23noiseFilter)\'/%3E%3C/svg%3E")' }} />
-            
+
             <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-primary/40 to-transparent opacity-30" />
 
             {/* Header */}
@@ -179,7 +179,7 @@ export default function FirmwareModal({ isOpen, onClose }) {
                   </div>
                 </div>
               </div>
-              <button 
+              <button
                 onClick={onClose}
                 className="p-2 hover:bg-white/5 rounded-xl transition-all hover:rotate-90 text-muted/20 hover:text-text"
               >
@@ -204,34 +204,33 @@ export default function FirmwareModal({ isOpen, onClose }) {
                       <button
                         key={fw.id}
                         onClick={() => setSelectedFw(fw)}
-                        className={`w-full text-left p-3.5 rounded-xl transition-all border group relative overflow-hidden ${
-                          selectedFw?.id === fw.id 
-                            ? 'bg-primary/10 border-primary/40 text-text shadow-[0_0_20px_rgba(0,0,0,0.3)]' 
+                        className={`w-full text-left p-3.5 rounded-xl transition-all border group relative overflow-hidden ${selectedFw?.id === fw.id
+                            ? 'bg-primary/10 border-primary/40 text-text shadow-[0_0_20px_rgba(0,0,0,0.3)]'
                             : 'border-border/10 text-muted/60 hover:bg-white/5 hover:text-text/80'
-                        }`}
+                          }`}
                       >
                         {selectedFw?.id === fw.id && (
                           <motion.div layoutId="active-nav-btn" className="absolute inset-0 bg-gradient-to-r from-primary/10 to-transparent -z-10" />
                         )}
                         <div className="text-sm font-bold tracking-tight">{fw.name}</div>
                         <div className="text-[9px] font-bold opacity-30 mt-0.5 flex items-center gap-2">
-                           {fw.board}
+                          {fw.board}
                         </div>
                       </button>
                     ))
                   )}
                 </div>
-                
+
                 {/* Meta Info in Sidebar */}
                 {selectedFw && !manifestLoading && (
                   <div className="pt-4 border-t border-border/10 space-y-3">
                     <div className="flex items-center justify-between">
-                       <span className="text-[8px] font-bold text-muted/20 uppercase tracking-widest">Compiled</span>
-                       <span className="text-[10px] font-bold text-muted/60">{selectedFw.date}</span>
+                      <span className="text-[8px] font-bold text-muted/20 uppercase tracking-widest">Compiled</span>
+                      <span className="text-[10px] font-bold text-muted/60">{selectedFw.date}</span>
                     </div>
                     <div className="flex items-center justify-between font-bold">
-                       <span className="text-[8px] text-muted/20 uppercase tracking-widest">Version</span>
-                       <span className="text-[10px] text-primary/70">v{selectedFw.version}</span>
+                      <span className="text-[8px] text-muted/20 uppercase tracking-widest">Version</span>
+                      <span className="text-[10px] text-primary/70">v{selectedFw.version}</span>
                     </div>
                   </div>
                 )}
@@ -240,26 +239,26 @@ export default function FirmwareModal({ isOpen, onClose }) {
               {/* Content area */}
               <div className="flex-1 p-6 flex flex-col bg-black/10 relative overflow-hidden">
                 {selectedFw ? (
-                  <motion.div 
+                  <motion.div
                     initial={{ opacity: 0, scale: 0.98 }}
                     animate={{ opacity: 1, scale: 1 }}
                     className="flex-1 flex flex-col min-h-0"
                   >
                     <div className="flex items-center justify-between mb-5">
-                       <h3 className="text-3xl font-bold font-['Outfit'] text-text tracking-widest flex items-center gap-4">
-                         {selectedFw.name.toUpperCase()}
-                         <div className="h-px flex-1 w-20 bg-gradient-to-r from-border/20 to-transparent" />
-                       </h3>
-                       <div className="flex items-center gap-2 opacity-20">
-                         <Code size={14} className="text-muted" />
-                         <span className="text-[9px] font-bold uppercase tracking-[0.4em] text-muted">Source Matrix</span>
-                       </div>
+                      <h3 className="text-3xl font-bold font-['Outfit'] text-text tracking-widest flex items-center gap-4">
+                        {selectedFw.name.toUpperCase()}
+                        <div className="h-px flex-1 w-20 bg-gradient-to-r from-border/20 to-transparent" />
+                      </h3>
+                      <div className="flex items-center gap-2 opacity-20">
+                        <Code size={14} className="text-muted" />
+                        <span className="text-[9px] font-bold uppercase tracking-[0.4em] text-muted">Source Matrix</span>
+                      </div>
                     </div>
 
                     <div className="flex-1 overflow-hidden rounded-2xl border border-border/10 shadow-[inset_0_0_40px_rgba(0,0,0,0.8)] bg-black/60 group relative flex flex-col">
                       {loading ? (
                         <div className="absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm z-10 rounded-2xl">
-                           <Loader2 className="animate-spin text-primary" size={32} />
+                          <Loader2 className="animate-spin text-primary" size={32} />
                         </div>
                       ) : null}
                       <div className="fw-scroll flex-1 overflow-auto">
@@ -268,7 +267,7 @@ export default function FirmwareModal({ isOpen, onClose }) {
                     </div>
                   </motion.div>
                 ) : (
-                   <div className="flex-1 flex items-center justify-center opacity-10">
+                  <div className="flex-1 flex items-center justify-center opacity-10">
                     <div className="text-center space-y-4">
                       <Cpu size={60} className="mx-auto" />
                       <div className="text-[10px] font-bold uppercase tracking-[0.5em] text-muted">Awaiting Uplink</div>
@@ -280,26 +279,26 @@ export default function FirmwareModal({ isOpen, onClose }) {
 
             {/* Footer */}
             <div className="px-8 py-5 bg-black/20 border-t border-border/10 flex items-center justify-between gap-6 backdrop-blur-md">
-               {/* Briefing Box */}
-               {selectedFw ? (
-                 <motion.div 
-                   initial={{ opacity: 0, y: 10 }}
-                   animate={{ opacity: 1, y: 0 }}
-                   className="flex-1 max-w-[450px] flex items-center gap-4 p-3 bg-bg/10 rounded-xl border border-border/10 overflow-hidden"
-                 >
-                   <div className="p-2 bg-accent/20 rounded-lg shrink-0">
-                     <Zap size={16} className="text-accent" />
-                   </div>
-                   <div className="min-w-0">
-                     <p className="text-[11px] text-muted font-bold leading-relaxed line-clamp-2 uppercase tracking-tight">
-                       {selectedFw.description}
-                     </p>
-                   </div>
-                 </motion.div>
-               ) : <div className="flex-1" />}
+              {/* Briefing Box */}
+              {selectedFw ? (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="flex-1 max-w-[450px] flex items-center gap-4 p-3 bg-bg/10 rounded-xl border border-border/10 overflow-hidden"
+                >
+                  <div className="p-2 bg-accent/20 rounded-lg shrink-0">
+                    <Zap size={16} className="text-accent" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[11px] text-muted font-bold leading-relaxed line-clamp-2 uppercase tracking-tight">
+                      {selectedFw.description}
+                    </p>
+                  </div>
+                </motion.div>
+              ) : <div className="flex-1" />}
 
-               <div className="flex gap-3">
-                  <button 
+              <div className="flex gap-3">
+                <button
                   onClick={handleCopy}
                   disabled={!selectedFw || loading}
                   className="flex items-center gap-2 px-5 py-3 bg-bg/20 hover:bg-bg/40 text-text rounded-xl font-bold text-[10px] tracking-widest transition-all border border-border/10 active:scale-95 disabled:opacity-20"
@@ -307,8 +306,8 @@ export default function FirmwareModal({ isOpen, onClose }) {
                   {copied ? <Check size={16} className="text-primary" /> : <Copy size={16} className="text-muted" />}
                   {copied ? 'MATRIX CLONED' : 'COPY SOURCE'}
                 </button>
-                
-                <button 
+
+                <button
                   onClick={handleDownload}
                   disabled={!selectedFw || loading}
                   className="flex items-center gap-2 px-8 py-3 bg-primary text-primary-contrast rounded-xl font-bold text-[10px] tracking-[0.15em] transition-all shadow-[0_0_20px_rgba(var(--primary-rgb),0.2)] hover:shadow-[0_0_30px_rgba(var(--primary-rgb),0.4)] hover:scale-[1.02] active:scale-95 group relative overflow-hidden disabled:opacity-20"
@@ -317,7 +316,7 @@ export default function FirmwareModal({ isOpen, onClose }) {
                   <Download size={16} />
                   DOWNLOAD BINARY
                 </button>
-               </div>
+              </div>
             </div>
           </motion.div>
         </div>

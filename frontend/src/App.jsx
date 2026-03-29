@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { AuthProvider } from './contexts/AuthContext'
 import { useAuth } from './contexts/AuthContext'
 import LoginPage from './components/auth/LoginPage'
-import Dashboard from './components/dashboard/Dashboard'
+import Dashboard from './components/Dashboard'
 import { soundHandler } from './handlers/SoundHandler';
 
 function AppContent() {
