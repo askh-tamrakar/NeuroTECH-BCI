@@ -7,25 +7,23 @@
   display: flex;
   flex-direction: column;
   gap: 0px;
-  height: 417px;
+  height: 100%;
 }
 
 .chart-header {
-  padding: 0px 10px 0px 10px;
-  margin-bottom: 0px;
-  border-bottom: 0px none transparent;
-  border-top: 0px solid var(--border);
-  border-top-left-radius: 0.75rem;
-  border-top-right-radius: 0.75rem;
-  border-bottom-left-radius: 0;
-  border-bottom-right-radius: 0;
-  border-bottom: 1px solid var(--border);
-  background-color: rgba(var(--bg-rgb), 0.5);
+  position: relative;
+  z-index: 10;
+  height: var(--chart-header-height, 48px);
+  padding: 0px 10px;
   background-color: color-mix(in srgb, var(--bg) 50%, transparent);
   backdrop-filter: blur(4px);
   display: flex;
   justify-content: space-between;
   align-items: center;
+  border-bottom: 1px solid var(--border);
+  border-top-left-radius: 0.75rem;
+  border-top-right-radius: 0.75rem;
+  flex: none;
 }
 
 .chart-title {

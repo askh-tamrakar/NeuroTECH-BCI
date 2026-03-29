@@ -8,7 +8,8 @@ const WorkerTimeSeriesChart = forwardRef(({
     displayMode = 'raw',
     activeChannelIndex,
     channelIndex,
-    onWindowSelect
+    onWindowSelect,
+    noBorder = false
 }, ref) => {
 
     const containerRef = useRef(null);
@@ -49,23 +50,6 @@ const WorkerTimeSeriesChart = forwardRef(({
                 const worker = new Worker(new URL('../../workers/chart.worker.js', import.meta.url), { type: 'module' });
                 workerRef.current = worker;
 
-                // Transfer Canvas
-                // We only transfer if we just created the worker (implying first mount or real remount)
-                // If workerRef was null, we assume we need to transfer.
-                // BUT wait, isTransferred ref logic from before was to prevent double transfer on SAME instance.
-                // Here, if we are in Strict Mode, the component is "remounted".
-                // workerRef is a Ref, so it persists?
-                // NO, if component is unmounted, Refs ARE discarded if the fiber is killed?
-                // React Strict Mode: "Effect cleanup runs, then Effect runs again."
-                // Refs ARE preserved during the immediate double-invoke?
-                // Actually, in Strict Mode dev, it's: Mount -> Unmount -> Mount.
-                // If Unmount happens, refs are usually lost if the component is destroyed.
-                // BUT React preserves state for the immediate remount?
-                // Let's assume standard behavior:
-                // If we don't terminate the worker in cleanup immediately, workerRef.current stays valid?
-                // NO, we need to store the worker in a module-level variable or something?
-                // No, DinoView uses `workerRef` which is a `useRef`.
-                // This implies React preserves the Ref object during the strict mode flicker.
 
                 if (!isTransferred.current) {
                     const offscreen = canvasRef.current.transferControlToOffscreen();
@@ -105,15 +89,6 @@ const WorkerTimeSeriesChart = forwardRef(({
                 console.error("Failed to transfer canvas or init worker:", err);
             }
         } else {
-            // Worker already exists (rescued from cleanup)
-            // Just update config/resize if needed?
-            // It should be running.
-            // We might need to re-attach event listeners if we detached them?
-            // The onmessage listener is attached to the worker instance.
-            // If we reused the worker instance, the old listener is still there?
-            // Or we should re-attach it to capture the new 'pendingRequests' closure?
-            // YES - we need to re-attach onmessage because 'pendingRequests' ref is stable,
-            // but 'onWindowSelect' prop might have changed!
             const worker = workerRef.current;
             worker.onmessage = (e) => {
                 const { type, idPromise, payload } = e.data;
@@ -245,6 +220,7 @@ const WorkerTimeSeriesChart = forwardRef(({
         <div
             ref={containerRef}
             className={`w-full h-full relative ${className}`}
+            style={noBorder ? { border: 'none', borderRadius: 0, boxShadow: 'none' } : {}}
             onMouseDown={handleMouseDown}
             onMouseUp={handleMouseUp}
             onMouseLeave={handleMouseLeave}

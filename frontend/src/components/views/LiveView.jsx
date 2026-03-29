@@ -4,9 +4,9 @@ import WorkerFFTChart from '../charts/WorkerFFTChart'
 import InlineModeToggle from '../ui/InlineModeToggle'
 import CustomNumberInput from '../ui/CustomNumberInput'
 import FromToRangeInput from '../ui/FromToRangeInput'
-import { Radio, Square, Play, Pause, Save, Trash2, Cpu, Settings2, Wifi, Power } from 'lucide-react'
+import { Radio, Square, Play, Pause, Save, Trash2, Cpu, Settings2, Wifi, Power, ChartSpline, ZoomIn, ArrowUpDown } from 'lucide-react'
 import { CalibrationApi } from '../../services/calibrationApi'
-import { formatPowerValue, getPowerScaleHint } from '../../utils/spectrumFormat'
+import { formatAmplitudeValue } from '../../utils/spectrumFormat'
 import '../../styles/live/LiveView.css'
 
 export default function LiveView({ wsData, wsEvent, config, isPaused, wsUrl, recordState, recordHandlers }) {
@@ -25,7 +25,6 @@ export default function LiveView({ wsData, wsEvent, config, isPaused, wsUrl, rec
   const chartRefs = useRef({});
 
   const [annotations, setAnnotations] = useState([])
-  const [allDetectionActive, setAllDetectionActive] = useState(false)
   const [fftStatsByChannel, setFftStatsByChannel] = useState({})
 
   // Channels are 0 and 1
@@ -97,7 +96,7 @@ export default function LiveView({ wsData, wsEvent, config, isPaused, wsUrl, rec
               recordState.recordedDataRef.current.push(recordPoint);
             }
           });
-          
+
           // Cap recording point memory to prevent extreme memory bloat (~20 mins at 1000Hz = 1.2M points)
           if (recordState.recordedDataRef.current.length > 1500000) {
             recordState.recordedDataRef.current = recordState.recordedDataRef.current.slice(-1500000);
@@ -120,6 +119,9 @@ export default function LiveView({ wsData, wsEvent, config, isPaused, wsUrl, rec
       activeChannels.forEach((chIdx, i) => {
         if (!next[chIdx]) {
           const defaultColor = ['#3b82f6', '#10b981', '#f59e0b', '#a855f7'][i % 4]
+          const sensorName = config?.channel_mapping?.[`ch${chIdx}`]?.sensor || 'EEG'
+          const sensorDefaults = { EMG: { min: 1, max: 300 }, EEG: { min: 1, max: 50 }, EOG: { min: 1, max: 20 } }
+          
           next[chIdx] = {
             zoom: 1,
             manualRange: "",
@@ -127,7 +129,8 @@ export default function LiveView({ wsData, wsEvent, config, isPaused, wsUrl, rec
             color: defaultColor,
             graphMode: 'time',
             emgDisplayMode: 'raw',
-            fftFreqRange: { min: 1, max: 50 }
+            unitMode: 'amplitude',
+            fftFreqRange: sensorDefaults[sensorName] || { min: 1, max: 50 }
           }
           changed = true
         }
@@ -275,26 +278,6 @@ export default function LiveView({ wsData, wsEvent, config, isPaused, wsUrl, rec
             FIRMWARE
           </button>
 
-          <button
-            onClick={async () => {
-              const nextState = !allDetectionActive
-              try {
-                await CalibrationApi.togglePrediction('ALL', nextState)
-                setAllDetectionActive(nextState)
-              } catch (error) {
-                console.error('Failed to toggle all detection:', error)
-              }
-            }}
-            className={`px-3 py-1.5 rounded-lg text-[14px] font-bold transition-all flex items-center gap-2 border ${allDetectionActive
-              ? 'bg-primary text-white border-primary shadow-sm'
-              : 'bg-bg/50 border-border text-muted hover:text-text hover:bg-surface/50'
-              }`}
-            title="Start or stop EMG, EOG, and EEG detection together"
-          >
-            <Power size={18} />
-            {allDetectionActive ? 'STOP ALL DETECTION' : 'START ALL DETECTION'}
-          </button>
-
           <div>
             {recordState?.isRecording && <div className="recording-status font-bold text-red-500 animate-pulse"> ● RECORDING </div>}
           </div>
@@ -323,7 +306,8 @@ export default function LiveView({ wsData, wsEvent, config, isPaused, wsUrl, rec
           const currentSmoothing = channelConfig[chIdx]?.smoothing ?? true
           const graphMode = channelConfig[chIdx]?.graphMode || 'time'
           const emgDisplayMode = channelConfig[chIdx]?.emgDisplayMode || 'raw'
-          const fftFreqRange = channelConfig[chIdx]?.fftFreqRange || { min: 1, max: 50 }
+          const sensorDefaults = { EMG: { min: 1, max: 300 }, EEG: { min: 1, max: 50 }, EOG: { min: 1, max: 20 } };
+          const fftFreqRange = channelConfig[chIdx]?.fftFreqRange || sensorDefaults[sensorName] || { min: 1, max: 50 }
           const isFftMode = sensorName === 'EEG' && graphMode === 'fft'
           const fftStats = fftStatsByChannel[chIdx] || { min: 0, max: 0, mean: 0 }
           const fftRangeValue = Number(currentManual) || Math.max(1, Math.ceil((fftStats.max || 1) * 1.15))
@@ -334,7 +318,7 @@ export default function LiveView({ wsData, wsEvent, config, isPaused, wsUrl, rec
                 value={graphMode}
                 onChange={(value) => updateChannelConfig(chIdx, 'graphMode', value)}
                 options={[
-                  { id: 'time', label: 'NORMAL' },
+                  { id: 'time', label: '' },
                   { id: 'fft', label: 'FFT' }
                 ]}
               />
@@ -345,7 +329,7 @@ export default function LiveView({ wsData, wsEvent, config, isPaused, wsUrl, rec
                   value={emgDisplayMode}
                   onChange={(value) => updateChannelConfig(chIdx, 'emgDisplayMode', value)}
                   options={[
-                    { id: 'raw', label: 'RAW' },
+                    { id: 'raw', label: '' },
                     { id: 'envelope', label: 'ENVELOPE' }
                   ]}
                 />
@@ -353,104 +337,38 @@ export default function LiveView({ wsData, wsEvent, config, isPaused, wsUrl, rec
               : null
 
           return (
-            <div key={chIdx} className="channel-wrapper h-full min-h-[300px] flex flex-col">
+            <div key={chIdx} className="channel-wrapper flex-grow flex-1 min-h-[200px] flex flex-col">
               {isFftMode ? (
-                <div className="signal-chart-container">
-                  <div className="chart-header">
-                    <div className="flex items-center gap-4 min-w-0">
-                      <h3 className="chart-title">
-                        Graph {chIdx + 1}
-                        <span className="channel-color-dot" style={{ backgroundColor: currentChColor }}></span>
-                        {sensorName}
-                      </h3>
-                      {titleAddon && <div className="shrink-0">{titleAddon}</div>}
-                    </div>
-
-                    <div className="flex items-center gap-6">
-                      <FromToRangeInput
-                        fromValue={fftFreqRange.min}
-                        toValue={fftFreqRange.max}
-                        onFromChange={(value) => updateChannelConfig(chIdx, 'fftFreqRange', { ...fftFreqRange, min: Math.min(value, fftFreqRange.max - 1) })}
-                        onToChange={(value) => updateChannelConfig(chIdx, 'fftFreqRange', { ...fftFreqRange, max: Math.max(value, fftFreqRange.min + 1) })}
-                        fromMin={0}
-                        fromMax={Math.max(0, fftFreqRange.max - 1)}
-                        toMin={Math.max(1, fftFreqRange.min + 1)}
-                        toMax={500}
-                        unit="Hz"
-                        className="!border-border !bg-bg/80"
-                      />
-                      <div className="flex items-center gap-2">
-                        <div className="flex items-center gap-1.5 text-muted">
-                          <Cpu size={18} />
-                          <span className="text-xs font-bold uppercase tracking-wider">Zoom</span>
-                        </div>
-                        <div className="flex gap-1.5 bg-bg/50 p-1.5 rounded-lg">
-                          {[1, 2, 5, 10, 20, 50].map((z) => (
-                            <button
-                              key={z}
-                              onClick={() => { updateChannelConfig(chIdx, 'zoom', z); updateChannelConfig(chIdx, 'manualRange', "") }}
-                              className={`px-2.5 py-1 rounded text-xs font-bold transition-all border ${currentZoom === z && !currentManual
-                                ? 'bg-primary text-white border-primary shadow-sm'
-                                : 'bg-bg text-muted border-border hover:text-text hover:border-muted/50'
-                                }`}
-                            >
-                              {z}x
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                      <CustomNumberInput
-                        value={fftRangeValue}
-                        onChange={(value) => updateChannelConfig(chIdx, 'manualRange', String(value))}
-                        min={0}
-                        step={0.1}
-                        accentColor="primary"
-                        className="w-[130px]"
-                        unit="uV^2"
-                      />
-                    </div>
-
-                    <div className="flex items-center gap-4 pl-4 border-l border-border">
-                      <div className="range-display text-[16px] font-bold text-muted tabular-nums">
-                        0-{formatPowerValue(fftRangeValue)}
-                      </div>
-                      <div className="flex flex-col gap-1">
-                        <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted">{getPowerScaleHint()}</div>
-                        <div className="chart-stats flex gap-5">
-                          <div className="stat-item">
-                            <span className="stat-label-chart">Min</span>
-                            <span className="stat-value">{formatPowerValue(fftStats.min)}</span>
-                          </div>
-                          <div className="stat-item">
-                            <span className="stat-label-chart">Max</span>
-                            <span className="stat-value">{formatPowerValue(fftStats.max)}</span>
-                          </div>
-                          <div className="stat-item">
-                            <span className="stat-label-chart">Mean</span>
-                            <span className="stat-value">{formatPowerValue(fftStats.mean)}</span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="chart-area" style={{ minHeight: 0, overflow: 'hidden', position: 'relative', margin: 0, padding: 0 }}>
-                    <WorkerFFTChart
-                      ref={el => chartRefs.current[chIdx] = el}
-                      channelIndex={chIdx}
-                      config={{
-                        channelIndex: chIdx,
-                        color: currentChColor,
-                        zoom: currentZoom,
-                        manualRange: currentManual,
-                        freqMin: fftFreqRange.min,
-                        freqMax: fftFreqRange.max,
-                        sampleRate: config?.sampling_rate || 1000,
-                        disabled: !isEnabled,
-                      }}
-                      onStatsChange={(stats) => setFftStatsByChannel(prev => ({ ...prev, [chIdx]: stats }))}
-                    />
-                  </div>
-                </div>
+                <WorkerFFTChart
+                  ref={el => chartRefs.current[chIdx] = el}
+                  channelIndex={chIdx}
+                  graphNo={`Graph ${chIdx + 1}`}
+                  title={`${sensorName}`}
+                  color={currentChColor}
+                  onColorChange={(newColor) => updateChannelConfig(chIdx, 'color', newColor)}
+                  titleAddon={titleAddon}
+                  currentZoom={currentZoom}
+                  onZoomChange={(z) => { updateChannelConfig(chIdx, 'zoom', z); updateChannelConfig(chIdx, 'manualRange', "") }}
+                  currentManual={currentManual}
+                  onRangeChange={(val) => updateChannelConfig(chIdx, 'manualRange', String(val))}
+                  frequencyFrom={fftFreqRange.min}
+                  frequencyTo={fftFreqRange.max}
+                  onApplyFilters={({ frequencyFrom, frequencyTo }) => {
+                    updateChannelConfig(chIdx, 'fftFreqRange', { min: Number(frequencyFrom), max: Number(frequencyTo) });
+                  }}
+                  config={{
+                    channelIndex: chIdx,
+                    color: currentChColor,
+                    zoom: currentZoom,
+                    manualRange: currentManual,
+                    freqMin: fftFreqRange.min,
+                    freqMax: fftFreqRange.max,
+                    unitMode: channelConfig[chIdx]?.unitMode || 'amplitude',
+                    sampleRate: config?.sampling_rate || 1000,
+                    disabled: !isEnabled,
+                  }}
+                  onStatsChange={(stats) => setFftStatsByChannel(prev => ({ ...prev, [chIdx]: stats }))}
+                />
               ) : (
                 <SignalChart
                   ref={el => chartRefs.current[chIdx] = el}

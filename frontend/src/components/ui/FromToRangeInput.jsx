@@ -29,6 +29,7 @@ export default function FromToRangeInput({
                     accentColor={accentColor}
                     className="w-[78px]"
                     unit={unit}
+                    borderless={true}
                 />
             </div>
             <span className="text-muted text-xs font-bold">to</span>
@@ -43,6 +44,7 @@ export default function FromToRangeInput({
                     accentColor={accentColor}
                     className="w-[78px]"
                     unit={unit}
+                    borderless={true}
                 />
             </div>
         </div>

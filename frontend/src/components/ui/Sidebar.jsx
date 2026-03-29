@@ -7,8 +7,9 @@ import {
 } from 'lucide-react';
 import ElectricBorder from './ElectricBorder';
 import CustomSelect from './CustomSelect';
-import CustomRangeSlider from './CustomRangeSlider';
+import CustomSlider from './CustomSlider';
 import CustomNumberInput from './CustomNumberInput';
+import RangeSlider from './RangeSlider';
 import { soundHandler } from '../../handlers/SoundHandler';
 
 export default function Sidebar({
@@ -525,7 +526,16 @@ function FilterSection({
                     <input
                         type="checkbox"
                         checked={filterConfig.notch_enabled || false}
-                        onChange={(e) => onFilterChange(sensorType, 'notch_enabled', e.target.checked)}
+                        onChange={(e) => {
+                            onFilterChange(sensorType, 'notch_enabled', e.target.checked);
+                            onSave?.({
+                                ...config,
+                                filters: {
+                                    ...config.filters,
+                                    [sensorType]: { ...config.filters?.[sensorType], notch_enabled: e.target.checked }
+                                }
+                            });
+                        }}
                         className="accent-primary hidden"
                     />
                     <Power size={14} className={filterConfig.notch_enabled ? `text-${accentColor}-500` : "text-red-500"} />
@@ -537,7 +547,16 @@ function FilterSection({
                         <CustomNumberInput
                             step={0.1}
                             value={filterConfig.notch_freq || 50}
-                            onChange={(val) => onFilterChange(sensorType, 'notch_freq', val)}
+                            onChange={(val) => {
+                                onFilterChange(sensorType, 'notch_freq', val);
+                                onSave?.({
+                                    ...config,
+                                    filters: {
+                                        ...config.filters,
+                                        [sensorType]: { ...config.filters?.[sensorType], notch_freq: val }
+                                    }
+                                });
+                            }}
                             accentColor={accentColor}
                             className="w-[100px] !h-[1.75rem]"
                             unit="Hz"
@@ -551,7 +570,16 @@ function FilterSection({
                     <input
                         type="checkbox"
                         checked={filterConfig.bandpass_enabled || false}
-                        onChange={(e) => onFilterChange(sensorType, 'bandpass_enabled', e.target.checked)}
+                        onChange={(e) => {
+                            onFilterChange(sensorType, 'bandpass_enabled', e.target.checked);
+                            onSave?.({
+                                ...config,
+                                filters: {
+                                    ...config.filters,
+                                    [sensorType]: { ...config.filters?.[sensorType], bandpass_enabled: e.target.checked }
+                                }
+                            });
+                        }}
                         className="accent-primary hidden"
                     />
                     <Power size={14} className={filterConfig.bandpass_enabled ? `text-${accentColor}-500` : "text-red-500"} />
@@ -559,23 +587,49 @@ function FilterSection({
                     Bandpass Filter
                 </label>
                 {filterConfig.bandpass_enabled && (
-                    <div className="flex gap-2 items-center pl-6">
-                        <CustomNumberInput
-                            step={0.1}
-                            value={filterConfig.bandpass_low || 1}
-                            onChange={(val) => onFilterChange(sensorType, 'bandpass_low', val)}
-                            accentColor={accentColor}
-                            className="w-[80px]"
-                        />
-                        <span className="text-xs text-muted font-bold">-</span>
-                        <CustomNumberInput
-                            step={0.1}
-                            value={filterConfig.bandpass_high || 100}
-                            onChange={(val) => onFilterChange(sensorType, 'bandpass_high', val)}
-                            accentColor={accentColor}
-                            className="w-[100px]"
-                            unit="Hz"
-                        />
+                    <div className="flex gap-2 items-center pl-6 pr-2 h-12">
+                        {(() => {
+                            const ranges = {
+                                EMG: { min: 1, max: 300, step: 2 },
+                                EEG: { min: 1, max: 50, step: 1 },
+                                EOG: { min: 0.1, max: 20, step: 0.1 }
+                            };
+                            const range = ranges[sensorType] || { min: 1, max: 300, step: 1 };
+
+                            return (
+                                <RangeSlider
+                                    min={range.min}
+                                    max={range.max}
+                                    step={range.step}
+                                    minValue={filterConfig.bandpass_low || range.min}
+                                    maxValue={filterConfig.bandpass_high || range.max}
+                                    color={
+                                        accentColor === 'primary' ? '#3b82f6' :
+                                            accentColor === 'emerald' ? '#10b981' :
+                                                accentColor === 'orange' ? '#f97316' : '#3b82f6'
+                                    }
+                                    labelSuffix="Hz"
+                                    onChange={({ min, max }) => {
+                                        handleSensorFilterChange(sensorType, 'bandpass_low', min);
+                                        handleSensorFilterChange(sensorType, 'bandpass_high', max);
+                                    }}
+                                    onFinalChange={({ min, max }) => {
+                                        const updatedConfig = {
+                                            ...config,
+                                            filters: {
+                                                ...config.filters,
+                                                [sensorType]: {
+                                                    ...config.filters?.[sensorType],
+                                                    bandpass_low: min,
+                                                    bandpass_high: max
+                                                }
+                                            }
+                                        };
+                                        if (onSave) onSave(updatedConfig);
+                                    }}
+                                />
+                            );
+                        })()}
                     </div>
                 )}
             </div>
@@ -588,12 +642,21 @@ function FilterSection({
                     </span>
                 </label>
                 <div className="px-1">
-                    <CustomRangeSlider
+                    <CustomSlider
                         min={0.1}
                         max={200}
                         step={0.1}
                         value={filterConfig.cutoff || 1}
                         onChange={(val) => onFilterChange(sensorType, 'cutoff', val)}
+                        onFinalChange={(val) => {
+                            onSave?.({
+                                ...config,
+                                filters: {
+                                    ...config.filters,
+                                    [sensorType]: { ...config.filters?.[sensorType], cutoff: val }
+                                }
+                            });
+                        }}
                         accentColor={accentColor}
                     />
                 </div>
@@ -612,12 +675,21 @@ function FilterSection({
                         </span>
                     </label>
                     <div className="px-1">
-                        <CustomRangeSlider
+                        <CustomSlider
                             min={1}
                             max={8}
                             step={1}
                             value={filterConfig.order || 4}
                             onChange={(val) => onFilterChange(sensorType, 'order', val)}
+                            onFinalChange={(val) => {
+                                onSave?.({
+                                    ...config,
+                                    filters: {
+                                        ...config.filters,
+                                        [sensorType]: { ...config.filters?.[sensorType], order: val }
+                                    }
+                                });
+                            }}
                             accentColor={accentColor}
                         />
                     </div>

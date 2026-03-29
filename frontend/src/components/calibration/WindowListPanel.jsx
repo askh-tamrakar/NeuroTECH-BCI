@@ -1,5 +1,7 @@
 import React from 'react';
 import { Trash2, Activity, Cpu, Zap, ListOrdered, ListX } from 'lucide-react';
+import CustomNumberInput from '../ui/CustomNumberInput'
+
 
 /**
  * WindowListPanel
@@ -11,6 +13,10 @@ export default function WindowListPanel({
     activeSensor,
     autoLimit = 30,
     onAutoLimitChange,
+    batchSize = 5,
+    onBatchSizeChange,
+    numBatches = 6,
+    onNumBatchesChange,
     autoCalibrate = false,
     onAutoCalibrateChange,
     onClearSaved,
@@ -49,7 +55,7 @@ export default function WindowListPanel({
 
     // Track progress of the CURRENT BATCH (Active/Collected) for Auto Mode
     const targetCount = autoLimit || 30;
-    const activeCount = recordingCount + processedCount; // Use the calculated counts
+    const activeCount = recordingCount + processedCount;
     const progress = Math.min(100, (processedCount / targetCount) * 100);
 
     const getWindowTone = (status) => {
@@ -97,16 +103,10 @@ export default function WindowListPanel({
 
                     {/* Auto-Calibration/Limit Toggle */}
                     <div className="flex items-center gap-2">
-                        <div className="flex items-center gap-1 bg-[var(--bg)] px-2 py-1 rounded border border-[var(--section-border)]">
+                        <div className="flex items-center gap-1.5 px-2 py-1 bg-[var(--bg)]">
                             <span className="text-[12px] font-bold text-[var(--text-secondary)] uppercase">Limit:</span>
-                            <input
-                                type="number"
-                                className="w-8 bg-transparent text-sm font-mono text-center outline-none text-[var(--text)] appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]"
-                                value={autoLimit}
-                                onChange={(e) => onAutoLimitChange?.(Number(e.target.value))}
-                            />
+                            <span className="text-sm font-mono font-bold text-[var(--primary)]">{autoLimit}</span>
                         </div>
-                        {/* <div className="h-6 w-[2px] bg-border mx-1"></div> */}
                         <span className={`text-[14px] pl-1 border-l-2 border-t-2 border-b-2 border-[var(--border)] font-bold uppercase ${autoCalibrate ? 'text-[var(--primary)]' : 'text-[var(--text-secondary)]'}`}>Auto</span>
                         <button
                             onClick={() => onAutoCalibrateChange?.(!autoCalibrate)}
@@ -155,67 +155,105 @@ export default function WindowListPanel({
                     windows.slice().reverse().map((win, index) => {
                         const tone = getWindowTone(win.status);
                         return (
-                        <div
-                            key={win.id || index}
-                            className={`py-1 px-2 flex flex-col gap-0 rounded-lg border transition-all group hover:translate-x-1 animate-in slide-in-from-right-4 fade-in duration-300 ${tone.card}`}
-                        >
-                            <div className="flex justify-between items-center">
-                                <div className="flex flex-col gap-2">
-                                    {/* Class Indicator */}
-                                    <span className="font-bold text-sm text-text uppercase">{win.label}</span>
+                            <div
+                                key={win.id || index}
+                                className={`py-1 px-2 flex flex-col gap-0 rounded-lg border transition-all group hover:translate-x-1 animate-in slide-in-from-right-4 fade-in duration-300 ${tone.card}`}
+                            >
+                                <div className="flex justify-between items-center">
+                                    <div className="flex flex-col gap-2">
+                                        {/* Class Indicator */}
+                                        <span className="font-bold text-sm text-text uppercase">{win.label}</span>
 
-                                    {/* Status Indicator */}
-                                    <div className="flex items-center gap-1">
-                                        <span className={`w-1.5 h-1.5 rounded-full ${tone.dot}`}></span>
-                                        <span className={`text-xs uppercase ${tone.text}`}>
-                                            {(win.status === 'recording' || win.status === 'pending') ? 'Recording' :
-                                                (win.status === 'collected') ? 'Ready' :
-                                                    (win.status === 'saved') ? 'Saved' :
-                                                        (win.status === 'correct') ? 'Correct' :
-                                                            (win.status === 'incorrect') ? 'Incorrect' :
-                                                                'Error'}
+                                        {/* Status Indicator */}
+                                        <div className="flex items-center gap-1">
+                                            <span className={`w-1.5 h-1.5 rounded-full ${tone.dot}`}></span>
+                                            <span className={`text-xs uppercase ${tone.text}`}>
+                                                {(win.status === 'recording' || win.status === 'pending') ? 'Recording' :
+                                                    (win.status === 'collected') ? 'Ready' :
+                                                        (win.status === 'saved') ? 'Saved' :
+                                                            (win.status === 'correct') ? 'Correct' :
+                                                                (win.status === 'incorrect') ? 'Incorrect' :
+                                                                    'Error'}
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex flex-col gap-2 content-center">
+                                        {/* Graph */}
+                                        <div className="w-24 h-8 flex items-center">
+                                            <Sparkline data={win.samples} color={tone.line} />
+                                        </div>
+                                        <span className="text-xs text-[var(--text-secondary)] font-mono">
+                                            {(win.endTime - win.startTime).toFixed(0)}ms
                                         </span>
                                     </div>
-                                </div>
 
-                                <div className="flex flex-col gap-2 content-center">
-                                    {/* Graph */}
-                                    <div className="w-24 h-8 flex items-center">
-                                        <Sparkline data={win.samples} color={tone.line} />
+                                    <div className="flex gap-1 opacity-100">
+                                        {/* Trash */}
+                                        <button
+                                            onClick={(e) => { e.stopPropagation(); onDelete?.(win.id); }}
+                                            className="p-1 hover:bg-red-500/10 rounded text-red-400 text-xs transition-colors"
+                                            title="Delete window"
+                                        >
+                                            <Trash2 size={16} />
+                                        </button>
                                     </div>
-                                    <span className="text-xs text-[var(--text-secondary)] font-mono">
-                                        {(win.endTime - win.startTime).toFixed(0)}ms
-                                    </span>
-                                </div>
-
-                                <div className="flex gap-1 opacity-100">
-                                    {/* Trash */}
-                                    <button
-                                        onClick={(e) => { e.stopPropagation(); onDelete?.(win.id); }}
-                                        className="p-1 hover:bg-red-500/10 rounded text-red-400 text-xs transition-colors"
-                                        title="Delete window"
-                                    >
-                                        <Trash2 size={16} />
-                                    </button>
                                 </div>
                             </div>
-                        </div>
-                    )})
+                        )
+                    })
                 )}
             </div>
 
             {/* Footer with Append Sample */}
-            <div className="p-2 border-t border-border bg-bg/50">
+            <div className="p-2 border-t border-border bg-bg/50 flex items-center gap-2">
                 <button
                     onClick={onClearSaved}
                     disabled={autoCalibrate}
-                    className={`w-full py-1 rounded-lg font-bold text-[16px] uppercase tracking-wider transition-all flex items-center justify-center gap-1 ${autoCalibrate
+                    className={`flex-1 py-1 rounded-lg font-bold text-[16px] uppercase tracking-wider transition-all flex items-center justify-center gap-1 ${autoCalibrate
                         ? 'bg-bg text-muted border border-border cursor-not-allowed opacity-50'
                         : 'bg-emerald-500 text-white hover:opacity-90 shadow-glow'
                         }`}
                 >
                     Save Windows
                 </button>
+
+                {autoCalibrate ? (
+                    <div className="flex items-center gap-2">
+                        <CustomNumberInput
+                            value={batchSize}
+                            onChange={(value) => onBatchSizeChange?.(Number(value))}
+                            min={0}
+                            step={1}
+                            accentColor="primary"
+                            className="w-[100px]"
+                            unit={"Size"}
+                        />
+
+                        <CustomNumberInput
+                            value={numBatches}
+                            onChange={(value) => onNumBatchesChange?.(Number(value))}
+                            min={0}
+                            step={1}
+                            accentColor="primary"
+                            className="w-[110px]"
+                            unit={"Batches"}
+                        />
+                    </div>
+                ) : (
+
+                    <div>
+                        <CustomNumberInput
+                            value={autoLimit}
+                            onChange={(value) => onAutoLimitChange?.(Number(value))}
+                            min={0}
+                            step={1}
+                            accentColor="primary"
+                            className="w-[110px]"
+                            unit={"Limit"}
+                        />
+                    </div>
+                )}
             </div>
         </div >
     );

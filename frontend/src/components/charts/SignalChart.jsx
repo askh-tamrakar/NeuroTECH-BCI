@@ -182,12 +182,17 @@ const SignalChart = forwardRef(({
   // Sync Config Updates
   useEffect(() => {
     if (workerRef.current) {
+      const style = getComputedStyle(document.documentElement);
+      const gridColor = style.getPropertyValue('--graph-grid').trim() || 'rgba(255, 255, 255, 0.1)';
+      const textColor = style.getPropertyValue('--graph-text').trim() || '#9ca3af';
+
       workerRef.current.postMessage({
         type: 'SET_CONFIG',
         payload: {
           timeWindowMs,
           color,
-          themeAxisColor: getComputedStyle(document.documentElement).getPropertyValue('--muted').trim() || '#aaaaaa',
+          themeAxisColor: textColor,
+          themeGridColor: gridColor,
           zoom: currentZoom,
           manualRange: autoScaledRange || currentManual,
           showGrid,
@@ -269,6 +274,7 @@ const SignalChart = forwardRef(({
   return (
     <div className={`signal-chart-container ${disabled ? 'signal-chart-disabled' : ''}`}>
       <div className="chart-header">
+        {/* Left: Title and Color */}
         <div className="flex items-center gap-4 min-w-0">
           <h3 className="chart-title" style={{ position: 'relative' }}>
             <button
@@ -283,13 +289,20 @@ const SignalChart = forwardRef(({
               className="p-1 hover:bg-muted/10 rounded-full transition-colors cursor-pointer group"
               title="Click to Cycle Color"
             >
-              <ChartSpline size={32} strokeWidth={3} style={{ color: color }} className="mr-2 group-hover:scale-110 transition-transform" />
+              <ChartSpline
+                size={32}
+                strokeWidth={3}
+                style={{ color: color }}
+                className="mr-2 group-hover:scale-110 transition-transform"
+              />
             </button>
-            {graphNo}
-            <span className="channel-color-dot" style={{ backgroundColor: color }}></span>
-            {title}
+            <span className="flex items-center gap-2 shrink-0">
+              {graphNo}
+              <span className="channel-color-dot" style={{ backgroundColor: color }}></span>
+              {title}
+            </span>
           </h3>
-          {titleAddon && <div className="shrink-0">{titleAddon}</div>}
+          <div className="flex items-center">{titleAddon}</div>
         </div>
 
         {/* Middle: Controls Box */}
@@ -395,13 +408,12 @@ const SignalChart = forwardRef(({
         </div>
       </div>
 
-      <div className="chart-area" style={{ minHeight: 0, overflow: 'hidden', position: 'relative', margin: 0, padding: 0 }} ref={containerRef}>
-        {/* Canvas is dynamically injected here */}
+      <div className="chart-area flex-grow relative" style={{ minHeight: 0, overflow: 'hidden', margin: 0, padding: 0 }} ref={containerRef}>
 
         {/* Centered Static Labels Overlay */}
         <div style={{
           position: 'absolute',
-          bottom: '10px',
+          top: '10px',
           left: '50%',
           transform: 'translateX(-50%)',
           display: 'flex',

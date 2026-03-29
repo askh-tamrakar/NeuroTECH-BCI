@@ -20,9 +20,10 @@
     "EEG": {
       "cutoff": 0.1,
       "bandpass_enabled": true,
-      "notch_enabled": true,
+      "notch_enabled": false,
       "bandpass_high": 30,
-      "notch": "50Hz"
+      "notch": "50Hz",
+      "bandpass_low": 1
     }
   }
 }

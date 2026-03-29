@@ -34,6 +34,36 @@ export function getPowerScaleHint() {
     return '1 M uV^2 = 1,000,000 uV^2';
 }
 
+const AMPLITUDE_UNITS = [
+    { limit: 1e6, divisor: 1e6, suffix: 'V' },
+    { limit: 1e3, divisor: 1e3, suffix: 'mV' },
+    { limit: 1, divisor: 1, suffix: 'uV' },
+    { limit: 1e-3, divisor: 1e-3, suffix: 'nV' },
+];
+
+export function formatAmplitudeValue(value, { decimals = 2, includeUnit = true } = {}) {
+    if (!Number.isFinite(value) || value === 0) {
+        return includeUnit ? `0 uV` : '0';
+    }
+
+    const absolute = Math.abs(value);
+    const unit = AMPLITUDE_UNITS.find((entry) => absolute >= entry.limit) || AMPLITUDE_UNITS[AMPLITUDE_UNITS.length - 1];
+    const scaled = value / unit.divisor;
+    const safeDecimals = Math.max(0, decimals);
+
+    let text;
+    if (Math.abs(scaled) >= 100) {
+        text = scaled.toFixed(Math.min(1, safeDecimals));
+    } else if (Math.abs(scaled) >= 10) {
+        text = scaled.toFixed(Math.min(2, safeDecimals));
+    } else {
+        text = scaled.toFixed(safeDecimals);
+    }
+
+    const compact = text.replace(/\.0+$/, '').replace(/(\.\d*[1-9])0+$/, '$1');
+    return includeUnit ? `${compact} ${unit.suffix}` : compact;
+}
+
 export function smoothSpectrumPoints(spectrum, radius = 3) {
     if (!Array.isArray(spectrum) || spectrum.length < 3) return spectrum;
 

@@ -19,12 +19,14 @@ except Exception:
 
 class LSLStreamer:
     def __init__(self, name: str, channel_types: List[str], channel_labels: Optional[List[str]] = None,
-                 channel_count: Optional[int] = None, nominal_srate: float = 1000.0, source_id: Optional[str] = None):
+                 channel_count: Optional[int] = None, nominal_srate: float = 1000.0, 
+                 source_id: Optional[str] = None, channel_format: str = 'float32'):
         """
         name: stream name
         channel_types: list of type strings (e.g., ['EMG','EMG'] or ['EEG','EOG'])
         channel_labels: optional list of labels; length should match channel_types
         channel_count: if provided, used as channel_count; else len(channel_types)
+        channel_format: 'float32', 'double64', 'string', 'int32', etc. (default: 'float32')
         """
         self.name = name
         self.channel_types = channel_types or []
@@ -32,6 +34,7 @@ class LSLStreamer:
         self.nominal_srate = nominal_srate
         self.source_id = source_id or name
         self.channel_count = channel_count if channel_count is not None else max(1, len(self.channel_types))
+        self.channel_format = channel_format
         self.outlet: Optional[pylsl.StreamOutlet] = None
 
         if LSL_AVAILABLE:
@@ -46,7 +49,7 @@ class LSLStreamer:
                 type='EEG',  # general type; consumers will inspect channel metadata
                 channel_count=self.channel_count,
                 nominal_srate=float(self.nominal_srate),
-                channel_format='float32',
+                channel_format=self.channel_format,
                 source_id=self.source_id
             )
             channels = info.desc().append_child("channels")
@@ -61,7 +64,12 @@ class LSLStreamer:
             self.outlet = pylsl.StreamOutlet(info)
             print(f"Created stream '{self.name}' (channels={self.channel_count})")
         except Exception as e:
-            print(f"Failed to create LSL outlet '{self.name}': {e}")
+            err_msg = str(e)
+            if "requested address is not valid" in err_msg.lower() or "10049" in err_msg:
+                print(f"⚠️  LSL Warning for '{self.name}': {err_msg}")
+                print(f"   (This usually means LSL multicast failed on your current network interface, but the system may still function.)")
+            else:
+                print(f"❌ Failed to create LSL outlet '{self.name}': {e}")
             self.outlet = None
 
     def push_sample(self, sample: List[float], ts: Optional[float] = None):

@@ -5,7 +5,7 @@ import SSVEPStimulus from '../ssvep/SSVEPStimulus';
 import { soundHandler } from '../../handlers/SoundHandler';
 import CustomNumberInput from '../ui/CustomNumberInput';
 import CustomSelect from '../ui/CustomSelect';
-import CustomRangeSlider from '../ui/CustomRangeSlider';
+import CustomSlider from '../ui/CustomSlider';
 import { CalibrationApi } from '../../services/calibrationApi';
 
 const COMMON_KEYS = ['None', 'W', 'A', 'S', 'D', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'Enter', 'Escape', 'P', 'Q', '0', '1', '2', '3'];
@@ -586,7 +586,7 @@ export default function SSVEPView({ isConnected, wsEvent }) {
                                 <span className="flex items-center gap-2"><Sun size={20} /> Brightness</span>
                                 <span className="text-primary text-xl">{Math.round(brightness * 100)}%</span>
                             </div>
-                            <CustomRangeSlider
+                            <CustomSlider
                                 min={0.1}
                                 max={1.0}
                                 step={0.05}

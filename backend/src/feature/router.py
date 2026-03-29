@@ -97,8 +97,19 @@ class FeatureRouter:
         
         log.info(f"Connected to {INPUT_STREAM_NAME} ({len(self.channel_labels)} ch @ {self.sr} Hz)")
         
-        # Create Event Outlet
-        self.create_outlet()
+        # Create Event Outlet using the robust LSLStreamer
+        from src.acquisition.lsl_streams import LSLStreamer
+        self.lsl_outlet = LSLStreamer(
+            OUTPUT_STREAM_NAME,
+            channel_types=['Markers'],
+            channel_labels=['Events'],
+            channel_count=1,
+            nominal_srate=0, # Irregular rate
+            source_id='BioEvents123',
+            channel_format='string'
+        )
+        self.outlet = self.lsl_outlet
+        log.debug(f"Created Event Outlet: {OUTPUT_STREAM_NAME}")
         
         # Initialize Extractors based on mapping
         self.configure_pipeline()
@@ -106,9 +117,8 @@ class FeatureRouter:
         return True
 
     def create_outlet(self):
-        info = pylsl.StreamInfo(OUTPUT_STREAM_NAME, 'Markers', 1, 0, 'string', 'BioEvents123')
-        self.outlet = pylsl.StreamOutlet(info)
-        log.debug(f"Created Event Outlet: {OUTPUT_STREAM_NAME}")
+        # Deprecated: Handled in resolve_stream via LSLStreamer
+        pass
 
     def parse_channels(self, info):
         # Simplistic parsing - relying on config mostly, but let's see what stream says

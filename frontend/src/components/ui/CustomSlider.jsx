@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { soundHandler } from '../../handlers/SoundHandler';
 
-export default function CustomRangeSlider({ min, max, step, value, onChange, accentColor = 'primary' }) {
+export default function CustomSlider({ min, max, step, value, onChange, onFinalChange, accentColor = 'primary' }) {
     const activeColorHex = 
         accentColor === 'primary' ? 'var(--primary)' : 
         accentColor === 'emerald' ? '#10b981' : 
@@ -35,7 +35,9 @@ export default function CustomRangeSlider({ min, max, step, value, onChange, acc
     };
 
     const handlePointerUp = () => {
-        // Optional: keep it or do nothing since handleValueChange updates it.
+        if (onFinalChange) {
+            onFinalChange(localValue);
+        }
     };
 
     return (

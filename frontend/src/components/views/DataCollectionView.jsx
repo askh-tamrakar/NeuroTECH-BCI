@@ -11,12 +11,13 @@ import { CalibrationApi } from '../../services/calibrationApi';
 import CustomSelect from '../ui/CustomSelect';
 import CustomNumberInput from '../ui/CustomNumberInput';
 import FromToRangeInput from '../ui/FromToRangeInput';
-import { formatPowerValue, getPowerScaleHint } from '../../utils/spectrumFormat';
+import { formatAmplitudeValue } from '../../utils/spectrumFormat';
 import { useSettings } from '../../contexts/SettingsContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import {
     Activity, Play, Square, Database, Zap,
-    Target, ChartSpline, Brain, ArrowRightFromLine
+    Target, ChartSpline, Brain, ArrowRightFromLine,
+    ZoomIn, ArrowUpDown, ArrowDown, ArrowUp, Sigma
 } from 'lucide-react';
 import { soundHandler } from '../../handlers/SoundHandler'
 
@@ -36,7 +37,8 @@ const WINDOW_PREVIEW_POINTS = 72;
 const SENSOR_LABELS = {
     EMG: ['Rock', 'Paper', 'Scissors', 'Rest'],
     EOG: ['SingleBlink', 'DoubleBlink', 'Rest'],
-    EEG: ['Target 1', 'Target 2', 'Target 3', 'Target 4', 'Target 5', 'Target 6', 'Rest'],
+    EEG: ['Target 1', 'Target 2', 'Target 3',
+        'Target 4', 'Target 5', 'Target 6', 'Rest'],
 };
 
 function downsampleSamples(samples, maxPoints = WINDOW_PREVIEW_POINTS) {
@@ -107,13 +109,66 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
         return `Session_${now.getDate()}_${now.getHours()}${now.getMinutes()}`;
     });
     const [appendMode, setAppendMode] = useState(false);
+    const [batchSize, setBatchSize] = useState(settings?.collectionState?.batchSize || 5);
+    const [numBatches, setNumBatches] = useState(settings?.collectionState?.numBatches || 6);
     const [autoLimit, setAutoLimit] = useState(settings?.collectionState?.autoLimit || 30);
     const [autoCalibrate, setAutoCalibrate] = useState(settings?.collectionState?.autoCalibrate || false); // Auto-calibration toggle
     const [windowDuration, setWindowDuration] = useState(settings?.collectionState?.windowDuration || 900); // ms
     const [timeWindow, setTimeWindow] = useState(settings?.collectionState?.timeWindow || 5000); // visible sweep window length for calibration plot
     const [graphMode, setGraphMode] = useState(settings?.collectionState?.graphMode || 'time');
     const [emgDisplayMode, setEmgDisplayMode] = useState(settings?.collectionState?.emgDisplayMode || 'raw');
-    const [fftFreqRange, setFftFreqRange] = useState(settings?.collectionState?.fftFreqRange || { min: 1, max: 50 });
+    const [manualYRange, setManualYRange] = useState(() => {
+        const saved = localStorage.getItem(`manual_y_range_${activeSensor}`);
+        return saved || "";
+    });
+    // FFT Frequency Range Persistence
+    const [fftFreqRange, setFftFreqRange] = useState(() => {
+        const saved = localStorage.getItem(`fft_range_${activeSensor}`);
+        if (saved) return JSON.parse(saved);
+        const defaults = { EMG: { min: 1, max: 300 }, EEG: { min: 1, max: 50 }, EOG: { min: 1, max: 20 } };
+        return defaults[activeSensor] || { min: 1, max: 50 };
+    });
+
+    const isInternalUpdate = useRef(false);
+    const lastSensorRef = useRef(activeSensor);
+
+    // Sync from LocalStorage on Sensor Switch
+    useEffect(() => {
+        const savedFft = localStorage.getItem(`fft_range_${activeSensor}`);
+        let newFftRange;
+        if (savedFft) {
+            newFftRange = JSON.parse(savedFft);
+        } else {
+            const defaults = { EMG: { min: 1, max: 300 }, EEG: { min: 1, max: 50 }, EOG: { min: 1, max: 20 } };
+            newFftRange = defaults[activeSensor] || { min: 1, max: 50 };
+        }
+
+        const savedY = localStorage.getItem(`manual_y_range_${activeSensor}`);
+
+        isInternalUpdate.current = true;
+        setFftFreqRange(newFftRange);
+        setManualYRange(savedY || "");
+        lastSensorRef.current = activeSensor;
+    }, [activeSensor]);
+
+    // Save to LocalStorage on Change
+    useEffect(() => {
+        if (isInternalUpdate.current) {
+            isInternalUpdate.current = false;
+            return;
+        }
+        localStorage.setItem(`fft_range_${activeSensor}`, JSON.stringify(fftFreqRange));
+    }, [fftFreqRange, activeSensor]);
+
+    useEffect(() => {
+        if (isInternalUpdate.current) return;
+        localStorage.setItem(`manual_y_range_${activeSensor}`, manualYRange);
+    }, [manualYRange, activeSensor]);
+
+    const updateFftRangeValue = useCallback((field, val) => {
+        setFftFreqRange(prev => ({ ...prev, [field]: val }));
+    }, []);
+
     const [fftStats, setFftStats] = useState({ min: 0, max: 0, mean: 0 });
 
     const [dataLastUpdated, setDataLastUpdated] = useState(0);
@@ -151,6 +206,13 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
     useEffect(() => { autoLimitRef.current = autoLimit; }, [autoLimit]);
     useEffect(() => { sessionNameRef.current = sessionName; }, [sessionName]);
 
+    // Update autoLimit based on batch settings in auto mode
+    useEffect(() => {
+        if (autoCalibrate) {
+            setAutoLimit(batchSize * numBatches);
+        }
+    }, [autoCalibrate, batchSize, numBatches]);
+
 
     // Compute matching channels for the active sensor
     const matchingChannels = React.useMemo(() => {
@@ -171,15 +233,16 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                 .filter((label, idx, labels) => labels.indexOf(label) !== idx)
         );
 
-        return rawMatches.map((channel) => ({
+        return rawMatches.map((channel, idx) => ({
             ...channel,
-            label: duplicateLabels.has(channel.rawLabel)
-                ? `${channel.rawLabel} · CH${channel.index}`
-                : channel.rawLabel
+            label: rawMatches.length === 2
+                ? `ch- A${idx + 1}`
+                : (duplicateLabels.has(channel.rawLabel)
+                    ? `${channel.rawLabel} · CH${channel.index}`
+                    : channel.rawLabel)
         }));
     }, [activeSensor, config]);
 
-    // Auto-select first matching channel when sensor changes
     // Auto-select first matching channel when sensor changes
     useEffect(() => {
         if (matchingChannels.length > 0) {
@@ -217,6 +280,13 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
         }
         const fallback = configuredSensors[0] || activeSensor || 'EMG';
         return [fallback, fallback];
+    }, [configuredSensors, activeSensor]);
+
+    // Ensure activeSensor is always a valid configured sensor
+    useEffect(() => {
+        if (configuredSensors.length > 0 && !configuredSensors.includes(activeSensor)) {
+            setActiveSensor(configuredSensors[0]);
+        }
     }, [configuredSensors, activeSensor]);
 
     const eegTargets = useMemo(() => {
@@ -438,6 +508,7 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
         });
     }, [activeSensor, activeChannelIndex, targetLabel, mode, autoLimit, autoCalibrate, windowDuration, timeWindow]);
 
+
     // Ensure config is loaded on mount
     useEffect(() => {
         const loadConfig = async () => {
@@ -508,12 +579,11 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
         };
 
         loadSelectedRecording();
-    }, [selectedRecording, mode, activeSensor, activeChannelIndex]); // Depend on activeChannelIndex
+    }, [selectedRecording, mode, activeSensor, activeChannelIndex, graphMode]); // Added graphMode to dependencies
 
 
     // Zoom state (Y-axis) similar to LiveView
     const [zoom, setZoom] = useState(settings?.collectionState?.zoom || 1);
-    const [manualYRange, setManualYRange] = useState("");
     const [customLineColor, setCustomLineColor] = useState(null); // New state for line color
     const BASE_AMPLITUDE = 1500;
 
@@ -545,12 +615,14 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
             timeWindow,
             windowDuration,
             autoLimit,
+            batchSize,
+            numBatches,
             autoCalibrate,
             graphMode,
             emgDisplayMode,
             fftFreqRange
         });
-    }, [zoom, timeWindow, windowDuration, autoLimit, autoCalibrate, graphMode, emgDisplayMode, fftFreqRange, updateSettings]);
+    }, [zoom, timeWindow, windowDuration, autoLimit, batchSize, numBatches, autoCalibrate, graphMode, emgDisplayMode, fftFreqRange, updateSettings]);
 
     // Handlers
     const handleSensorChange = (sensor) => {
@@ -640,7 +712,7 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
 
     const handleStopCalibration = useCallback(async () => {
         setIsCalibrating(false);
-        soundHandler.playDinoPause(); // Sounds like a stop/pause
+        soundHandler.playDinoPause();
         windowWorkerRef.current?.postMessage({ type: 'STOP_WINDOWING' });
         await CalibrationApi.stopCalibration(activeSensor);
         setActiveWindow(null);
@@ -872,9 +944,6 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
         });
     }, [API_BASE_URL, activeSensor, buildWindowMetadata, mode, sessionName]);
 
-
-
-
     /**
      * Saves all collected windows to the database.
      */
@@ -951,6 +1020,27 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
             appendLockRef.current = false;
         }
     }, [mode, activeSensor, markedWindows, dispatchBatchSave, refreshSessionData, requestFullWindows]);
+
+    // Auto-save and Auto-stop logic (Moved here to ensure handlers are initialized)
+    useEffect(() => {
+        if (!isCalibrating) return;
+
+        // statsTotal = recordingCount + processedCount + savedCount
+        const recordingCount = markedWindows.filter(w => w.status === 'recording' || w.status === 'pending').length;
+        const processedCount = markedWindows.filter(w => w.status === 'collected').length;
+        const savedCount = markedWindows.filter(w => (w.status === 'saved' || w.status === 'correct')).length;
+        const statsTotal = recordingCount + processedCount + savedCount;
+
+        // Auto-save when batch size is reached (Auto-Calibrate only)
+        if (autoCalibrate && processedCount >= batchSize && !appendLockRef.current) {
+            handleAppendSamples();
+        }
+
+        // Auto-stop when limit is reached (Applies to both modes if isCalibrating is true)
+        if (statsTotal >= autoLimit) {
+            handleStopCalibration();
+        }
+    }, [markedWindows, autoCalibrate, isCalibrating, batchSize, autoLimit, handleAppendSamples, handleStopCalibration]);
 
     useEffect(() => {
         handleAppendSamplesRef.current = handleAppendSamples;
@@ -1088,9 +1178,6 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
             console.log('[DataCollectionView] Calibration result:', result);
 
             // 2. Update config locally
-            // Ideally we also trigger the ConfigPanel to reload, but since config is lifted state in parent (usually), 
-            // or here passing down... currently `config` is local state.
-            // We should refetch configuration.
             const refreshedConfig = await CalibrationApi.fetchSensorConfig();
             setConfig(refreshedConfig);
 
@@ -1162,10 +1249,6 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
     // Optimization: Flusing directly to Worker
     const incomingBufferRef = useRef([]);
 
-    // Data Processing for Chart Plotting - REMOVED (Handled by DataWorker -> BroadcastChannel -> ChartWorker)
-    // Note: windowWorkerRef still needs timing updates, we can either pipe them from DataWorker or 
-    // keep a minimal listener here. Let's keep a minimal one for windowing logic.
-
     useEffect(() => {
         if (!wsData) return;
         const payload = wsData.raw || wsData;
@@ -1179,10 +1262,6 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
         latestSignalTimeRef.current = incomingTs;
         windowWorkerRef.current?.postMessage({ type: 'UPDATE_SIGNAL_TIME', payload: incomingTs });
     }, [wsData]);
-
-
-    // Flush to Worker loop (30fps) - REMOVED (Handled by DataWorker -> BroadcastChannel -> ChartWorker)
-
 
     // Sync Windows to Worker
     const overlayWindows = useMemo(() => (
@@ -1375,6 +1454,7 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
             freqMin: Number(fftFreqRange?.min || 1),
             freqMax: Number(fftFreqRange?.max || 50),
             themeAxisColor: axisColor,
+            unitMode: 'amplitude',
             sampleRate: Number(config?.sampling_rate || 1000),
         };
     }, [activeChannelIndex, customLineColor, zoom, manualYRange, fftFreqRange, currentTheme, config]);
@@ -1386,18 +1466,8 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
     const currentGraphTitle = `Graph ${activeChannelIndex + 1}`;
     const isFftMode = activeSensor === 'EEG' && graphMode === 'fft';
     const fftRangeValue = Number(manualYRange) || Math.max(1, Math.ceil((fftStats.max || 1) * 1.15));
-    const fftRangeDisplay = formatPowerValue(fftRangeValue);
-    const powerScaleHint = getPowerScaleHint();
+    const fftRangeDisplay = formatAmplitudeValue(fftRangeValue);
 
-    const updateFftRangeValue = useCallback((key, value) => {
-        const parsed = Number(value);
-        setFftFreqRange((prev) => {
-            const next = { ...prev, [key]: Number.isFinite(parsed) ? parsed : prev[key] };
-            const min = Math.max(0, Math.min(next.min, next.max - 1));
-            const max = Math.max(min + 1, next.max);
-            return { min, max };
-        });
-    }, []);
 
     return (
         <div className="flex flex-col flex-1 min-h-0 bg-bg text-text animate-in fade-in duration-500 overflow-hidden gap-2">
@@ -1408,7 +1478,7 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                 {/* SIDEBAR CARD */}
                 <div className="w-[260px] flex-none flex flex-col bg-surface border-border border-2 rounded-xl shadow-sm overflow-hidden">
                     {/* Sidebar Header */}
-                    <div className="p-1 border-b border-border flex items-center justify-between gap-2 bg-surface/50">
+                    <div className="px-1 py-[7px] border-b border-border flex items-center justify-between gap-2 bg-bg/60">
                         <div className="flex flex-row items-center gap-2.5">
                             <span className="flex flex-row text-[22px] items-center font-bold tracking-tight">
                                 <Database size={24} className="text-primary mr-1" /> Data Collection
@@ -1429,25 +1499,37 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
 
                         {/* 1. SENSOR & MODE */}
                         <div className="space-y-3">
-                            <label className="text-[16px] font-bold text-muted uppercase tracking-wider flex items-center gap-1.5"><Activity size={22} /> Sensor & Mode</label>
+                            <label className="text-[16px] font-bold text-muted uppercase tracking-wider flex items-center gap-1.5 whitespace-nowrap overflow-hidden">
+                                <Activity size={22} className="shrink-0" />
+                                {configuredSensors.length === 1 && matchingChannels.length === 2 ? 'Channel' : 'Sensor'} & Mode
+                            </label>
 
-                            {/* Pill Toggle for Sensors */}
+                            {/* Pill Toggle for Sensors / Channels */}
                             {configuredSensors.length <= 2 ? (
                                 <div className="flex items-center justify-center">
-                                    <InlineModeToggle
-                                        value={activeSensor}
-                                        onChange={(value) => {
-                                            if (configuredSensors.length > 1) {
-                                                handleSensorChange(value);
-                                            }
-                                        }}
-                                        disabled={configuredSensors.length < 2}
-                                        options={[
-                                            { id: visibleSensorToggle[0], label: visibleSensorToggle[0] },
-                                            { id: visibleSensorToggle[1], label: visibleSensorToggle[1] },
-                                        ]}
-                                        className="scale-[1.08]"
-                                    />
+                                    {configuredSensors.length === 1 && matchingChannels.length === 2 ? (
+                                        <InlineModeToggle
+                                            value={activeChannelIndex}
+                                            onChange={(value) => setActiveChannelIndex(Number(value))}
+                                            options={matchingChannels.map(c => ({ id: c.index, label: c.label }))}
+                                            className="scale-[1.25]"
+                                        />
+                                    ) : (
+                                        <InlineModeToggle
+                                            value={activeSensor}
+                                            onChange={(value) => {
+                                                if (configuredSensors.length > 1) {
+                                                    handleSensorChange(value);
+                                                }
+                                            }}
+                                            disabled={configuredSensors.length < 2}
+                                            options={[
+                                                { id: visibleSensorToggle[0], label: visibleSensorToggle[0] },
+                                                { id: visibleSensorToggle[1], label: visibleSensorToggle[1] },
+                                            ]}
+                                            className="scale-[1.25]"
+                                        />
+                                    )}
                                 </div>
                             ) : (
                                 <div className="flex flex-wrap gap-2">
@@ -1484,22 +1566,6 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                             </div>
                         </div>
 
-                        {/* 1.5 CHANNEL FOCUS (EEG Only) */}
-                        {matchingChannels.length > 1 && (
-                            <div className="space-y-3 animate-in slide-in-from-top-2 duration-300">
-                                <label className="text-[14px] font-bold text-muted uppercase tracking-wider flex items-center gap-1.5 opacity-80">Channel Focus</label>
-                                <div className="flex items-center justify-center">
-                                    <InlineModeToggle
-                                        value={activeChannelIndex}
-                                        onChange={(value) => setActiveChannelIndex(Number(value))}
-                                        options={[
-                                            { id: matchingChannels[0].index, label: matchingChannels[0].label },
-                                            { id: matchingChannels[1].index, label: matchingChannels[1].label },
-                                        ]}
-                                    />
-                                </div>
-                            </div>
-                        )}
 
                         <div className="h-[2px] w-full bg-border/95"></div>
 
@@ -1604,9 +1670,9 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                 </div>
 
                 {/* CHART CARD */}
-                <div className="flex-grow min-w-0 bg-surface border-2 border-border rounded-xl shadow-sm overflow-hidden flex flex-col relative group">
+                <div className="flex-grow min-w-0 bg-surface border-2 border-border rounded-xl shadow-sm overflow-hidden flex flex-col relative ">
                     {/* Status Badge Overlay */}
-                    <div className="absolute top-1.5 right-3 z-10">
+                    <div className="absolute top-14 right-2 z-10">
                         <div className={`px-2 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider border backdrop-blur-sm shadow-sm ${isCalibrating
                             ? 'bg-red-500/10 text-red-500 border-red-500/20 animate-pulse'
                             : 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'}`}>
@@ -1614,63 +1680,73 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                         </div>
                     </div>
 
-                    {/* Chart Header Controls */}
-                    <div className="px-3 py-2 border-b border-border bg-bg/60 backdrop-blur-sm flex items-center justify-between gap-4 flex-none">
-                        <div className="flex items-center gap-4 overflow-x-auto no-scrollbar">
-                            <div className="flex items-center gap-3 shrink-0">
-                                <button
-                                    onClick={(e) => {
-                                        e.preventDefault();
-                                        const currentColor = customLineColor || chartConfig.lineColor;
-                                        const currentIndex = DEFAULT_PALETTE.indexOf(currentColor);
-                                        const nextIndex = (currentIndex + 1) % DEFAULT_PALETTE.length;
-                                        setCustomLineColor(DEFAULT_PALETTE[nextIndex === -1 ? 0 : nextIndex]);
-                                    }}
-                                    className="p-1 hover:bg-muted/10 rounded-full transition-colors cursor-pointer group flex items-center"
-                                    title="Click to Cycle Color"
-                                >
-                                    <ChartSpline size={28} strokeWidth={3} style={{ color: customLineColor || chartConfig.lineColor }} className="group-hover:scale-110 transition-transform" />
-                                </button>
+                    {!isFftMode ? (
+                        <>
+                            {/* Time Series Chart Header Controls */}
+                            <div
+                                className="chart-header"
+                                style={{ height: 'var(--chart-header-height, 48px)' }}
+                            >
+                                {/* Left: Title and Color */}
+                                <div className="flex items-center gap-4 min-w-0">
+                                    <h3 className="chart-title" style={{ position: 'relative' }}>
+                                        <button
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                const currentColor = customLineColor || chartConfig.lineColor;
+                                                const currentIndex = DEFAULT_PALETTE.indexOf(currentColor);
+                                                const nextIndex = (currentIndex + 1) % DEFAULT_PALETTE.length;
+                                                setCustomLineColor(DEFAULT_PALETTE[nextIndex === -1 ? 0 : nextIndex]);
+                                            }}
+                                            className="p-1 hover:bg-muted/10 rounded-full transition-colors cursor-pointer group flex items-center shrink-0"
+                                            title="Click to Cycle Color"
+                                        >
+                                            <ChartSpline
+                                                size={32}
+                                                strokeWidth={3}
+                                                style={{ color: customLineColor || chartConfig.lineColor }}
+                                                className="mr-2 group-hover:scale-110 transition-transform"
+                                            />
+                                        </button>
+                                        <span className="flex items-center gap-2 shrink-0">
+                                            {currentGraphTitle}
+                                            <span className="channel-color-dot" style={{ backgroundColor: customLineColor || chartConfig.lineColor }}></span>
+                                            {activeSensor}
+                                        </span>
+                                    </h3>
 
-                                <div className="flex items-center gap-3 shrink-0">
-                                    <div className="text-[26px] font-black tracking-tight text-text flex items-center gap-2">
-                                        {currentGraphTitle}
-                                        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: customLineColor || chartConfig.lineColor }}></span>
-                                        {activeSensor}
+                                    <div className="flex items-center">
+                                        {activeSensor === 'EEG' && (
+                                            <InlineModeToggle
+                                                value={graphMode}
+                                                onChange={setGraphMode}
+                                                options={[
+                                                    { id: 'time', label: '' },
+                                                    { id: 'fft', label: 'FFT' },
+                                                ]}
+                                            />
+                                        )}
+                                        {activeSensor === 'EMG' && (
+                                            <InlineModeToggle
+                                                value={emgDisplayMode}
+                                                onChange={setEmgDisplayMode}
+                                                options={[
+                                                    { id: 'raw', label: '' },
+                                                    { id: 'envelope', label: 'ENVELOPE' },
+                                                ]}
+                                            />
+                                        )}
                                     </div>
-                                    <span className="text-xs font-bold uppercase tracking-[0.2em] text-muted">{currentChannelLabel}</span>
                                 </div>
 
-                                {activeSensor === 'EEG' && (
-                                    <InlineModeToggle
-                                        value={graphMode}
-                                        onChange={setGraphMode}
-                                        options={[
-                                            { id: 'time', label: 'NORMAL' },
-                                            { id: 'fft', label: 'FFT' },
-                                        ]}
-                                    />
-                                )}
-
-                                {activeSensor === 'EMG' && (
-                                    <InlineModeToggle
-                                        value={emgDisplayMode}
-                                        onChange={setEmgDisplayMode}
-                                        options={[
-                                            { id: 'raw', label: 'RAW' },
-                                            { id: 'envelope', label: 'ENVELOPE' },
-                                        ]}
-                                    />
-                                )}
-                            </div>
-
-                            <div className="w-px h-8 bg-border shrink-0"></div>
-
-                            {!isFftMode && (
-                                <>
-                                    <div className="flex items-center gap-2 shrink-0">
-                                        <span className="text-xs font-bold text-muted uppercase">Window</span>
-                                        <div className="w-[96px]">
+                                {/* Middle: Controls Box */}
+                                <div className="flex items-center gap-6">
+                                    <div className="flex items-center gap-2">
+                                        <div className="flex items-center gap-1.5 text-muted">
+                                            <Activity size={18} />
+                                            <span className="text-xs font-bold uppercase tracking-wider">Window</span>
+                                        </div>
+                                        <div className="w-[75px]">
                                             <CustomSelect
                                                 value={timeWindow}
                                                 onChange={(value) => setTimeWindow(Number(value))}
@@ -1680,9 +1756,12 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                                         </div>
                                     </div>
 
-                                    <div className="flex items-center gap-2 shrink-0">
-                                        <span className="text-xs font-bold text-muted uppercase">Capture</span>
-                                        <div className="w-[126px]">
+                                    <div className="flex items-center gap-2 ">
+                                        <div className="flex items-center gap-1.5 text-muted">
+                                            <Target size={18} />
+                                            <span className="text-xs font-bold uppercase tracking-wider">Capture</span>
+                                        </div>
+                                        <div className="w-[150px]">
                                             <CustomSelect
                                                 value={windowDuration}
                                                 onChange={(value) => setWindowDuration(Number(value))}
@@ -1694,111 +1773,109 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                                             />
                                         </div>
                                     </div>
-                                </>
-                            )}
 
-                            <div className="flex items-center gap-2 shrink-0">
-                                <span className="text-xs font-bold text-muted uppercase">Zoom</span>
-                                <div className="flex gap-1 bg-bg/50 p-1 rounded-lg">
-                                    {[1, 2, 5, 10, 25].map(z => (
-                                        <button
-                                            key={z}
-                                            onClick={() => { setZoom(z); setManualYRange(""); }}
-                                            className={`px-2 py-1 text-xs rounded font-bold transition-all border ${zoom === z && !manualYRange
-                                                ? 'bg-primary text-black border-primary'
-                                                : 'bg-bg/80 text-muted border-border hover:text-text'
-                                                }`}
-                                        >
-                                            {z}x
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-
-                            <div className="w-px h-8 bg-border shrink-0"></div>
-
-                            {isFftMode ? (
-                                <div className="flex items-center gap-3 shrink-0">
-                                    <FromToRangeInput
-                                        fromValue={fftFreqRange?.min ?? 1}
-                                        toValue={fftFreqRange?.max ?? 50}
-                                        onFromChange={(value) => updateFftRangeValue('min', value)}
-                                        onToChange={(value) => updateFftRangeValue('max', value)}
-                                        fromMin={0}
-                                        fromMax={Math.max(0, (fftFreqRange?.max || 50) - 1)}
-                                        toMin={Math.max(1, (fftFreqRange?.min || 1) + 1)}
-                                        toMax={500}
-                                        unit="Hz"
-                                        className="!border-border !bg-bg/80"
-                                    />
-
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-xs font-bold text-muted uppercase">Range</span>
-                                        <CustomNumberInput
-                                            value={fftRangeValue}
-                                            onChange={(value) => setManualYRange(String(value))}
-                                            min={0}
-                                            step={0.1}
-                                            accentColor="primary"
-                                            className="w-[128px]"
-                                            unit="uV^2"
-                                        />
+                                    <div className="flex items-center gap-2 ">
+                                        <div className="flex items-center gap-1.5 text-muted">
+                                            <ZoomIn size={18} />
+                                            <span className="text-xs font-bold uppercase tracking-wider">Zoom</span>
+                                        </div>
+                                        <div className="flex gap-1.5 bg-bg/50 p-1.5 rounded-lg">
+                                            {[1, 2, 5, 10, 25].map(z => (
+                                                <button
+                                                    key={z}
+                                                    onClick={() => { setZoom(z); setManualYRange(""); }}
+                                                    className={`px-2.5 py-1 rounded text-xs font-bold transition-all border ${zoom === z && !manualYRange
+                                                        ? 'bg-primary text-white border-primary shadow-sm'
+                                                        : 'bg-bg text-muted border-border hover:text-text hover:border-muted/50'
+                                                        }`}
+                                                >
+                                                    {z}x
+                                                </button>
+                                            ))}
+                                        </div>
                                     </div>
                                 </div>
-                            ) : (
-                                <div className="flex items-center gap-2 shrink-0">
-                                    <span className="text-xs font-bold text-muted uppercase">Range</span>
-                                    <CustomNumberInput
-                                        value={Number(manualYRange) || Math.round(1500 / zoom)}
-                                        onChange={(value) => setManualYRange(String(value))}
-                                        min={1}
-                                        step={1}
-                                        accentColor="primary"
-                                        className="w-[112px]"
-                                        unit="uV"
+
+                                {/* Right: Stats Box */}
+                                <div className="flex items-center gap-4 pl-4 border-l border-border">
+                                    <div className="range-display text-[16px] font-bold text-muted tabular-nums">
+                                        +/-{Number(manualYRange) || Math.round(1500 / zoom)} uV
+                                    </div>
+                                    <div className="chart-stats flex gap-5">
+                                        <div className="stat-item flex items-center gap-0.25">
+                                            <span className="stat-label-chart flex items-center gap-1 text-xs text-muted"><ArrowDown size={18} />Min</span>
+                                            <span className="stat-value text-sm font-mono font-bold">{activeWindow?.samples ? Math.min(...activeWindow.samples).toFixed(2) : '0.00'}</span>
+                                        </div>
+                                        <div className="stat-item flex items-center gap-0.25">
+                                            <span className="stat-label-chart flex items-center gap-1 text-xs text-muted"><ArrowUp size={18} />Max</span>
+                                            <span className="stat-value text-sm font-mono font-bold">{activeWindow?.samples ? Math.max(...activeWindow.samples).toFixed(2) : '0.00'}</span>
+                                        </div>
+                                        <div className="stat-item flex items-center gap-0.25">
+                                            <span className="stat-label-chart flex items-center gap-1 text-xs text-muted"><Sigma size={18} />Mean</span>
+                                            <span className="stat-value text-sm font-mono font-bold">{activeWindow?.samples ? (activeWindow.samples.reduce((sum, value) => sum + value, 0) / Math.max(1, activeWindow.samples.length)).toFixed(2) : '0.00'}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="chart-area flex-grow relative">
+                                <div className="absolute inset-0 p-2">
+                                    <WorkerTimeSeriesChart
+                                        ref={chartRef}
+                                        timeWindow={timeWindow}
+                                        activeSensor={activeSensor}
+                                        displayMode={emgDisplayMode}
+                                        activeChannelIndex={activeChannelIndex}
+                                        channelIndex={activeChannelIndex}
+                                        config={chartConfig}
+                                        onWindowSelect={handleManualWindowSelect}
+                                        noBorder={true}
                                     />
                                 </div>
-                            )}
-                        </div>
-
-                        <div className="flex items-center gap-4 pl-4 border-l border-border shrink-0">
-                            <div className="text-[16px] font-bold text-muted tabular-nums">
-                                {isFftMode ? `0-${fftRangeDisplay}` : `+/-${Number(manualYRange) || Math.round(1500 / zoom)} uV`}
                             </div>
-                            <div className="flex flex-col gap-1">
-                                {isFftMode && <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted">{powerScaleHint}</div>}
-                                <div className="flex items-center gap-5">
-                                    <div className="text-xs font-mono text-muted">Min <span className="text-text font-bold">{isFftMode ? formatPowerValue(fftStats.min) : activeWindow?.samples ? Math.min(...activeWindow.samples).toFixed(2) : '0.00'}</span></div>
-                                    <div className="text-xs font-mono text-muted">Max <span className="text-text font-bold">{isFftMode ? formatPowerValue(fftStats.max) : activeWindow?.samples ? Math.max(...activeWindow.samples).toFixed(2) : '0.00'}</span></div>
-                                    <div className="text-xs font-mono text-muted">Mean <span className="text-text font-bold">{isFftMode ? formatPowerValue(fftStats.mean) : activeWindow?.samples ? (activeWindow.samples.reduce((sum, value) => sum + value, 0) / Math.max(1, activeWindow.samples.length)).toFixed(2) : '0.00'}</span></div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="flex-grow relative">
-                        <div className="absolute inset-0 p-2">
-                            {isFftMode ? (
+                        </>
+                    ) : (
+                        /* FFT Mode (Header integrated in WorkerFFTChart) */
+                        <div className="chart-area flex-grow flex flex-col min-h-0 relative">
+                            <div className="absolute inset-0 p-0">
                                 <WorkerFFTChart
                                     ref={chartRef}
                                     channelIndex={activeChannelIndex}
+                                    graphNo={`Graph ${activeChannelIndex + 1}`}
+                                    title={activeSensor}
+                                    color={customLineColor || chartConfig.lineColor}
+                                    onColorChange={setCustomLineColor}
+                                    titleAddon={
+                                        activeSensor === 'EEG' && (
+                                            <InlineModeToggle
+                                                value={graphMode}
+                                                onChange={setGraphMode}
+                                                options={[
+                                                    { id: 'time', label: '' },
+                                                    { id: 'fft', label: 'FFT' },
+                                                ]}
+                                            />
+                                        )
+                                    }
+                                    frequencyFrom={fftFreqRange?.min || 1}
+                                    frequencyTo={fftFreqRange?.max || 50}
+                                    onApplyFilters={({ frequencyFrom, frequencyTo }) => {
+                                        setFftFreqRangeMap(prev => ({
+                                            ...prev,
+                                            [activeSensor]: { min: frequencyFrom, max: frequencyTo }
+                                        }));
+                                    }}
+                                    currentZoom={zoom}
+                                    onZoomChange={(z) => { setZoom(z); setManualYRange(""); }}
+                                    currentManual={manualYRange}
+                                    onRangeChange={setManualYRange}
                                     config={fftChartConfig}
                                     onStatsChange={setFftStats}
+                                    noBorder={true}
                                 />
-                            ) : (
-                                <WorkerTimeSeriesChart
-                                    ref={chartRef}
-                                    timeWindow={timeWindow}
-                                    activeSensor={activeSensor}
-                                    displayMode={emgDisplayMode}
-                                    activeChannelIndex={activeChannelIndex}
-                                    channelIndex={activeChannelIndex}
-                                    config={chartConfig}
-                                    onWindowSelect={handleManualWindowSelect}
-                                />
-                            )}
+                            </div>
                         </div>
-                    </div>
+                    )}
                 </div>
             </div>
 
@@ -1833,11 +1910,13 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                     ) : (
                         <ConfigPanel config={config} sensor={activeSensor} onSave={setConfig} />
                     )}
-                </div>                {/* Window List */}
+                </div>
+
+                {/* Window List */}
                 <div className="lg:col-span-3 h-full min-h-0 overflow-hidden shadow-sm flex flex-col bg-card rounded-md">
                     {activeSensor === 'EEG' ? (
                         <>
-                        <div className="flex flex-col flex-1 gap-2 overflow-hidden">
+                            <div className="flex flex-col flex-1 gap-2 overflow-hidden">
                                 <CustomSwitchPill
                                     activeTab={showEegWindowList ? 'list' : 'collection'}
                                     onSwitch={(id) => setShowEegWindowList(id === 'list')}
@@ -1855,6 +1934,10 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                                             activeSensor={activeSensor}
                                             autoLimit={autoLimit}
                                             onAutoLimitChange={setAutoLimit}
+                                            batchSize={batchSize}
+                                            onBatchSizeChange={setBatchSize}
+                                            numBatches={numBatches}
+                                            onNumBatchesChange={setNumBatches}
                                             autoCalibrate={autoCalibrate}
                                             onAutoCalibrateChange={setAutoCalibrate}
                                             onClearSaved={handleAppendSamples}
@@ -1880,6 +1963,10 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                             activeSensor={activeSensor}
                             autoLimit={autoLimit}
                             onAutoLimitChange={setAutoLimit}
+                            batchSize={batchSize}
+                            onBatchSizeChange={setBatchSize}
+                            numBatches={numBatches}
+                            onNumBatchesChange={setNumBatches}
                             autoCalibrate={autoCalibrate}
                             onAutoCalibrateChange={setAutoCalibrate}
                             onClearSaved={handleAppendSamples}

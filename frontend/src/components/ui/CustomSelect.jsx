@@ -60,8 +60,8 @@ export default function CustomSelect({
                     ${triggerClassName}
                 `}
             >
-                <span className={`truncate ${!value ? 'text-muted' : 'text-text'}`}>
-                    {options.find(opt => (typeof opt === 'object' ? opt.value : opt) === value)?.label || value || placeholder}
+                <span className={`truncate ${(value === undefined || value === null || value === "") ? 'text-muted' : 'text-text'}`}>
+                    {options.find(opt => (typeof opt === 'object' ? opt.value : opt) === value)?.label ?? value ?? placeholder}
                 </span>
                 <ChevronDown
                     size={16}

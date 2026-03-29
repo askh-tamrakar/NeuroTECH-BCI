@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import AnimatedList from '../ui/AnimatedList';
 import CustomSelect from '../ui/CustomSelect';
-import { Trash, ClipboardX, Trash2, FolderPlus, RefreshCw, Edit2, GitMerge, Check, X, ArchiveX, Filter, ArrowUpDown, ArrowUp, ArrowDown, ListFilter, Hash, ArrowDownToLine, ArrowUpToLine } from 'lucide-react';
+import { Trash, ClipboardX, Trash2, FolderPlus, RefreshCw, Edit2, GitMerge, Check, X, ArchiveX, ArrowUpDown, ArrowUp, ArrowDown, ListFilter, ArrowDownToLine, ArrowUpToLine } from 'lucide-react';
 
 export default function SessionManagerPanel({
     activeSensor,
@@ -18,7 +18,7 @@ export default function SessionManagerPanel({
     totalRows = 0,
     absoluteTotalRows = 0,
     hasMore = true,
-    refreshTrigger = 0, // NEW PROP
+    refreshTrigger = 0,
     onFetchDetails,
     onDeleteSession,
     onRenameSession,
@@ -105,8 +105,6 @@ export default function SessionManagerPanel({
 
     // Handler for AnimatedList selection
     const handleSessionSelect = (sessionName, index) => {
-        // Robust extraction: Split by '_session_' and take the last segment
-        // This handles cases where user put '_session_' in the name itself (though unlikely)
         const parts = sessionName.split('_session_');
         const clean = parts.length > 1 ? parts[parts.length - 1] : sessionName;
         onSessionChange(clean);
@@ -289,7 +287,7 @@ export default function SessionManagerPanel({
                     {/* Session Name Label */}
                     <div className="flex items-center gap-2 px-3 bg-primary/10 rounded border border-primary shrink-0 h-9">
                         <FolderPlus size={18} className="text-primary" />
-                        <span className="text-sm font-bold text-text uppercase tracking-wider truncate max-w-[150px]">
+                        <span className="text-sm font-bold text-inter uppercase tracking-wider truncate max-w-[150px]">
                             {currentSessionName ? currentSessionName.replace(`${activeSensor.toLowerCase()}_session_`, '') : 'Select a Session'}
                         </span>
                     </div>

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ChevronUp, ChevronDown } from 'lucide-react';
 
-export default function CustomNumberInput({ value, onChange, min, max, step = 1, accentColor = 'primary', className = 'w-[72px]', unit }) {
+export default function CustomNumberInput({ value, onChange, min, max, step = 1, accentColor = 'primary', className = 'w-[72px]', unit, borderless = false }) {
     const [localValue, setLocalValue] = useState(value);
     const [inputValue, setInputValue] = useState(value.toString());
     const inputRef = useRef(null);
@@ -62,8 +62,12 @@ export default function CustomNumberInput({ value, onChange, min, max, step = 1,
         }
     };
 
+    const containerClasses = borderless
+        ? `flex items-center border-none bg-transparent h-8 ${className}`
+        : `flex items-center bg-bg/50 border border-${accentColor}-500/80 rounded-lg overflow-hidden hover:border-${accentColor}-500 transition-colors focus-within:border-${accentColor}-500 h-8 ${className}`;
+
     return (
-        <div className={`flex items-center bg-bg/50 border border-${accentColor}-500/80 rounded-lg overflow-hidden hover:border-${accentColor}-500 transition-colors focus-within:border-${accentColor}-500 h-8 ${className}`}>
+        <div className={containerClasses}>
             <input
                 ref={inputRef}
                 type="text"
