@@ -5,6 +5,7 @@
   color: var(--text);
   font-family: 'Inter', sans-serif;
   background: var(--bg);
+  background: var(--bg);
   overflow: hidden;
 }
 
@@ -14,7 +15,8 @@
   border-right: 1px solid rgba(255, 255, 255, 0.08);
   display: flex;
   flex-direction: column;
-  padding: 24px 0;
+  padding: 24px 0 0 0;
+  flex-shrink: 0;
 }
 
 .eeg-sidebar-header {
@@ -25,11 +27,12 @@
   align-items: center;
   gap: 12px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
   margin-bottom: 24px;
 }
 
 .eeg-sidebar-group {
-  margin-bottom: 24px;
+  margin-bottom: 12px;
 }
 
 .eeg-sidebar-title {
@@ -55,14 +58,36 @@
 
 .eeg-nav-item:hover {
   background: rgba(255, 255, 255, 0.03);
+  background: rgba(255, 255, 255, 0.03);
   color: var(--text);
 }
 
 .eeg-nav-item.active {
   background: rgba(255, 255, 255, 0.08);
-  border-left-color: var(--accent, #4CAF50);
+  border-left-color: var(--accent, #FFC107);
   color: var(--text);
   font-weight: 500;
+}
+
+.eeg-sidebar-radar {
+  margin-top: auto;
+  padding: 20px 0 10px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.eeg-radar-title {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  color: #888;
+  letter-spacing: 1.5px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  align-self: flex-start;
+  margin-left: 24px;
 }
 
 .eeg-main-content {
@@ -70,6 +95,7 @@
   padding: 40px;
   display: flex;
   flex-direction: column;
+  background: radial-gradient(circle at top right, rgba(255, 255, 255, 0.02) 0%, transparent 60%);
   background: radial-gradient(circle at top right, rgba(255, 255, 255, 0.02) 0%, transparent 60%);
   overflow-y: auto;
 }
@@ -84,25 +110,52 @@
   display: flex;
   flex-direction: column;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
   position: relative;
   overflow: hidden;
   min-height: 500px;
 }
 
-.eeg-view-header {
+.eeg-overview-container {
   display: flex;
-  align-items: center;
-  gap: 16px;
+  flex-direction: column;
+  padding: 10px;
+}
+
+.eeg-overview-title {
+  font-size: 2.5rem;
+  font-weight: 700;
+  margin: 0 0 10px 0;
+  background: linear-gradient(135deg, #fff 0%, #aaa 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.eeg-overview-subtitle {
+  font-size: 1.1rem;
+  color: #aaa;
   margin-bottom: 40px;
 }
 
-.eeg-view-title {
-  font-size: 2.5rem;
-  font-weight: 700;
-  margin: 0;
-  background: linear-gradient(135deg, #fff 0%, #aaa 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+.eeg-app-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 24px;
+  padding-bottom: 40px;
+}
+
+.eeg-app-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 16px;
+  padding: 24px;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
 .eeg-view-icon {
@@ -123,23 +176,45 @@
   text-align: center;
   border: 1px solid rgba(255, 255, 255, 0.05);
   flex: 1;
+}
+
+.eeg-app-card:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 193, 7, 0.4);
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgba(255, 193, 7, 0.15);
+}
+
+.eeg-app-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  background: rgba(255, 193, 7, 0.1);
+  color: var(--accent, #FFC107);
   display: flex;
-  flex-direction: column;
-  justify-content: center;
   align-items: center;
+  justify-content: center;
+  margin-bottom: 20px;
+  transition: all 0.3s ease;
 }
 
-.eeg-score-display {
-  font-size: 5rem;
-  font-weight: 800;
-  margin: 20px 0;
-  line-height: 1;
+.eeg-app-card:hover .eeg-app-icon {
+  background: rgba(255, 193, 7, 0.2);
+  transform: scale(1.05);
 }
 
-.eeg-meta-text {
+.eeg-app-card h3 {
+  margin: 0 0 10px 0;
   font-size: 1.25rem;
-  color: #aaa;
-  margin-top: 10px;
+  color: #fff;
+  font-weight: 600;
+}
+
+.eeg-app-card p {
+  margin: 0;
+  font-size: 0.95rem;
+  color: #888;
+  line-height: 1.5;
 }
 
 .eeg-progress-track {
@@ -185,6 +260,22 @@
   height: 100%;
   color: #666;
   gap: 20px;
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.4s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .loader-circle {

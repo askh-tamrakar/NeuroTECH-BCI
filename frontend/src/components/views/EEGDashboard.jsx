@@ -1,30 +1,53 @@
-import React, { useState, useEffect } from 'react';
-import { Activity, Music, Brain, Wind, AlertTriangle, Eye, Radio, Layout } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Activity, Music, Wind, Eye, Grid } from 'lucide-react';
 import '../../styles/views/EEGDashboard.css';
 
 import SSVEPView from './SSVEPView';
 import MusicView from './MusicView';
-import FocusView from './FocusView';
 import MeditationView from './MeditationView';
-import StressView from './StressView';
-import FFTView from './FFTView';
 import BubbleGameView from './BubbleGameView';
-import VisualEEGView from './VisualEEGView';
+
+const OVERVIEW_APPS = [
+  { id: 'music', title: 'Music Control', icon: Music, desc: 'Control playback using frontal lobe focus states.' },
+  { id: 'meditation', title: 'Meditation Trainer', icon: Wind, desc: 'Guided neurofeedback breathing sessions.' },
+  { id: 'bubble', title: 'Bubble Game', icon: Activity, desc: 'Interactive peak wave game.' },
+  { id: 'ssvep', title: 'SSVEP Interface', icon: Eye, desc: 'Visual cortex stimulation via flickering targets.' },
+];
+
+const OverviewGrid = ({ onSelect }) => (
+  <div className="eeg-overview-container animate-fade-in">
+    <h1 className="eeg-overview-title">Applications Dashboard</h1>
+    <p className="eeg-overview-subtitle">Select a neuro-application to begin session.</p>
+    <div className="eeg-app-grid">
+      {OVERVIEW_APPS.map(app => (
+        <div key={app.id} className="eeg-app-card" onClick={() => onSelect(app.id)}>
+          <div className="eeg-app-icon"><app.icon size={28} /></div>
+          <h3>{app.title}</h3>
+          <p>{app.desc}</p>
+        </div>
+      ))}
+    </div>
+  </div>
+);
+
+
 
 const EEGDashboard = ({ wsEvent, isConnected, wsUrl }) => {
-  const [preset, setPreset] = useState("frontal_fp1");
-  const [currentView, setCurrentView] = useState("music");
+  const [currentView, setCurrentView] = useState("overview");
   const [eegResult, setEegResult] = useState(null);
 
   useEffect(() => {
+    let modePreset = "frontal_fp1";
+    if (currentView === "ssvep") modePreset = "visual_eeg_oz";
+
     fetch('/api/mode', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ preset, view: currentView })
+      body: JSON.stringify({ preset: modePreset, view: currentView })
     }).catch(err => console.error("Failed to update mode:", err));
 
     setEegResult(null);
-  }, [preset, currentView]);
+  }, [currentView]);
 
   useEffect(() => {
     if (wsEvent && wsEvent.event === 'eeg_mode_result') {
@@ -33,110 +56,76 @@ const EEGDashboard = ({ wsEvent, isConnected, wsUrl }) => {
   }, [wsEvent]);
 
   const renderView = () => {
-    if (preset.includes("ssvep")) {
-      return <SSVEPView isConnected={isConnected} wsEvent={wsEvent} />;
-    }
-
     switch (currentView) {
+      case "overview": return <OverviewGrid onSelect={setCurrentView} />;
       case "music": return <MusicView result={eegResult} />;
-      case "focus": return <FocusView result={eegResult} />;
       case "meditation": return <MeditationView result={eegResult} />;
-      case "stress": return <StressView result={eegResult} />;
-      case "fft": return <FFTView wsUrl={wsUrl} />;
       case "bubble": return <BubbleGameView result={eegResult} isConnected={isConnected} />;
-      case "monitor": return <VisualEEGView wsEvent={wsEvent} isConnected={isConnected} />;
-      default: return <div className="waiting-container">Select an application...</div>;
+      case "ssvep": return <SSVEPView isConnected={isConnected} wsEvent={wsEvent} />;
+      default: return <OverviewGrid onSelect={setCurrentView} />;
     }
   };
+
+  const isFullContainer = currentView === "ssvep" || currentView === "bubble";
 
   return (
     <div className="eeg-dashboard-wrapper">
       {/* Sidebar Navigation */}
       <div className="eeg-sidebar">
         <div className="eeg-sidebar-header">
-          <Activity size={24} color="var(--accent, #4CAF50)" />
+          <Activity size={24} color="var(--accent, #FFC107)" />
           <span>EEG Suite</span>
         </div>
 
-        <div className="eeg-sidebar-group">
-          <div className="eeg-sidebar-title">Pipeline / Sensor</div>
+        <div className="eeg-sidebar-group flex-grow overflow-y-auto [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-white/10 hover:[&::-webkit-scrollbar-thumb]:bg-white/20 [&::-webkit-scrollbar-thumb]:rounded-full">
+          <div className="eeg-sidebar-title">Applications</div>
           <div
-            className={`eeg-nav-item ${preset === 'ssvep_eeg_oz' ? 'active' : ''}`}
-            onClick={() => setPreset('ssvep_eeg_oz')}
+            className={`eeg-nav-item ${currentView === 'overview' ? 'active' : ''}`}
+            onClick={() => setCurrentView('overview')}
           >
-            <Eye size={18} /> SSVEP (Oz)
+            <Grid size={18} /> Dashboard Overview
           </div>
 
           <div
-            className={`eeg-nav-item ${preset === 'frontal_fp1' ? 'active' : ''}`}
-            onClick={() => setPreset('frontal_fp1')}
+            className={`eeg-nav-item ${currentView === 'music' ? 'active' : ''}`}
+            onClick={() => setCurrentView('music')}
           >
-            <Brain size={18} /> Frontal Lobe (FP1)
+            <Music size={18} /> Music Control
           </div>
           <div
-            className={`eeg-nav-item ${preset === 'frontal_fp2' ? 'active' : ''}`}
-            onClick={() => setPreset('frontal_fp2')}
+            className={`eeg-nav-item ${currentView === 'meditation' ? 'active' : ''}`}
+            onClick={() => setCurrentView('meditation')}
           >
-            <Brain size={18} /> Frontal Lobe (FP2)
+            <Wind size={18} /> Meditation Trainer
           </div>
+
+          <div
+            className={`eeg-nav-item ${currentView === 'bubble' ? 'active' : ''}`}
+            onClick={() => setCurrentView('bubble')}
+          >
+            <Activity size={18} /> Bubble Game
+          </div>
+          <div
+            className={`eeg-nav-item ${currentView === 'ssvep' ? 'active' : ''}`}
+            onClick={() => setCurrentView('ssvep')}
+          >
+            <Eye size={18} /> SSVEP Interface
+          </div>
+
         </div>
 
-        {preset.includes("frontal") && (
-          <div className="eeg-sidebar-group">
-            <div className="eeg-sidebar-title">Frontal Applications</div>
-            <div
-              className={`eeg-nav-item ${currentView === 'music' ? 'active' : ''}`}
-              onClick={() => setCurrentView('music')}
-            >
-              <Music size={18} /> Music Control
-            </div>
-            <div
-              className={`eeg-nav-item ${currentView === 'focus' ? 'active' : ''}`}
-              onClick={() => setCurrentView('focus')}
-            >
-              <Brain size={18} /> Focus Monitor
-            </div>
-            <div
-              className={`eeg-nav-item ${currentView === 'meditation' ? 'active' : ''}`}
-              onClick={() => setCurrentView('meditation')}
-            >
-              <Wind size={18} /> Meditation Trainer
-            </div>
-            <div
-              className={`eeg-nav-item ${currentView === 'stress' ? 'active' : ''}`}
-              onClick={() => setCurrentView('stress')}
-            >
-              <AlertTriangle size={18} /> Stress Monitor
-            </div>
-            <div
-              className={`eeg-nav-item ${currentView === 'fft' ? 'active' : ''}`}
-              onClick={() => setCurrentView('fft')}
-            >
-              <Radio size={18} /> FFT Spectrum
-            </div>
-            <div
-              className={`eeg-nav-item ${currentView === 'bubble' ? 'active' : ''}`}
-              onClick={() => setCurrentView('bubble')}
-            >
-              <Activity size={18} /> Bubble Game
-            </div>
-            <div
-              className={`eeg-nav-item ${currentView === 'monitor' ? 'active' : ''}`}
-              onClick={() => setCurrentView('monitor')}
-            >
-              <Layout size={18} /> Live Analytics
-            </div>
-          </div>
-        )}
+
       </div>
 
       {/* Main Content Area */}
       <div className="eeg-main-content" style={
-        (preset.includes("ssvep") || currentView === 'bubble')
-          ? { padding: 0, background: preset.includes("ssvep") ? '#000' : 'transparent', overflow: 'hidden', position: 'relative', height: '100%' }
+        isFullContainer
+          ? { padding: 0, background: currentView === "ssvep" ? '#000' : 'transparent', overflow: 'hidden', position: 'relative', height: '100%' }
           : { overflowY: 'auto', overflowX: 'hidden' }
       }>
-        {preset.includes("ssvep") || currentView === 'bubble' ? (
+        {isFullContainer ? (
+          renderView()
+        ) : currentView === "overview" ? (
           renderView()
         ) : (
           <div className="eeg-glass-card">
@@ -144,9 +133,8 @@ const EEGDashboard = ({ wsEvent, isConnected, wsUrl }) => {
           </div>
         )}
       </div>
-    </div>
+    </div >
   );
 };
 
 export default EEGDashboard;
-
