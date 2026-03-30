@@ -6,6 +6,7 @@ import {
     ArrowRightFromLine, Info, BookOpen
 } from 'lucide-react';
 import { soundHandler } from '../../handlers/SoundHandler';
+import { useTheme } from '../../contexts/ThemeContext';
 import CustomSelect from '../ui/inputs/CustomSelect';
 import CustomSlider from '../ui/inputs/CustomSlider';
 
@@ -907,20 +908,18 @@ const ControlPanel = ({
         </div>
 
         {/* Actions */}
-        <div className="grid grid-cols-1 gap-3">
-            <motion.button
+        <div className="grid grid-cols-1 gap-3 overflow-visible">
+            {/* Shimmer Effect */}
+            <button
                 onClick={onTrain}
                 disabled={loading}
-                whileHover={{ scale: 1.01 }}
-                whileActive={{ scale: 0.98 }}
-                className="group relative overflow-hidden py-2 bg-[var(--primary)] text-white hover:opacity-90 font-bold rounded-xl shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full flex items-center justify-center py-3 bg-primary text-primary-contrast rounded-xl font-bold text-[10px] tracking-[0.15em] transition-all shadow-[0_0_20px_rgba(var(--primary-rgb),0.2)] hover:shadow-[0_0_30px_rgba(var(--primary-rgb),0.4)] hover:scale-[1.05] hover:z-50 active:scale-95 group relative overflow-hidden disabled:opacity-20"
             >
-                {/* Shimmer Effect */}
                 <div className="absolute inset-0 bg-white/30 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000 ease-in-out skew-x-12" />
-
-                <span className="relative z-10 text-xl gap-4 flex items-center justify-center">
+                <span className="relative z-10 text-xl gap-4 flex items-center justify-center w-full">
                     {loading ? 'Training...' : (
                         <>
+                            Train
                             <motion.span
                                 initial={{ rotate: 0 }}
                                 whileHover={{
@@ -932,16 +931,17 @@ const ControlPanel = ({
                             >
                                 <Rocket size={34} />
                             </motion.span>
-                            Train New Model
+                            Model
                         </>
                     )}
                 </span>
-            </motion.button>
+            </button>
         </div>
     </div>
 );
 
 export default function MLTrainingView({ onSwitchLab }) {
+    const { currentThemeId } = useTheme();
     const API_BASE_URL = import.meta.env.VITE_API_URL || '';
     const [activeTab, setActiveTab] = useState('EMG');
 
@@ -1241,7 +1241,7 @@ export default function MLTrainingView({ onSwitchLab }) {
 
 
     return (
-        <div className="font-sans w-full flex-1 min-h-0 p-4 flex flex-col items-stretch overflow-hidden">
+        <div className="flex-1 flex flex-col h-full overflow-hidden p-4" key={currentThemeId}>
             {/* ERROR DISPLAY */}
             {error && <div className="w-full bg-red-900/20 border border-red-500 text-red-200 py-2 rounded mb-4 flex justify-between items-center shrink-0 text-sm px-4">
                 <span><strong>Error:</strong> {error}</span>
@@ -1249,8 +1249,8 @@ export default function MLTrainingView({ onSwitchLab }) {
             </div>}
 
             {/* CONTENT scrollable container */}
-            <div className="flex-1 w-full min-h-0 overflow-hidden">
-                <div className="h-full grid grid-cols-12 grid-rows-6 gap-4">
+            <div className="flex-1 overflow-hidden">
+                <div className="h-full grid grid-cols-12 grid-rows-6 gap-4 overflow-visible">
                     {/* LEFT SIDEBAR CONTROLS (Span 3) - NOW CONTAINS ACCURACY & FEATURES TOO */}
                     <div className="col-span-12 lg:col-span-3 row-span-6 flex flex-col gap-4 min-h-0">
                         {/* 1. CONTROLS */}
