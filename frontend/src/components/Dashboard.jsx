@@ -41,10 +41,10 @@ export default function Dashboard() {
 
   // Derived nav colors from current theme
   const navColors = React.useMemo(() => ({
-    base: currentTheme.colors['--accent'],
-    pill: currentTheme.colors['--text'],
-    pillText: currentTheme.colors['--accent'],
-    hoverText: currentTheme.colors['--text']
+    base: currentTheme.navPill,
+    pill: currentTheme.navBase,
+    pillText: currentTheme.navPill,
+    hoverText: currentTheme.navBase
   }), [currentTheme]);
 
   // Pill size calculation
@@ -118,7 +118,7 @@ export default function Dashboard() {
       href: '#',
       menu: ({ close }) => (
         <ScrollStack style={{ '--scroll-stack-width': `${pillSize.width + 78}px` }}>
-          {themes.map((t) => (
+          {themes.filter(t => t.visible !== false).map((t) => (
             <ScrollStackItem key={t.id}>
               <Pill
                 label={t.name}
@@ -130,10 +130,10 @@ export default function Dashboard() {
                   setTheme(t.id);
                   close?.();
                 }}
-                baseColor={t.colors['--text']}
-                pillColor={t.colors['--accent']}
-                hoveredTextColor={t.colors['--accent']}
-                pillTextColor={t.colors['--text']}
+                baseColor={t.navBase}
+                pillColor={t.navPill}
+                hoveredTextColor={t.navPill}
+                pillTextColor={t.navBase}
               />
             </ScrollStackItem>
           ))}

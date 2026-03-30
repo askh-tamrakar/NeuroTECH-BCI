@@ -42,6 +42,7 @@ import { useSettings } from '../../contexts/SettingsContext'
 import { soundHandler } from '../../handlers/SoundHandler'
 import { Music, Volume2, Upload, VolumeX } from 'lucide-react'
 import { audioStorage } from '../../utils/AudioStorage'
+import { Reorder } from 'framer-motion'
 
 // Helper for color inputs
 const ColorInput = ({ label, value, onChange }) => (
@@ -146,7 +147,10 @@ export default function SettingsView({
     updateThemeColor,
     removeTheme,
     resetThemes,
-    resetThemeColors
+    resetThemeColors,
+    reorderThemes,
+    toggleThemeVisibility,
+    updateThemeOrder
   } = useTheme()
 
   const { user, logout } = useAuth()
@@ -168,6 +172,8 @@ export default function SettingsView({
     setActiveSection(id);
     if (onSectionChange) onSectionChange(id);
   };
+
+  const [organizeMode, setOrganizeMode] = useState(false);
 
   // Editor state
   const [isEditingName, setIsEditingName] = useState(false);
@@ -470,7 +476,10 @@ export default function SettingsView({
                   <p className="text-[13px] text-muted mt-1">Customize your dashboard theme and color palette</p>
                 </div>
                 <div className="flex gap-2">
-                  <button onClick={resetThemes} className="px-3.5 py-1.5 rounded-lg text-[11px] font-bold tracking-[0.06em] cursor-pointer border border-border bg-surface/95 text-muted hover:text-text hover:border-white/20 transition-all">Reset Defaults</button>
+                  <button onClick={() => setOrganizeMode(!organizeMode)} className={`px-3.5 py-1.5 rounded-lg text-[11px] font-bold tracking-[0.06em] cursor-pointer border transition-all ${organizeMode ? 'bg-primary border-primary text-bg' : 'border-primary/30 bg-primary/10 text-primary hover:bg-primary/20'}`}>
+                    {organizeMode ? 'Done Organizing' : 'Organize'}
+                  </button>
+                  <button onClick={resetThemes} className="px-3.5 py-1.5 rounded-lg text-[11px] font-bold tracking-[0.06em] cursor-pointer border border-border bg-surface/95 text-muted hover:text-text hover:border-white/20 transition-all">Reset</button>
                   <button onClick={handleCreateTheme} className="px-3.5 py-1.5 rounded-lg text-[11px] font-bold tracking-[0.06em] cursor-pointer border border-primary/30 bg-primary/10 text-primary hover:bg-primary/20 transition-all">+ New Theme</button>
                 </div>
               </div>
@@ -482,22 +491,64 @@ export default function SettingsView({
                   </span>
                 </div>
                 <div className="p-5 flex flex-col gap-4">
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2.5">
-                    {themes.map((t) => (
-                      <div
-                        key={t.id}
-                        onClick={() => setTheme(t.id)}
-                        className={`border rounded-xl p-3 cursor-pointer transition-all bg-surface/80 hover:-translate-y-[1px] ${currentThemeId === t.id ? 'border-primary ring-1 ring-primary/50 shadow-[0_0_20px_rgba(0,200,240,0.08)]' : 'border-border/50 hover:border-border'}`}
-                      >
-                        <div className="flex gap-1.5 mb-2">
-                          <div className="w-[11px] h-[11px] rounded-full" style={{ backgroundColor: t.colors['--bg'] }} />
-                          <div className="w-[11px] h-[11px] rounded-full" style={{ backgroundColor: t.colors['--primary'] }} />
-                          <div className="w-[11px] h-[11px] rounded-full" style={{ backgroundColor: t.colors['--accent'] }} />
+                  {organizeMode ? (
+                    <Reorder.Group axis="y" values={themes} onReorder={reorderThemes} className="flex flex-col gap-2 max-h-[400px] overflow-y-auto custom-scrollbar pr-2">
+                      {themes.map((t) => (
+                        <Reorder.Item key={t.id} value={t} className="flex items-center justify-between p-3 bg-surface/80 border border-border/50 rounded-xl hover:border-border cursor-grab active:cursor-grabbing">
+                          <div className="flex items-center gap-3">
+                            <Menu size={16} className="text-muted" />
+                            <div className="flex gap-1.5 mt-0.5" title="Base, Primary, Accent">
+                              <div className="w-[12px] h-[12px] rounded-full" style={{ backgroundColor: t.colors['--bg'] }} />
+                              <div className="w-[12px] h-[12px] rounded-full" style={{ backgroundColor: t.colors['--primary'] }} />
+                              <div className="w-[12px] h-[12px] rounded-full" style={{ backgroundColor: t.colors['--accent'] }} />
+                            </div>
+                            <div className="flex flex-col">
+                              <span className="text-[13px] font-bold tracking-tight text-text leading-tight">{t.name}</span>
+                              <span className="text-[10px] uppercase font-mono text-muted tracking-widest">{t.id}</span>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-6" onPointerDown={e => e.stopPropagation()}>
+                            {/* Numeric Order Input */}
+                            <div className="flex items-center gap-2">
+                              <span className="text-[9px] uppercase font-bold text-muted tracking-wide">Order</span>
+                              <input 
+                                type="number" 
+                                value={t.order} 
+                                onChange={(e) => updateThemeOrder(t.id, parseInt(e.target.value) || 0)}
+                                className="w-16 bg-bg border border-border/50 rounded-lg px-2 py-1 text-[11px] font-mono tabular-nums outline-none focus:border-primary text-center"
+                              />
+                            </div>
+                            {/* Custom Radio Toggle */}
+                            <div className="flex items-center gap-2 cursor-pointer" onClick={() => toggleThemeVisibility(t.id)}>
+                              <div className={`w-4 h-4 rounded-full border flex items-center justify-center transition-all ${t.visible !== false ? 'border-primary bg-primary/20' : 'border-border bg-bg'}`}>
+                                {t.visible !== false && <div className="w-2 h-2 rounded-full bg-primary" />}
+                              </div>
+                              <span className={`text-[10px] uppercase font-bold tracking-wider w-14 ${t.visible !== false ? 'text-primary' : 'text-muted'}`}>
+                                {t.visible !== false ? 'Enabled' : 'Disabled'}
+                              </span>
+                            </div>
+                          </div>
+                        </Reorder.Item>
+                      ))}
+                    </Reorder.Group>
+                  ) : (
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2.5">
+                      {themes.filter(t => t.visible !== false).map((t) => (
+                        <div
+                          key={t.id}
+                          onClick={() => setTheme(t.id)}
+                          className={`border rounded-xl p-3 cursor-pointer transition-all bg-surface/80 hover:-translate-y-[1px] ${currentThemeId === t.id ? 'border-primary ring-1 ring-primary/50 shadow-[0_0_20px_rgba(0,200,240,0.08)]' : 'border-border/50 hover:border-border'}`}
+                        >
+                          <div className="flex gap-1.5 mb-2">
+                            <div className="w-[11px] h-[11px] rounded-full" style={{ backgroundColor: t.colors['--bg'] }} />
+                            <div className="w-[11px] h-[11px] rounded-full" style={{ backgroundColor: t.colors['--primary'] }} />
+                            <div className="w-[11px] h-[11px] rounded-full" style={{ backgroundColor: t.colors['--accent'] }} />
+                          </div>
+                          <div className={`text-[11px] font-medium leading-[1.3] truncate ${currentThemeId === t.id ? 'text-primary' : 'text-muted'}`}>{t.name}</div>
                         </div>
-                        <div className={`text-[11px] font-medium leading-[1.3] truncate ${currentThemeId === t.id ? 'text-primary' : 'text-muted'}`}>{t.name}</div>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  )}
                   <div className="bg-surface/80 rounded-xl px-4 py-3.5 border border-border flex flex-col gap-3">
                     <div className="flex items-center gap-3.5 w-full">
                       <div className="text-[11px] font-semibold tracking-[0.08em] uppercase text-muted shrink-0">Active</div>
