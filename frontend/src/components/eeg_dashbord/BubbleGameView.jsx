@@ -1,13 +1,23 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Settings, Play, Square, Activity, MousePointer2, Zap, History, Menu, ChevronLeft, ChevronUp, Power, ChevronDown, Gamepad2, Mouse, Trash2 } from 'lucide-react';
 import { useTheme } from '../../contexts/ThemeContext';
 import '../../styles/views/BubbleGameView.css';
 
-const BubbleGameView = ({ result, isConnected }) => {
+const BubbleGameView = ({ result, isConnected, onBackToMenu }) => {
   const containerRef = useRef(null);
   const canvasWrapRef = useRef(null);
   const resultRef = useRef(null);
   const { currentTheme } = useTheme();
   const themeRef = useRef(currentTheme);
+
+  const [showSidebar, setShowSidebar] = useState(true);
+  const [globalRunning, setGlobalRunning] = useState(false);
+  const [mouseMode, setMouseMode] = useState(false);
+  const [difficulty, setDifficulty] = useState(1);
+  
+  // Expose these for React to read
+  const [realTimeFreq, setRealTimeFreq] = useState(0);
+  const [focusScore, setFocusScore] = useState(0);
 
   useEffect(() => { themeRef.current = currentTheme; }, [currentTheme]);
   useEffect(() => { resultRef.current = result; }, [result]);
@@ -19,9 +29,10 @@ const BubbleGameView = ({ result, isConnected }) => {
     const $$ = (sel) => container.querySelectorAll(sel);
 
     const canvas = $('gameCanvas');
+    if (!canvas) return; // Wait for mount
     const ctx = canvas.getContext('2d');
     const waveCanvas = $('waveCanvas');
-    const waveCtx = waveCanvas.getContext('2d');
+    const waveCtx = waveCanvas ? waveCanvas.getContext('2d') : null;
 
     let W, H;
     let score = 0, level = 1, lives = 3, combo = 0, maxCombo = 0;
@@ -33,12 +44,12 @@ const BubbleGameView = ({ result, isConnected }) => {
     let waveHistory = [];
     const WAVE_LEN = 140;
     let gameRunning = false;
-    let mouseMode = false;
+    let isMouseMode = mouseMode;
     let animId = null;
     let bubblesPopped = 0, bubblesMissed = 0;
     let sessionStart = 0;
     let activeChannel = 'attention';
-    let peakBands = [0, 0, 0, 0, 0]; // Delta, Theta, Alpha, Beta, Gamma peaks
+    let peakBands = [0, 0, 0, 0, 0]; 
 
     const channels = {
       attention: v => Math.max(0, Math.min(1, v / 100)),
@@ -47,19 +58,20 @@ const BubbleGameView = ({ result, isConnected }) => {
       beta:  v => Math.max(0, Math.min(1, v / 10)),
     };
 
-    // ── RESIZE ──────────────────────────────────
     function resize() {
       const wrap = canvasWrapRef.current || canvas.parentElement;
       if (!wrap) return;
       const rect = wrap.getBoundingClientRect();
       W = canvas.width = rect.width;
       H = canvas.height = rect.height;
-      if (waveCanvas) waveCanvas.width = waveCanvas.offsetWidth;
+      if (waveCanvas) waveCanvas.width = waveCanvas.offsetWidth || 560;
     }
     window.addEventListener('resize', resize);
-    resize();
+    resize(); // Force instant dimension assignment before drawBackground
+    // Initial delay for tailwind transitions
+    setTimeout(resize, 10);
+    setTimeout(resize, 350); 
 
-    // ── MOUSE ────────────────────────────────────
     const mouseMoveHandler = (e) => {
       const wrap = canvasWrapRef.current || canvas.parentElement;
       if (!wrap) return;
@@ -71,11 +83,11 @@ const BubbleGameView = ({ result, isConnected }) => {
     };
     window.addEventListener('mousemove', mouseMoveHandler);
 
-    // ── SIMULATION ───────────────────────────────
     let simPhase = 0, simTrend = 0;
     function startSimulation() {
       eegMode = 'simulate';
-      setConnStatus('simulating', 'SIMULATE');
+      const indicator = $('conn-indicator');
+      if (indicator) indicator.className = 'w-2 h-2 rounded-full animate-pulse bg-amber-500 shadow-[0_0_8px_#f59e0b]';
       if (simInterval) clearInterval(simInterval);
       if (fetchInterval) clearInterval(fetchInterval);
       simInterval = setInterval(() => {
@@ -93,7 +105,8 @@ const BubbleGameView = ({ result, isConnected }) => {
 
     function startLiveStream() {
       eegMode = 'ws';
-      setConnStatus('connected', 'LIVE STREAM');
+      const indicator = $('conn-indicator');
+      if (indicator) indicator.className = 'w-2 h-2 rounded-full bg-green-500 shadow-[0_0_8px_#22c55e]';
       if (simInterval) clearInterval(simInterval);
       if (fetchInterval) clearInterval(fetchInterval);
       fetchInterval = setInterval(() => {
@@ -117,18 +130,16 @@ const BubbleGameView = ({ result, isConnected }) => {
       }, 60);
     }
 
-    function setConnStatus(state, label) {
-      const dot = $('conn-dot'); if (dot) dot.className = 'dot ' + state;
-      const lbl = $('conn-label'); if (lbl) lbl.textContent = label;
-    }
-
     function updateEEGUI() {
       waveHistory.push(eegSignal);
       if (waveHistory.length > WAVE_LEN) waveHistory.shift();
       const fill = $('signal-fill');
-      if (fill) { fill.style.width = (eegSignal * 100) + '%'; fill.className = 'signal-fill' + (eegSignal > .65 ? ' high' : eegSignal < .3 ? ' low' : ''); }
-      const sigVal = $('signal-val'); if (sigVal) sigVal.textContent = isNaN(rawSignal) ? '0.00' : rawSignal.toFixed(2);
-      const focVal = $('focus-val'); if (focVal) focVal.textContent = Math.round(eegSignal * 100) + '%';
+      if (fill) { fill.style.width = (eegSignal * 100) + '%'; fill.className = 'signal-fill ' + (eegSignal > .65 ? 'high' : eegSignal < .3 ? 'low' : ''); }
+      
+      // Update React state explicitly for sidebar UI
+      setRealTimeFreq(isNaN(rawSignal) ? 0 : rawSignal);
+      setFocusScore(Math.round(eegSignal * 100));
+
       drawWave();
       updateBandPanel();
     }
@@ -176,13 +187,14 @@ const BubbleGameView = ({ result, isConnected }) => {
       const step = cw / (WAVE_LEN - 1);
       waveCtx.beginPath();
       waveCtx.strokeStyle = '#00f5ff'; waveCtx.lineWidth = 1.5;
-      waveCtx.shadowColor = '#00f5ff'; waveCtx.shadowBlur = 8;
+      waveCtx.shadowColor = '#00f5ff'; waveCtx.shadowBlur = 4;
       for (let i = 0; i < waveHistory.length; i++) {
         const x = (i - (WAVE_LEN - waveHistory.length)) * step;
         const y = ch - waveHistory[i] * (ch * 0.85) - ch * 0.07;
         i === 0 ? waveCtx.moveTo(x, y) : waveCtx.lineTo(x, y);
       }
       waveCtx.stroke();
+      
       waveCtx.beginPath();
       for (let i = 0; i < waveHistory.length; i++) {
         const x = (i - (WAVE_LEN - waveHistory.length)) * step;
@@ -191,11 +203,10 @@ const BubbleGameView = ({ result, isConnected }) => {
       }
       waveCtx.lineTo(cw, ch); waveCtx.lineTo(0, ch); waveCtx.closePath();
       const grad = waveCtx.createLinearGradient(0, 0, 0, ch);
-      grad.addColorStop(0, 'rgba(0,245,255,.18)'); grad.addColorStop(1, 'rgba(0,245,255,0)');
+      grad.addColorStop(0, 'rgba(0,245,255,.12)'); grad.addColorStop(1, 'rgba(0,245,255,0)');
       waveCtx.fillStyle = grad; waveCtx.fill();
     }
 
-    // ── BUBBLE COLORS ────────────────────────────
     const hexToRgba = (hex, alpha) => {
       if (!hex) return `rgba(255,255,255,${alpha})`;
       if (hex.startsWith('rgba') || hex.startsWith('rgb')) return hex;
@@ -227,10 +238,14 @@ const BubbleGameView = ({ result, isConnected }) => {
       const cols = getBubbleColors();
       const col = cols[Math.floor(Math.random() * cols.length)];
       const type = SPECIAL_TYPES[Math.floor(Math.random() * SPECIAL_TYPES.length)];
+      
+      let diff = 1;
+      try { const df = container.querySelector('#game-difficulty'); if (df) diff = parseInt(df.dataset.val) || 1; } catch (e) {}
+
       const radius = 18 + Math.random() * 22 + (type === 'bomb' ? 10 : 0);
       bubbles.push({
         x: radius + Math.random() * (W - radius * 2), y: H + radius, r: radius,
-        speed: 0.6 + Math.random() * 0.8 + level * 0.12,
+        speed: 0.6 + Math.random() * 0.8 + level * 0.12 + (diff - 1) * 0.8,
         drift: (Math.random() - 0.5) * 0.4, col, type,
         wobble: Math.random() * Math.PI * 2,
         wobbleSpeed: 0.03 + Math.random() * 0.02,
@@ -249,7 +264,7 @@ const BubbleGameView = ({ result, isConnected }) => {
 
     function spawnFloatText(x, y, text, color) {
       const el = document.createElement('div');
-      el.className = 'pop-text';
+      el.className = 'pop-text absolute pointer-events-none font-display font-bold text-lg z-50';
       el.style.cssText = `left:${x}px;top:${y}px;color:${color};text-shadow:0 0 12px ${color}`;
       el.textContent = text;
       const wrap = canvasWrapRef.current;
@@ -257,7 +272,13 @@ const BubbleGameView = ({ result, isConnected }) => {
     }
 
     function getCursorRadius() {
-      const base = mouseMode ? 48 : 30, extra = mouseMode ? 60 : 100;
+      let isManualMode = false;
+      try {
+           const btn = container.querySelector('#mode-indicator-switch');
+           if (btn && btn.textContent.includes('MANUAL')) isManualMode = true; 
+      } catch (e) {}
+
+      const base = isManualMode ? 48 : 30, extra = isManualMode ? 60 : 100;
       const r = base + eegSignal * extra;
       const cur = $('cursor');
       if (cur) {
@@ -312,11 +333,15 @@ const BubbleGameView = ({ result, isConnected }) => {
     }
     function buildLivesUI() {
       const el = $('hud-lives'); if (!el) return; el.innerHTML = '';
-      for (let i = 0; i < 3; i++) { const d = document.createElement('div'); d.className = 'life-dot' + (i >= lives ? ' dead' : ''); el.appendChild(d); }
+      for (let i = 0; i < 3; i++) { const d = document.createElement('div'); d.className = 'w-2.5 h-2.5 rounded-full bg-pink-500 shadow-[0_0_8px_#ec4899] transition-opacity ' + (i >= lives ? 'opacity-10 shadow-none' : ''); el.appendChild(d); }
     }
 
     let spawnTimer = 0;
-    function spawnRate() { return Math.max(30, 80 - level * 5); }
+    function spawnRate() { 
+      let diff = 1;
+      try { const df = container.querySelector('#game-difficulty'); if (df) diff = parseInt(df.dataset.val) || 1; } catch (e) {}
+      return Math.max(15, 80 - level * 5 - (diff - 1) * 20); 
+    }
 
     let bgStars = [];
     function initStars() {
@@ -386,6 +411,12 @@ const BubbleGameView = ({ result, isConnected }) => {
     function loadSessionData() {
       try { return JSON.parse(localStorage.getItem('nb_sessions') || '[]'); } catch { return []; }
     }
+    
+    container.clearHistoryHandler = () => {
+      localStorage.removeItem('nb_sessions');
+      renderSessionHistory();
+    };
+
     function saveSession(sessionData) {
       const sessions = loadSessionData();
       sessions.unshift(sessionData);
@@ -396,23 +427,26 @@ const BubbleGameView = ({ result, isConnected }) => {
       const sessions = loadSessionData();
       const container2 = $('session-history');
       if (!container2) return;
-      if (sessions.length === 0) { container2.innerHTML = '<div class="no-sessions">No sessions yet</div>'; return; }
+      if (sessions.length === 0) { container2.innerHTML = '<div class="text-[10px] text-[var(--muted)]/50 text-center tracking-[2px] py-4">NO SESSIONS YET</div>'; return; }
       container2.innerHTML = sessions.map((s, i) => `
-        <div class="session-entry">
-          <div class="se-top"><span class="se-num">#${i+1}</span><span class="se-score">${s.score.toLocaleString()}</span></div>
-          <div class="se-bottom">
-            <span>Lvl ${s.level}</span>
-            <span>${s.accuracy}%</span>
-            <span>${s.time}s</span>
-            <span class="se-mode">${s.mode}</span>
+        <div class="bg-[var(--primary)]/5 border border-[var(--primary)]/10 rounded-lg p-2.5 mb-2 hover:bg-[var(--primary)]/10 transition-colors">
+          <div class="flex justify-between items-baseline mb-1">
+            <span class="text-[9px] text-[var(--teal)] opacity-60 tracking-wider">#${i+1}</span>
+            <span class="font-display text-[15px] font-bold text-white shadow-glow">${s.score.toLocaleString()}</span>
+          </div>
+          <div class="flex gap-2 text-[8px] text-[var(--primary)]/60 tracking-widest flex-wrap uppercase font-bold">
+            <span>LVL ${s.level}</span>
+            <span>ACC ${s.accuracy}%</span>
+            <span>${s.time}S</span>
+            <span class="${s.mode === 'MANUAL' ? 'text-amber-500' : 'text-[var(--primary)]'}">${s.mode}</span>
           </div>
         </div>
       `).join('');
     }
 
     // ── GAME CONTROL ──────────────────────────────
-    container.startGameHandler = (mMode = false) => {
-      mouseMode = mMode; peakBands = [0,0,0,0,0];
+    container.startGameHandler = () => {
+      peakBands = [0,0,0,0,0];
       score = 0; level = 1; lives = 3; combo = 0; maxCombo = 0;
       bubblesPopped = 0; bubblesMissed = 0; bubbles = []; particles = []; waveHistory = [];
       spawnTimer = 0; sessionStart = Date.now();
@@ -421,48 +455,51 @@ const BubbleGameView = ({ result, isConnected }) => {
       const cd = $('combo-display'); if(cd) cd.textContent = '';
       ['pk-delta','pk-theta','pk-alpha','pk-beta','pk-gamma'].forEach(id => { const el = $(id); if(el) el.textContent = '0%'; });
       buildLivesUI();
-      $('startScreen').classList.add('hidden');
-      $('gameOverScreen').classList.add('hidden');
+      
+      const go = $('gameOverScreen');
+      if (go) go.classList.add('hidden');
+      
       initStars(); gameRunning = true;
-      if (!simInterval && !fetchInterval) startSimulation();
+      if (!simInterval && !fetchInterval) {
+         if (eegMode === 'simulate') startSimulation(); else startLiveStream();
+      }
       loop();
-      // Update mode indicator
-      const mi = $('mode-indicator');
-      if (mi) mi.textContent = mMode ? 'MANUAL' : 'SENSOR';
-      const mb = $('mode-badge');
-      if (mb) mb.className = 'mode-badge ' + (mMode ? 'mode-manual' : 'mode-sensor');
+      setGlobalRunning(true);
     };
 
-    container.switchModeHandler = () => {
-      if (gameRunning) {
-        // Switch in-game
-        mouseMode = !mouseMode;
-        const mi = $('mode-indicator'); if (mi) mi.textContent = mouseMode ? 'MANUAL' : 'SENSOR';
-        const mb = $('mode-badge'); if (mb) mb.className = 'mode-badge ' + (mouseMode ? 'mode-manual' : 'mode-sensor');
-      }
+    container.stopGameHandler = () => {
+       endGame();
     };
 
     function endGame() {
       gameRunning = false;
+      setGlobalRunning(false);
       if (animId) cancelAnimationFrame(animId);
       const elapsed = Math.round((Date.now() - sessionStart) / 1000);
       const acc = bubblesPopped + bubblesMissed > 0 ? Math.round(bubblesPopped / (bubblesPopped + bubblesMissed) * 100) : 0;
-      const sg = $('stat-grid');
-      if (sg) sg.innerHTML = `
-        <div class="stat-cell"><div class="s-label">SCORE</div><div class="s-val">${score.toLocaleString()}</div></div>
-        <div class="stat-cell"><div class="s-label">LEVEL</div><div class="s-val">${level}</div></div>
-        <div class="stat-cell"><div class="s-label">MAX COMBO</div><div class="s-val">${maxCombo}</div></div>
-        <div class="stat-cell"><div class="s-label">POPPED</div><div class="s-val">${bubblesPopped}</div></div>
-        <div class="stat-cell"><div class="s-label">ACCURACY</div><div class="s-val">${acc}%</div></div>
-        <div class="stat-cell"><div class="s-label">TIME</div><div class="s-val">${elapsed}s</div></div>
-      `;
-      $('gameOverScreen').classList.remove('hidden');
-      saveSession({ score, level, accuracy: acc, time: elapsed, mode: mouseMode ? 'MANUAL' : 'SENSOR' });
+      const statGrid = $('stat-grid');
+      if (statGrid) {
+          statGrid.innerHTML = `
+            <div class="bg-[var(--primary)]/5 border border-[var(--primary)]/20 rounded-lg p-3 text-center"><div class="text-[9px] tracking-[3px] text-[var(--teal)] opacity-70 mb-1">SCORE</div><div class="font-display text-xl font-bold text-white">${score.toLocaleString()}</div></div>
+            <div class="bg-[var(--primary)]/5 border border-[var(--primary)]/20 rounded-lg p-3 text-center"><div class="text-[9px] tracking-[3px] text-[var(--teal)] opacity-70 mb-1">LEVEL</div><div class="font-display text-xl font-bold text-white">${level}</div></div>
+            <div class="bg-[var(--primary)]/5 border border-[var(--primary)]/20 rounded-lg p-3 text-center"><div class="text-[9px] tracking-[3px] text-[var(--teal)] opacity-70 mb-1">COMBO</div><div class="font-display text-xl font-bold text-white">${maxCombo}</div></div>
+            <div class="bg-[var(--primary)]/5 border border-[var(--primary)]/20 rounded-lg p-3 text-center"><div class="text-[9px] tracking-[3px] text-[var(--teal)] opacity-70 mb-1">POPPED</div><div class="font-display text-xl font-bold text-white">${bubblesPopped}</div></div>
+            <div class="bg-[var(--primary)]/5 border border-[var(--primary)]/20 rounded-lg p-3 text-center"><div class="text-[9px] tracking-[3px] text-[var(--teal)] opacity-70 mb-1">ACCURACY</div><div class="font-display text-xl font-bold text-white">${acc}%</div></div>
+            <div class="bg-[var(--primary)]/5 border border-[var(--primary)]/20 rounded-lg p-3 text-center"><div class="text-[9px] tracking-[3px] text-[var(--teal)] opacity-70 mb-1">TIME</div><div class="font-display text-xl font-bold text-white">${elapsed}s</div></div>
+          `;
+      }
+      const goScreen = $('gameOverScreen');
+      if (goScreen) goScreen.classList.remove('hidden');
+      
+      let isManualMode = false;
+      try {
+           const btn = container.querySelector('#mode-indicator-switch');
+           if (btn && btn.textContent.includes('MANUAL')) isManualMode = true; 
+      } catch (e) {}
+
+      saveSession({ score, level, accuracy: acc, time: elapsed, mode: isManualMode ? 'MANUAL' : 'SENSOR' });
       renderSessionHistory();
     }
-
-    const connBtn = $('conn-btn');
-    if (connBtn) { connBtn.onclick = () => { if (eegMode === 'simulate') startLiveStream(); else startSimulation(); }; }
 
     $$('.ch-tag').forEach(tag => {
       tag.onclick = (e) => {
@@ -473,6 +510,8 @@ const BubbleGameView = ({ result, isConnected }) => {
     });
 
     startSimulation(); initStars(); renderSessionHistory();
+    // initial paint draw
+    drawBackground();
 
     return () => {
       window.removeEventListener('resize', resize);
@@ -485,139 +524,264 @@ const BubbleGameView = ({ result, isConnected }) => {
   }, []);
 
   return (
-    <div className="bubble-layout" ref={containerRef}>
+    <div className="w-full h-full flex bg-[var(--bg)] overflow-hidden relative select-none" ref={containerRef}>
+      <div id="game-difficulty" data-val={difficulty} className="hidden"></div>
+      {/* ── GAME CANVAS MAIN AREA ── */}
+      <div className={`flex-grow flex flex-col items-center justify-center relative transition-all duration-300 ${showSidebar ? 'ml-80' : 'ml-[4.25rem]'}`}>
+         <div className="absolute inset-0 bubble-canvas-wrap" ref={canvasWrapRef}>
+            <canvas id="gameCanvas"></canvas>
 
-      {/* ── GAME CANVAS AREA ── */}
-      <div className="bubble-canvas-wrap" ref={canvasWrapRef}>
-        <canvas id="gameCanvas"></canvas>
+            {/* Custom Cursor Aura */}
+            <svg id="cursor" className="absolute pointer-events-none z-[100] transition-[width,height] duration-75" width="60" height="60" viewBox="0 0 60 60">
+                <defs>
+                    <radialGradient id="cg" cx="50%" cy="50%" r="50%">
+                        <stop offset="0%" stopColor="#00f5ff" stopOpacity=".9"/>
+                        <stop offset="60%" stopColor="#00f5ff" stopOpacity=".15"/>
+                        <stop offset="100%" stopColor="#00f5ff" stopOpacity="0"/>
+                    </radialGradient>
+                </defs>
+                <circle id="cursorAura" cx="30" cy="30" r="26" fill="url(#cg)" opacity=".8"/>
+            </svg>
 
-        {/* Custom cursor */}
-        <svg id="cursor" width="60" height="60" viewBox="0 0 60 60">
-          <defs>
-            <radialGradient id="cg" cx="50%" cy="50%" r="50%">
-              <stop offset="0%" stopColor="#00f5ff" stopOpacity=".9"/>
-              <stop offset="60%" stopColor="#00f5ff" stopOpacity=".15"/>
-              <stop offset="100%" stopColor="#00f5ff" stopOpacity="0"/>
-            </radialGradient>
-          </defs>
-          <circle id="cursorAura" cx="30" cy="30" r="26" fill="url(#cg)" opacity=".6"/>
-          <circle cx="30" cy="30" r="4" fill="#fff" opacity=".9"/>
-          <circle cx="30" cy="30" r="2" fill="#00f5ff"/>
-        </svg>
+            {/* Overlays Canvas */}
+            <div className="pointer-events-none absolute inset-0 bg-[repeating-linear-gradient(0deg,transparent,transparent_2px,rgba(0,0,0,0.06)_2px,rgba(0,0,0,0.06)_4px)] z-[300]"></div>
 
-        {/* HUDs over canvas */}
-        <div className="hud" id="hud-score">
-          <div className="label">SCORE</div>
-          <div className="value" id="score-val">0</div>
-        </div>
-        <div className="hud" id="hud-level">
-          <div className="label">LEVEL</div>
-          <div className="value" id="level-val">01</div>
-          <div id="combo-display"></div>
-        </div>
-        <div className="hud" id="hud-lives"></div>
-
-        {/* Bottom EEG panel */}
-        <div className="hud" id="hud-eeg">
-          <div className="eeg-panel">
-            <div className="eeg-header">
-              <span className="eeg-title">EEG · FRONTAL SIGNAL</span>
-              <div className="connection-indicator" id="conn-btn">
-                <div className="dot simulating" id="conn-dot"></div>
-                <span id="conn-label">SIMULATE</span>
-              </div>
+            {/* Floating Top HUDs */}
+            <div className="absolute top-6 left-6 z-50 pointer-events-none flex flex-col items-start">
+               <span className="font-display text-[10px] tracking-widest text-[var(--primary)] opacity-70">SCORE</span>
+               <span id="score-val" className="font-display text-4xl font-black text-white drop-shadow-[0_0_16px_var(--primary)]">0</span>
             </div>
-            <canvas id="waveCanvas" width="560" height="44"></canvas>
-            <div className="signal-track"><div className="signal-fill" id="signal-fill"></div></div>
-            <div className="signal-meta">
-              <span>ACTIVITY MAP</span>
-              <span>SIGNAL <span className="signal-value" id="signal-val">0.00</span></span>
-              <span>FOCUS <span className="signal-value" id="focus-val">0%</span></span>
+            
+            <div className="absolute top-6 right-6 z-50 pointer-events-none flex flex-col items-end">
+               <span className="font-display text-[10px] tracking-widest text-[var(--primary)] opacity-70">LEVEL</span>
+               <span id="level-val" className="font-display text-3xl font-bold text-[var(--graph-line-1)] drop-shadow-[0_0_12px_var(--graph-line-1)]">01</span>
+               <span id="combo-display" className="font-display text-[13px] text-amber-500 mt-1 drop-shadow-md min-h-[20px]"></span>
             </div>
-            <div className="channel-row" style={{marginTop:'10px'}}>
-              <span className="ch-tag active" data-ch="attention">ATTN</span>
-              <span className="ch-tag" data-ch="alpha">ALPHA</span>
-              <span className="ch-tag" data-ch="theta">THETA</span>
-              <span className="ch-tag" data-ch="beta">BETA</span>
+
+            <div id="hud-lives" className="absolute top-7 left-1/2 -translate-x-1/2 z-50 flex gap-2"></div>
+
+            {/* Bottom HUD - Floating Panel */}
+            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-50 pointer-events-auto rounded-xl bg-[var(--surface)]/80 border border-[var(--primary)]/20 p-3 shadow-2xl backdrop-blur-md w-[min(560px,94%)]">
+               <div className="flex justify-between items-center mb-2">
+                 <span className="font-display text-[9px] tracking-[3px] text-[var(--primary)] opacity-90 uppercase">Frontal EEG Signal</span>
+                 <div className="flex items-center gap-1.5 px-3 py-1 rounded-full border border-[var(--primary)]/30 text-[9px] font-bold tracking-widest cursor-pointer hover:bg-[var(--primary)]/10 transition-colors">
+                    <span id="conn-indicator" className="w-2 h-2 rounded-full bg-gray-500"></span>
+                    <span id="conn-label" className="text-[var(--text)] uppercase">Waiting</span>
+                 </div>
+               </div>
+               <canvas id="waveCanvas" className="w-full h-10 rounded bg-black/30 mb-2"></canvas>
+               <div className="h-1.5 bg-[var(--primary)]/10 rounded-full overflow-hidden mb-1.5">
+                 <div id="signal-fill" className="h-full bg-gradient-to-r from-[var(--teal)] to-[var(--primary)] shadow-[0_0_10px_var(--primary)] w-0 transition-all duration-100"></div>
+               </div>
+               <div className="flex justify-between text-[9px] text-[var(--primary)]/60 font-bold tracking-widest uppercase">
+                  <span>Activity Map</span>
+                  <span>Signal <span id="signal-val" className="text-[var(--primary)] font-black ml-1">0.00</span></span>
+                  <span>Focus <span id="focus-val" className="text-[var(--primary)] font-black ml-1">0%</span></span>
+               </div>
+               <div className="flex gap-2 flex-wrap mt-2">
+                 {['attention', 'alpha', 'theta', 'beta'].map(ch => (
+                     <span key={ch} className={`ch-tag text-[9px] tracking-widest px-2 py-1 border border-[var(--primary)]/20 rounded cursor-pointer transition-colors select-none ${ch === 'attention' ? 'active bg-[var(--primary)]/15 border-[var(--primary)] text-white' : 'hover:bg-[var(--primary)]/5'}`} data-ch={ch}>
+                        {ch === 'attention' ? 'ATTN' : ch.toUpperCase()}
+                     </span>
+                 ))}
+               </div>
             </div>
-          </div>
-        </div>
 
-        {/* Overlays */}
-        <div className="overlay" id="startScreen">
-          <div className="overlay-title">NEURO<br/>BUBBLE</div>
-          <div className="overlay-sub">FOCUS YOUR FRONTAL CORTEX · POP THE BUBBLES</div>
-          <div style={{fontSize:'11px',color:'var(--glow-teal)',opacity:'.7',marginBottom:'28px',maxWidth:'360px',textAlign:'center',lineHeight:'1.8'}}>
-            HIGH FOCUS → larger cursor aura → pop more bubbles at once.
-          </div>
-          <button className="big-btn" onClick={() => containerRef.current?.startGameHandler(false)}>SENSOR MODE</button>
-          <button className="big-btn" onClick={() => containerRef.current?.startGameHandler(true)} style={{borderColor:'var(--glow-amber)',color:'var(--glow-amber)'}}>MANUAL (MOUSE) MODE</button>
-        </div>
-
-        <div className="overlay hidden" id="gameOverScreen">
-          <div className="overlay-title">SESSION<br/>ENDED</div>
-          <div className="stat-grid" id="stat-grid"></div>
-          <button className="big-btn" onClick={() => containerRef.current?.startGameHandler(false)}>NEW SESSION</button>
-        </div>
+            {/* Game Over Screen */}
+            <div id="gameOverScreen" className="hidden absolute inset-0 z-[200] flex flex-col items-center justify-center bg-[var(--bg)]/90 backdrop-blur-xl pointer-events-auto">
+               <h1 className="font-display text-5xl md:text-6xl font-black tracking-widest text-white drop-shadow-[0_0_30px_var(--primary)] mb-8 text-center leading-tight">SESSION<br/>ENDED</h1>
+               <div id="stat-grid" className="grid grid-cols-3 gap-3 mb-8 w-[min(460px,94%)]"></div>
+               <button onClick={() => containerRef.current?.startGameHandler()} className="font-display text-xs tracking-widest px-10 py-3 rounded-full border border-[var(--primary)] bg-[var(--primary)]/10 text-white hover:bg-[var(--primary)]/20 shadow-[0_0_15px_rgba(var(--primary-rgb),0.2)] transition-all">
+                  NEW SESSION
+               </button>
+            </div>
+         </div>
       </div>
 
-      {/* ── RIGHT SIDEBAR ── */}
-      <div className="bubble-sidebar">
+      {/* ── LEFT SIDEBAR (SSVEP STYLE) ── */}
+      <div 
+         className={`absolute left-0 top-0 bottom-0 z-10 transition-all duration-300 ease-in-out border-r border-[var(--border)] bg-[var(--surface)]/80 backdrop-blur-md flex flex-col h-full pointer-events-auto select-none ${showSidebar ? 'w-80 overflow-y-auto overflow-x-hidden' : 'w-[4.25rem] overflow-visible'} [&::-webkit-scrollbar]:hidden `}
+      >
+         
+         {/* Collapsed Sidebar */}
+         {!showSidebar && (
+            <div className="flex flex-col items-center justify-start py-3 w-full animate-fade-in shrink-0 h-full overflow-visible gap-2">
+               <button onClick={onBackToMenu} className="hover:bg-white/10 p-2.5 rounded-full transition-colors group relative" title="Back to Menu">
+                  <ChevronLeft size={26} className="text-[var(--text)]" />
+                  <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-[var(--surface)] border border-[var(--border)] px-3 py-1.5 rounded-lg text-xs font-bold text-[var(--primary)] whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Back to Menu</div>
+               </button>
+               
+               <div className="w-full h-px bg-[var(--border)]/80 shrink-0 my-1" />
 
-        {/* Mode Panel */}
-        <div className="sb-section">
-          <div className="sb-title">GAME MODE</div>
-          <div className="mode-badge mode-sensor" id="mode-badge">
-            <span id="mode-indicator">SENSOR</span>
-          </div>
-          <div className="mode-buttons">
-            <button className="sb-btn" onClick={() => containerRef.current?.startGameHandler(false)}>⚡ SENSOR</button>
-            <button className="sb-btn sb-btn-alt" onClick={() => containerRef.current?.startGameHandler(true)}>🖱 MANUAL</button>
-          </div>
-          <button className="sb-btn sb-btn-switch" onClick={() => containerRef.current?.switchModeHandler()}>↔ SWITCH IN-GAME</button>
-        </div>
+               <button onClick={() => setShowSidebar(true)} className="hover:bg-white/10 p-2.5 rounded-full transition-colors group relative" title="Expand Bar">
+                  <Menu size={24} className="text-[var(--primary)]" />
+                  <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-[var(--surface)] px-3 py-1.5 rounded-lg text-xs font-bold text-white whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Expand Sidebar</div>
+               </button>
 
-        {/* Live Band Powers */}
-        <div className="sb-section">
-          <div className="sb-title">EEG BANDS  <span style={{fontSize:'8px',opacity:.5}}>(LIVE · PEAK)</span></div>
-          {[
-            { id: 'delta', label: 'δ DELTA',  cls: 'bf-delta' },
-            { id: 'theta', label: 'θ THETA',  cls: 'bf-theta' },
-            { id: 'alpha', label: 'α ALPHA',  cls: 'bf-alpha' },
-            { id: 'beta',  label: 'β BETA',   cls: 'bf-beta'  },
-            { id: 'gamma', label: 'γ GAMMA',  cls: 'bf-gamma' },
-          ].map(b => (
-            <div className="band-row" key={b.id}>
-              <div className="band-label">{b.label}</div>
-              <div className="band-track"><div className={`band-fill ${b.cls}`} id={`bf-${b.id}`}></div></div>
-              <div className="band-val" id={`bv-${b.id}`}>0%</div>
-              <div className="band-peak" id={`pk-${b.id}`}>0%</div>
+               <div className="w-full h-px bg-[var(--border)]/80 shrink-0 my-1" />
+
+               <button 
+                  onClick={() => {
+                     setMouseMode(!mouseMode);
+                     const btn = document.getElementById('mode-indicator-switch');
+                     if(btn) btn.textContent = mouseMode ? '⚡ SENSOR' : '🖱 MANUAL';
+                  }} 
+                  className={`p-2.5 rounded-full transition-colors group relative ${mouseMode ? 'text-amber-500 bg-amber-500/10' : 'text-[var(--primary)] bg-[var(--primary)]/10'}`} title="Mode Select"
+               >
+                  {mouseMode ? <Mouse size={24} /> : <Zap size={24} />}
+                  <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-[var(--surface)] border border-[var(--border)] px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50 shadow-glow">
+                     Mode: {mouseMode ? 'MANUAL' : 'SENSOR'}
+                  </div>
+               </button>
+
+               <div className="w-full h-px bg-[var(--border)]/80 shrink-0 my-1" />
+
+               <div className="flex flex-col items-center group relative cursor-default w-full py-2">
+                  <Activity size={24} className="text-[var(--primary)] mb-1" />
+                  <span className="text-sm font-black text-[var(--primary)]">{realTimeFreq}</span>
+                  <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-[var(--surface)] border border-[var(--border)] px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Score/Signal Power</div>
+               </div>
+
+               <button onClick={() => setShowSidebar(true)} className="hover:bg-white/10 p-2.5 rounded-full transition-colors group relative mt-auto">
+                  <History size={24} className="text-[var(--muted)]" />
+                  <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-[var(--surface)] px-3 py-1.5 rounded-lg text-[10px] font-bold tracking-widest whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">SESSION LOG</div>
+               </button>
+               
+               <button onClick={() => globalRunning ? containerRef.current?.stopGameHandler() : containerRef.current?.startGameHandler()} className={`p-3 rounded-full group relative transition-all shadow-md ${globalRunning ? 'text-red-500 bg-red-500/10 hover:bg-red-500/20' : 'text-green-500 bg-green-500/10 hover:bg-green-500/20'}`} style={{marginBottom: '20px'}}>
+                  {globalRunning ? <Square size={26} /> : <Play size={26} />}
+                  <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-[var(--surface)] px-3 py-1.5 rounded-lg text-xs font-bold text-white opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity shadow-lg">
+                     {globalRunning ? 'End Session' : 'Start Session'}
+                  </div>
+               </button>
             </div>
-          ))}
+         )}
+         
+         {/* Expanded Sidebar */}
+         <div className={`flex-grow flex flex-col p-4 gap-4 font-mono transition-opacity duration-300 w-80 shrink-0 ${!showSidebar ? 'opacity-0 h-0 hidden' : 'opacity-100'}`}>
 
-          {/* Attention ring */}
-          <div className="attn-ring-wrap">
-            <svg viewBox="0 0 80 80" className="attn-svg">
-              <circle cx="40" cy="40" r="32" fill="none" stroke="rgba(0,245,255,0.1)" strokeWidth="7"/>
-              <circle id="bd-attn-fill" cx="40" cy="40" r="32" fill="none" stroke="var(--glow-cyan)" strokeWidth="7"
-                strokeLinecap="round" strokeDasharray="201" strokeDashoffset="201"
-                style={{transform:'rotate(-90deg)',transformOrigin:'40px 40px',transition:'stroke-dashoffset 0.3s'}}/>
-            </svg>
-            <div className="attn-center">
-              <div id="bd-attn-val" className="attn-val">0%</div>
-              <div className="attn-label">FOCUS</div>
-            </div>
-          </div>
-        </div>
+             {/* Header */}
+             <div className="flex items-center justify-between shrink-0 mb-1">
+                 <div>
+                     <h2 className="text-[22px] font-bold text-[var(--text)] mb-1 flex items-center gap-3 tracking-[2px]">
+                         <Gamepad2 size={26} className="text-[var(--primary)]" />
+                         BUBBLE GAME
+                     </h2>
+                 </div>
+                 <div className="flex gap-2">
+                     <button onClick={onBackToMenu} className="p-2 hover:bg-white/10 rounded-full transition-colors">
+                         <ChevronLeft size={22} className="text-[var(--text)]" />
+                     </button>
+                     <button onClick={() => setShowSidebar(false)} className="p-2 hover:bg-white/10 rounded-full transition-colors">
+                         <ChevronLeft size={22} className="rotate-180 text-[var(--text)]" />
+                     </button>
+                 </div>
+             </div>
 
-        {/* Session History */}
-        <div className="sb-section sb-section-grow">
-          <div className="sb-title">SESSION HISTORY</div>
-          <div id="session-history" className="session-history">
-            <div className="no-sessions">No sessions yet</div>
-          </div>
-        </div>
+             {/* Global Play/Stop */}
+             <div className="shrink-0 mb-1">
+                 <button onClick={() => globalRunning ? containerRef.current?.stopGameHandler() : containerRef.current?.startGameHandler()} className={`w-full py-3.5 rounded-xl text-sm font-black uppercase tracking-[3px] transition-all flex items-center justify-center gap-3 border-2 shadow-lg ${globalRunning ? 'bg-red-500/10 border-red-500/40 text-red-500 hover:bg-red-500/20' : 'bg-green-500/10 border-green-500/40 text-green-500 hover:bg-green-500/20'}`}>
+                     {globalRunning ? <><Square size={20} /> END SESSION</> : <><Play size={20} /> NEW SESSION</>}
+                 </button>
+             </div>
 
+             {/* Game Mode */}
+             <div className="bg-[var(--bg)]/50 border border-[var(--primary)]/20 rounded-xl p-3 shrink-0 flex flex-col gap-3">
+                 <h4 className="text-[10px] font-bold text-[var(--muted)]/80 uppercase tracking-widest flex items-center gap-2">
+                    <Settings size={14} /> Control Mode
+                 </h4>
+                 
+                 <div className="flex gap-2 w-full p-1 bg-[var(--surface)] rounded-lg border border-[var(--border)]">
+                    <button 
+                       id="mode-indicator-switch"
+                       onClick={() => { setMouseMode(false); }} 
+                       className={`flex-1 py-1.5 rounded-md text-[11px] font-bold tracking-widest uppercase transition-all flex items-center justify-center gap-2 ${!mouseMode ? 'bg-[var(--primary)]/20 text-[var(--primary)] shadow-[0_0_8px_rgba(var(--primary-rgb),0.3)]' : 'text-[var(--muted)] hover:bg-white/5'}`}>
+                       <Zap size={14} /> SENSOR
+                    </button>
+                    <button 
+                       onClick={() => { setMouseMode(true); }} 
+                       className={`flex-1 py-1.5 rounded-md text-[11px] font-bold tracking-widest uppercase transition-all flex items-center justify-center gap-2 ${mouseMode ? 'bg-amber-500/20 text-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.3)]' : 'text-[var(--muted)] hover:bg-white/5'}`}>
+                       <Mouse size={14} /> MANUAL
+                    </button>
+                 </div>
+
+                 <h4 className="text-[10px] font-bold text-[var(--muted)]/80 uppercase tracking-widest flex items-center gap-2 mt-3">
+                    <Activity size={14} /> Difficulty Level
+                 </h4>
+                 
+                 <div className="flex gap-2 w-full p-1 bg-[var(--surface)] rounded-lg border border-[var(--border)] mb-1">
+                    {[1, 2, 3].map(lvl => (
+                      <button 
+                         key={lvl}
+                         onClick={() => setDifficulty(lvl)}
+                         className={`flex-1 py-1.5 rounded-md text-[11px] font-bold tracking-widest uppercase transition-all flex items-center justify-center gap-2 ${difficulty === lvl ? 'bg-[var(--primary)]/20 text-[var(--primary)] shadow-[0_0_8px_rgba(var(--primary-rgb),0.3)]' : 'text-[var(--muted)] hover:bg-white/5'}`}>
+                         LVL {lvl}
+                      </button>
+                    ))}
+                 </div>
+                 
+                 <p className="text-[10px] text-[var(--muted)] leading-relaxed italic opacity-80">
+                   {mouseMode ? "Use mouse movement. Game dynamically scales based on cursor proximity." : "Focus level scales up cursor aura to pop bubbles entirely with your mind."}
+                 </p>
+             </div>
+
+             {/* Live Band Analysis */}
+             <div className="bg-[var(--bg)]/60 border border-[var(--primary)]/30 rounded-xl p-3 shrink-0 backdrop-blur-md pb-4 pt-4">
+                  <h4 className="text-[10px] font-bold text-[var(--primary)]/80 uppercase tracking-[2px] mb-4 flex justify-between items-center">
+                     <span>EEG Bands (Live · Peak)</span>
+                     <span className="w-1.5 h-1.5 rounded-full bg-[var(--primary)] animate-pulse shadow-glow"></span>
+                  </h4>
+
+                  <div className="flex flex-col gap-2">
+                     {[
+                        { id: 'delta', label: 'δ DELTA',  color: '#4466ff' },
+                        { id: 'theta', label: 'θ THETA',  color: 'var(--glow-violet)' },
+                        { id: 'alpha', label: 'α ALPHA',  color: 'var(--glow-green)' },
+                        { id: 'beta',  label: 'β BETA',   color: 'var(--primary)'  },
+                        { id: 'gamma', label: 'γ GAMMA',  color: 'var(--glow-amber)' },
+                     ].map(b => (
+                        <div key={b.id} className="flex items-center gap-2">
+                           <span className="text-[10px] tracking-widest font-bold opacity-60 w-[48px] shrink-0" style={{color: b.color}}>{b.label}</span>
+                           <div className="flex-1 h-1.5 bg-white/5 rounded-full overflow-hidden">
+                              <div id={`bf-${b.id}`} className="h-full rounded-full transition-all duration-150 shadow-md" style={{background: b.color, width: '0%'}}></div>
+                           </div>
+                           <span id={`bv-${b.id}`} className="text-[10px] w-8 text-right font-black" style={{color: b.color}}>0%</span>
+                           <span id={`pk-${b.id}`} className="text-[9px] w-6 text-right font-black text-amber-500/80">0%</span>
+                        </div>
+                     ))}
+                  </div>
+
+                  <div className="h-px w-full bg-white/5 my-4"></div>
+
+                  <div className="relative w-[100px] h-[100px] mx-auto">
+                     <svg viewBox="0 0 80 80" className="w-full h-full -rotate-90">
+                        <circle cx="40" cy="40" r="32" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="8"/>
+                        <circle id="bd-attn-fill" cx="40" cy="40" r="32" fill="none" stroke="var(--primary)" strokeWidth="8"
+                           strokeLinecap="round" strokeDasharray="201" strokeDashoffset="201"
+                           style={{transition: 'stroke-dashoffset 0.3s ease-out', filter: 'drop-shadow(0 0 4px var(--primary))'}}/>
+                     </svg>
+                     <div className="absolute inset-0 flex flex-col items-center justify-center">
+                        <span id="bd-attn-val" className="font-display font-black text-2xl text-white drop-shadow-md">0%</span>
+                        <span className="text-[8px] font-bold tracking-widest text-[var(--primary)] uppercase mt-0.5 opacity-80">FOCUS</span>
+                     </div>
+                  </div>
+             </div>
+
+             {/* Session History Container */}
+             <div className="flex flex-col h-[250px] shrink-0 border border-[var(--border)] rounded-xl bg-[var(--bg)]/40 p-3 pt-3">
+                 <h4 className="text-[10px] font-bold text-[var(--muted)] uppercase tracking-[3px] mb-3 flex items-center justify-between border-b border-[var(--border)]/50 pb-2">
+                     <div className="flex items-center gap-2">
+                         <History size={14} /> History
+                     </div>
+                     <button onClick={() => containerRef.current?.clearHistoryHandler()} className="text-[var(--text-error)] opacity-70 hover:opacity-100 transition-opacity" title="Clear History">
+                         <Trash2 size={12} />
+                     </button>
+                 </h4>
+                 <div id="session-history" className="flex-grow overflow-y-auto pr-1 [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:bg-[var(--primary)]/20 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-[var(--primary)]/40 flex flex-col gap-2">
+                    {/* populated by javascript */}
+                 </div>
+             </div>
+
+         </div>
       </div>
     </div>
   );
