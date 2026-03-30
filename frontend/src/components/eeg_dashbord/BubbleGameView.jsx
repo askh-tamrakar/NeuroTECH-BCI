@@ -14,13 +14,20 @@ const BubbleGameView = ({ result, isConnected, onBackToMenu }) => {
   const [globalRunning, setGlobalRunning] = useState(false);
   const [mouseMode, setMouseMode] = useState(false);
   const [difficulty, setDifficulty] = useState(1);
-  
+  const isConnectedRef = useRef(isConnected);
+
   // Expose these for React to read
   const [realTimeFreq, setRealTimeFreq] = useState(0);
   const [focusScore, setFocusScore] = useState(0);
 
   useEffect(() => { themeRef.current = currentTheme; }, [currentTheme]);
   useEffect(() => { resultRef.current = result; }, [result]);
+  useEffect(() => { 
+     isConnectedRef.current = isConnected; 
+     if (containerRef.current && containerRef.current.onConnectionChange) {
+        containerRef.current.onConnectionChange(isConnected);
+     }
+  }, [isConnected]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -83,31 +90,33 @@ const BubbleGameView = ({ result, isConnected, onBackToMenu }) => {
     };
     window.addEventListener('mousemove', mouseMoveHandler);
 
-    let simPhase = 0, simTrend = 0;
-    function startSimulation() {
-      eegMode = 'simulate';
+    function stopStream() {
+      eegMode = 'idle';
       const indicator = $('conn-indicator');
-      if (indicator) indicator.className = 'w-2 h-2 rounded-full animate-pulse bg-amber-500 shadow-[0_0_8px_#f59e0b]';
-      if (simInterval) clearInterval(simInterval);
+      if (indicator) indicator.className = 'w-2 h-2 rounded-full bg-red-500 shadow-[0_0_8px_#ef4444]';
+      const label = $('conn-label'); if (label) label.textContent = 'DISCONNECTED';
       if (fetchInterval) clearInterval(fetchInterval);
-      simInterval = setInterval(() => {
-        simPhase += 0.07;
-        simTrend += (Math.random() - 0.48) * 0.04;
-        simTrend = Math.max(-0.3, Math.min(0.3, simTrend));
-        const base = 0.5 + simTrend;
-        const noise = Math.sin(simPhase * 1.3) * 0.15 + Math.sin(simPhase * 3.7) * 0.07
-                    + Math.sin(simPhase * 7.1) * 0.04 + (Math.random() - 0.5) * 0.1;
-        eegSignal = Math.max(0, Math.min(1, base + noise));
-        rawSignal = +(eegSignal * 100).toFixed(1);
-        updateEEGUI();
-      }, 60);
+      
+      eegSignal = 0; rawSignal = 0;
+      setRealTimeFreq(0); setFocusScore(0);
+      
+      waveHistory = new Array(WAVE_LEN).fill(0);
+      drawWave();
+      
+      ['delta','theta','alpha','beta','gamma'].forEach(id => {
+         const bf = $(`bf-${id}`); if(bf) bf.style.width = '0%';
+         const bv = $(`bv-${id}`); if(bv) bv.textContent = '0%';
+      });
+      const ae = $('bd-attn-val'); if(ae) ae.textContent = '0%';
+      const af = $('bd-attn-fill'); if(af) af.style.strokeDashoffset = 201;
     }
+
 
     function startLiveStream() {
       eegMode = 'ws';
       const indicator = $('conn-indicator');
       if (indicator) indicator.className = 'w-2 h-2 rounded-full bg-green-500 shadow-[0_0_8px_#22c55e]';
-      if (simInterval) clearInterval(simInterval);
+      const label = $('conn-label'); if (label) label.textContent = 'CONNECTED';
       if (fetchInterval) clearInterval(fetchInterval);
       fetchInterval = setInterval(() => {
         const res = resultRef.current;
@@ -460,8 +469,8 @@ const BubbleGameView = ({ result, isConnected, onBackToMenu }) => {
       if (go) go.classList.add('hidden');
       
       initStars(); gameRunning = true;
-      if (!simInterval && !fetchInterval) {
-         if (eegMode === 'simulate') startSimulation(); else startLiveStream();
+      if (!fetchInterval && isConnectedRef.current) {
+         startLiveStream();
       }
       loop();
       setGlobalRunning(true);
@@ -469,6 +478,11 @@ const BubbleGameView = ({ result, isConnected, onBackToMenu }) => {
 
     container.stopGameHandler = () => {
        endGame();
+    };
+    
+    container.onConnectionChange = (connected) => {
+       if (connected) { if (gameRunning && !fetchInterval) startLiveStream(); else if (!gameRunning) startLiveStream(); }
+       else stopStream();
     };
 
     function endGame() {
@@ -509,14 +523,14 @@ const BubbleGameView = ({ result, isConnected, onBackToMenu }) => {
       };
     });
 
-    startSimulation(); initStars(); renderSessionHistory();
+    initStars(); renderSessionHistory();
+    if (isConnectedRef.current) startLiveStream(); else stopStream();
     // initial paint draw
     drawBackground();
 
     return () => {
       window.removeEventListener('resize', resize);
       window.removeEventListener('mousemove', mouseMoveHandler);
-      if (simInterval) clearInterval(simInterval);
       if (fetchInterval) clearInterval(fetchInterval);
       if (animId) cancelAnimationFrame(animId);
       gameRunning = false;
