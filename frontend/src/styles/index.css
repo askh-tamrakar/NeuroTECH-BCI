@@ -171,18 +171,16 @@ body {
     --shadow: rgba(0, 0, 0, 0.55);
 
     /* dino */
-    --day: var(--text);
-    --night: var(--bg);
-    --tree-day: #D9C974;
-    --tree-night: #B8860B;
-    --cloud-day: #D9C974;
+    --day: #FFFDE7;
+    --night: #1c1a17;
+    --tree-day: #2C2B28;
+    --tree-night: #A18F3B;
+    --cloud-day: #F2B01E;
     --cloud-night: #554d24;
     --sun-day: #F2B01E;
-    /* Golden Sun */
-    --sun-night: #B8860B;
-    /* Dark Goldenrod */
-    --moon-day: #fff;
-    --moon-night: #FFF7B0;
+    --sun-night: #F2B01E;
+    --moon-day: #FFFFFF;
+    --moon-night: #FFE680;
 
     /* Extended */
     --text-secondary: #D9C974;
@@ -211,13 +209,15 @@ body {
     --graph-text: #D9C974;
 
     /* Semantic Overrides */
-    --sky-day: #FFFFE0;
-    --sky-night: #2C2B28;
-    --dino: var(--primary);
-    --obstacle: var(--surface);
-    --obstacle-border: var(--border);
-    --ground: var(--bg);
-    --ground-line: var(--accent);
+    --sky-day: #FFFDE7;
+    --sky-night: #1c1a17;
+    --dino: #F2B01E;
+    --dino-night: #FFE680;
+    --obstacle: #F2B01E;
+    --obstacle-border: #2C2C2C;
+    --ground: #FFE680;
+    --ground-night: #2C2B28;
+    --ground-line: #CC8E00;
   }
 
   /* Golden Ember */
@@ -268,6 +268,7 @@ body {
     --graph-bg: #FFFDE7;
     --graph-grid: #D9C260;
     --graph-text: #5D4037;
+
     /* Semantic Overrides */
     --sky-day: #FFFDE7;
     --sky-night: #1c1a17;
@@ -1016,6 +1017,378 @@ body {
     --ground-line: var(--accent);
   }
 
+  /* Neon Amethyst */
+  .theme-neon-amethyst {
+    --bg: #0F0529;
+    --bg-rgb: 15, 5, 41;
+
+    --surface: #4A2574;
+    --surface-rgb: 74, 37, 116;
+
+    --text: #F3E9FF;
+    --text-rgb: 243, 233, 255;
+
+    --muted: #BFA6D9;
+    --muted-rgb: 191, 166, 217;
+
+    --primary: #924DBF;
+    --primary-rgb: 146, 77, 191;
+
+    --primary-contrast: #FFFFFF;
+
+    --accent: #9E72C3;
+    --accent-rgb: 158, 114, 195;
+
+    --border: #7338A0;
+    --border-rgb: 115, 56, 160;
+
+    --shadow: rgba(15, 5, 41, 0.6);
+
+    --chart-header-height: 48px;
+
+    --graph-text: #D1C4E9;
+    --graph-grid: rgba(158, 114, 195, 0.2);
+
+    /* dino */
+    --day: #EDE7F6;
+    --night: #0F0529;
+
+    --tree-day: #B39DDB;
+    --tree-night: #4A2574;
+
+    --cloud-day: #F3E9FF;
+    --cloud-night: #7338A0;
+
+    --sun-day: #E1BEE7;
+    --sun-night: #924DBF;
+
+    --moon-night: #D1C4E9;
+
+    /* Extended */
+    --text-secondary: #CBB4E6;
+    --text-tertiary: #9A84B8;
+    --text-highlight: #9E72C3;
+    --text-error: #F87171;
+    --text-success: #34D399;
+
+    --title: #924DBF;
+    --heading: #F3E9FF;
+    --label: #BFA6D9;
+
+    --section-bg: #4A2574;
+    --section-border: #7338A0;
+
+    --panel-bg: #7338A0;
+    --panel-border: #4A2574;
+
+    --header-bg: #0F0529;
+    --header-text: #9E72C3;
+
+    --event-bg: rgba(146, 77, 191, 0.25);
+    --event-border: #924DBF;
+    --event-text: #F3E9FF;
+
+    --selection-bg: rgba(158, 114, 195, 0.35);
+    --selection-border: #9E72C3;
+
+    --graph-line-1: #924DBF;
+    --graph-line-2: #7338A0;
+
+    --graph-bg: #0F0529;
+    --graph-grid: #4A2574;
+    --graph-text: #CBB4E6;
+
+    /* Semantic Overrides */
+    --sky-day: #EDE7F6;
+    --sky-night: #0F0529;
+
+    --dino: #924DBF;
+    --obstacle: #7338A0;
+    --obstacle-border: #F3E9FF;
+
+    --ground: #4A2574;
+    --ground-line: #9E72C3;
+  }
+
+  /* Aurora Spectrum */
+  .theme-aurora-spectrum {
+    --bg: #2B1B47;
+    --bg-rgb: 43, 27, 71;
+
+    --surface: #5A2A83;
+    --surface-rgb: 90, 42, 131;
+
+    --text: #FFF4E6;
+    --text-rgb: 255, 244, 230;
+
+    --muted: #D9C6A5;
+    --muted-rgb: 217, 198, 165;
+
+    --primary: #FF6B6B;
+    --primary-rgb: 255, 107, 107;
+
+    --primary-contrast: #1A1A1A;
+
+    --accent: #4D96FF;
+    --accent-rgb: 77, 150, 255;
+
+    --border: #FFD93D;
+    --border-rgb: 255, 217, 61;
+
+    --shadow: rgba(0, 0, 0, 0.4);
+
+    --chart-header-height: 48px;
+
+    --graph-text: #EAE2FF;
+    --graph-grid: rgba(255, 255, 255, 0.2);
+
+    /* dino */
+    --day: #FFF4E6;
+    --night: #2B1B47;
+
+    --tree-day: #A0D995;
+    --tree-night: #5A2A83;
+
+    --cloud-day: #FFE8D6;
+    --cloud-night: #4D96FF;
+
+    --sun-day: #FFD93D;
+    --sun-night: #FF6B6B;
+
+    --moon-night: #CDB4DB;
+
+    /* Extended */
+    --text-secondary: #EAD7C3;
+    --text-tertiary: #BFA6A0;
+    --text-highlight: #FFD93D;
+    --text-error: #FF4D6D;
+    --text-success: #52B788;
+
+    --title: #FF6B6B;
+    --heading: #FFF4E6;
+    --label: #D9C6A5;
+
+    --section-bg: #5A2A83;
+    --section-border: #FFD93D;
+
+    --panel-bg: #7B3FBF;
+    --panel-border: #5A2A83;
+
+    --header-bg: #2B1B47;
+    --header-text: #4D96FF;
+
+    --event-bg: rgba(255, 107, 107, 0.3);
+    --event-border: #FF6B6B;
+    --event-text: #FFF4E6;
+
+    --selection-bg: rgba(77, 150, 255, 0.3);
+    --selection-border: #4D96FF;
+
+    --graph-line-1: #FF6B6B;
+    --graph-line-2: #4D96FF;
+
+    --graph-bg: #2B1B47;
+    --graph-grid: #5A2A83;
+    --graph-text: #EAD7C3;
+
+    /* Semantic */
+    --sky-day: #FFF4E6;
+    --sky-night: #2B1B47;
+
+    --dino: #FF6B6B;
+    --obstacle: #FFD93D;
+    --obstacle-border: #FFF4E6;
+
+    --ground: #5A2A83;
+    --ground-line: #4D96FF;
+  }
+
+  /* Sunset Dashboard */
+  .theme-sunset-dashboard {
+    --bg: #233A4D;
+    --bg-rgb: 35, 58, 77;
+
+    --surface: #619B8A;
+    --surface-rgb: 97, 155, 138;
+
+    --text: #F1FAEE;
+    --text-rgb: 241, 250, 238;
+
+    --muted: #A3B18A;
+    --muted-rgb: 163, 177, 138;
+
+    --primary: #FF7F2A;
+    --primary-rgb: 255, 127, 42;
+
+    --primary-contrast: #000000;
+
+    --accent: #F4C95D;
+    --accent-rgb: 244, 201, 93;
+
+    --border: #A3B18A;
+    --border-rgb: 163, 177, 138;
+
+    --shadow: rgba(0, 0, 0, 0.35);
+
+    --chart-header-height: 48px;
+
+    --graph-text: #DAD7CD;
+    --graph-grid: rgba(255, 255, 255, 0.15);
+
+    /* dino */
+    --day: #F1FAEE;
+    --night: #233A4D;
+
+    --tree-day: #A3B18A;
+    --tree-night: #619B8A;
+
+    --cloud-day: #F1FAEE;
+    --cloud-night: #233A4D;
+
+    --sun-day: #F4C95D;
+    --sun-night: #FF7F2A;
+
+    --moon-night: #DAD7CD;
+
+    /* Extended */
+    --text-secondary: #DAD7CD;
+    --text-tertiary: #B7B7A4;
+    --text-highlight: #FF7F2A;
+    --text-error: #E63946;
+    --text-success: #52B788;
+
+    --title: #FF7F2A;
+    --heading: #F1FAEE;
+    --label: #A3B18A;
+
+    --section-bg: #619B8A;
+    --section-border: #A3B18A;
+
+    --panel-bg: #A3B18A;
+    --panel-border: #619B8A;
+
+    --header-bg: #233A4D;
+    --header-text: #F4C95D;
+
+    --event-bg: rgba(255, 127, 42, 0.25);
+    --event-border: #FF7F2A;
+    --event-text: #F1FAEE;
+
+    --selection-bg: rgba(244, 201, 93, 0.3);
+    --selection-border: #F4C95D;
+
+    --graph-line-1: #FF7F2A;
+    --graph-line-2: #F4C95D;
+
+    --graph-bg: #233A4D;
+    --graph-grid: #619B8A;
+    --graph-text: #DAD7CD;
+
+    /* Semantic */
+    --sky-day: #F1FAEE;
+    --sky-night: #233A4D;
+
+    --dino: #FF7F2A;
+    --obstacle: #F4C95D;
+    --obstacle-border: #F1FAEE;
+
+    --ground: #619B8A;
+    --ground-line: #F4C95D;
+  }
+
+  /* Muted Elegance */
+  .theme-muted-elegance {
+    --bg: #4A4A4A;
+    --bg-rgb: 74, 74, 74;
+
+    --surface: #B08968;
+    --surface-rgb: 176, 137, 104;
+
+    --text: #F5E6E8;
+    --text-rgb: 245, 230, 232;
+
+    --muted: #C8D5B9;
+    --muted-rgb: 200, 213, 185;
+
+    --primary: #B83B5E;
+    --primary-rgb: 184, 59, 94;
+
+    --primary-contrast: #FFFFFF;
+
+    --accent: #D6B9BE;
+    --accent-rgb: 214, 185, 190;
+
+    --border: #6B705C;
+    --border-rgb: 107, 112, 92;
+
+    --shadow: rgba(0, 0, 0, 0.4);
+
+    --chart-header-height: 48px;
+
+    --graph-text: #E6D3D8;
+    --graph-grid: rgba(255, 255, 255, 0.1);
+
+    /* dino */
+    --day: #F5E6E8;
+    --night: #4A4A4A;
+
+    --tree-day: #C8D5B9;
+    --tree-night: #6B705C;
+
+    --cloud-day: #F5E6E8;
+    --cloud-night: #4A4A4A;
+
+    --sun-day: #FFD6A5;
+    --sun-night: #B83B5E;
+
+    --moon-night: #D6B9BE;
+
+    /* Extended */
+    --text-secondary: #E6D3D8;
+    --text-tertiary: #B7A5A9;
+    --text-highlight: #B83B5E;
+    --text-error: #D00000;
+    --text-success: #40916C;
+
+    --title: #B83B5E;
+    --heading: #F5E6E8;
+    --label: #C8D5B9;
+
+    --section-bg: #B08968;
+    --section-border: #6B705C;
+
+    --panel-bg: #6B705C;
+    --panel-border: #B08968;
+
+    --header-bg: #4A4A4A;
+    --header-text: #D6B9BE;
+
+    --event-bg: rgba(184, 59, 94, 0.25);
+    --event-border: #B83B5E;
+    --event-text: #F5E6E8;
+
+    --selection-bg: rgba(214, 185, 190, 0.3);
+    --selection-border: #D6B9BE;
+
+    --graph-line-1: #B83B5E;
+    --graph-line-2: #D6B9BE;
+
+    --graph-bg: #4A4A4A;
+    --graph-grid: #6B705C;
+    --graph-text: #E6D3D8;
+
+    /* Semantic */
+    --sky-day: #F5E6E8;
+    --sky-night: #4A4A4A;
+
+    --dino: #B83B5E;
+    --obstacle: #6B705C;
+    --obstacle-border: #F5E6E8;
+
+    --ground: #B08968;
+    --ground-line: #D6B9BE;
+  }
+
   .root,
   .theme-yellow-dark,
   .theme-yellow,
@@ -1029,7 +1402,11 @@ body {
   .theme-forest,
   .theme-slate,
   .theme-plum,
-  .theme-ember {
+  .theme-ember,
+  .theme-neon-amethyst,
+  .theme-aurora-spectrum,
+  .theme-sunset-dashboard,
+  .theme-muted-elegance {
     --window-pending-bg: rgba(245, 158, 11, 0.14);
     --window-pending-border: rgba(245, 158, 11, 0.35);
     --window-pending-border-strong: rgba(245, 158, 11, 0.68);

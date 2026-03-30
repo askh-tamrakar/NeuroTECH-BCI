@@ -319,8 +319,8 @@ def main():
         # Wait for component to be ready if it has a pattern
         if component["ready_pattern"]:
             log_system(f" Waiting for {name} to initialize...", icon=Theme.SYS)
-            # Wait up to 30 seconds for connection
-            if not ready_event.wait(timeout=30.0):
+            # Wait up to 60 seconds for connection
+            if not ready_event.wait(timeout=60.0):
                 log_system(f" ERROR: {name} timed out while connecting!", icon=Theme.ERROR)
                 shutdown_handler(None, None)
             time.sleep(0.5)

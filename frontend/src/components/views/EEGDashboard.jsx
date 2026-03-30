@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Activity, Music, Wind, Eye, Grid } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Activity, Music, Wind, Eye, Grid, MonitorPlay, Layers } from 'lucide-react';
 import '../../styles/views/EEGDashboard.css';
 
 import SSVEPView from '../eeg_dashbord/SSVEPView';
@@ -15,7 +15,7 @@ const OVERVIEW_APPS = [
 ];
 
 const OverviewGrid = ({ onSelect }) => (
-  <div className="eeg-overview-container animate-fade-in">
+  <div className="eeg-overview-container animate-fade-in w-full">
     <h1 className="eeg-overview-title">Applications Dashboard</h1>
     <p className="eeg-overview-subtitle">Select a neuro-application to begin session.</p>
     <div className="eeg-app-grid">
@@ -30,11 +30,10 @@ const OverviewGrid = ({ onSelect }) => (
   </div>
 );
 
-
-
 const EEGDashboard = ({ wsEvent, isConnected, wsUrl }) => {
   const [currentView, setCurrentView] = useState("overview");
   const [eegResult, setEegResult] = useState(null);
+  const [sidebarTab, setSidebarTab] = useState("nav"); // 'nav' | 'controls'
 
   useEffect(() => {
     let modePreset = "frontal_fp1";
@@ -55,86 +54,84 @@ const EEGDashboard = ({ wsEvent, isConnected, wsUrl }) => {
     }
   }, [wsEvent]);
 
+  const handleSelectView = (view) => {
+    setCurrentView(view);
+    if (view !== 'overview') {
+      setSidebarTab('controls');
+    } else {
+      setSidebarTab('nav');
+    }
+  };
+
   const renderView = () => {
     switch (currentView) {
-      case "overview": return <OverviewGrid onSelect={setCurrentView} />;
+      case "overview": return <OverviewGrid onSelect={handleSelectView} />;
       case "music": return <MusicView result={eegResult} />;
       case "meditation": return <MeditationView result={eegResult} />;
-      case "bubble": return <BubbleGameView result={eegResult} isConnected={isConnected} />;
-      case "ssvep": return <SSVEPView isConnected={isConnected} wsEvent={wsEvent} />;
-      default: return <OverviewGrid onSelect={setCurrentView} />;
+      case "bubble": return <BubbleGameView result={eegResult} isConnected={isConnected} onBackToMenu={() => setCurrentView('overview')} />;
+      case "ssvep": return <SSVEPView isConnected={isConnected} wsEvent={wsEvent} onBackToMenu={() => setCurrentView('overview')} />;
+      default: return <OverviewGrid onSelect={handleSelectView} />;
     }
   };
 
   const isFullContainer = currentView === "ssvep" || currentView === "bubble";
 
   return (
-    <div className="eeg-dashboard-wrapper">
-      {/* Sidebar Navigation */}
-      <div className="eeg-sidebar">
-        <div className="eeg-sidebar-header">
-          <Activity size={24} color="var(--accent, #FFC107)" />
-          <span>EEG Suite</span>
+    <div className="flex flex-row h-full w-full bg-[var(--bg)]">
+      
+      {/* Native Left Sidebar Navigation (Hidden when Full Container App is active) */}
+      {!isFullContainer && (
+        <div className="w-[18rem] bg-[var(--surface)] border-r border-[var(--border)] shrink-0 flex flex-col h-full z-10 p-4">
+            <h2 className="text-xl font-black mb-6 text-[var(--primary)] tracking-widest px-2">NEURO SUITE</h2>
+            
+            <div className="flex flex-col gap-1.5 h-full overflow-y-auto [&::-webkit-scrollbar]:hidden">
+              <button 
+                className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold text-sm border ${currentView === 'overview' ? 'bg-[var(--primary)]/10 text-[var(--primary)] border-[var(--primary)]/30 shadow-sm' : 'text-[var(--text)] hover:bg-[var(--bg)] border-transparent'}`} 
+                onClick={() => setCurrentView('overview')}
+              >
+                <Grid size={18} /> Dashboard Overview
+              </button>
+              <button 
+                className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold text-sm border ${currentView === 'music' ? 'bg-[var(--primary)]/10 text-[var(--primary)] border-[var(--primary)]/30 shadow-sm' : 'text-[var(--text)] hover:bg-[var(--bg)] border-transparent'}`} 
+                onClick={() => setCurrentView('music')}
+              >
+                <Music size={18} /> Music Control
+              </button>
+              <button 
+                className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold text-sm border ${currentView === 'meditation' ? 'bg-[var(--primary)]/10 text-[var(--primary)] border-[var(--primary)]/30 shadow-sm' : 'text-[var(--text)] hover:bg-[var(--bg)] border-transparent'}`} 
+                onClick={() => setCurrentView('meditation')}
+              >
+                <Wind size={18} /> Meditation Trainer
+              </button>
+              <button 
+                className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold text-sm border ${currentView === 'bubble' ? 'bg-[var(--primary)]/10 text-[var(--primary)] border-[var(--primary)]/30 shadow-sm' : 'text-[var(--text)] hover:bg-[var(--bg)] border-transparent'}`} 
+                onClick={() => setCurrentView('bubble')}
+              >
+                <Activity size={18} /> Bubble Game
+              </button>
+              <button 
+                className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold text-sm border ${currentView === 'ssvep' ? 'bg-[var(--primary)]/10 text-[var(--primary)] border-[var(--primary)]/30 shadow-sm' : 'text-[var(--text)] hover:bg-[var(--bg)] border-transparent'}`} 
+                onClick={() => setCurrentView('ssvep')}
+              >
+                <Eye size={18} /> SSVEP Interface
+              </button>
+            </div>
         </div>
-
-        <div className="eeg-sidebar-group flex-grow overflow-y-auto [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-white/10 hover:[&::-webkit-scrollbar-thumb]:bg-white/20 [&::-webkit-scrollbar-thumb]:rounded-full">
-          <div className="eeg-sidebar-title">Applications</div>
-          <div
-            className={`eeg-nav-item ${currentView === 'overview' ? 'active' : ''}`}
-            onClick={() => setCurrentView('overview')}
-          >
-            <Grid size={18} /> Dashboard Overview
-          </div>
-
-          <div
-            className={`eeg-nav-item ${currentView === 'music' ? 'active' : ''}`}
-            onClick={() => setCurrentView('music')}
-          >
-            <Music size={18} /> Music Control
-          </div>
-          <div
-            className={`eeg-nav-item ${currentView === 'meditation' ? 'active' : ''}`}
-            onClick={() => setCurrentView('meditation')}
-          >
-            <Wind size={18} /> Meditation Trainer
-          </div>
-
-          <div
-            className={`eeg-nav-item ${currentView === 'bubble' ? 'active' : ''}`}
-            onClick={() => setCurrentView('bubble')}
-          >
-            <Activity size={18} /> Bubble Game
-          </div>
-          <div
-            className={`eeg-nav-item ${currentView === 'ssvep' ? 'active' : ''}`}
-            onClick={() => setCurrentView('ssvep')}
-          >
-            <Eye size={18} /> SSVEP Interface
-          </div>
-
-        </div>
-
-
-      </div>
+      )}
 
       {/* Main Content Area */}
-      <div className="eeg-main-content" style={
-        isFullContainer
-          ? { padding: 0, background: currentView === "ssvep" ? '#000' : 'transparent', overflow: 'hidden', position: 'relative', height: '100%' }
-          : { overflowY: 'auto', overflowX: 'hidden' }
-      }>
+      <div className={`flex-grow h-full overflow-hidden flex flex-col relative`}>
         {isFullContainer ? (
           renderView()
-        ) : currentView === "overview" ? (
-          renderView()
         ) : (
-          <div className="eeg-glass-card">
+          <div className="w-full h-full mx-auto flex-1 overflow-y-auto p-4 md:p-8">
             {renderView()}
           </div>
         )}
       </div>
-    </div >
+    </div>
   );
 };
 
 export default EEGDashboard;
+

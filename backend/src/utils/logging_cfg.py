@@ -41,11 +41,16 @@ class ColorFormatter(logging.Formatter):
     RESET = "\033[0m"
 
     def format(self, record):
-        level = record.levelname
-        if ENABLE_COLORS and level in self.COLORS:
-            levelname_color = f"{self.COLORS[level]}{level}{self.RESET}"
-            record.levelname = levelname_color
-        return super().format(record)
+        # Create a copy of the levelname for formatting to avoid mutating the shared record
+        orig_levelname = record.levelname
+        if ENABLE_COLORS and orig_levelname in self.COLORS:
+            record.levelname = f"{self.COLORS[orig_levelname]}{orig_levelname}{self.RESET}"
+        
+        result = super().format(record)
+        
+        # Restore original levelname so other handlers (like file handler) don't get ANSI codes
+        record.levelname = orig_levelname
+        return result
 
 
 # ---------------------------------------------------

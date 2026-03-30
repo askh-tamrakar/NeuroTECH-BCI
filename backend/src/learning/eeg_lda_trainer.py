@@ -210,13 +210,34 @@ def train_eeg_lda_model(
 
     config_manager.set_active_model("EEG", model_name)
 
+    # Dynamically resolve frequency labels from data
+    label_to_freq = {}
+    if "target_frequency" in df.columns:
+        for lbl, group in df.groupby("label"):
+            freqs = group["target_frequency"].dropna().unique()
+            valid_freqs = [f for f in freqs if f > 0]
+            if valid_freqs:
+                label_to_freq[int(lbl)] = valid_freqs[0]
+
+    nice_labels = []
+    for i in std_labels:
+        freq = label_to_freq.get(i)
+        if freq:
+            # Format to remove .0 if it's an integer
+            fmt_freq = f"{int(freq)}" if freq == int(freq) else f"{freq}"
+            nice_labels.append(f"{fmt_freq}Hz")
+        elif i == 0:
+            nice_labels.append("Rest")
+        else:
+            nice_labels.append(DISPLAY_LABELS["EEG"].get(i, str(i)))
+
     return {
         "status": "success",
         "sensor": "EEG",
         "classifier": "LDA",
         "accuracy": acc,
         "confusion_matrix": cm,
-        "labels": [DISPLAY_LABELS["EEG"].get(i, str(i)) for i in std_labels],
+        "labels": nice_labels,
         "n_samples": int(len(y_test)),
         "train_samples": int(len(y_train)),
         "total_samples": int(len(df)),
@@ -282,6 +303,26 @@ def evaluate_eeg_lda_model(table_name: str = "eeg_windows", model_name: str | No
     feature_importances, raw_feature_importances = _normalize_feature_importances(model, feature_order)
     visualization = _build_lda_visualization(model, X_eval, y, feature_order)
 
+    # Dynamically resolve frequency labels from data
+    label_to_freq = {}
+    if "target_frequency" in df.columns:
+        for lbl, group in df.groupby("label"):
+            freqs = group["target_frequency"].dropna().unique()
+            valid_freqs = [f for f in freqs if f > 0]
+            if valid_freqs:
+                label_to_freq[int(lbl)] = valid_freqs[0]
+
+    nice_labels = []
+    for i in std_labels:
+        freq = label_to_freq.get(i)
+        if freq:
+            fmt_freq = f"{int(freq)}" if freq == int(freq) else f"{freq}"
+            nice_labels.append(f"{fmt_freq}Hz")
+        elif i == 0:
+            nice_labels.append("Rest")
+        else:
+            nice_labels.append(DISPLAY_LABELS["EEG"].get(i, str(i)))
+
     return {
         "status": "success",
         "sensor": "EEG",
@@ -290,7 +331,7 @@ def evaluate_eeg_lda_model(table_name: str = "eeg_windows", model_name: str | No
         "model_path": str(paths["model"]),
         "accuracy": acc,
         "confusion_matrix": cm,
-        "labels": [DISPLAY_LABELS["EEG"].get(i, str(i)) for i in std_labels],
+        "labels": nice_labels,
         "n_samples": int(len(df)),
         "total_samples": int(len(df)),
         "feature_importances": feature_importances,

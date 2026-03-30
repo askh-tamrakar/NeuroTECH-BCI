@@ -25,6 +25,24 @@ const getEventEmoji = (type) => {
     }
 };
 
+const resolveColorVar = (styles, initialProp, fallbackProp1, fallbackProp2) => {
+    let val = styles.getPropertyValue(initialProp).trim();
+    if (!val && fallbackProp1) val = styles.getPropertyValue(fallbackProp1).trim();
+    if (!val && fallbackProp2) val = styles.getPropertyValue(fallbackProp2).trim();
+
+    let depth = 0;
+    while (val && val.includes('var(') && depth < 5) {
+        const match = val.match(/var\(([^)]+)\)/);
+        if (match) {
+            val = styles.getPropertyValue(match[1].trim()).trim();
+        } else {
+            break;
+        }
+        depth++;
+    }
+    return val;
+};
+
 export default function DinoView({ isConnected, wsEvent, isPaused }) {
     const API_BASE_URL = import.meta.env.VITE_API_URL || '';
     const normalizeModelName = useCallback((name) => String(name || '').toLowerCase().replace(/[^a-z0-9]/g, ''), []);
@@ -458,34 +476,34 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
                 // Get theme colors
                 const styles = getComputedStyle(document.body)
                 const theme = {
-                    bg: styles.getPropertyValue('--bg').trim(),
-                    surface: styles.getPropertyValue('--surface').trim(),
-                    text: styles.getPropertyValue('--text').trim(),
-                    primary: styles.getPropertyValue('--primary').trim(),
-                    border: styles.getPropertyValue('--border').trim(),
-                    muted: styles.getPropertyValue('--muted').trim(),
-                    accent: styles.getPropertyValue('--accent').trim(),
-                    day: styles.getPropertyValue('--day').trim(),
-                    night: styles.getPropertyValue('--night').trim(),
-                    treeDay: styles.getPropertyValue('--tree-day').trim(),
-                    treeNight: styles.getPropertyValue('--tree-night').trim(),
-                    cloudDay: styles.getPropertyValue('--cloud-day').trim(),
-                    cloudNight: styles.getPropertyValue('--cloud-night').trim(),
-                    sunDay: styles.getPropertyValue('--sun-day').trim(),
-                    sunNight: styles.getPropertyValue('--sun-night').trim(),
-                    moonDay: styles.getPropertyValue('--moon-day').trim(),
-                    moonNight: styles.getPropertyValue('--moon-night').trim(),
-                    dinoDay: (styles.getPropertyValue('--dino-day') || styles.getPropertyValue('--dino') || styles.getPropertyValue('--primary')).trim(),
-                    dinoNight: (styles.getPropertyValue('--dino-night') || styles.getPropertyValue('--dino') || styles.getPropertyValue('--primary')).trim(),
-                    obstacleDay: (styles.getPropertyValue('--obstacle-day') || styles.getPropertyValue('--obstacle') || styles.getPropertyValue('--primary')).trim(),
-                    obstacleNight: (styles.getPropertyValue('--obstacle-night') || styles.getPropertyValue('--obstacle') || styles.getPropertyValue('--primary')).trim(),
-                    obstacleBorder: (styles.getPropertyValue('--obstacle-border') || styles.getPropertyValue('--text')).trim(),
-                    groundDay: (styles.getPropertyValue('--ground-day') || styles.getPropertyValue('--ground') || styles.getPropertyValue('--surface')).trim(),
-                    groundNight: (styles.getPropertyValue('--ground-night') || styles.getPropertyValue('--ground') || styles.getPropertyValue('--surface')).trim(),
-                    groundLineDay: (styles.getPropertyValue('--ground-line-day') || styles.getPropertyValue('--ground-line') || styles.getPropertyValue('--accent')).trim(),
-                    groundLineNight: (styles.getPropertyValue('--ground-line-night') || styles.getPropertyValue('--ground-line') || styles.getPropertyValue('--accent')).trim(),
-                    skyDay: styles.getPropertyValue('--sky-day').trim(),
-                    skyNight: styles.getPropertyValue('--sky-night').trim()
+                    bg: resolveColorVar(styles, '--bg'),
+                    surface: resolveColorVar(styles, '--surface'),
+                    text: resolveColorVar(styles, '--text'),
+                    primary: resolveColorVar(styles, '--primary'),
+                    border: resolveColorVar(styles, '--border'),
+                    muted: resolveColorVar(styles, '--muted'),
+                    accent: resolveColorVar(styles, '--accent'),
+                    day: resolveColorVar(styles, '--day'),
+                    night: resolveColorVar(styles, '--night'),
+                    treeDay: resolveColorVar(styles, '--tree-day'),
+                    treeNight: resolveColorVar(styles, '--tree-night'),
+                    cloudDay: resolveColorVar(styles, '--cloud-day'),
+                    cloudNight: resolveColorVar(styles, '--cloud-night'),
+                    sunDay: resolveColorVar(styles, '--sun-day'),
+                    sunNight: resolveColorVar(styles, '--sun-night'),
+                    moonDay: resolveColorVar(styles, '--moon-day'),
+                    moonNight: resolveColorVar(styles, '--moon-night'),
+                    dinoDay: resolveColorVar(styles, '--dino-day', '--dino', '--primary'),
+                    dinoNight: resolveColorVar(styles, '--dino-night', '--dino', '--primary'),
+                    obstacleDay: resolveColorVar(styles, '--obstacle-day', '--obstacle', '--primary'),
+                    obstacleNight: resolveColorVar(styles, '--obstacle-night', '--obstacle', '--primary'),
+                    obstacleBorder: resolveColorVar(styles, '--obstacle-border', '--text'),
+                    groundDay: resolveColorVar(styles, '--ground-day', '--ground', '--surface'),
+                    groundNight: resolveColorVar(styles, '--ground-night', '--ground', '--surface'),
+                    groundLineDay: resolveColorVar(styles, '--ground-line-day', '--ground-line', '--accent'),
+                    groundLineNight: resolveColorVar(styles, '--ground-line-night', '--ground-line', '--accent'),
+                    skyDay: resolveColorVar(styles, '--sky-day'),
+                    skyNight: resolveColorVar(styles, '--sky-night')
                 }
 
                 // Load 8 Bush Variants
@@ -589,7 +607,7 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
                     // Reset or increment based on worker message
                     setCactusJump(prev => {
                         const next = (obstaclesPassedVal !== undefined && obstaclesPassedVal === 0) ? 0 : prev + 1;
-                        
+
                         // Only update best if we are actually progressing
                         if (next > 0 && next > bestCactusJumpRef.current) {
                             localStorage.setItem('dino_best_cactus', next.toString())
@@ -658,35 +676,35 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
             if (shouldUpdate && workerRef.current) {
                 const styles = getComputedStyle(document.body);
                 const theme = {
-                    bg: styles.getPropertyValue('--bg').trim(),
-                    surface: styles.getPropertyValue('--surface').trim(),
-                    text: styles.getPropertyValue('--text').trim(),
-                    primary: styles.getPropertyValue('--primary').trim(),
-                    border: styles.getPropertyValue('--border').trim(),
-                    muted: styles.getPropertyValue('--muted').trim(),
-                    accent: styles.getPropertyValue('--accent').trim(),
-                    day: styles.getPropertyValue('--day').trim(),
-                    night: styles.getPropertyValue('--night').trim(),
-                    treeDay: styles.getPropertyValue('--tree-day').trim(),
-                    treeNight: styles.getPropertyValue('--tree-night').trim(),
-                    cloudDay: styles.getPropertyValue('--cloud-day').trim(),
-                    cloudNight: styles.getPropertyValue('--cloud-night').trim(),
-                    sunDay: styles.getPropertyValue('--sun-day').trim(),
-                    sunNight: styles.getPropertyValue('--sun-night').trim(),
-                    moonDay: styles.getPropertyValue('--moon-day').trim(),
-                    moonNight: styles.getPropertyValue('--moon-night').trim(),
+                    bg: resolveColorVar(styles, '--bg'),
+                    surface: resolveColorVar(styles, '--surface'),
+                    text: resolveColorVar(styles, '--text'),
+                    primary: resolveColorVar(styles, '--primary'),
+                    border: resolveColorVar(styles, '--border'),
+                    muted: resolveColorVar(styles, '--muted'),
+                    accent: resolveColorVar(styles, '--accent'),
+                    day: resolveColorVar(styles, '--day'),
+                    night: resolveColorVar(styles, '--night'),
+                    treeDay: resolveColorVar(styles, '--tree-day'),
+                    treeNight: resolveColorVar(styles, '--tree-night'),
+                    cloudDay: resolveColorVar(styles, '--cloud-day'),
+                    cloudNight: resolveColorVar(styles, '--cloud-night'),
+                    sunDay: resolveColorVar(styles, '--sun-day'),
+                    sunNight: resolveColorVar(styles, '--sun-night'),
+                    moonDay: resolveColorVar(styles, '--moon-day'),
+                    moonNight: resolveColorVar(styles, '--moon-night'),
                     // New simplified mappings
-                    dinoDay: styles.getPropertyValue('--dino').trim(),
-                    dinoNight: styles.getPropertyValue('--dino').trim(),
-                    obstacleDay: styles.getPropertyValue('--obstacle').trim(),
-                    obstacleNight: styles.getPropertyValue('--obstacle').trim(),
-                    obstacleBorder: styles.getPropertyValue('--obstacle-border').trim(),
-                    groundDay: styles.getPropertyValue('--ground').trim(),
-                    groundNight: styles.getPropertyValue('--ground').trim(),
-                    groundLineDay: styles.getPropertyValue('--ground-line').trim(),
-                    groundLineNight: styles.getPropertyValue('--ground-line').trim(),
-                    skyDay: styles.getPropertyValue('--sky-day').trim(),
-                    skyNight: styles.getPropertyValue('--sky-night').trim()
+                    dinoDay: resolveColorVar(styles, '--dino', '--dino-day', '--primary'),
+                    dinoNight: resolveColorVar(styles, '--dino', '--dino-night', '--primary'),
+                    obstacleDay: resolveColorVar(styles, '--obstacle', '--obstacle-day', '--primary'),
+                    obstacleNight: resolveColorVar(styles, '--obstacle', '--obstacle-night', '--primary'),
+                    obstacleBorder: resolveColorVar(styles, '--obstacle-border', '--text'),
+                    groundDay: resolveColorVar(styles, '--ground', '--ground-day', '--surface'),
+                    groundNight: resolveColorVar(styles, '--ground', '--ground-night', '--surface'),
+                    groundLineDay: resolveColorVar(styles, '--ground-line', '--ground-line-day', '--accent'),
+                    groundLineNight: resolveColorVar(styles, '--ground-line', '--ground-line-night', '--accent'),
+                    skyDay: resolveColorVar(styles, '--sky-day'),
+                    skyNight: resolveColorVar(styles, '--sky-night')
                 };
                 workerRef.current.postMessage({ type: 'THEME_UPDATE', payload: theme });
             }
@@ -1494,7 +1512,7 @@ const SettingToggle = ({ label, value, onChange, icon: Icon }) => (
 
 const SettingSelect = ({ label, value, options, onChange }) => (
     <div className="flex justify-between items-center py-1 gap-2">
-        <span className="text-xs text-muted">{label}</span>
+        <span className="text-lg text-muted">{label}</span>
         <div className="w-32">
             <CustomSelect
                 value={value}
