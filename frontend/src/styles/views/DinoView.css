@@ -497,18 +497,52 @@
    is actively beating their personal record.
    ============================================= */
 @keyframes record-heartbeat {
-    0%   { opacity: 1; transform: scale(1);    filter: drop-shadow(0 0 0px var(--primary)); }
-    14%  { opacity: 1; transform: scale(1.15); filter: drop-shadow(0 0 8px var(--primary)); }
-    28%  { opacity: 1; transform: scale(1.05); filter: drop-shadow(0 0 4px var(--primary)); }
-    42%  { opacity: 1; transform: scale(1.18); filter: drop-shadow(0 0 14px var(--primary)); }
-    70%  { opacity: 1; transform: scale(1);    filter: drop-shadow(0 0 2px var(--primary)); }
-    100% { opacity: 1; transform: scale(1);    filter: drop-shadow(0 0 0px var(--primary)); }
+    0% {
+        opacity: 1;
+        transform: scale(1);
+        filter: drop-shadow(0 0 0px var(--primary));
+    }
+
+    14% {
+        opacity: 1;
+        transform: scale(1.15);
+        filter: drop-shadow(0 0 8px var(--primary));
+    }
+
+    28% {
+        opacity: 1;
+        transform: scale(1.05);
+        filter: drop-shadow(0 0 4px var(--primary));
+    }
+
+    42% {
+        opacity: 1;
+        transform: scale(1.18);
+        filter: drop-shadow(0 0 14px var(--primary));
+    }
+
+    70% {
+        opacity: 1;
+        transform: scale(1.08);
+        filter: drop-shadow(0 0 2px var(--primary));
+    }
+
+    84% {
+        opacity: 1;
+        transform: scale(1.15);
+        filter: drop-shadow(0 0 4px var(--primary));
+    }
+
+    100% {
+        opacity: 1;
+        transform: scale(1.05);
+        filter: drop-shadow(0 0 0px var(--primary));
+    }
 }
 
 .record-glow {
-    display: inline-flex;
-    align-items: center;
-    animation: record-heartbeat 0.9s ease-in-out infinite;
+    display: inline-block;
+    animation: record-heartbeat 1.8s ease-in-out infinite;
     color: var(--primary);
     will-change: transform, filter;
-}
+}

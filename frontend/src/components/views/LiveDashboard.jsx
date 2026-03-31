@@ -7,6 +7,8 @@ import { ConfigService } from '../../services/ConfigService'
 import { DataService } from '../../services/DataService'
 import '../../styles/live/LiveDashboard.css'
 
+const MemoizedFirmwareModal = React.memo(FirmwareModal);
+
 export default function LiveDashboard({ wsData, wsConfig, wsEvent, sendMessage, wsUrl, status, latency, connect, disconnect, mobileMainView, setMobileMainView }) {
     const [config, setConfig] = useState()
     const [isPaused, setIsPaused] = useState(() => {
@@ -191,6 +193,8 @@ export default function LiveDashboard({ wsData, wsConfig, wsEvent, sendMessage, 
         setIsFirmwareModalOpen, setRecordingTime
     }
 
+    const closeFirmwareModal = React.useCallback(() => setIsFirmwareModalOpen(false), []);
+
     if (loading) return <div className="loading-screen">Loading Config...</div>
 
     // Render Logic for Mobile Swap
@@ -233,9 +237,9 @@ export default function LiveDashboard({ wsData, wsConfig, wsEvent, sendMessage, 
             </main>
 
             {/* Modals */}
-            <FirmwareModal
+            <MemoizedFirmwareModal
                 isOpen={isFirmwareModalOpen}
-                onClose={() => setIsFirmwareModalOpen(false)}
+                onClose={closeFirmwareModal}
             />
         </div>
     )

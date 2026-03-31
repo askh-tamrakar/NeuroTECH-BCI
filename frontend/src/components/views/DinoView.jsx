@@ -1039,7 +1039,7 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
                                             <span className={isNewJumpRecord ? 'record-glow' : ''}>
                                                 <Counter value={bestCactusJump} fontSize="1.6rem" places={[100, 10, 1]} className="stat-counter-primary-light" style={{ lineHeight: 1 }} />
                                             </span>
-                                            <span className='stat-row-centered stat-info'> <ChevronLeft />  BEST</span>
+                                            <span className='stat-row-centered stat-info'> <ChevronLeft />  HIGHEST</span>
                                         </div>
                                     </div>
                                 </div>
@@ -1051,13 +1051,13 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
                                     {/* Right Center: Score & Best Score */}
                                     <div className="stat-group-center">
                                         <div className="stat-row-centered">
-                                            <span className='stat-row-centered stat-info'>BEST <ChevronRight /></span>
+                                            <span className='stat-row-centered stat-info'>HIGHEST <ChevronRight /></span>
                                             <span className={isNewScoreRecord ? 'record-glow' : ''}>
                                                 <Counter value={Math.floor(highScore / 10)} fontSize="1.6rem" places={[10000, 1000, 100, 10, 1]} className="stat-counter-primary-light" style={{ lineHeight: 1 }} />
                                             </span>
                                             <Target size={34} className="text-primary/40 mx-2" />
                                             <Counter value={Math.floor(score / 10)} fontSize="1.6rem" places={[10000, 1000, 100, 10, 1]} className="stat-counter-primary-light" style={{ lineHeight: 1 }} />
-                                            <span className='stat-row-centered stat-info'> <ChevronLeft />  SCORE</span>
+                                            <span className='stat-row-centered stat-info'> <ChevronLeft />  RUN</span>
                                         </div>
                                     </div>
 
