@@ -502,9 +502,7 @@ export default function SettingsView({
           { id: 'connectivity', icon: Globe, label: 'Link' },
           { divider: true },
           { id: 'audio', icon: Music, label: 'Audio' },
-          { id: 'hotkeys', icon: Keyboard, label: 'Keys' },
-          { divider: true },
-          { id: 'telemetry', icon: Activity, label: 'Telem' }
+          { id: 'hotkeys', icon: Keyboard, label: 'Keys' }
         ].map((item, i) => {
           if (item.divider) return <div key={`div-${i}`} className="w-[28px] h-px bg-border my-1.5" />;
           const isActive = activeSection === item.id;
@@ -887,6 +885,35 @@ export default function SettingsView({
                   </div>
                 </div>
               </div>
+
+              {/* TELEMETRY CARDS */}
+              <div className="grid grid-cols-2 gap-3 mt-2">
+                <div className="bg-surface/95 border border-border rounded-2xl p-5 flex flex-col relative overflow-hidden shadow-lg">
+                  <div className="text-[10px] font-bold tracking-[0.2em] uppercase text-muted mb-2.5">Neural Pipeline</div>
+                  <div className="text-[32px] font-bold tracking-tight leading-none text-text">
+                    {latency > 0 ? latency : '—'}
+                    <span className="text-[14px] font-normal text-muted ml-1.5 uppercase">ms</span>
+                  </div>
+                  <div className={`text-[12px] font-bold mt-2 flex items-center gap-1.5 ${latency > 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                    <div className={`w-1.5 h-1.5 rounded-full ${latency > 0 ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`} />
+                    {latency > 0 ? 'Connected' : 'No device connected'}
+                  </div>
+                  <div className="absolute right-0 bottom-0 flex items-end gap-[4px] opacity-20 p-4 h-[50px] pointer-events-none">
+                    {[...Array(12)].map((_, i) => (
+                      <div key={i} className="w-[3px] bg-primary rounded-t-[2px]" style={{ height: `${Math.floor(Math.random() * 25 + 5)}px` }} />
+                    ))}
+                  </div>
+                </div>
+
+                <div className="bg-surface/95 border border-border rounded-2xl p-5 flex flex-col shadow-lg">
+                  <div className="text-[10px] font-bold tracking-[0.2em] uppercase text-muted mb-2.5 text-right">Sync Refresh</div>
+                  <div className="text-[32px] font-bold tracking-tight leading-none text-text tabular-nums text-right">
+                    {fps}
+                    <span className="text-[14px] font-normal text-muted ml-1.5 uppercase">fps</span>
+                  </div>
+                  <div className="text-[12px] font-bold mt-2 text-muted text-right uppercase tracking-[0.05em]">Frontend rendering</div>
+                </div>
+              </div>
             </div>
           )}
 
@@ -1057,33 +1084,7 @@ export default function SettingsView({
             </div>
           )}
 
-          {/* TELEMETRY */}
-          {activeSection === 'telemetry' && (
-            <div className="flex flex-col gap-4 animate-fade-in">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h2 className="text-[22px] font-bold tracking-tight">Telemetry</h2>
-                  <p className="text-[13px] text-muted mt-1">System diagnostics, session analytics and logging</p>
-                </div>
-              </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="bg-surface/95 border border-border rounded-xl p-4 flex flex-col relative overflow-hidden">
-                  <div className="text-[10px] font-bold tracking-[0.1em] uppercase text-muted mb-2">Neural Pipeline</div>
-                  <div className="text-[28px] font-bold tracking-tight leading-none text-text">{latency > 0 ? latency : '—'}<span className="text-[13px] font-normal text-muted ml-1">ms</span></div>
-                  <div className={`text-[12px] mt-1 ${latency > 0 ? 'text-emerald-500' : 'text-red-500'}`}>{latency > 0 ? 'Connected' : 'No device connected'}</div>
-                  <div className="absolute right-0 bottom-0 flex items-end gap-[3px] opacity-30 p-3 h-[40px] pointer-events-none">
-                    {[...Array(10)].map((_, i) => <div key={i} className="w-[3px] bg-primary rounded-t-[2px]" style={{ height: `${Math.floor(Math.random() * 20 + 4)}px` }} />)}
-                  </div>
-                </div>
-                <div className="bg-surface/95 border border-border rounded-xl p-4 flex flex-col">
-                  <div className="text-[10px] font-bold tracking-[0.1em] uppercase text-muted mb-2">Sync Refresh</div>
-                  <div className="text-[28px] font-bold tracking-tight leading-none text-text tabular-nums">{fps}<span className="text-[13px] font-normal text-muted ml-1">fps</span></div>
-                  <div className="text-[12px] mt-1 text-muted">Frontend rendering speed</div>
-                </div>
-              </div>
-            </div>
-          )}
           {/* ACCOUNT */}
           {activeSection === 'account' && (
             <div className="flex flex-col gap-6 animate-fade-in w-full">
