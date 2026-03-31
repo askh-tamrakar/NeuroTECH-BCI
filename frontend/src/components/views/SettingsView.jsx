@@ -143,6 +143,7 @@ export default function SettingsView({
     currentThemeId,
     setTheme,
     addTheme,
+    addFullTheme,
     updateTheme,
     updateThemeColor,
     removeTheme,
@@ -173,7 +174,75 @@ export default function SettingsView({
     if (onSectionChange) onSectionChange(id);
   };
 
-  const [organizeMode, setOrganizeMode] = useState(false);
+  // Theme Builder State
+  const [builderName, setBuilderName] = useState('Custom Theme');
+  const [builderId, setBuilderId] = useState('theme-custom-theme');
+  const [builderTab, setBuilderTab] = useState('json'); // 'json' or 'visual'
+  const [builderJsonText, setBuilderJsonText] = useState('{\n  "accent": "#0ea5e9",\n  "navBase": "#020617",\n  "navPill": "#0ea5e9",\n  "colors": {\n    "--bg": "#020617",\n    "--surface": "#0f172a",\n    "--text": "#f8fafc",\n    "--muted": "#94a3b8",\n    "--primary": "#38bdf8",\n    "--primary-contrast": "#0f172a",\n    "--accent": "#0ea5e9",\n    "--border": "#1e293b",\n    "--shadow": "rgba(0, 0, 0, 0.4)",\n    "--day": "#f8fafc",\n    "--night": "#020617",\n    "--tree-day": "#38bdf8",\n    "--tree-night": "#1e293b",\n    "--cloud-day": "#ffffff",\n    "--cloud-night": "#334155",\n    "--sun-day": "#38bdf8",\n    "--sun-night": "#38bdf8",\n    "--moon-day": "#ffffff",\n    "--moon-night": "#cbd5e1",\n    "--sky-day": "#e0f2fe",\n    "--sky-night": "#020617",\n    "--text-secondary": "#cbd5e1",\n    "--text-tertiary": "#94a3b8",\n    "--text-highlight": "#38bdf8",\n    "--text-error": "#ef4444",\n    "--text-success": "#22c55e",\n    "--title": "#38bdf8",\n    "--heading": "#f8fafc",\n    "--label": "#94a3b8",\n    "--section-bg": "#0f172a",\n    "--section-border": "#1e293b",\n    "--panel-bg": "#020617",\n    "--panel-border": "#1e293b",\n    "--header-bg": "#0f172a",\n    "--header-text": "#f8fafc",\n    "--event-bg": "#0f172a",\n    "--event-border": "#1e293b",\n    "--event-text": "#cbd5e1",\n    "--selection-bg": "rgba(56, 189, 248, 0.15)",\n    "--selection-border": "#38bdf8",\n    "--graph-line-1": "#38bdf8",\n    "--graph-line-2": "#0ea5e9",\n    "--graph-bg": "#020617",\n    "--graph-grid": "rgba(56, 189, 248, 0.1)",\n    "--graph-text": "#cbd5e1"\n  }\n}');
+  const [builderError, setBuilderError] = useState('');
+
+  // Native HTML5 UI Drag and Drop
+  const [draggedThemeId, setDraggedThemeId] = useState(null);
+
+  const handleDragStart = (e, id) => {
+    setDraggedThemeId(id);
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", id);
+    setTimeout(() => { if (e.target) e.target.style.opacity = '0.4'; }, 0);
+  };
+
+  const handleDragEnter = (e, targetId) => {
+    e.preventDefault();
+    if (!draggedThemeId || draggedThemeId === targetId) return;
+    const newThemes = [...themes];
+    const sourceIdx = newThemes.findIndex(t => t.id === draggedThemeId);
+    const targetIdx = newThemes.findIndex(t => t.id === targetId);
+    if (sourceIdx < 0 || targetIdx < 0) return;
+    const [movedObj] = newThemes.splice(sourceIdx, 1);
+    newThemes.splice(targetIdx, 0, movedObj);
+    reorderThemes(newThemes);
+  };
+
+  const handleDragEnd = (e) => {
+    setDraggedThemeId(null);
+    if (e.target) e.target.style.opacity = '1';
+  };
+
+  useEffect(() => {
+    setBuilderId('theme-' + builderName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, ''));
+  }, [builderName]);
+
+  const handleSaveBuiltTheme = () => {
+    setBuilderError('');
+    try {
+      const parsed = JSON.parse(builderJsonText);
+      const reqCols = ['--bg', '--surface', '--text', '--primary', '--accent', '--border'];
+      if (!parsed.colors) { setBuilderError('Missing "colors" object.'); return; }
+      const missing = reqCols.filter(c => !parsed.colors[c]);
+      if (missing.length > 0) { setBuilderError(`Missing required colors: ${missing.join(', ')}`); return; }
+
+      const newTheme = {
+        id: builderId,
+        name: builderName,
+        type: 'custom',
+        accent: parsed.accent || parsed.colors['--accent'],
+        navBase: parsed.navBase || parsed.colors['--bg'],
+        navPill: parsed.navPill || parsed.colors['--primary'],
+        colors: parsed.colors
+      };
+
+      if (themes.some(t => t.id === newTheme.id)) {
+        setBuilderError(`Theme ID "${newTheme.id}" already exists. Use a unique name.`);
+        return;
+      }
+
+      addFullTheme(newTheme);
+      setBuilderError('Success!');
+      setTimeout(() => setBuilderError(''), 3000);
+    } catch (e) {
+      setBuilderError('Invalid JSON format.');
+    }
+  };
 
   // Editor state
   const [isEditingName, setIsEditingName] = useState(false);
@@ -188,12 +257,7 @@ export default function SettingsView({
   const [showPreviewLines, setShowPreviewLines] = useState(true);
   const [showTuning, setShowTuning] = useState(false);
 
-  // Emergency Restore: Ensure original colors are applied on mount
-  useEffect(() => {
-    if (currentTheme?.type === 'default') {
-      resetThemeColors(currentThemeId);
-    }
-  }, []);
+
   useEffect(() => {
     let frameCount = 0;
     let lastTime = performance.now();
@@ -438,9 +502,7 @@ export default function SettingsView({
           { id: 'connectivity', icon: Globe, label: 'Link' },
           { divider: true },
           { id: 'audio', icon: Music, label: 'Audio' },
-          { id: 'hotkeys', icon: Keyboard, label: 'Keys' },
-          { divider: true },
-          { id: 'telemetry', icon: Activity, label: 'Telem' }
+          { id: 'hotkeys', icon: Keyboard, label: 'Keys' }
         ].map((item, i) => {
           if (item.divider) return <div key={`div-${i}`} className="w-[38px] h-px bg-border my-2" />;
           const isActive = activeSection === item.id;
@@ -465,245 +527,298 @@ export default function SettingsView({
       </aside>
 
       {/* ── MAIN ── */}
-      <main className="flex-1 overflow-y-auto px-5 py-4 flex flex-col items-center min-w-0 custom-scrollbar">
-        <div className="w-full max-w-[1240px] flex flex-col gap-2.5">
+      <main className={`flex-1 overflow-x-hidden px-5 py-6 flex flex-col min-w-0 ${activeSection === 'appearance' ? 'overflow-y-hidden' : 'overflow-y-auto custom-scrollbar'}`}>
+        <style dangerouslySetInnerHTML={{
+          __html: `
+          .hide-scroll::-webkit-scrollbar { display: none; }
+          .hide-scroll { -ms-overflow-style: none; scrollbar-width: none; }
+          .bg-checkered {
+             background-image: linear-gradient(45deg, #222 25%, transparent 25%), linear-gradient(-45deg, #222 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #222 75%), linear-gradient(-45deg, transparent 75%, #222 75%);
+             background-size: 8px 8px;
+             background-position: 0 0, 0 4px, 4px -4px, -4px 0px;
+          }
+        `}} />
+        <div className="w-full h-full flex flex-col gap-6">
           {/* APPEARANCE */}
           {activeSection === 'appearance' && (
-            <div className="flex flex-col gap-4 animate-fade-in">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h2 className="text-[30px] font-bold tracking-tight text-white">Appearance</h2>
-                  <p className="text-[15px] text-muted mt-1.5 font-medium">Customize your dashboard theme and color palette</p>
-                </div>
-                <div className="flex gap-2.5">
-                  <button onClick={() => setOrganizeMode(!organizeMode)} className={`px-4 py-2 rounded-lg text-[12px] font-bold tracking-[0.06em] cursor-pointer border transition-all ${organizeMode ? 'bg-primary border-primary text-bg' : 'border-primary/30 bg-primary/10 text-primary hover:bg-primary/20'}`}>
-                    {organizeMode ? 'Done Organizing' : 'Organize'}
-                  </button>
-                  <button onClick={resetThemes} className="px-4 py-2 rounded-lg text-[12px] font-bold tracking-[0.06em] cursor-pointer border border-border bg-surface/95 text-muted hover:text-text hover:border-white/20 transition-all">Reset</button>
-                  <button onClick={handleCreateTheme} className="px-4 py-2 rounded-lg text-[12px] font-bold tracking-[0.06em] cursor-pointer border border-primary/30 bg-primary/10 text-primary hover:bg-primary/20 transition-all">+ New Theme</button>
-                </div>
-              </div>
+            <div className="flex flex-col lg:flex-row gap-6 animate-fade-in items-start h-full">
 
-              <div className="bg-surface/95 border border-border rounded-2xl overflow-hidden shadow-lg">
-                <div className="px-5 py-3.5 border-b border-border flex items-center justify-between gap-3">
-                  <span className="text-[11px] font-bold tracking-[0.1em] uppercase text-muted flex items-center gap-2">
-                    <Palette size={14} className="opacity-70" strokeWidth={1.8} /> Color Theme
-                  </span>
-                </div>
-                <div className="p-5 flex flex-col gap-4">
-                  {organizeMode ? (
-                    <Reorder.Group axis="y" values={themes} onReorder={reorderThemes} className="flex flex-col gap-2 max-h-[400px] overflow-y-auto custom-scrollbar pr-2">
-                      {themes.map((t) => (
-                        <Reorder.Item key={t.id} value={t} className="flex items-center justify-between p-3 bg-surface/80 border border-border/50 rounded-xl hover:border-border cursor-grab active:cursor-grabbing">
-                          <div className="flex items-center gap-3">
-                            <Menu size={16} className="text-muted" />
-                            <div className="flex gap-1.5 mt-0.5" title="Base, Primary, Accent">
-                              <div className="w-[12px] h-[12px] rounded-full" style={{ backgroundColor: t.colors['--bg'] }} />
-                              <div className="w-[12px] h-[12px] rounded-full" style={{ backgroundColor: t.colors['--primary'] }} />
-                              <div className="w-[12px] h-[12px] rounded-full" style={{ backgroundColor: t.colors['--accent'] }} />
-                            </div>
-                            <div className="flex flex-col">
-                              <span className="text-[13px] font-bold tracking-tight text-text leading-tight">{t.name}</span>
-                              <span className="text-[10px] uppercase font-mono text-muted tracking-widest">{t.id}</span>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-6" onPointerDown={e => e.stopPropagation()}>
-                            {/* Numeric Order Input */}
-                            <div className="flex items-center gap-2">
-                              <span className="text-[9px] uppercase font-bold text-muted tracking-wide">Order</span>
-                              <input 
-                                type="number" 
-                                value={t.order} 
-                                onChange={(e) => updateThemeOrder(t.id, parseInt(e.target.value) || 0)}
-                                className="w-16 bg-bg border border-border/50 rounded-lg px-2 py-1 text-[11px] font-mono tabular-nums outline-none focus:border-primary text-center"
-                              />
-                            </div>
-                            {/* Custom Radio Toggle */}
-                            <div className="flex items-center gap-2 cursor-pointer" onClick={() => toggleThemeVisibility(t.id)}>
-                              <div className={`w-4 h-4 rounded-full border flex items-center justify-center transition-all ${t.visible !== false ? 'border-primary bg-primary/20' : 'border-border bg-bg'}`}>
-                                {t.visible !== false && <div className="w-2 h-2 rounded-full bg-primary" />}
-                              </div>
-                              <span className={`text-[10px] uppercase font-bold tracking-wider w-14 ${t.visible !== false ? 'text-primary' : 'text-muted'}`}>
-                                {t.visible !== false ? 'Enabled' : 'Disabled'}
-                              </span>
-                            </div>
-                          </div>
-                        </Reorder.Item>
-                      ))}
-                    </Reorder.Group>
-                  ) : (
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3.5">
-                      {themes.filter(t => t.visible !== false).map((t) => (
-                        <div
-                          key={t.id}
-                          onClick={() => setTheme(t.id)}
-                          className={`border rounded-xl p-4 cursor-pointer transition-all bg-surface/80 hover:-translate-y-[1px] ${currentThemeId === t.id ? 'border-primary ring-1 ring-primary/50 shadow-[0_0_20px_rgba(0,200,240,0.08)]' : 'border-border/50 hover:border-border'}`}
-                        >
-                          <div className="flex gap-2 mb-2.5">
-                            <div className="w-[12px] h-[12px] rounded-full" style={{ backgroundColor: t.colors['--bg'] }} />
-                            <div className="w-[12px] h-[12px] rounded-full" style={{ backgroundColor: t.colors['--primary'] }} />
-                            <div className="w-[12px] h-[12px] rounded-full" style={{ backgroundColor: t.colors['--accent'] }} />
-                          </div>
-                          <div className={`text-[13px] font-medium leading-[1.3] truncate ${currentThemeId === t.id ? 'text-primary' : 'text-muted'}`}>{t.name}</div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  <div className="bg-surface/80 rounded-xl px-4 py-3.5 border border-border flex flex-col gap-3">
-                    <div className="flex items-center gap-3.5 w-full">
-                      <div className="text-[11px] font-semibold tracking-[0.08em] uppercase text-muted shrink-0">Active</div>
-                      <div className="flex-1 flex flex-col gap-1.5 min-h-[16px] justify-center">
-                        <div className="h-1.5 rounded-full transition-all duration-300" style={{ width: `${previewLineWidth1}%`, backgroundColor: currentTheme.colors['--primary'] || 'var(--primary)' }} />
-                        <div className="h-1.5 rounded-full transition-all duration-300" style={{ width: `${previewLineWidth2}%`, backgroundColor: currentTheme.colors['--accent'] || 'var(--accent)' }} />
-                      </div>
-                      <div className="flex gap-2 items-center">
-                        <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: currentTheme.colors['--bg'] || 'var(--bg)' }} />
-                        <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: currentTheme.colors['--primary'] || 'var(--primary)' }} />
-                        <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: currentTheme.colors['--accent'] || 'var(--accent)' }} />
-                        <div className="h-4 w-px bg-border/50 mx-1" />
-                        <button
-                          onClick={() => setShowTuning(!showTuning)}
-                          className={`p-1.5 rounded-md transition-all ${showTuning ? 'text-primary' : 'text-muted hover:text-text'}`}
-                          title="Tune Lines"
-                        >
-                          <Settings size={14} className={showTuning ? 'animate-spin-slow' : ''} />
-                        </button>
-                      </div>
-                    </div>
-
-                    {showTuning && (
-                      <div className="flex flex-col gap-3 pt-3 border-t border-border/10 animate-in fade-in slide-in-from-top-1 duration-200">
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="flex flex-col gap-1.5">
-                            <div className="flex justify-between text-[8px] font-bold text-muted uppercase">
-                              <span>Line 1 Scale</span>
-                              <span className="text-primary">{previewLineWidth1}%</span>
-                            </div>
-                            <input type="range" min="5" max="100" value={previewLineWidth1} onChange={(e) => setPreviewLineWidth1(parseInt(e.target.value))} className="w-full h-1 bg-surface-hover rounded-full appearance-none cursor-pointer" style={{ accentColor: 'var(--primary)' }} />
-                          </div>
-                          <div className="flex flex-col gap-1.5">
-                            <div className="flex justify-between text-[8px] font-bold text-primary uppercase">
-                              <span>Line 2 Scale</span>
-                              <span className="text-accent">{previewLineWidth2}%</span>
-                            </div>
-                            <input type="range" min="5" max="100" value={previewLineWidth2} onChange={(e) => setPreviewLineWidth2(parseInt(e.target.value))} className="w-full h-1 bg-surface-hover rounded-full appearance-none cursor-pointer" style={{ accentColor: 'var(--accent)' }} />
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="flex flex-col gap-1.5">
-                            <div className="flex justify-between text-[8px] font-bold uppercase text-primary">
-                              <span>Primary Intensity</span>
-                              <span>{(hexToHsl(currentTheme.colors['--primary'] || '#000000')[1] * 100).toFixed(0)}%</span>
-                            </div>
-                            <input
-                              type="range" min="0" max="1" step="0.01"
-                              value={hexToHsl(currentTheme.colors['--primary'] || '#000000')[1]}
-                              onChange={(e) => {
-                                const [h, s, l] = hexToHsl(currentTheme.colors['--primary']);
-                                updateThemeColor(currentThemeId, '--primary', hslToHex(h, parseFloat(e.target.value), l));
-                              }}
-                              className="w-full h-1 bg-surface-hover rounded-full appearance-none cursor-pointer" style={{ accentColor: 'var(--primary)' }}
-                            />
-                          </div>
-                          <div className="flex flex-col gap-1.5">
-                            <div className="flex justify-between text-[8px] font-bold uppercase text-accent">
-                              <span>Accent Intensity</span>
-                              <span>{(hexToHsl(currentTheme.colors['--accent'] || '#000000')[1] * 100).toFixed(0)}%</span>
-                            </div>
-                            <input
-                              type="range" min="0" max="1" step="0.01"
-                              value={hexToHsl(currentTheme.colors['--accent'] || '#000000')[1]}
-                              onChange={(e) => {
-                                const [h, s, l] = hexToHsl(currentTheme.colors['--accent']);
-                                updateThemeColor(currentThemeId, '--accent', hslToHex(h, parseFloat(e.target.value), l));
-                              }}
-                              className="w-full h-1 bg-surface-hover rounded-full appearance-none cursor-pointer" style={{ accentColor: 'var(--accent)' }}
-                            />
-                          </div>
-                        </div>
-
-                        <button
-                          onClick={() => { resetThemeColors(currentThemeId); setShowTuning(false); }}
-                          className="text-[9px] font-bold text-primary self-center hover:underline flex items-center gap-1 opacity-70 hover:opacity-100 py-1"
-                        >
-                          <RefreshCw size={10} /> Full Restore (Source Colors)
-                        </button>
-                      </div>
-                    )}
+              {/* LEFT PANEL: Theme Organizer */}
+              <div className="flex-[3] flex flex-col gap-4 w-full h-full">
+                <div className="flex items-start justify-between gap-3 shrink-0">
+                  <div>
+                    <h2 className="text-[22px] font-bold tracking-tight">Appearance</h2>
+                    <p className="text-[13px] text-muted mt-1">Organize your dashboard themes (Drag cards to reorder)</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={resetThemes} className="px-3.5 py-1.5 rounded-lg text-[11px] font-bold tracking-[0.06em] cursor-pointer border border-border bg-surface/95 text-muted hover:text-text hover:border-white/20 transition-all">Reset Defaults</button>
                   </div>
                 </div>
-              </div>
 
-              <div className="bg-surface/85 border border-border rounded-2xl overflow-hidden shadow-lg">
-                <div className="px-5 py-3.5 border-b border-border flex items-center justify-between gap-3">
-                  <span className="text-[11px] font-bold tracking-[0.1em] uppercase text-muted flex items-center gap-2">
-                    <Edit3 size={14} className="opacity-70" strokeWidth={1.8} /> Custom Palette
-                  </span>
-                  {currentTheme.type === 'custom' && (
-                    <div className="flex gap-2">
-                      <button onClick={handleDuplicateTheme} className="px-2 py-1 rounded text-[10px] bg-surface border border-border text-muted hover:text-text">Duplicate</button>
-                      <button onClick={() => removeTheme(currentThemeId)} className="px-2 py-1 rounded text-[10px] bg-red-500/10 border border-red-500/20 text-red-500">Delete</button>
-                    </div>
-                  )}
-                </div>
-                <div className="p-5 flex flex-col">
-                  {currentTheme.type === 'custom' ? (
-                    <>
-                      <div className="flex items-center justify-between py-3 border-b border-border/50">
-                        <span className="text-[14px] font-medium text-text">Theme Name</span>
-                        {isEditingName ? (
-                          <input type="text" autoFocus value={tempName} onChange={e => setTempName(e.target.value)} onBlur={() => { updateTheme(currentThemeId, { name: tempName || currentTheme.name }); setIsEditingName(false); }} onKeyDown={e => { if (e.key === 'Enter') { updateTheme(currentThemeId, { name: tempName || currentTheme.name }); setIsEditingName(false); } }} className="bg-bg border border-primary rounded px-2 py-1 text-sm outline-none w-[150px] text-right" />
-                        ) : (
-                          <span className="text-[14px] font-bold border-b border-dashed border-primary/50 cursor-pointer" onClick={() => { setTempName(currentTheme.name); setIsEditingName(true); }}>{currentTheme.name}</span>
-                        )}
-                      </div>
-                      {[
-                        { label: 'System Background', key: '--bg' },
-                        { label: 'Surface UI Nodes', key: '--surface' },
-                        { label: 'Base Typography', key: '--text' },
-                        { label: 'Primary Action Alpha', key: '--primary' },
-                        { label: 'Accent Highlight', key: '--accent' },
-                        { label: 'Vector Border Edge', key: '--border' }
-                      ].map(({ label, key }) => (
-                        <div key={key} className="flex items-center justify-between py-3 border-b border-border/50 last:border-0 group">
-                          <div className="flex flex-col">
-                            <span className="text-[14px] font-medium transition-colors group-hover:text-primary">{label}</span>
-                            <span className="text-[10px] text-muted font-mono uppercase tracking-tighter opacity-0 group-hover:opacity-100 transition-opacity">{key}</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all mr-2">
-                              <button
-                                onClick={() => updateThemeColor(currentThemeId, key, adjustLightness(currentTheme.colors[key], 0.05))}
-                                className="p-1 rounded bg-surface border border-border hover:text-primary transition-all"
-                                title="Shift Up"
-                              >
-                                <ChevronUp size={12} />
-                              </button>
-                              <button
-                                onClick={() => updateThemeColor(currentThemeId, key, adjustLightness(currentTheme.colors[key], -0.05))}
-                                className="p-1 rounded bg-surface border border-border hover:text-primary transition-all"
-                                title="Shift Down"
-                              >
-                                <ChevronDown size={12} />
-                              </button>
-                              <button
-                                onClick={() => updateThemeColor(currentThemeId, key, generateRandomHex())}
-                                className="p-1 rounded bg-surface border border-border hover:text-primary transition-all"
-                                title="Randomize"
-                              >
-                                <RefreshCw size={12} />
-                              </button>
+                <div className="bg-surface/95 border border-border rounded-2xl overflow-hidden shadow-lg flex-1 flex flex-col min-h-0">
+                  <div className="px-5 py-3.5 border-b border-border flex items-center justify-between gap-3 shrink-0">
+                    <span className="text-[11px] font-bold tracking-[0.1em] uppercase text-muted flex items-center gap-2">
+                      <Palette size={14} className="opacity-70" strokeWidth={1.8} /> Color Themes
+                    </span>
+                  </div>
+                  <div className="p-5 flex flex-col gap-4 overflow-y-auto hide-scroll flex-1">
+                    <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 place-content-start">
+                      {themes.map((t) => (
+                        <div
+                          key={t.id}
+                          draggable="true"
+                          onDragStart={(e) => handleDragStart(e, t.id)}
+                          onDragEnter={(e) => handleDragEnter(e, t.id)}
+                          onDragEnd={handleDragEnd}
+                          onDragOver={(e) => e.preventDefault()}
+                          onClick={() => setTheme(t.id)}
+                          className={`relative border rounded-xl p-5 min-h-[100px] flex flex-col justify-end cursor-grab active:cursor-grabbing transition-all bg-surface/80 hover:scale-[1.02] ${draggedThemeId === t.id ? 'opacity-40 border-dashed border-primary/50' : ''} ${currentThemeId === t.id ? 'border-primary ring-1 ring-primary/50 shadow-[0_0_20px_rgba(0,200,240,0.08)]' : 'border-border/50 hover:border-border'}`}
+                        >
+                          {/* Inline Toggles & Actions */}
+                          <div className="absolute top-2.5 right-2.5 flex items-center gap-2 z-10">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setBuilderName(`${t.name} Draft`);
+                                setBuilderJsonText(JSON.stringify({
+                                  accent: t.accent || t.colors['--accent'],
+                                  navBase: t.navBase || t.colors['--bg'],
+                                  navPill: t.navPill || t.colors['--primary'],
+                                  colors: t.colors
+                                }, null, 2));
+                                setBuilderTab('visual');
+                              }}
+                              className="w-[22px] h-[22px] rounded flex items-center justify-center bg-surface border border-border hover:bg-primary/20 hover:border-primary/50 hover:text-primary transition-all text-muted shadow-sm"
+                              title="Load into Builder"
+                            >
+                              <Copy size={11} strokeWidth={2.5} />
+                            </button>
+
+                            <div
+                              className="w-[16px] h-[16px] rounded-full border cursor-pointer flex items-center justify-center transition-transform hover:scale-110 bg-surface shadow-sm"
+                              onClick={(e) => { e.stopPropagation(); toggleThemeVisibility(t.id); }}
+                              style={{ borderColor: t.visible !== false ? t.colors['--primary'] : 'var(--border)' }}
+                              title={t.visible !== false ? "Theme Enabled. Click to disable" : "Theme Disabled. Click to enable"}
+                            >
+                              {t.visible !== false && <div className="w-[8px] h-[8px] rounded-full" style={{ backgroundColor: t.colors['--primary'] }} />}
                             </div>
-                            <span className="text-[12px] text-muted font-mono min-w-[65px] text-right">{currentTheme.colors[key]}</span>
-                            <input type="color" value={currentTheme.colors[key]} onChange={(e) => updateThemeColor(currentThemeId, key, e.target.value)} className="w-[32px] h-[32px] rounded-lg border border-border cursor-pointer p-0 bg-transparent shrink-0 hover:scale-110 transition-transform" />
                           </div>
+
+                          <div className="flex gap-2.5 mb-2.5 pointer-events-none pr-12">
+                            <div className="w-[14px] h-[14px] rounded-full shadow-sm border border-black/20" style={{ backgroundColor: t.colors['--bg'] }} />
+                            <div className="w-[14px] h-[14px] rounded-full shadow-sm border border-black/20" style={{ backgroundColor: t.colors['--primary'] }} />
+                            <div className="w-[14px] h-[14px] rounded-full shadow-sm border border-black/20" style={{ backgroundColor: t.colors['--accent'] }} />
+                          </div>
+                          <div className={`text-[14px] font-bold tracking-tight leading-[1.3] truncate pointer-events-none ${currentThemeId === t.id ? 'text-primary drop-shadow-[0_0_8px_var(--primary)] text-shadow-glow' : 'text-text'}`}>{t.name}</div>
                         </div>
                       ))}
-                    </>
-                  ) : (
-                    <div className="text-center py-6 text-muted text-sm">Select a custom theme or duplicate the current one to edit colors.</div>
-                  )}
+                    </div>
+
+                    <div className="bg-surface/80 rounded-xl px-4 py-3.5 border border-border flex flex-col gap-3 mt-4">
+                      <div className="flex items-center gap-3.5 w-full">
+                        <div className="text-[11px] font-semibold tracking-[0.08em] uppercase text-muted shrink-0">Active Indicator</div>
+                        <div className="flex-1 flex flex-col gap-1.5 min-h-[16px] justify-center">
+                          <div className="h-1.5 rounded-full transition-all duration-300" style={{ width: `${previewLineWidth1}%`, backgroundColor: currentTheme.colors['--primary'] || 'var(--primary)' }} />
+                          <div className="h-1.5 rounded-full transition-all duration-300" style={{ width: `${previewLineWidth2}%`, backgroundColor: currentTheme.colors['--accent'] || 'var(--accent)' }} />
+                        </div>
+                        <div className="flex gap-2 items-center">
+                          <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: currentTheme.colors['--bg'] || 'var(--bg)' }} />
+                          <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: currentTheme.colors['--primary'] || 'var(--primary)' }} />
+                          <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: currentTheme.colors['--accent'] || 'var(--accent)' }} />
+                          <div className="h-4 w-px bg-border/50 mx-1" />
+                          <button onClick={() => setShowTuning(!showTuning)} className={`p-1.5 rounded-md transition-all ${showTuning ? 'text-primary' : 'text-muted hover:text-text'}`} title="Tune Lines">
+                            <Settings size={14} className={showTuning ? 'animate-spin-slow' : ''} />
+                          </button>
+                        </div>
+                      </div>
+                      {showTuning && (
+                        <div className="flex flex-col gap-3 pt-3 border-t border-border/10 animate-in fade-in slide-in-from-top-1 duration-200">
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="flex flex-col gap-1.5">
+                              <div className="flex justify-between text-[8px] font-bold text-muted uppercase">
+                                <span>Line 1 Scale</span><span className="text-primary">{previewLineWidth1}%</span>
+                              </div>
+                              <input type="range" min="5" max="100" value={previewLineWidth1} onChange={(e) => setPreviewLineWidth1(parseInt(e.target.value))} className="w-full h-1 bg-surface-hover rounded-full appearance-none cursor-pointer" style={{ accentColor: 'var(--primary)' }} />
+                            </div>
+                            <div className="flex flex-col gap-1.5">
+                              <div className="flex justify-between text-[8px] font-bold text-primary uppercase">
+                                <span>Line 2 Scale</span><span className="text-accent">{previewLineWidth2}%</span>
+                              </div>
+                              <input type="range" min="5" max="100" value={previewLineWidth2} onChange={(e) => setPreviewLineWidth2(parseInt(e.target.value))} className="w-full h-1 bg-surface-hover rounded-full appearance-none cursor-pointer" style={{ accentColor: 'var(--accent)' }} />
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="flex flex-col gap-1.5">
+                              <div className="flex justify-between text-[8px] font-bold uppercase text-primary">
+                                <span>Primary Intensity</span>
+                                <span>{(hexToHsl(currentTheme.colors['--primary'] || '#000000')[1] * 100).toFixed(0)}%</span>
+                              </div>
+                              <input type="range" min="0" max="1" step="0.01"
+                                value={hexToHsl(currentTheme.colors['--primary'] || '#000000')[1]}
+                                onChange={(e) => {
+                                  const [h, s, l] = hexToHsl(currentTheme.colors['--primary']);
+                                  updateThemeColor(currentThemeId, '--primary', hslToHex(h, parseFloat(e.target.value), l));
+                                }}
+                                className="w-full h-1 bg-surface-hover rounded-full appearance-none cursor-pointer" style={{ accentColor: 'var(--primary)' }}
+                              />
+                            </div>
+                            <div className="flex flex-col gap-1.5">
+                              <div className="flex justify-between text-[8px] font-bold uppercase text-accent">
+                                <span>Accent Intensity</span>
+                                <span>{(hexToHsl(currentTheme.colors['--accent'] || '#000000')[1] * 100).toFixed(0)}%</span>
+                              </div>
+                              <input
+                                type="range" min="0" max="1" step="0.01"
+                                value={hexToHsl(currentTheme.colors['--accent'] || '#000000')[1]}
+                                onChange={(e) => {
+                                  const [h, s, l] = hexToHsl(currentTheme.colors['--accent']);
+                                  updateThemeColor(currentThemeId, '--accent', hslToHex(h, parseFloat(e.target.value), l));
+                                }}
+                                className="w-full h-1 bg-surface-hover rounded-full appearance-none cursor-pointer" style={{ accentColor: 'var(--accent)' }}
+                              />
+                            </div>
+                          </div>
+
+                          <button
+                            onClick={() => { resetThemeColors(currentThemeId); setShowTuning(false); }}
+                            className="text-[9px] font-bold text-primary self-center hover:underline flex items-center gap-1 opacity-70 hover:opacity-100 py-1"
+                          >
+                            <RefreshCw size={10} /> Full Restore (Source Colors)
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div> {/* End of Left Panel */}
+
+              {/* RIGHT PANEL: Theme Builder */}
+              <div className="flex-[2] flex flex-col w-full h-[calc(100vh-120px)] sticky top-6">
+                <div className="bg-surface/90 border border-border rounded-2xl overflow-hidden shadow-lg flex flex-col h-full">
+                  <div className="px-5 py-4 border-b border-border flex items-center justify-between gap-3 bg-surface z-10 shrink-0">
+                    <span className="text-[11px] font-bold tracking-[0.1em] uppercase text-text flex items-center gap-2">
+                      <Plus size={14} className="opacity-70 text-primary" strokeWidth={1.8} /> Theme Builder
+                    </span>
+                    <button onClick={handleSaveBuiltTheme} className="px-4 py-1.5 bg-primary/10 text-primary border border-primary/40 rounded-lg hover:bg-primary/20 text-[10px] font-bold uppercase tracking-widest transition-all hover:scale-105 active:scale-95 shadow-[0_0_15px_rgba(0,180,255,0.1)]">
+                      Save Theme
+                    </button>
+                  </div>
+
+                  {/* Mode Toggle */}
+                  <div className="flex border-b border-border/50 text-[10px] uppercase font-bold tracking-widest bg-surface/50 shrink-0">
+                    <button onClick={() => setBuilderTab('json')} className={`flex-1 py-3 border-b-2 transition-all ${builderTab === 'json' ? 'border-primary text-primary bg-primary/5' : 'border-transparent text-muted hover:text-text'}`}>
+                      Raw JSON
+                    </button>
+                    <button onClick={() => setBuilderTab('visual')} className={`flex-1 py-3 border-b-2 transition-all ${builderTab === 'visual' ? 'border-primary text-primary bg-primary/5' : 'border-transparent text-muted hover:text-text'}`}>
+                      Visual UI
+                    </button>
+                  </div>
+
+                  <div className="p-5 flex flex-col gap-6 overflow-y-auto hide-scroll flex-1">
+                    <div className="flex flex-col gap-2 relative">
+                      <label className="text-[10px] uppercase font-bold text-muted tracking-widest">Theme Name</label>
+                      <input
+                        type="text"
+                        value={builderName}
+                        onChange={e => setBuilderName(e.target.value)}
+                        className="bg-bg border border-border/80 rounded-lg px-3 py-2.5 text-sm font-semibold outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 text-text transition-all"
+                      />
+                      <div className="flex justify-between items-center mt-1 px-1">
+                        <span className="text-[10px] font-mono text-muted/70 tracking-tight">ID: <span className="text-primary/70">{builderId}</span></span>
+                        <span className="text-[10px] font-mono text-muted/70 tracking-tight">{builderId}.json</span>
+                      </div>
+                    </div>
+
+                    {builderTab === 'json' && (
+                      <div className="flex flex-col gap-2 flex-1">
+                        <div className="flex justify-between items-end mb-1">
+                          <label className="text-[10px] uppercase font-bold text-muted tracking-widest">JSON Definition</label>
+                          <span className="text-[9px] text-muted/60 uppercase font-bold">Raw Import</span>
+                        </div>
+                        <p className="text-[12px] text-muted mb-1 leading-relaxed">Paste your full theme <code className="text-primary bg-primary/10 px-1 rounded">json</code> mapping below. Missing essential tokens will block saving.</p>
+                        <textarea
+                          value={builderJsonText}
+                          onChange={e => setBuilderJsonText(e.target.value)}
+                          className="bg-[#0a0a0c] border border-border/80 rounded-xl p-5 text-[14px] font-mono text-[#a5d6a7] min-h-[500px] h-full flex-1 outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 shadow-inner resize-y custom-scrollbar leading-relaxed"
+                          spellCheck="false"
+                        />
+                      </div>
+                    )}
+
+                    {builderTab === 'visual' && (() => {
+                      let colorsObj = {};
+                      try { colorsObj = JSON.parse(builderJsonText).colors || {}; } catch (e) { }
+
+                      return (
+                        <div className="flex flex-col gap-4">
+                          <div className="flex justify-between items-end mb-1">
+                            <label className="text-[10px] uppercase font-bold text-muted tracking-widest">Visual Color Editor</label>
+                            <span className="text-[9px] text-muted/60 uppercase font-bold">Complete Palette</span>
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pb-2">
+                            {Object.entries(colorsObj).map(([key, val]) => {
+                              const label = key.replace('--', '').split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+                              return (
+                                <div key={key} className="flex flex-col p-3 border border-border/50 rounded-lg bg-bg/50 group hover:border-primary/40 transition-all shadow-sm gap-2">
+                                  <div className="flex justify-between items-start">
+                                    <div className="flex flex-col truncate pr-2">
+                                      <span className="text-[12px] font-bold text-text group-hover:text-primary transition-colors">{label}</span>
+                                      <span className="text-[9px] text-muted font-mono tracking-tighter opacity-70">{key}</span>
+                                    </div>
+                                    <div className="relative w-[28px] h-[28px] rounded-lg overflow-hidden border border-border shrink-0 shadow-inner group-hover:scale-110 transition-transform bg-checkered">
+                                      <div className="absolute inset-0" style={{ backgroundColor: val }} />
+                                      <input
+                                        type="color"
+                                        value={val && typeof val === 'string' && val.length >= 7 ? val.substring(0, 7) : '#000000'}
+                                        onChange={(e) => {
+                                          try {
+                                            const p = JSON.parse(builderJsonText);
+                                            if (!p.colors) p.colors = {};
+                                            p.colors[key] = e.target.value;
+                                            if (key === '--bg') p.navBase = e.target.value;
+                                            if (key === '--primary') p.navPill = e.target.value;
+                                            if (key === '--accent') p.accent = e.target.value;
+                                            setBuilderJsonText(JSON.stringify(p, null, 2));
+                                          } catch (err) { }
+                                        }}
+                                        className="absolute -top-4 -left-4 w-[64px] h-[64px] cursor-pointer opacity-0"
+                                      />
+                                    </div>
+                                  </div>
+                                  <input
+                                    type="text"
+                                    value={val}
+                                    onChange={(e) => {
+                                      try {
+                                        const p = JSON.parse(builderJsonText);
+                                        if (!p.colors) p.colors = {};
+                                        p.colors[key] = e.target.value;
+                                        if (key === '--bg') p.navBase = e.target.value;
+                                        if (key === '--primary') p.navPill = e.target.value;
+                                        if (key === '--accent') p.accent = e.target.value;
+                                        setBuilderJsonText(JSON.stringify(p, null, 2));
+                                      } catch (err) { }
+                                    }}
+                                    className="w-full bg-surface/50 border border-border/60 rounded px-2 py-1.5 text-[11px] font-mono text-muted focus:text-text focus:border-primary focus:ring-1 focus:ring-primary/20 outline-none transition-all placeholder:text-muted/30"
+                                    placeholder="HEX or RGBA"
+                                  />
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {builderError && (
+                      <div className={`text-[12px] font-bold mt-2 px-3 py-2.5 rounded-lg border flex items-center gap-2 shrink-0 ${builderError === 'Success!' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' : 'bg-red-500/10 text-red-500 border-red-500/20'}`}>
+                        {builderError === 'Success!' ? <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> : <span className="w-1.5 h-1.5 rounded-full bg-red-500" />}
+                        {builderError}
+                      </div>
+                    )}
+
+                    <div className="h-[60px] shrink-0 w-full" /> {/* Spacer for footer */}
+                  </div>
                 </div>
               </div>
             </div>
@@ -768,6 +883,35 @@ export default function SettingsView({
                       <div className="w-10 h-6 bg-surface-hover peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-[16px] peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500 border border-border-hi"></div>
                     </label>
                   </div>
+                </div>
+              </div>
+
+              {/* TELEMETRY CARDS */}
+              <div className="grid grid-cols-2 gap-3 mt-2">
+                <div className="bg-surface/95 border border-border rounded-2xl p-5 flex flex-col relative overflow-hidden shadow-lg">
+                  <div className="text-[10px] font-bold tracking-[0.2em] uppercase text-muted mb-2.5">Neural Pipeline</div>
+                  <div className="text-[32px] font-bold tracking-tight leading-none text-text">
+                    {latency > 0 ? latency : '—'}
+                    <span className="text-[14px] font-normal text-muted ml-1.5 uppercase">ms</span>
+                  </div>
+                  <div className={`text-[12px] font-bold mt-2 flex items-center gap-1.5 ${latency > 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                    <div className={`w-1.5 h-1.5 rounded-full ${latency > 0 ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`} />
+                    {latency > 0 ? 'Connected' : 'No device connected'}
+                  </div>
+                  <div className="absolute right-0 bottom-0 flex items-end gap-[4px] opacity-20 p-4 h-[50px] pointer-events-none">
+                    {[...Array(12)].map((_, i) => (
+                      <div key={i} className="w-[3px] bg-primary rounded-t-[2px]" style={{ height: `${Math.floor(Math.random() * 25 + 5)}px` }} />
+                    ))}
+                  </div>
+                </div>
+
+                <div className="bg-surface/95 border border-border rounded-2xl p-5 flex flex-col shadow-lg">
+                  <div className="text-[10px] font-bold tracking-[0.2em] uppercase text-muted mb-2.5 text-right">Sync Refresh</div>
+                  <div className="text-[32px] font-bold tracking-tight leading-none text-text tabular-nums text-right">
+                    {fps}
+                    <span className="text-[14px] font-normal text-muted ml-1.5 uppercase">fps</span>
+                  </div>
+                  <div className="text-[12px] font-bold mt-2 text-muted text-right uppercase tracking-[0.05em]">Frontend rendering</div>
                 </div>
               </div>
             </div>

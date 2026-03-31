@@ -129,6 +129,16 @@ export function ThemeProvider({ children }) {
         return id;
     };
 
+    const addFullTheme = (themeObj) => {
+        if (!themeObj.id || themes.some(t => t.id === themeObj.id)) {
+            // Unlikely to hit if strictly validated before, but fallback if name collision occurs
+            themeObj.id = `${themeObj.id}-${Date.now()}`;
+        }
+        setThemes([...themes, themeObj]);
+        setCurrentThemeId(themeObj.id);
+        return themeObj.id;
+    };
+
     const updateTheme = (id, updates) => {
         setThemes(prev => prev.map(t => {
             if (t.id !== id) return t;
@@ -211,6 +221,7 @@ export function ThemeProvider({ children }) {
             currentThemeId,
             setTheme: setCurrentThemeId,
             addTheme,
+            addFullTheme,
             updateTheme,
             updateThemeColor,
             removeTheme,
