@@ -1,6 +1,7 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
-import { Settings, Play, Square, Activity, Wind, Power, Zap, History, Menu, ChevronLeft, ChevronRight, Brain, BookOpen } from 'lucide-react';
+import { Settings, Play, Square, Activity, Wind, Power, Zap, History, Menu, ChevronLeft, ChevronRight, Brain, BookOpen, Eye, Grid, Music, Volume2, Trophy, Clock, Calendar, CheckSquare, Sparkles, VolumeX } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import '../../styles/views/MeditationView.css';
 
 /* ── DAILY WISDOM QUOTES ───────────────────────── */
@@ -26,7 +27,7 @@ const TOTAL_CYCLE = PHASES.reduce((s, p) => s + p.dur, 0);
 /* ── PRESETS (minutes) ─────────────────────────── */
 const PRESETS = [3, 5, 10, 15];
 
-const MeditationView = ({ result }) => {
+const MeditationView = ({ result, currentView, onNavigate }) => {
   const containerRef      = useRef(null);
   const resultRef         = useRef(null);
   const { currentTheme }  = useTheme();
@@ -34,9 +35,44 @@ const MeditationView = ({ result }) => {
 
   const [wisdomIdx] = useState(() => Math.floor(Math.random() * WISDOM.length));
   const [showSidebar, setShowSidebar] = useState(true);
+  const [sidebarTab, setSidebarTab] = useState('controls');
 
-  useEffect(() => { themeRef.current = currentTheme; }, [currentTheme]);
-  useEffect(() => { resultRef.current = result; }, [result]);
+  /* ── PERSISTENT STATS ──────────────────────── */
+  const [stats, setStats] = useState(() => {
+    try {
+      const saved = localStorage.getItem('med_stats');
+      const parsed = saved ? JSON.parse(saved) : null;
+      return {
+        streak: parsed?.streak ?? 0,
+        totalMin: parsed?.totalMin ?? 0,
+        sessions: Array.isArray(parsed?.sessions) ? parsed.sessions : [],
+        lastDate: parsed?.lastDate ?? null,
+        xp: parsed?.xp ?? 0
+      };
+    } catch {
+      return { streak: 0, totalMin: 0, sessions: [], lastDate: null, xp: 0 };
+    }
+  });
+
+  useEffect(() => {
+    localStorage.setItem('med_stats', JSON.stringify(stats));
+  }, [stats]);
+
+  /* ── MUSIC MIXER STATE ─────────────────────── */
+  const [musicState, setMusicState] = useState([
+    { id: 'rain',    label: 'Rain/Storm',   active: false, vol: 0.5 },
+    { id: 'forest',  label: 'Deep Forest',  active: false, vol: 0.5 },
+    { id: 'alpha',   label: 'Binaural-α',   active: false, vol: 0.3 },
+    { id: 'theta',   label: 'Binaural-θ',   active: false, vol: 0.3 },
+  ]);
+
+  const toggleMusic = (id) => {
+    setMusicState(prev => prev.map(m => m.id === id ? { ...m, active: !m.active } : m));
+  };
+
+  const updateVol = (id, vol) => {
+    setMusicState(prev => prev.map(m => m.id === id ? { ...m, vol } : m));
+  };
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -248,12 +284,19 @@ const MeditationView = ({ result }) => {
                     + (Math.random() - 0.5) * 0.06;
         calmSignal = Math.max(0, Math.min(1, base + noise));
 
-        const alpha = Math.round(22 + calmSignal * 18 + (Math.random() - 0.5) * 4);
-        const theta = Math.round(18 + calmSignal * 10 + (Math.random() - 0.5) * 3);
         const delta = Math.round(14 + (Math.random() - 0.5) * 4);
-        const beta  = Math.round(Math.max(8, 26 - calmSignal * 18 + (Math.random() - 0.5) * 4));
+        const theta = Math.round(18 + calmSignal * 15 + (Math.random() - 0.5) * 3);
+        const alpha = Math.round(22 + calmSignal * 22 + (Math.random() - 0.5) * 4);
+        const beta  = Math.round(Math.max(8, 28 - calmSignal * 20 + (Math.random() - 0.5) * 4));
         const gamma = Math.round(8  + (Math.random() - 0.5) * 3);
         rawBands = [delta, theta, alpha, beta, gamma];
+
+        // Derived Metrics
+        const focusScore = Math.round(calmSignal * 100);
+        const stressLevel = Math.max(0, Math.round(100 - (calmSignal * 100) + (Math.random() - 0.5) * 10));
+        
+        const fv = $('med-focus-val'); if(fv) fv.textContent = focusScore;
+        const sv = $('med-stress-val'); if(sv) sv.textContent = stressLevel;
       }, 60);
     }
 
@@ -399,13 +442,30 @@ const MeditationView = ({ result }) => {
     }
 
     /* ── SESSION PERSISTENCE ───────────────────── */
-    function loadSessions() {
-      try { return JSON.parse(localStorage.getItem('med_sessions') || '[]'); } catch { return []; }
-    }
     function saveSession(data) {
-      const s = loadSessions(); s.unshift(data);
-      if (s.length > 5) s.pop();
-      localStorage.setItem('med_sessions', JSON.stringify(s));
+      setStats(prev => {
+        const today = new Date().toDateString();
+        let newStreak = prev.streak;
+        if (prev.lastDate !== today) {
+           // Increment streak if last session was yesterday
+           const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
+           if (prev.lastDate === yesterday.toDateString()) newStreak++;
+           else if (!prev.lastDate) newStreak = 1;
+           else newStreak = 1; // broken streak
+        }
+
+        const newSessions = [data, ...prev.sessions].slice(0, 10);
+        const addedXP = 50 + (data.avgCalm * 2);
+        
+        return {
+          ...prev,
+          streak: newStreak,
+          totalMin: prev.totalMin + (parseInt(data.duration.split(':')[0]) || 0),
+          sessions: newSessions,
+          lastDate: today,
+          xp: prev.xp + addedXP
+        };
+      });
     }
 
     /* ── EXPOSED HANDLERS ──────────────────────── */
@@ -550,13 +610,13 @@ const MeditationView = ({ result }) => {
   }, []);
 
   const wisdom = WISDOM[wisdomIdx];
-  const rightWidth = showSidebar ? 'mr-80' : 'mr-[4.25rem]';
+  const leftWidth = showSidebar ? 'ml-80' : 'ml-[4.25rem]';
 
   return (
     <div className="w-full h-full flex bg-bg overflow-hidden relative" ref={containerRef}>
 
       {/* ══ CENTER AREA: Main Charts ═══════════════════════════════ */}
-      <div className={`flex-grow flex flex-col transition-all duration-300 ${rightWidth}`}>
+      <div className={`flex-grow flex flex-col transition-all duration-300 ${leftWidth}`}>
           <div className="med-main">
             {/* Top row: Brain Activity & Focus Orb */}
             <div className="med-charts-row">
@@ -577,6 +637,18 @@ const MeditationView = ({ result }) => {
                   <span className="med-section-icon" style={{ marginLeft: '-2px' }}>◎</span>
                   <span className="med-section-title">Respiration</span>
                   <span className="med-section-sub"> · Focus Bubble</span>
+                </div>
+                
+                {/* Real-time Metrics Overlays */}
+                <div className="absolute top-16 left-4 right-4 flex justify-between z-10 pointer-events-none">
+                    <div className="flex flex-col items-center">
+                        <span className="text-[10px] font-bold text-primary/60 tracking-widest uppercase">Focus</span>
+                        <span id="med-focus-val" className="text-2xl font-black text-primary font-mono tabular-nums">0</span>
+                    </div>
+                    <div className="flex flex-col items-center">
+                        <span className="text-[10px] font-bold text-red-500/60 tracking-widest uppercase">Stress</span>
+                        <span id="med-stress-val" className="text-2xl font-black text-red-500 font-mono tabular-nums">0</span>
+                    </div>
                 </div>
                 
                 <div className="flex-grow flex flex-col items-center justify-center relative bg-bg/20">
@@ -618,13 +690,20 @@ const MeditationView = ({ result }) => {
           </div>
       </div>
 
-      {/* ══ RIGHT SIDEBAR ══════════════════════════════ */}
-      <div className={`absolute right-0 top-0 bottom-0 z-10 transition-all duration-300 ease-in-out border-l border-border bg-surface/80 backdrop-blur-md flex flex-col h-full ${showSidebar ? 'w-80 overflow-y-auto overflow-x-hidden' : 'w-[4.25rem] overflow-visible'} [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']`}>
+      {/* ══ LEFT SIDEBAR ══════════════════════════════ */}
+      <div className={`absolute left-0 top-0 bottom-0 z-10 transition-all duration-300 ease-in-out border-r border-border bg-surface/80 backdrop-blur-md flex flex-col h-full ${showSidebar ? 'w-80 overflow-y-auto overflow-x-hidden' : 'w-[4.25rem] overflow-visible'} [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']`}>
         
         {/* Collapsed Sidebar */}
         {!showSidebar && (
-            <div className="flex flex-col items-center justify-around py-4 w-full animate-fade-in shrink-0 h-full overflow-visible">
-                <button onClick={() => setShowSidebar(true)} className="p-2 hover:bg-white/10 rounded-full transition-colors" title="Expand Sidebar">
+            <div className="flex flex-col items-center justify-start py-4 w-full animate-fade-in shrink-0 h-full overflow-visible">
+                <button onClick={() => { setShowSidebar(true); setSidebarTab('nav'); }} className="hover:bg-white/10 p-2 rounded-full transition-colors group relative mb-2" title="App Navigation">
+                    <Grid size={28} className="text-muted group-hover:text-primary" />
+                    <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">App Navigation</div>
+                </button>
+
+                <div className="w-full h-px bg-border/80 shrink-0 my-2" />
+
+                <button onClick={() => { setShowSidebar(true); setSidebarTab('controls'); }} className="p-2 hover:bg-white/10 rounded-full transition-colors" title="Expand Controls">
                     <Menu size={30} className="text-primary" />
                 </button>
 
@@ -633,7 +712,7 @@ const MeditationView = ({ result }) => {
                 <div className="flex flex-col items-center cursor-default group relative w-full" title="Calm Signal">
                     <Activity size={24} className="text-primary mb-1" />
                     <span id="med-col-calm-val" className="text-[18px] font-black tabular-nums mt-1 text-primary">0</span>
-                    <div className="absolute right-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Calm Signal %</div>
+                    <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Calm Signal %</div>
                 </div>
 
                 <div className="w-full h-px bg-border/80 shrink-0 my-2" />
@@ -641,14 +720,14 @@ const MeditationView = ({ result }) => {
                 <button id="med-col-session-btn" onClick={() => containerRef.current?.sessionBtnHandler()} title="Start/Stop Session" className="transition-colors group relative p-3 rounded-full text-green-500 hover:bg-green-500/20">
                     <Play id="med-col-play" size={26} />
                     <Square id="med-col-stop" size={26} className="hidden" />
-                    <div id="med-col-tooltip-session" className="absolute right-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Start Session</div>
+                    <div id="med-col-tooltip-session" className="absolute left-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Start Session</div>
                 </button>
 
                 <div className="w-full h-px bg-border/80 shrink-0 my-2" />
 
                 <button onClick={() => setShowSidebar(true)} title="Controls Settings" className="hover:text-primary transition-colors group relative p-2">
                     <Settings size={28} className="text-muted group-hover:text-primary" />
-                    <div className="absolute right-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Settings & Presets</div>
+                    <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Settings & Presets</div>
                 </button>
 
                 <div className="w-full h-px bg-border/80 shrink-0 my-2" />
@@ -657,97 +736,192 @@ const MeditationView = ({ result }) => {
                     <button id="med-col-conn-btn" onClick={() => containerRef.current?.toggleConnHandler()} className="w-[42px] h-[42px] flex items-center justify-center rounded-full border transition-all cursor-pointer shadow-sm group relative bg-red-500/10 border-red-500/30 text-red-500" title="Connection Mode">
                         <Zap id="med-col-zap" size={24} className="hidden" />
                         <Power id="med-col-power" size={24} />
-                        <div id="med-col-conn-lbl" className="absolute right-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Simulate Mode</div>
+                        <div id="med-col-conn-lbl" className="absolute left-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Simulate Mode</div>
                     </button>
                 </div>
             </div>
         )}
 
         {/* Expanded Sidebar */}
-        <div className={`flex-grow flex flex-col overflow-hidden p-4 gap-3 font-mono transition-opacity duration-300 w-80 shrink-0 ${!showSidebar ? 'opacity-0 h-0 hidden' : 'opacity-100'}`}>
+        <div className={`flex-grow flex flex-col p-4 gap-4 font-mono transition-opacity duration-300 w-80 shrink-0 ${!showSidebar ? 'opacity-0 h-0 hidden' : 'opacity-100'}`}>
             {/* Header */}
-            <div className="flex items-center justify-between shrink-0 mb-2">
+            <div className="flex items-center justify-between shrink-0 mb-1">
                 <div>
-                    <h2 className="text-2xl font-bold text-text mb-1 flex items-center gap-3">
-                        <Settings size={28} className="text-primary animate-pulse" />
-                        <span style={{ letterSpacing: '2.3px' }}>Controls</span>
+                    <h2 className="text-[22px] font-bold text-text mb-1 flex items-center gap-3 tracking-[2px]">
+                        {sidebarTab === 'controls' ? <Wind size={26} className="text-primary" /> : <Grid size={26} className="text-primary" />}
+                        <span style={{ letterSpacing: '2.3px' }}>{sidebarTab === 'controls' ? 'TRAINER' : 'NEURO SUITE'}</span>
                     </h2>
-                    <p className="text-xs text-muted font-mono">Meditation Trainer</p>
                 </div>
-                <button onClick={() => setShowSidebar(false)} className="p-2 hover:bg-white/10 rounded-full transition-colors" title="Collapse Sidebar">
-                    <ChevronLeft size={24} className="rotate-180" />
-                </button>
-            </div>
-
-            {/* Global Actions */}
-            <div className="shrink-0 mb-2">
-                <button id="med-session-btn" onClick={() => containerRef.current?.sessionBtnHandler()} className="w-full py-2.5 rounded-xl text-base font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-2 border-2 bg-green-500/10 border-green-500/50 text-green-500 hover:bg-green-500/20 shadow-glow">
-                    <Play size={18} /> Start
-                </button>
-            </div>
-
-            {/* Session Phase Info */}
-            <div className="flex flex-col gap-2 shrink-0 bg-bg/30 p-3 rounded-xl border border-border/50 mb-2">
-                <div className="text-xs text-muted uppercase tracking-widest mb-1 flex items-center gap-2"><Wind size={16}/> Breath Phase</div>
-                <div id="med-phase-badge" className="text-center font-bold text-lg font-mono tracking-widest py-2 rounded-lg border border-muted/50 text-muted bg-bg/50 transition-all">READY</div>
-                <div id="med-timer-big" className="text-4xl text-center font-black text-text font-mono tracking-widest drop-shadow-[0_0_8px_var(--primary)] my-2">05:00</div>
-                <div id="med-cycle-count" className="text-xs text-center text-muted font-mono tracking-widest opacity-80">CYCLE 0</div>
-            </div>
-
-            {/* Presets Grid */}
-            <div className="mb-2 shrink-0">
-                <div className="text-xs text-muted font-bold uppercase tracking-widest mb-2 flex items-center gap-2"><Wind size={16}/> Duration</div>
-                <div className="grid grid-cols-2 gap-2">
-                    {PRESETS.map(min => (
-                        <button key={min} className={`med-preset-btn p-2 rounded-lg border transition-all font-mono text-sm tracking-wider ${min === 5 ? 'bg-primary text-bg border-primary shadow-glow' : 'bg-bg/50 border-border text-muted hover:border-primary'}`} data-min={min} onClick={() => containerRef.current?.presetHandler(min)}>{min} min</button>
-                    ))}
+                <div className="flex gap-2">
+                    <button onClick={() => setShowSidebar(false)} className="p-2 hover:bg-white/10 rounded-full transition-colors" title="Collapse Sidebar">
+                        <ChevronLeft size={24} className="" />
+                    </button>
                 </div>
             </div>
 
-            {/* Calm Signal */}
-            <div className="bg-bg/50 border border-primary/20 rounded-xl p-3 flex items-center justify-between shrink-0 mb-2">
-                <div className="flex flex-col">
-                    <span className="text-base font-bold text-muted uppercase tracking-widest flex items-center gap-2 mb-1">
-                        <Activity size={20} className="text-primary" /> Calm
-                    </span>
-                    <div className="flex items-baseline gap-1">
-                        <span id="med-exp-calm-val" className="text-3xl font-black text-primary tabular-nums">0%</span>
-                    </div>
-                </div>
-                <div className="w-1/2 flex flex-col items-end gap-1">
-                    <div className="flex items-center gap-1.5">
-                        <span className="w-2.5 h-2.5 rounded-full bg-primary animate-pulse shadow-[0_0_8px_var(--primary)]" />
-                        <span className="text-sm font-bold text-primary/80">SIGNAL</span>
-                    </div>
-                    <div className="w-full mt-2 h-1 bg-bg rounded-full overflow-hidden flex justify-end">
-                        <div id="med-exp-calm-pip" className="h-full bg-primary transition-all duration-300 shadow-[0_0_8px_var(--primary)]" style={{ width: '0%' }} />
-                    </div>
-                </div>
+            {/* Tab Switcher */}
+            <div className="flex bg-bg/50 border border-border p-1 rounded-xl shrink-0 mb-1">
+               <button onClick={() => setSidebarTab('controls')} className={`flex-1 py-1.5 rounded-lg text-[11px] border ${sidebarTab === 'controls' ? 'border-primary/20' : 'border-transparent'} font-bold tracking-widest uppercase flex items-center justify-center gap-2 transition-all ${sidebarTab === 'controls' ? 'bg-primary/10 text-primary shadow-glow' : 'text-muted hover:text-text hover:bg-white/5'}`}>
+                  <Settings size={14} /> Controls
+               </button>
+               <button onClick={() => setSidebarTab('nav')} className={`flex-1 py-1.5 rounded-lg text-[11px] border ${sidebarTab === 'nav' ? 'border-primary/20' : 'border-transparent'} font-bold tracking-widest uppercase flex items-center justify-center gap-2 transition-all ${sidebarTab === 'nav' ? 'bg-primary/10 text-primary shadow-glow' : 'text-muted hover:text-text hover:bg-white/5'}`}>
+                  <Grid size={14} /> Navigation
+               </button>
             </div>
 
-            {/* Connection Mode */}
-            <div id="med-exp-conn-box" className="bg-bg/50 border border-red-500/20 rounded-xl p-3 flex flex-col shrink-0 mb-4 shadow-[0_0_10px_rgba(239,68,68,0.1)] transition-colors cursor-pointer hover:bg-bg/70" onClick={() => containerRef.current?.toggleConnHandler()}>
-               <div className="flex items-center justify-between mb-2">
-                   <span className="text-xs font-bold text-muted uppercase tracking-widest">Input Source</span>
-                   <button className="text-xs text-muted hover:text-text border border-border px-2 py-0.5 rounded-md hover:bg-white/5 transition-all">SWITCH</button>
+            {sidebarTab === 'controls' && (
+               <div className="flex flex-col gap-4 h-full overflow-y-auto [&::-webkit-scrollbar]:hidden pb-10">
+                  
+                  {/* Global Play/Stop */}
+                  <div className="shrink-0">
+                      <button id="med-session-btn" onClick={() => containerRef.current?.sessionBtnHandler()} className="w-full py-4 rounded-xl text-sm font-black uppercase tracking-[3px] transition-all flex items-center justify-center gap-3 border-2 shadow-lg bg-green-500/10 border-green-500/40 text-green-500 hover:bg-green-500/20 shadow-glow">
+                          <Play size={20} /> NEW SESSION
+                      </button>
+                  </div>
+
+                  {/* ──────────────────────────────── Section: LIVE MEDITATION ──────────────────────────────── */}
+                  <div className="bg-bg/50 border border-primary/20 rounded-xl p-3 shrink-0 flex flex-col gap-3">
+                      <h4 className="text-[10px] font-bold text-muted/80 uppercase tracking-widest flex items-center gap-2">
+                        <Activity size={14} /> Live Focus Mode
+                      </h4>
+
+                      <div id="med-exp-conn-box" className="bg-surface/50 border border-red-500/20 rounded-lg p-2.5 flex items-center justify-between cursor-pointer hover:bg-bg/70 transition-all" onClick={() => containerRef.current?.toggleConnHandler()}>
+                         <div className="flex items-center gap-3">
+                            <Zap id="med-exp-conn-icon-live" size={18} className="text-green-500 hidden" />
+                            <Power id="med-exp-conn-icon-sim" size={18} className="text-red-500" />
+                            <span id="med-exp-conn-text" className="text-xs font-bold tracking-widest">SIMULATING</span>
+                         </div>
+                         <span className="text-[9px] bg-red-500/10 text-red-500 px-1.5 py-0.5 rounded border border-red-500/20">MOCK</span>
+                      </div>
+
+                      <div className="flex flex-col gap-2 p-2.5 bg-surface/30 border border-border/50 rounded-lg">
+                          <div className="flex justify-between items-center mb-1">
+                             <div id="med-phase-badge" className="text-[11px] font-black tracking-widest text-muted">READY</div>
+                             <div id="med-timer-big" className="text-lg font-black text-primary font-mono tabular-nums">05:00</div>
+                          </div>
+                          <div className="w-full h-1 bg-border rounded-full overflow-hidden">
+                             <div id="med-exp-calm-pip" className="h-full bg-primary transition-all duration-300" style={{ width: '0%' }} />
+                          </div>
+                      </div>
+
+                      <div className="grid grid-cols-4 gap-1.5">
+                          {PRESETS.map(min => (
+                              <button key={min} className={`med-preset-btn py-1.5 rounded-md border transition-all font-mono text-[10px] tracking-wider ${min === 5 ? 'bg-primary text-bg border-primary' : 'bg-surface/50 border-border text-muted hover:border-primary'}`} data-min={min} onClick={() => containerRef.current?.presetHandler(min)}>{min}M</button>
+                          ))}
+                      </div>
+                  </div>
+
+                  {/* ──────────────────────────────── Section: RELAXATION MUSIC ──────────────────────────────── */}
+                  <div className="bg-bg/50 border border-primary/20 rounded-xl p-3 shrink-0 flex flex-col gap-3">
+                      <h4 className="text-[10px] font-bold text-muted/80 uppercase tracking-widest flex items-center gap-2">
+                         <Volume2 size={14} /> Soundscape Mixer
+                      </h4>
+
+                      <div className="flex flex-col gap-2.5">
+                         {musicState.map(m => (
+                            <div key={m.id} className="flex flex-col gap-2 p-2 rounded-lg bg-surface/30 border border-border/30 hover:border-primary/30 transition-all">
+                               <div className="flex items-center justify-between">
+                                  <span className={`text-[11px] font-bold tracking-tight ${m.active ? 'text-primary' : 'text-muted'}`}>{m.label}</span>
+                                  <button onClick={() => toggleMusic(m.id)} className={`p-1 rounded-md transition-all ${m.active ? 'bg-primary text-bg' : 'bg-surface border border-border text-muted hover:text-text'}`}>
+                                     {m.active ? <Volume2 size={12} /> : <VolumeX size={12} />}
+                                  </button>
+                               </div>
+                               {m.active && (
+                                  <input type="range" min="0" max="1" step="0.01" value={m.vol} onChange={(e) => updateVol(m.id, parseFloat(e.target.value))} className="w-full h-1 bg-primary/20 rounded-lg appearance-none cursor-pointer accent-primary" />
+                               )}
+                            </div>
+                         ))}
+                      </div>
+                  </div>
+
+                  {/* ──────────────────────────────── Section: CLOUD STATS & PROFILE ──────────────────────────────── */}
+                  <div className="bg-bg/50 border border-primary/20 rounded-xl p-3 shrink-0 flex flex-col gap-3">
+                      <h4 className="text-[10px] font-bold text-muted/80 uppercase tracking-widest flex items-center gap-2">
+                        <Trophy size={14} /> Performance
+                      </h4>
+
+                      <div className="grid grid-cols-2 gap-2">
+                         <div className="bg-surface/30 p-2.5 rounded-lg border border-border/50 flex flex-col items-center">
+                            <span className="text-[10px] text-muted uppercase tracking-tighter mb-1">STREAK</span>
+                            <span className="text-xl font-black text-orange-500">🔥 {stats.streak}D</span>
+                         </div>
+                         <div className="bg-surface/30 p-2.5 rounded-lg border border-border/50 flex flex-col items-center">
+                            <span className="text-[10px] text-muted uppercase tracking-tighter mb-1">TOTAL</span>
+                            <span className="text-xl font-black text-primary">{stats.totalMin}M</span>
+                         </div>
+                      </div>
+
+                      <div className="p-2.5 bg-surface/30 border border-border/50 rounded-lg">
+                         <div className="flex justify-between items-center mb-1.5">
+                            <span className="text-[10px] font-bold text-muted">LEVEL {Math.floor(stats.xp / 1000) + 1}</span>
+                            <span className="text-[10px] font-mono text-primary">{stats.xp % 1000}/1000 XP</span>
+                         </div>
+                         <div className="w-full h-1.5 bg-border rounded-full overflow-hidden">
+                            <div className="h-full bg-gradient-to-r from-primary to-blue-400" style={{ width: `${(stats.xp % 1000) / 10}%` }} />
+                         </div>
+                      </div>
+
+                      {stats.sessions.length > 0 && (
+                         <div className="mt-2 space-y-1.5">
+                            <span className="text-[9px] font-black text-muted uppercase tracking-widest block mb-2">RECENT SESSIONS</span>
+                            {stats.sessions.slice(0, 3).map((s, idx) => (
+                               <div key={idx} className="flex items-center justify-between text-[10px] bg-bg/30 p-1.5 rounded border border-border/40">
+                                  <div className="flex gap-2 items-center">
+                                     <Calendar size={10} className="text-primary" />
+                                     <span className="font-bold opacity-80">{s.duration}</span>
+                                  </div>
+                                  <span className="font-mono text-primary font-black">{s.avgCalm}% CALM</span>
+                               </div>
+                            ))}
+                         </div>
+                      )}
+                  </div>
+
+                  {/* Daily Wisdom Footer */}
+                  <div className="mt-2 border border-border/50 bg-bg/20 rounded-xl p-3 shrink-0">
+                      <div className="flex items-center gap-2 text-primary/80 font-mono text-[9px] font-bold uppercase tracking-widest mb-1.5">
+                          <BookOpen size={12}/> Daily Wisdom
+                      </div>
+                      <p className="text-[11px] text-text/80 italic mb-1.5 leading-relaxed">"{wisdom.quote}"</p>
+                      <p className="text-[10px] text-primary/70">{wisdom.author}</p>
+                  </div>
                </div>
-               <div className="flex items-center gap-3">
-                   <div className="p-2 rounded-full bg-bg/80 border border-border">
-                       <Zap id="med-exp-conn-icon-live" size={24} className="text-green-500 hidden" />
-                       <Power id="med-exp-conn-icon-sim" size={24} className="text-red-500" />
-                   </div>
-                   <span id="med-exp-conn-text" className="font-bold text-lg tracking-widest">SIMULATE</span>
-               </div>
-            </div>
+            )}
 
-            {/* Daily Wisdom */}
-            <div className="mt-auto border border-border/50 bg-bg/20 rounded-xl p-3 shrink-0">
-                <div className="flex items-center gap-2 text-primary/80 font-mono text-xs font-bold uppercase tracking-widest mb-2">
-                    <BookOpen size={14}/> Daily Wisdom
-                </div>
-                <p className="text-[13px] text-text/90 italic mb-2 leading-relaxed">"{wisdom.quote}"</p>
-                <p className="text-xs text-primary/70">{wisdom.author}</p>
-            </div>
+            {sidebarTab === 'nav' && (
+               <div className="flex flex-col gap-2 h-full overflow-y-auto [&::-webkit-scrollbar]:hidden pb-4">
+                 <button 
+                    className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold text-sm border ${currentView === 'overview' ? 'bg-primary/10 text-primary border-primary/30 shadow-sm' : 'text-text hover:bg-bg border-border/50'}`} 
+                    onClick={() => onNavigate && onNavigate('overview')}
+                 >
+                    <Grid size={18} /> Dashboard Overview
+                 </button>
+                 <button 
+                    className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold text-sm border ${currentView === 'music' ? 'bg-primary/10 text-primary border-primary/30 shadow-sm' : 'text-text hover:bg-bg border-border/50'}`} 
+                    onClick={() => onNavigate && onNavigate('music')}
+                 >
+                    <Music size={18} /> Music Control
+                 </button>
+                 <button 
+                    className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold text-sm border ${currentView === 'meditation' ? 'bg-primary/10 text-primary border-primary/30 shadow-sm' : 'text-text hover:bg-bg border-border/50'}`} 
+                    onClick={() => onNavigate && onNavigate('meditation')}
+                 >
+                    <Wind size={18} /> Meditation Trainer
+                 </button>
+                 <button 
+                    className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold text-sm border ${currentView === 'bubble' ? 'bg-primary/10 text-primary border-primary/30 shadow-sm' : 'text-text hover:bg-bg border-border/50'}`} 
+                    onClick={() => onNavigate && onNavigate('bubble')}
+                 >
+                    <Activity size={18} /> Bubble Game
+                 </button>
+                 <button 
+                    className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold text-sm border ${currentView === 'ssvep' ? 'bg-primary/10 text-primary border-primary/30 shadow-sm' : 'text-text hover:bg-bg border-border/50'}`} 
+                    onClick={() => onNavigate && onNavigate('ssvep')}
+                 >
+                    <Eye size={18} /> SSVEP Interface
+                 </button>
+               </div>
+            )}
         </div>
 
       </div>

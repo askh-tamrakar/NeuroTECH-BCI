@@ -67,14 +67,14 @@ const EEGDashboard = ({ wsEvent, isConnected, wsUrl }) => {
     switch (currentView) {
       case "overview": return <OverviewGrid onSelect={handleSelectView} />;
       case "music": return <MusicView result={eegResult} />;
-      case "meditation": return <MeditationView result={eegResult} />;
+      case "meditation": return <MeditationView result={eegResult} currentView={currentView} onNavigate={handleSelectView} />;
       case "bubble": return <BubbleGameView result={eegResult} isConnected={isConnected} onBackToMenu={() => setCurrentView('overview')} />;
       case "ssvep": return <SSVEPView isConnected={isConnected} wsEvent={wsEvent} onBackToMenu={() => setCurrentView('overview')} />;
       default: return <OverviewGrid onSelect={handleSelectView} />;
     }
   };
 
-  const isFullContainer = currentView === "ssvep" || currentView === "bubble";
+  const isFullContainer = currentView === "ssvep" || currentView === "bubble" || currentView === "meditation";
 
   return (
     <div className="flex flex-row h-full w-full bg-[var(--bg)]">

@@ -153,3 +153,50 @@
   opacity: 0.35;
 }
 .med-radar-canvas { position: relative; z-index: 1; }
+
+/* ── MIXER SLIDERS ───────────────────────── */
+input[type=range].accent-primary::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  height: 12px;
+  width: 12px;
+  border-radius: 50%;
+  background: var(--primary);
+  box-shadow: 0 0 8px var(--primary);
+  cursor: pointer;
+  margin-top: -4px; /* Centers thumb on track */
+}
+
+input[type=range].accent-primary::-moz-range-thumb {
+  height: 12px;
+  width: 12px;
+  border-radius: 50%;
+  background: var(--primary);
+  box-shadow: 0 0 8px var(--primary);
+  cursor: pointer;
+  border: none;
+}
+
+input[type=range].accent-primary::-webkit-slider-runnable-track {
+  width: 100%;
+  height: 4px;
+  cursor: pointer;
+  background: rgba(var(--primary-rgb), 0.1);
+  border-radius: 2px;
+}
+
+/* Smooth Scrollbar for Sidebar */
+.med-sidebar-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--primary) transparent;
+}
+.med-sidebar-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+.med-sidebar-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.med-sidebar-scroll::-webkit-scrollbar-thumb {
+  background-color: var(--primary);
+  border-radius: 20px;
+  opacity: 0.3;
+}
