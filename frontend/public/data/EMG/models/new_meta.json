@@ -1,0 +1,113 @@
+{
+  "sensor": "EMG",
+  "classifier": "RandomForest",
+  "feature_order": [
+    "mav",
+    "rms",
+    "iemg",
+    "var",
+    "wl",
+    "zc",
+    "ssc",
+    "mean_freq",
+    "median_freq",
+    "spectral_entropy",
+    "d_mav",
+    "d_rms",
+    "d_iemg",
+    "d_var",
+    "d_wl",
+    "d_zc",
+    "d_ssc",
+    "d_mean_freq",
+    "d_median_freq",
+    "d_spectral_entropy"
+  ],
+  "table_name": "emg_session_Neurobench",
+  "created_at": "2026-04-01T02:54:55.645868",
+  "train_ratio": 0.7,
+  "val_ratio": 0.15,
+  "test_ratio": 0.15,
+  "k_folds": 5,
+  "random_state": 42,
+  "selected_hyperparameters": {
+    "n_estimators": 100,
+    "max_depth": 4,
+    "min_impurity_decrease": 0.005,
+    "criterion": "gini",
+    "max_features": "sqrt"
+  },
+  "train_accuracy": 1.0,
+  "validation_accuracy": 1.0,
+  "test_accuracy": 1.0,
+  "fold_accuracies": [
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0
+  ],
+  "average_accuracy": 1.0,
+  "mean_accuracy": 1.0,
+  "fold_std": 0.0,
+  "fold_min": 1.0,
+  "fold_max": 1.0,
+  "train_val_gap": 0.0,
+  "bias_indicator": "balanced",
+  "variance_indicator": "balanced",
+  "confusion_matrix": [
+    [
+      4,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      4,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      4,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      4
+    ]
+  ],
+  "labels": [
+    "Rest",
+    "Rock",
+    "Paper",
+    "Scissors"
+  ],
+  "split_summary": {
+    "train_val_samples": 64,
+    "test_samples": 16,
+    "split_mode": "session",
+    "train_val_groups": 20,
+    "test_groups": 4,
+    "group_column": "session_id"
+  },
+  "group_counts": {
+    "train_val_groups": 0,
+    "test_groups": 0
+  },
+  "session_profile": {
+    "window_ms": [
+      300.0
+    ],
+    "sampling_rate": [
+      1000.0
+    ],
+    "stride_ms": [
+      300.0
+    ]
+  }
+}

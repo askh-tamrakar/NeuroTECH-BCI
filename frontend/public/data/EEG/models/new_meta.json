@@ -1,0 +1,141 @@
+{
+  "sensor": "EEG",
+  "classifier": "LDA",
+  "feature_order": [
+    "score_1",
+    "score_2",
+    "score_3",
+    "score_4",
+    "score_5",
+    "score_6",
+    "max_score",
+    "second_max_score",
+    "score_ratio",
+    "score_mean",
+    "score_std",
+    "peak_freq"
+  ],
+  "table_name": "eeg_session_Neurobench",
+  "created_at": "2026-04-01T09:06:35.371661",
+  "train_ratio": 0.7,
+  "val_ratio": 0.15,
+  "test_ratio": 0.15,
+  "k_folds": 6,
+  "random_state": 42,
+  "solver": "svd",
+  "shrinkage": "none",
+  "tol": 0.0001,
+  "selected_hyperparameters": {
+    "solver": "svd",
+    "shrinkage": "none",
+    "tol": 0.0001
+  },
+  "train_accuracy": 1.0,
+  "validation_accuracy": 1.0,
+  "test_accuracy": 1.0,
+  "fold_accuracies": [
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0
+  ],
+  "average_accuracy": 1.0,
+  "mean_accuracy": 1.0,
+  "fold_std": 0.0,
+  "fold_min": 1.0,
+  "fold_max": 1.0,
+  "train_val_gap": 0.0,
+  "bias_indicator": "balanced",
+  "variance_indicator": "balanced",
+  "confusion_matrix": [
+    [
+      7,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      5,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      5,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      5,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      4,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      6,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      6
+    ]
+  ],
+  "labels": [
+    "Rest",
+    "8Hz",
+    "9Hz",
+    "12Hz",
+    "14.4Hz",
+    "16Hz",
+    "18Hz"
+  ],
+  "split_summary": {
+    "total_samples": 275,
+    "train_val_samples": 237,
+    "test_samples": 38,
+    "split_mode": "session",
+    "val_samples": 39,
+    "train_samples": 198,
+    "train_val_groups": 115,
+    "test_groups": 21,
+    "group_column": "session_id"
+  },
+  "group_counts": {
+    "train_val_groups": 0,
+    "test_groups": 0
+  }
+}

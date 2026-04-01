@@ -1,7 +1,7 @@
 {
   "filters": {
     "EMG": {
-      "cutoff": 56.5,
+      "cutoff": 174.7,
       "notch_enabled": true,
       "notch_freq": 50,
       "bandpass_enabled": true,

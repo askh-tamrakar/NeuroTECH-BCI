@@ -646,7 +646,7 @@ function FilterSection({
                         min={0.1}
                         max={200}
                         step={0.1}
-                        value={filterConfig.cutoff || 1}
+                        value={filterConfig.cutoff}
                         onChange={(val) => onFilterChange(sensorType, 'cutoff', val)}
                         onFinalChange={(val) => {
                             onSave?.({

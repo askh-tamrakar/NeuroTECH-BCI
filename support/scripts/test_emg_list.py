@@ -6,7 +6,7 @@ import json
 project_root = Path(__file__).resolve().parent.parent
 sys.path.append(str(project_root))
 
-from src.learning.model_trainer import list_saved_models, MODELS_ROOT
+from src.learning.emg_trainer import list_saved_models, MODELS_ROOT
 
 print(f"MODELS_ROOT: {MODELS_ROOT}")
 print(f"Checking for EMG directory: {(MODELS_ROOT / 'EMG').exists()}")

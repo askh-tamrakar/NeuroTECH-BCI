@@ -5,7 +5,7 @@ from pathlib import Path
 project_root = Path(__file__).resolve().parent.parent
 sys.path.append(str(project_root))
 
-from src.learning.model_trainer import load_model
+from src.learning.emg_trainer import load_model
 
 print("Testing load_model with single argument (Bug Reproduction)...")
 try:

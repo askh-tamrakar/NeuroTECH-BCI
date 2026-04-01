@@ -7,7 +7,7 @@
     },
     "ch1": {
       "enabled": true,
-      "sensor": "EEG"
+      "sensor": "EOG"
     }
   },
   "display": {
@@ -17,8 +17,8 @@
   },
   "num_channels": 2,
   "active_models": {
-    "EMG": "Neuro",
-    "EOG": "dino-ml",
-    "EEG": "Neuro"
+    "EMG": "new",
+    "EOG": "Neuro",
+    "EEG": "eeg_lda"
   }
 }

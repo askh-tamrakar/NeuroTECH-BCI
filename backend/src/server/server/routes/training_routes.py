@@ -1,6 +1,8 @@
 from flask import Blueprint, jsonify, request
 import json
 import time
+import threading
+import uuid
 import numpy as np
 import pandas as pd
 from src.server.server.state import state
@@ -15,8 +17,8 @@ from src.server.server.lsl_service import extract_eog_features, extract_eeg_feat
 from scipy import stats as scipy_stats
 
 # Imports for ML logic
-from src.learning.model_trainer import (
-    train_model, train_emg_model, train_eog_model,
+from src.learning.emg_trainer import (
+    train_emg_model,
     evaluate_saved_model, list_saved_models, delete_model, load_model, get_model_tree_structure
 )
 from src.learning.eog_trainer import (
@@ -30,6 +32,8 @@ from src.config.window_config import SESSION_CONFIG
 from src.feature.extractors.rps_extractor import EMG_BASE_FEATURES, EMG_FEATURE_COLUMNS
 
 training_bp = Blueprint('training', __name__)
+TRAINING_JOBS = {}
+TRAINING_JOBS_LOCK = threading.Lock()
 
 def extract_features_wrapper(sensor: str, samples: list, sr: int = 1000) -> dict:
     """Route to sensor-specific feature extraction."""
@@ -43,57 +47,102 @@ def extract_features_wrapper(sensor: str, samples: list, sr: int = 1000) -> dict
     else:
         return extract_emg_features(samples, sr)
 
+
+def _update_training_job(job_id: str, **fields):
+    with TRAINING_JOBS_LOCK:
+        job = TRAINING_JOBS.get(job_id)
+        if not job:
+            return
+        job.update(fields)
+        if "progress" in fields:
+            job["updated_at"] = time.time()
+
+
+def _launch_training_job(sensor: str, params: dict, trainer_fn):
+    sensor = sensor.upper()
+    job_id = str(uuid.uuid4())
+    with TRAINING_JOBS_LOCK:
+        TRAINING_JOBS[job_id] = {
+            "job_id": job_id,
+            "sensor": sensor,
+            "status": "running",
+            "stage": "queued",
+            "progress": 0.0,
+            "completed_steps": 0,
+            "total_steps": 0,
+            "candidate_index": 0,
+            "total_candidates": 0,
+            "fold_index": 0,
+            "total_folds": int(params.get("k_folds", 5) or 5),
+            "started_at": time.time(),
+            "updated_at": time.time(),
+            "result": None,
+            "error": None,
+        }
+
+    def progress_callback(payload):
+        _update_training_job(job_id, **payload)
+
+    def runner():
+        try:
+            result = trainer_fn(progress_callback=progress_callback, **params)
+            if "error" in result:
+                _update_training_job(job_id, status="error", error=result["error"], result=result, progress=1.0)
+                return
+            if sensor == "EMG" and state.rps_detector:
+                state.rps_detector.load_model(result.get("model_name"), verbose=False)
+            _update_training_job(job_id, status="completed", stage="completed", progress=1.0, result=result)
+        except Exception as exc:
+            _update_training_job(job_id, status="error", error=str(exc), progress=1.0)
+
+    thread = threading.Thread(target=runner, daemon=True)
+    thread.start()
+    return {"status": "started", "job_id": job_id, "sensor": sensor}
+
+
+@training_bp.route('/api/train-jobs/<job_id>', methods=['GET'])
+def api_get_training_job(job_id):
+    with TRAINING_JOBS_LOCK:
+        job = TRAINING_JOBS.get(job_id)
+        if not job:
+            return jsonify({"error": "Training job not found"}), 404
+        payload = dict(job)
+    elapsed = max(0.0, time.time() - payload.get("started_at", time.time()))
+    progress = float(payload.get("progress") or 0.0)
+    eta_seconds = None
+    if progress > 0 and progress < 1:
+        eta_seconds = max(0.0, (elapsed / progress) - elapsed)
+    payload["elapsed_seconds"] = elapsed
+    payload["eta_seconds"] = eta_seconds
+    return jsonify(payload)
+
 @training_bp.route('/api/train-emg-rf', methods=['POST'])
 def api_train_emg():
     try:
         params = request.get_json() or {}
-        target_table = params.get('table_name', 'emg_windows')
-        
-        if target_table == 'ALL':
-            target_table = 'emg_windows'
-
-        try:
-            conn = db_manager.connect('EMG')
-            cursor = conn.cursor()
-            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (target_table,))
-            if not cursor.fetchone():
-                 return jsonify({"error": f"Table {target_table} not found"}), 404
-                 
-            n = conn.execute(f"SELECT COUNT(*) FROM {target_table}").fetchone()[0]
-            conn.close()
-            
-            print(f"Train Request on {target_table}. Contains {n} samples.")
-            if n == 0:
-                return jsonify({"error": "Database is empty (0 samples). Please Record Data and hit Stop."}), 400
-        except Exception as e:
-            print(f"DB Check failed: {e}")
-
-        n_est = int(params.get('n_estimators', 200))
         max_d = params.get('max_depth')
-        if max_d == 'None' or max_d is None: max_d = 15
-        else: max_d = int(max_d)
-        
-        test_size = float(params.get('test_size', 0.2))
-        min_impurity_decrease = float(params.get('min_impurity_decrease', 0.0))
-        
-        model_name = params.get('model_name', 'emg_rf_model')
-        
-        result = train_emg_model(
-            n_estimators=n_est, 
-            max_depth=max_d, 
-            min_impurity_decrease=min_impurity_decrease,
-            test_size=test_size, 
-            table_name=target_table, 
-            model_name=model_name
-        )
-        if "error" in result:
-             return jsonify(result), 400
-             
-        # Update Web Server's RPSDetector explicitly since train_model doesn't have access to state
-        if state.rps_detector:
-             state.rps_detector.load_model(model_name, verbose=False)
-             
-        return jsonify(result)
+        launch_payload = {
+            "n_estimators": int(params.get('n_estimators', 200)),
+            "max_depth": 15 if max_d in {'None', None, ''} else int(max_d),
+            "min_impurity_decrease": float(params.get('min_impurity_decrease', 0.0)),
+            "table_name": params.get('table_name', 'emg_windows'),
+            "model_name": params.get('model_name', 'emg_rf_model'),
+            "train_ratio": float(params.get('train_ratio', 0.7)),
+            "val_ratio": float(params.get('val_ratio', 0.15)),
+            "test_ratio": float(params.get('test_ratio', 0.15)),
+            "k_folds": int(params.get('k_folds', 5)),
+            "random_state": int(params.get('random_state', 42)),
+            "n_estimators_min": params.get('n_estimators_min'),
+            "n_estimators_max": params.get('n_estimators_max'),
+            "max_depth_min": params.get('max_depth_min'),
+            "max_depth_max": params.get('max_depth_max'),
+            "min_impurity_decrease_min": params.get('min_impurity_decrease_min'),
+            "min_impurity_decrease_max": params.get('min_impurity_decrease_max'),
+            "criterion": params.get('criterion', 'gini'),
+            "max_features": params.get('max_features', 'sqrt'),
+            "search_resolution": int(params.get('search_resolution', 3)),
+        }
+        return jsonify(_launch_training_job('EMG', launch_payload, train_emg_model)), 202
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -101,29 +150,29 @@ def api_train_emg():
 def api_train_eog():
     try:
         params = request.get_json() or {}
-        n_est = int(params.get('n_estimators', 100))
         max_d = params.get('max_depth')
-        table_name = params.get('table_name') # Extract session table name
-        if table_name == 'ALL': table_name = 'eog_windows'
-        model_name = params.get('model_name', 'eog_rf')
-
-        if max_d == 'None' or max_d is None: max_d = None
-        else: max_d = int(max_d)
-        
-        test_size = float(params.get('test_size', 0.2))
-        min_impurity_decrease = float(params.get('min_impurity_decrease', 0.0))
-        
-        result = train_eog_model(
-            n_estimators=n_est, 
-            max_depth=max_d, 
-            min_impurity_decrease=min_impurity_decrease,
-            test_size=test_size, 
-            table_name=table_name, 
-            model_name=model_name
-        )
-        if "error" in result:
-             return jsonify(result), 400
-        return result, 200
+        launch_payload = {
+            "n_estimators": int(params.get('n_estimators', 100)),
+            "max_depth": None if max_d in {'None', None, ''} else int(max_d),
+            "min_impurity_decrease": float(params.get('min_impurity_decrease', 0.0)),
+            "table_name": params.get('table_name', 'eog_windows'),
+            "model_name": params.get('model_name', 'eog_rf'),
+            "train_ratio": float(params.get('train_ratio', 0.7)),
+            "val_ratio": float(params.get('val_ratio', 0.15)),
+            "test_ratio": float(params.get('test_ratio', 0.15)),
+            "k_folds": int(params.get('k_folds', 5)),
+            "random_state": int(params.get('random_state', 42)),
+            "n_estimators_min": params.get('n_estimators_min'),
+            "n_estimators_max": params.get('n_estimators_max'),
+            "max_depth_min": params.get('max_depth_min'),
+            "max_depth_max": params.get('max_depth_max'),
+            "min_impurity_decrease_min": params.get('min_impurity_decrease_min'),
+            "min_impurity_decrease_max": params.get('min_impurity_decrease_max'),
+            "criterion": params.get('criterion', 'gini'),
+            "max_features": params.get('max_features', 'sqrt'),
+            "search_resolution": int(params.get('search_resolution', 3)),
+        }
+        return jsonify(_launch_training_job('EOG', launch_payload, train_eog_model)), 202
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -132,24 +181,22 @@ def api_train_eog():
 def api_train_eeg_lda():
     try:
         params = request.get_json() or {}
-        table_name = params.get('table_name', 'eeg_windows')
-        if table_name == 'ALL':
-            table_name = 'eeg_windows'
-        test_size = float(params.get('test_size', 0.2))
-        model_name = params.get('model_name', 'eeg_lda')
-        solver = params.get('solver', 'eigen')
-        shrinkage = params.get('shrinkage', 'auto')
-
-        result = train_eeg_lda_model(
-            table_name=table_name,
-            test_size=test_size,
-            model_name=model_name,
-            solver=solver,
-            shrinkage=shrinkage,
-        )
-        if "error" in result:
-            return jsonify(result), 400
-        return jsonify(result)
+        launch_payload = {
+            "table_name": params.get('table_name', 'eeg_windows'),
+            "model_name": params.get('model_name', 'eeg_lda'),
+            "solver": params.get('solver', 'eigen'),
+            "shrinkage": params.get('shrinkage', 'auto'),
+            "train_ratio": float(params.get('train_ratio', 0.7)),
+            "val_ratio": float(params.get('val_ratio', 0.15)),
+            "test_ratio": float(params.get('test_ratio', 0.15)),
+            "k_folds": int(params.get('k_folds', 5)),
+            "random_state": int(params.get('random_state', 42)),
+            "tol": params.get('tol', 0.0001),
+            "tol_min": params.get('tol_min'),
+            "tol_max": params.get('tol_max'),
+            "search_resolution": int(params.get('search_resolution', 3)),
+        }
+        return jsonify(_launch_training_job('EEG', launch_payload, train_eeg_lda_model)), 202
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -180,7 +227,7 @@ def api_eval_eog():
 @training_bp.route('/api/model/evaluate/eeg', methods=['POST'])
 def api_eval_eeg():
     params = request.get_json() or {}
-    table_name = params.get('table_name') or 'eeg_windows'
+    table_name = params.get('table_name')
     model_name = params.get('model_name')
     res = evaluate_eeg_lda_model(table_name=table_name, model_name=model_name)
     if "error" in res:
@@ -220,7 +267,7 @@ def api_list_models():
                     "name": name,
                     "path": str(p),
                     "created_at": meta.get("created_at"),
-                    "accuracy": meta.get("accuracy"),
+                    "accuracy": meta.get("test_accuracy", meta.get("accuracy")),
                     "hyperparameters": {k:v for k,v in meta.items() if k not in ["created_at", "accuracy"]},
                     "active": (name == active_name)
                 })
@@ -479,6 +526,8 @@ def _save_window_payload(payload):
         collection_context = state.session.get_collection_context(sensor_upper) if hasattr(state.session, 'get_collection_context') else None
         effective_metadata = dict(collection_context or {})
         effective_metadata.update(metadata)
+        if sensor_upper in {'EMG', 'EEG'} and not effective_metadata.get('trial_group_id'):
+            effective_metadata['trial_group_id'] = payload.get('trial_group_id') or str(uuid.uuid4())
         collection_mode = str(
             effective_metadata.get('collectionMode')
             or effective_metadata.get('mode')
@@ -523,12 +572,14 @@ def _save_window_payload(payload):
             features['gap_ms'] = float(gap_ms)
             features['metadata_json'] = json.dumps(effective_metadata)
             features['source'] = str(effective_metadata.get('source', 'manual_window'))
+            features['trial_group_id'] = str(effective_metadata.get('trial_group_id', ''))
         elif sensor_upper == 'EEG':
             features['target_frequency'] = float(effective_metadata.get('targetFrequency', effective_metadata.get('frequency', 0)) or 0)
             features['channel_index'] = int(effective_metadata.get('channelIndex', payload.get('channel', 0)) or 0)
             features['sample_count'] = int(effective_metadata.get('sampleCount', len(samples)) or len(samples))
             features['window_ms'] = float(effective_metadata.get('windowMs', (len(samples) / sr) * 1000.0) or 0)
             features['metadata_json'] = json.dumps(effective_metadata)
+            features['trial_group_id'] = str(effective_metadata.get('trial_group_id', ''))
 
         ts = time.time()
         features['timestamp'] = ts
