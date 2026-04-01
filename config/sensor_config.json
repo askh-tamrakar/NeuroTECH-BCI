@@ -7,7 +7,7 @@
     },
     "ch1": {
       "enabled": true,
-      "sensor": "EEG"
+      "sensor": "EOG"
     }
   },
   "display": {
@@ -19,6 +19,6 @@
   "active_models": {
     "EMG": "Neuro",
     "EOG": "Neuro",
-    "EEG": "Neuro"
+    "EEG": "new"
   }
 }
