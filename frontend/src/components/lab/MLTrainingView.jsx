@@ -90,8 +90,6 @@ const SplitAccuracyCard = ({ result, models, selectedModelName, onSelectModel, o
     let descStr = '';
     if (tSamples > 0) {
         descStr = `${tSamples} Trn|${vSamples} Val|${teSamples} Tst`;
-    } else {
-        descStr = `${Math.round((params?.train_ratio || 0.7)*100)}% Trn|${Math.round((params?.val_ratio || 0.15)*100)}% Val|${Math.round((params?.test_ratio || 0.15)*100)}% Tst`;
     }
 
     return (
@@ -1119,7 +1117,19 @@ export default function MLTrainingView({ onSwitchLab }) {
     // Fetch total samples for selected session to display in Split UI
     useEffect(() => {
         if (!selectedSession) {
-            setSessionTotalSamples(0);
+            fetch(`${API_BASE_URL}/api/dataset-size/${activeTab}`)
+                .then(res => res.json())
+                .then(data => {
+                    if (data && typeof data.total !== 'undefined') {
+                        setSessionTotalSamples(data.total);
+                    } else {
+                        setSessionTotalSamples(0);
+                    }
+                })
+                .catch(e => {
+                    console.error("Base dataset fetch error:", e);
+                    setSessionTotalSamples(0);
+                });
             return;
         }
         fetch(`${API_BASE_URL}/api/sessions/${activeTab}/${selectedSession}?limit=1`)

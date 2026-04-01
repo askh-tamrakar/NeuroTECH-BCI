@@ -80,6 +80,22 @@ def api_list_sessions(sensor_type):
     return jsonify({"tables": tables})
 
 
+@session_bp.route('/api/dataset-size/<sensor_type>', methods=['GET'])
+def api_get_dataset_size(sensor_type):
+    """Fallback route to get count of rows in the base dataset table."""
+    try:
+        sensor = str(sensor_type).upper()
+        conn = db_manager.connect(sensor)
+        cursor = conn.cursor()
+        table_name = f"{sensor.lower()}_windows"
+        cursor.execute(f"SELECT COUNT(*) FROM {table_name}")
+        count = cursor.fetchone()[0]
+        return jsonify({"total": count})
+    except Exception as e:
+        print(f"Error fetching base dataset size for {sensor_type}: {e}")
+        return jsonify({"total": 0})
+
+
 @session_bp.route('/api/sessions/<sensor_type>/<session_name>', methods=['GET'])
 def api_get_session_data(sensor_type, session_name):
     """Get data rows for a specific session with optional pagination, sorting, and filtering."""
