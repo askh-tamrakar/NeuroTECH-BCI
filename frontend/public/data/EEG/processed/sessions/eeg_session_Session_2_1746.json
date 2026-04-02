@@ -1,0 +1,11 @@
+{
+  "sensor": "EEG",
+  "table_name": "eeg_session_Session_2_1746",
+  "session_name": "Session_2_1746",
+  "window_ms": 1499.40380859375,
+  "stride_ms": 1499.40380859375,
+  "sampling_rate": 1000.0,
+  "channel_index": 1,
+  "target_frequency": 3.5,
+  "source": "ssvep_collector"
+}

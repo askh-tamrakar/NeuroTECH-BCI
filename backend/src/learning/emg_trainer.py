@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -32,6 +33,7 @@ DISPLAY_LABELS = {
 }
 
 MODELS_ROOT = get_base_data_dir()
+REJECTED_MODELS_ROOT = Path(__file__).resolve().parents[3] / "rejected_models"
 
 ACTIVE_MODELS = {"EMG": None, "EOG": None, "EEG": None}
 ACTIVE_SCALERS = {"EMG": None, "EOG": None, "EEG": None}
@@ -78,6 +80,25 @@ def get_model_paths(sensor, model_name):
         "scaler": sensor_dir / f"{clean_name}_scaler.joblib",
         "meta": sensor_dir / f"{clean_name}_meta.json",
     }
+
+
+def get_rejected_models_root(sensor: str) -> Path:
+    root = REJECTED_MODELS_ROOT / sensor.upper()
+    root.mkdir(parents=True, exist_ok=True)
+    return root
+
+
+def create_training_run_dir(sensor: str, model_name: str) -> Path:
+    clean_name = "".join([c for c in model_name if c.isalnum() or c in ("_", "-")]) or sensor.lower()
+    run_dir = get_rejected_models_root(sensor) / f"{clean_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    return run_dir
+
+
+def save_candidate_snapshot(run_dir: Path, model_id: str, payload: dict) -> str:
+    path = run_dir / f"{model_id}.joblib"
+    joblib.dump(payload, path)
+    return str(path)
 
 
 def _collect_emg_session_profile(df):
@@ -177,10 +198,10 @@ def _compute_bias_variance(train_accuracy, validation_accuracy, fold_accuracies)
     }
 
 
-def _fit_rf(train_df, feature_cols, n_estimators, max_depth, min_impurity_decrease, criterion="gini", max_features="sqrt"):
+def _fit_rf(train_df, feature_cols, n_estimators, max_depth, min_impurity_decrease, criterion="gini", max_features="sqrt", label_col="class_label"):
     scaler = StandardScaler()
     X_train = train_df[feature_cols].fillna(0.0)
-    y_train = train_df["label"].astype(int)
+    y_train = train_df[label_col].astype(int)
     X_train_scaled = scaler.fit_transform(X_train)
     model = RandomForestClassifier(
         n_estimators=int(n_estimators),
@@ -194,9 +215,9 @@ def _fit_rf(train_df, feature_cols, n_estimators, max_depth, min_impurity_decrea
     return model, scaler
 
 
-def _score_rf(model, scaler, df, feature_cols, sensor):
+def _score_rf(model, scaler, df, feature_cols, sensor, label_col="class_label"):
     X = df[feature_cols].fillna(0.0)
-    y = df["label"].astype(int)
+    y = df[label_col].astype(int)
     X_scaled = scaler.transform(X)
     y_pred = model.predict(X_scaled)
     labels = LABELS_MAP[sensor]
@@ -234,9 +255,10 @@ def train_emg_model(
     search_resolution=3,
     progress_callback=None,
 ):
+    training_started_at = time.time()
     table_name = "emg_windows" if not table_name or table_name == "ALL" else table_name
     feature_cols = list(EMG_FEATURE_COLUMNS)
-    df = load_sensor_dataset("EMG", table_name, feature_cols, row_filter=_filter_emg_training_rows)
+    df = load_sensor_dataset("EMG", table_name, feature_cols, label_col="class_label", row_filter=_filter_emg_training_rows)
     profile = _validate_emg_session_profile(df, table_name)
     if "error" in profile:
         return profile
@@ -269,22 +291,54 @@ def train_emg_model(
         for mf in (max_features.split(',') if isinstance(max_features, str) else [max_features])
     ]
     total_steps = max(1, len(candidates) * int(k_folds))
-    best_result = None
     completed_steps = 0
+    best_result = None
+    training_history = []
+    run_dir = create_training_run_dir("EMG", model_name)
+    candidate_digits = max(2, len(str(len(candidates))))
 
     for candidate_index, candidate in enumerate(candidates, start=1):
         fold_train_scores = []
         fold_val_scores = []
         for fold_index, fold_train_df, fold_val_df in iter_cv_folds(split_bundle, int(k_folds), random_state=random_state):
-            model, scaler = _fit_rf(fold_train_df, feature_cols, **candidate)
-            train_metrics = _score_rf(model, scaler, fold_train_df, feature_cols, "EMG")
-            val_metrics = _score_rf(model, scaler, fold_val_df, feature_cols, "EMG")
+            model, scaler = _fit_rf(fold_train_df, feature_cols, label_col=split_bundle.label_col, **candidate)
+            train_metrics = _score_rf(model, scaler, fold_train_df, feature_cols, "EMG", label_col=split_bundle.label_col)
+            val_metrics = _score_rf(model, scaler, fold_val_df, feature_cols, "EMG", label_col=split_bundle.label_col)
             fold_train_scores.append(train_metrics["accuracy"])
             fold_val_scores.append(val_metrics["accuracy"])
+            accuracy = val_metrics["accuracy"]
+            id_str = f"C{candidate_index:0{candidate_digits}d}F{fold_index}"
+            artifact_path = save_candidate_snapshot(run_dir, id_str, {
+                "sensor": "EMG",
+                "classifier": "RandomForest",
+                "model": model,
+                "scaler": scaler,
+                "feature_order": feature_cols,
+                "hyperparameters": dict(candidate),
+                "train_metrics": train_metrics,
+                "validation_metrics": val_metrics,
+                "model_id": id_str,
+            })
+            history_item = {
+                "model_id": id_str,
+                "candidate_index": candidate_index,
+                "fold_index": fold_index,
+                "accuracy": accuracy,
+                "hyperparameters": dict(candidate),
+                "train_accuracy": train_metrics["accuracy"],
+                "validation_accuracy": val_metrics["accuracy"],
+                "n_train_samples": train_metrics["n_samples"],
+                "n_validation_samples": val_metrics["n_samples"],
+                "artifact_path": artifact_path,
+                "timestamp": time.time(),
+            }
+            training_history.append(history_item)
+            
             completed_steps += 1
             _emit_progress(
                 progress_callback,
                 stage="tuning",
+                model_id=id_str,
                 candidate_index=candidate_index,
                 total_candidates=len(candidates),
                 fold_index=fold_index,
@@ -292,6 +346,7 @@ def train_emg_model(
                 completed_steps=completed_steps,
                 total_steps=total_steps,
                 progress=float(completed_steps / total_steps),
+                history_item=history_item
             )
 
         validation_accuracy = float(np.mean(fold_val_scores))
@@ -306,9 +361,9 @@ def train_emg_model(
         if best_result is None or result["validation_accuracy"] > best_result["validation_accuracy"]:
             best_result = result
 
-    final_model, final_scaler = _fit_rf(split_bundle.train_val_df, feature_cols, **best_result["candidate"])
-    train_metrics = _score_rf(final_model, final_scaler, split_bundle.train_val_df, feature_cols, "EMG")
-    test_metrics = _score_rf(final_model, final_scaler, split_bundle.test_df, feature_cols, "EMG")
+    final_model, final_scaler = _fit_rf(split_bundle.train_val_df, feature_cols, label_col=split_bundle.label_col, **best_result["candidate"])
+    train_metrics = _score_rf(final_model, final_scaler, split_bundle.train_val_df, feature_cols, "EMG", label_col=split_bundle.label_col)
+    test_metrics = _score_rf(final_model, final_scaler, split_bundle.test_df, feature_cols, "EMG", label_col=split_bundle.label_col)
     importances = dict(zip(feature_cols, final_model.feature_importances_.tolist()))
     tree_struct = tree_to_json(final_model.estimators_[0], feature_cols)
 
@@ -321,12 +376,16 @@ def train_emg_model(
         "classifier": "RandomForest",
         "feature_order": feature_cols,
         "table_name": table_name,
+        "label_col": split_bundle.label_col,
         "created_at": datetime.now().isoformat(),
         "train_ratio": float(train_ratio),
         "val_ratio": float(val_ratio),
         "test_ratio": float(test_ratio),
         "k_folds": int(k_folds),
         "random_state": int(random_state),
+        "total_candidates": int(len(candidates)),
+        "total_models": int(len(training_history)),
+        "training_duration_seconds": float(time.time() - training_started_at),
         "selected_hyperparameters": best_result["candidate"],
         "train_accuracy": train_metrics["accuracy"],
         "validation_accuracy": best_result["validation_accuracy"],
@@ -340,12 +399,14 @@ def train_emg_model(
         "train_val_gap": best_result["train_val_gap"],
         "bias_indicator": best_result["bias_indicator"],
         "variance_indicator": best_result["variance_indicator"],
+        "training_history": training_history,
+        "training_history_dir": str(run_dir),
         "confusion_matrix": test_metrics["confusion_matrix"],
         "labels": [DISPLAY_LABELS["EMG"][idx] for idx in LABELS_MAP["EMG"]],
         "split_summary": split_summary(split_bundle, int(k_folds)),
         "group_counts": {
-            "train_val_groups": int(split_bundle.train_val_df["trial_group_id"].astype(str).nunique()) if "trial_group_id" in split_bundle.train_val_df.columns else 0,
-            "test_groups": int(split_bundle.test_df["trial_group_id"].astype(str).nunique()) if "trial_group_id" in split_bundle.test_df.columns else 0,
+            "train_val_groups": int(split_bundle.train_val_df[split_bundle.group_col].astype(str).nunique()) if split_bundle.group_col else 0,
+            "test_groups": int(split_bundle.test_df[split_bundle.group_col].astype(str).nunique()) if split_bundle.group_col else 0,
         },
         "session_profile": profile,
     }
@@ -396,6 +457,10 @@ def list_saved_models(sensor="EMG"):
             "created_at": meta.get("created_at"),
             "accuracy": meta.get("test_accuracy", meta.get("accuracy")),
             "hyperparameters": meta.get("selected_hyperparameters") or {k: v for k, v in meta.items() if k not in {"created_at", "accuracy"}},
+            "training_duration_seconds": meta.get("training_duration_seconds"),
+            "total_candidates": meta.get("total_candidates"),
+            "total_models": meta.get("total_models"),
+            "k_folds": meta.get("k_folds"),
             "active": name == active_name,
         })
     models.sort(key=lambda item: item.get("created_at") or "", reverse=True)
@@ -474,6 +539,8 @@ def evaluate_saved_model(sensor="EMG", table_name=None, model_name=None):
         "train_val_gap": meta.get("train_val_gap"),
         "bias_indicator": meta.get("bias_indicator"),
         "variance_indicator": meta.get("variance_indicator"),
+        "training_history": meta.get("training_history", []),
+        "training_history_dir": meta.get("training_history_dir"),
         "split_summary": meta.get("split_summary", {}),
         "group_counts": meta.get("group_counts", {}),
         "accuracy": meta.get("test_accuracy", meta.get("accuracy")),
@@ -486,8 +553,9 @@ def evaluate_saved_model(sensor="EMG", table_name=None, model_name=None):
     if not table_name:
         return base_response
 
-    df = load_sensor_dataset(sensor, table_name, feature_cols, row_filter=_filter_emg_training_rows if sensor == "EMG" else None)
-    metrics = _score_rf(model, scaler, df, feature_cols, sensor)
+    label_col = meta.get("label_col", "class_label" if sensor == "EMG" else "label")
+    df = load_sensor_dataset(sensor, table_name, feature_cols, label_col=label_col, row_filter=_filter_emg_training_rows if sensor == "EMG" else None)
+    metrics = _score_rf(model, scaler, df, feature_cols, sensor, label_col=label_col)
     base_response.update({
         "accuracy": metrics["accuracy"],
         "confusion_matrix": metrics["confusion_matrix"],

@@ -4,7 +4,6 @@ import sys
 import os
 import time
 import numpy as np
-import struct
 
 
 # Ensure we can import from src/acquisition
@@ -103,15 +102,7 @@ class DesktopReceiver:
                             # Push to Stream Manager
                             if self.stream_socket:
                                 try:
-                                    # Samples are Ch0, Ch1 (Raw ADC but treated as uV or raw)
-                                    # Assuming PacketParser returns raw ADC. The mobile app sends raw.
-                                    # Acquisition App converts to uV. Receiver implies input is Raw-uV?
-                                    # Line 30 was "BioSignals-Raw-uV".
-                                    # Line 112: sample = [float(pkt.ch0_raw), float(pkt.ch1_raw)]
-                                    # Let's send what we have.
-                                    v0 = float(pkt.ch0_raw)
-                                    v1 = float(pkt.ch1_raw)
-                                    self.stream_socket.sendall(struct.pack('<ff', v0, v1))
+                                    self.stream_socket.sendall(pkt_bytes)
                                 except Exception:
                                     self.stream_socket = None # Stop trying if broken
 

@@ -1,10 +1,17 @@
-import React, { useState } from 'react';
+import React, { useMemo } from 'react';
+import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import DataCollectionView from '../lab/DataCollectionView';
 import MLTrainingView from '../lab/MLTrainingView';
 
 export default function LabView(props) {
-    const [activeTab, setActiveTab] = useState('data'); // 'data' | 'ml'
+    const navigate = useNavigate();
+    const location = useLocation();
+
+    const activeTab = useMemo(() => {
+        if (location.pathname.includes('/ml_trainner')) return 'ml';
+        return 'data';
+    }, [location.pathname]);
 
     return (
         <AnimatePresence mode="wait">
@@ -16,18 +23,24 @@ export default function LabView(props) {
                 transition={{ duration: 0.3, ease: "easeOut" }}
                 className="flex-1 flex flex-col min-h-0 w-full"
             >
-                {activeTab === 'data' ? (
-                    <DataCollectionView 
-                        {...props} 
-                        onSwitchLab={() => setActiveTab('ml')} 
-                    />
-                ) : (
-                    <MLTrainingView 
-                        {...props} 
-                        onSwitchLab={() => setActiveTab('data')} 
-                    />
-                )}
+                <Routes>
+                    <Route path="data_collection" element={
+                        <DataCollectionView 
+                            {...props} 
+                            onSwitchLab={() => navigate('/dashboard/lab/ml_trainner')} 
+                        />
+                    } />
+                    <Route path="ml_trainner" element={
+                        <MLTrainingView 
+                            {...props} 
+                            onSwitchLab={() => navigate('/dashboard/lab/data_collection')} 
+                        />
+                    } />
+                    <Route index element={<Navigate to="data_collection" replace />} />
+                    <Route path="*" element={<Navigate to="data_collection" replace />} />
+                </Routes>
             </motion.div>
         </AnimatePresence>
     );
 }
+

@@ -211,7 +211,10 @@ def main():
     port = 5005 # API/WS port
     print(f"  {Theme.BOLD}{Theme.OKGREEN}► Backend Connectivity Options:{Theme.RESET}")
     for ip in ips:
-        print(f"      - http://{ip}:{port}")
+        print(f"      - Dashboard/API: http://{ip}:{port}")
+        print(f"        WebSocket: ws://{ip}:{port}")
+        print(f"        Raw ingress: {ip}:6000")
+        print(f"        Relay/actuation: {ip}:6002")
     print()
 
     frontend_dir = (Path(__file__).parent.parent / "frontend").resolve()

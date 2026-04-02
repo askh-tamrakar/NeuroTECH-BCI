@@ -11,6 +11,70 @@ FILTER_CONFIG_PATH = CONFIG_DIR / "filter_config.json"
 FEATURE_CONFIG_PATH = CONFIG_DIR / "feature_config.json"
 DEFAULT_SR = 1000
 
+
+def _normalize_filters(filters: dict | None) -> dict:
+    filters = dict(filters or {})
+
+    emg = dict(filters.get("EMG") or {})
+    if "order" in emg and "bandpass_order" not in emg:
+        emg["bandpass_order"] = emg["order"]
+    emg.pop("cutoff", None)
+    emg.setdefault("notch_enabled", True)
+    emg.setdefault("notch_freq", 50.0)
+    emg.setdefault("bandpass_enabled", True)
+    emg.setdefault("bandpass_low", 20.0)
+    emg.setdefault("bandpass_high", 250.0)
+    emg.setdefault("bandpass_order", 4)
+    emg.setdefault("envelope_enabled", True)
+    emg.setdefault("envelope_cutoff", 8.0)
+    emg.setdefault("envelope_order", 4)
+
+    eog = dict(filters.get("EOG") or {})
+    if eog.get("type") == "low_pass" and "bandpass_high" not in eog and "cutoff" in eog:
+        eog["bandpass_high"] = float(eog["cutoff"])
+    if "order" in eog and "bandpass_order" not in eog:
+        eog["bandpass_order"] = eog["order"]
+    eog.pop("type", None)
+    eog.pop("cutoff", None)
+    eog.setdefault("notch_enabled", False)
+    eog.setdefault("notch_freq", 50.0)
+    eog.setdefault("bandpass_enabled", True)
+    eog.setdefault("bandpass_low", 0.5)
+    eog.setdefault("bandpass_high", 10.0)
+    eog.setdefault("bandpass_order", 4)
+
+    eeg = dict(filters.get("EEG") or {})
+    legacy_chain = eeg.pop("filters", None)
+    if legacy_chain:
+        for stage in legacy_chain:
+            stage_type = str((stage or {}).get("type", "")).lower()
+            if stage_type == "notch":
+                eeg["notch_enabled"] = True
+                eeg["notch_freq"] = float(stage.get("freq", eeg.get("notch_freq", 50.0)))
+                eeg["notch_q"] = float(stage.get("Q", eeg.get("notch_q", 30.0)))
+            elif stage_type == "bandpass":
+                eeg["bandpass_enabled"] = True
+                eeg["bandpass_low"] = float(stage.get("low", eeg.get("bandpass_low", 1.0)))
+                eeg["bandpass_high"] = float(stage.get("high", eeg.get("bandpass_high", 45.0)))
+                eeg["bandpass_order"] = int(stage.get("order", eeg.get("bandpass_order", 4)))
+    notch_value = eeg.pop("notch", None)
+    if notch_value and "notch_freq" not in eeg:
+        try:
+            eeg["notch_freq"] = float(str(notch_value).lower().replace("hz", "").strip())
+        except Exception:
+            pass
+    eeg.setdefault("cutoff", 1.0)
+    eeg.setdefault("notch_enabled", True)
+    eeg.setdefault("notch_freq", 50.0)
+    eeg.setdefault("notch_q", 30.0)
+    eeg.setdefault("bandpass_enabled", True)
+    eeg.setdefault("bandpass_low", 1.0)
+    eeg.setdefault("bandpass_high", 45.0)
+    eeg.setdefault("bandpass_order", 4)
+
+    return {"EMG": emg, "EOG": eog, "EEG": eeg}
+
+
 def load_config() -> dict:
     """Load config from sensor, filter, and feature JSON files."""
     defaults = {
@@ -26,27 +90,35 @@ def load_config() -> dict:
             }
         },
         "filters": {
-             "EMG": {"cutoff": 20.0, "order": 4, "notch_enabled": True, "notch_freq": 50, "bandpass_enabled": True, "bandpass_low": 20, "bandpass_high": 250},
+            "EMG": {
+                "notch_enabled": True,
+                "notch_freq": 50,
+                "bandpass_enabled": True,
+                "bandpass_low": 20,
+                "bandpass_high": 250,
+                "bandpass_order": 4,
+                "envelope_enabled": True,
+                "envelope_cutoff": 8,
+                "envelope_order": 4,
+            },
             "EOG": {
-                "type": "low_pass",
-                "cutoff": 10.0,
-                "order": 4
+                "notch_enabled": False,
+                "notch_freq": 50,
+                "bandpass_enabled": True,
+                "bandpass_low": 0.5,
+                "bandpass_high": 10,
+                "bandpass_order": 4,
             },
             "EEG": {
-                "filters": [ 
-                    {
-                        "type": "notch",
-                        "freq": 50,
-                        "Q": 30
-                    },  
-                    {
-                        "type": "bandpass",
-                        "low": 0.5,
-                        "high": 45,
-                        "order": 4
-                    }
-                ]
-            }
+                "cutoff": 1.0,
+                "notch_enabled": True,
+                "notch_freq": 50,
+                "notch_q": 30,
+                "bandpass_enabled": True,
+                "bandpass_low": 1,
+                "bandpass_high": 45,
+                "bandpass_order": 4,
+            },
         },
         "display": {
             "timeWindowMs": 10000,
@@ -79,9 +151,11 @@ def load_config() -> dict:
              with open(FILTER_CONFIG_PATH) as f:
                 filter_cfg = json.load(f)
              if 'filters' in filter_cfg:
-                 merged['filters'] = filter_cfg['filters']
+                 merged['filters'] = _normalize_filters(filter_cfg['filters'])
         except Exception as e:
             print(f"⚠️  Error loading filter config: {e}")
+    else:
+        merged['filters'] = _normalize_filters(merged.get('filters'))
 
     # 3. Load Feature Config
     if FEATURE_CONFIG_PATH.exists():
@@ -93,6 +167,7 @@ def load_config() -> dict:
         except Exception as e:
             print(f"Error loading feature config: {e}")
 
+    merged['filters'] = _normalize_filters(merged.get('filters'))
     return merged
 
 
@@ -107,7 +182,7 @@ def save_config(config: dict) -> bool:
         
         # 1. Save Filters to filter_config.json
         if 'filters' in config:
-            filter_payload = {"filters": config['filters']}
+            filter_payload = {"filters": _normalize_filters(config['filters'])}
             with open(FILTER_CONFIG_PATH, 'w') as f:
                 json.dump(filter_payload, f, indent=2)
             print(f"💾 Filters saved to {FILTER_CONFIG_PATH}")

@@ -1,3 +1,5 @@
+import { buildApiUrl } from '../utils/runtimeConnection';
+
 /**
  * @typedef {'EMG' | 'EOG' | 'EEG'} SensorType
  */
@@ -37,7 +39,7 @@ export const CalibrationApi = {
      */
     async fetchSensorConfig() {
         console.log('[CalibrationApi] Fetching sensor config...');
-        const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+        const API_BASE_URL = buildApiUrl('');
         const response = await fetch(`${API_BASE_URL}/api/config`);
         if (!response.ok) {
             // Fallback or mock if backend is not ready
@@ -61,7 +63,7 @@ export const CalibrationApi = {
      */
     async saveSensorConfig(updatedConfig) {
         console.log('[CalibrationApi] Saving sensor config:', updatedConfig);
-        const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+        const API_BASE_URL = buildApiUrl('');
         const response = await fetch(`${API_BASE_URL}/api/config`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -79,7 +81,7 @@ export const CalibrationApi = {
      */
     async startCalibration(sensorType, mode, classLabel, windowDurationMs, sessionName = null, extra = {}) {
         console.log(`[CalibrationApi] Starting ${mode} calibration for ${sensorType} (${classLabel})`);
-        const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+        const API_BASE_URL = buildApiUrl('');
         const response = await fetch(`${API_BASE_URL}/api/calibration/start`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -105,7 +107,7 @@ export const CalibrationApi = {
      */
     async stopCalibration(sensorType) {
         console.log(`[CalibrationApi] Stopping calibration for ${sensorType}`);
-        const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+        const API_BASE_URL = buildApiUrl('');
         const response = await fetch(`${API_BASE_URL}/api/calibration/stop`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -147,7 +149,7 @@ export const CalibrationApi = {
                 status: w.status
             }));
 
-            const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+            const API_BASE_URL = buildApiUrl('');
             const response = await fetch(`${API_BASE_URL}/api/calibrate`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -188,7 +190,7 @@ export const CalibrationApi = {
                 session_name: sessionName // Pass session name
             };
 
-            const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+            const API_BASE_URL = buildApiUrl('');
             const resp = await fetch(`${API_BASE_URL}/api/window`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -221,7 +223,7 @@ export const CalibrationApi = {
                 samples: windowPayload.samples
             };
 
-            const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+            const API_BASE_URL = buildApiUrl('');
             const resp = await fetch(`${API_BASE_URL}/api/prediction/window/predict`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -246,7 +248,7 @@ export const CalibrationApi = {
      */
     async listRecordings() {
         try {
-            const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+            const API_BASE_URL = buildApiUrl('');
             const response = await fetch(`${API_BASE_URL}/api/recordings`);
             if (!response.ok) throw new Error('Failed to list recordings');
             return response.json();
@@ -263,7 +265,7 @@ export const CalibrationApi = {
      */
     async getRecording(filename) {
         try {
-            const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+            const API_BASE_URL = buildApiUrl('');
             const response = await fetch(`${API_BASE_URL}/api/recordings/${encodeURIComponent(filename)}`);
             console.log(response);
             if (!response.ok) throw new Error('Failed to fetch recording');
@@ -280,7 +282,7 @@ export const CalibrationApi = {
      */
     async startEmgRecording(label) {
         try {
-            const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+            const API_BASE_URL = buildApiUrl('');
             const response = await fetch(`${API_BASE_URL}/api/emg/start`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -298,7 +300,7 @@ export const CalibrationApi = {
      */
     async stopEmgRecording() {
         try {
-            const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+            const API_BASE_URL = buildApiUrl('');
             const response = await fetch(`${API_BASE_URL}/api/emg/stop`, { method: 'POST' });
             return response.json();
         } catch (error) {
@@ -312,7 +314,7 @@ export const CalibrationApi = {
      */
     async getEmgStatus() {
         try {
-            const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+            const API_BASE_URL = buildApiUrl('');
             const response = await fetch(`${API_BASE_URL}/api/emg/status`);
             if (!response.ok) return null;
             return response.json();
@@ -328,7 +330,7 @@ export const CalibrationApi = {
      * @param {boolean} isActive 
      */
     async togglePrediction(sensorType, isActive) {
-        const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+        const API_BASE_URL = buildApiUrl('');
         sensorType = sensorType.toUpperCase();
         const action = isActive ? 'start' : 'stop';
         let endpoint = '';
@@ -355,7 +357,7 @@ export const CalibrationApi = {
      */
     async sendManualClawCommand(action) {
         try {
-            const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+            const API_BASE_URL = buildApiUrl('');
             const response = await fetch(`${API_BASE_URL}/api/servo/manual`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },

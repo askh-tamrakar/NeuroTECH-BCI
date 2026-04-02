@@ -44,7 +44,7 @@ const resolveColorVar = (styles, initialProp, fallbackProp1, fallbackProp2) => {
 };
 
 export default function DinoView({ isConnected, wsEvent, isPaused }) {
-    const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+    const API_BASE_URL = buildApiUrl('');
     const normalizeModelName = useCallback((name) => String(name || '').toLowerCase().replace(/[^a-z0-9]/g, ''), []);
 
     const togglePrediction = useCallback((active) => {
@@ -1522,3 +1522,4 @@ const SettingSelect = ({ label, value, options, onChange }) => (
         </div>
     </div>
 )
+import { buildApiUrl } from '../../utils/runtimeConnection';

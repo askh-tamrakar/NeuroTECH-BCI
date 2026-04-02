@@ -1,24 +1,53 @@
 /**
- * useWebSocket.js - OFFLINE CAPABLE VERSION
- * 
- * Uses 'socket.io-client' npm package instead of CDN for offline support.
+ * useWebSocket.js - unified transport/api/stream connection hook
  */
 
-import { useState, useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { io } from 'socket.io-client'
+import { deriveApiUrlFromWs, getRuntimeConnection } from '../utils/runtimeConnection'
 
-export function useWebSocket(url = 'http://localhost:5005') {
-  const [status, setStatus] = useState('disconnected')
+const STATUS_POLL_MS = 2000
+const STREAM_FRESHNESS_MS = 2000
+
+function getConnectionState({ isConnecting, transportConnected, apiReachable, streamActive, hasServerStatus }) {
+  if (isConnecting && !transportConnected) {
+    return 'connecting'
+  }
+
+  if (streamActive) {
+    return 'streaming'
+  }
+
+  if (!transportConnected && !apiReachable) {
+    return 'disconnected'
+  }
+
+  if (hasServerStatus) {
+    return 'stream_offline'
+  }
+
+  return 'connected'
+}
+
+export function useWebSocket(url = getRuntimeConnection().wsUrl) {
+  const [transportConnected, setTransportConnected] = useState(false)
+  const [apiReachable, setApiReachable] = useState(false)
+  const [streamActive, setStreamActive] = useState(false)
+  const [isConnecting, setIsConnecting] = useState(false)
   const [lastMessage, setLastMessage] = useState(null)
   const [lastConfig, setLastConfig] = useState(null)
   const [lastEvent, setLastEvent] = useState(null)
   const [latency, setLatency] = useState(0)
+  const [currentUrl, setCurrentUrl] = useState(url)
+  const [serverStatus, setServerStatus] = useState(null)
+  const [lastStreamAt, setLastStreamAt] = useState(0)
 
   const socketRef = useRef(null)
-  const pingTimer = useRef(null)
+  const pingTimerRef = useRef(null)
+  const statusTimerRef = useRef(null)
+  const staleStreamTimerRef = useRef(null)
   const lastPingTime = useRef(0)
-
-  const [currentUrl, setCurrentUrl] = useState(url)
+  const lastStreamAtRef = useRef(0)
 
   useEffect(() => {
     if (url) {
@@ -26,253 +55,274 @@ export function useWebSocket(url = 'http://localhost:5005') {
     }
   }, [url])
 
-  const connect = (connectUrl) => {
-    const endpoint = connectUrl || currentUrl || url
+  const clearTimers = () => {
+    if (pingTimerRef.current) {
+      clearInterval(pingTimerRef.current)
+      pingTimerRef.current = null
+    }
+    if (statusTimerRef.current) {
+      clearInterval(statusTimerRef.current)
+      statusTimerRef.current = null
+    }
+    if (staleStreamTimerRef.current) {
+      clearInterval(staleStreamTimerRef.current)
+      staleStreamTimerRef.current = null
+    }
+  }
 
-    // Don't reconnect if already connected to same endpoint
+  const startStatusPolling = (endpoint) => {
+    if (!endpoint) return
+
+    const apiBaseUrl = deriveApiUrlFromWs(endpoint)
+    if (!apiBaseUrl) return
+
+    const pollStatus = async () => {
+      try {
+        const response = await fetch(`${apiBaseUrl}/api/status`, { cache: 'no-store' })
+        if (!response.ok) {
+          throw new Error(`Status failed: ${response.status}`)
+        }
+
+        const payload = await response.json()
+        setApiReachable(true)
+        setServerStatus(payload)
+
+        const streamIsFresh = payload.stream_active || (Date.now() - lastStreamAtRef.current <= STREAM_FRESHNESS_MS)
+        setStreamActive(Boolean(streamIsFresh))
+      } catch (error) {
+        setApiReachable(false)
+        setServerStatus(null)
+        setStreamActive(false)
+      }
+    }
+
+    pollStatus()
+    statusTimerRef.current = setInterval(pollStatus, STATUS_POLL_MS)
+    staleStreamTimerRef.current = setInterval(() => {
+      if (Date.now() - lastStreamAtRef.current > STREAM_FRESHNESS_MS) {
+        setStreamActive(false)
+      }
+    }, 1000)
+  }
+
+  const teardownSocket = () => {
+    clearTimers()
+
+    if (socketRef.current) {
+      socketRef.current.removeAllListeners()
+      socketRef.current.disconnect()
+      socketRef.current = null
+    }
+  }
+
+  const connect = (connectUrl) => {
+    const endpoint = connectUrl || currentUrl || url || getRuntimeConnection().wsUrl
+    if (!endpoint) return
+
     if (socketRef.current?.connected && endpoint === currentUrl) {
-      console.log('⚠️ Already connected')
       return
     }
 
-    console.log(`🔌 Connecting to WebSocket: ${endpoint} (Offline Mode)`)
-    setStatus('connecting')
+    teardownSocket()
     setCurrentUrl(endpoint)
+    setIsConnecting(true)
+    setLatency(0)
 
     try {
-      // Connect directly using the imported 'io' function
       socketRef.current = io(endpoint, {
         reconnection: true,
         timeout: 10000,
         transports: ['websocket', 'polling']
       })
 
-      setupSocketListeners()
+      socketRef.current.on('connect', () => {
+        setTransportConnected(true)
+        setIsConnecting(false)
+        startStatusPolling(endpoint)
 
-    } catch (e) {
-      console.error('❌ Failed to initialize Socket.IO:', e)
-      setStatus('error')
-    }
-  }
-
-  const setupSocketListeners = () => {
-    if (!socketRef.current) return
-
-    // === CONNECTION EVENT ===
-    socketRef.current.on('connect', () => {
-      console.log('✅ WebSocket connected')
-      setStatus('connected')
-
-      if (socketRef.current) {
-        pingTimer.current = setInterval(() => {
+        pingTimerRef.current = setInterval(() => {
           if (socketRef.current?.connected) {
             lastPingTime.current = performance.now()
             socketRef.current.emit('ping')
           }
         }, 500)
-      }
-    })
-
-    // === DISCONNECTION EVENT ===
-    socketRef.current.on('disconnect', () => {
-      console.log('❌ WebSocket disconnected')
-      setStatus('disconnected')
-      setLatency(0)
-
-      if (pingTimer.current) {
-        clearInterval(pingTimer.current)
-        pingTimer.current = null
-      }
-    })
-
-    // === ERROR EVENT ===
-    socketRef.current.on('error', (error) => {
-      console.error('❌ WebSocket error:', error)
-      setStatus('disconnected')
-    })
-
-    // === CONNECTION ERROR (Failed to connect) ===
-    socketRef.current.on('connect_error', (err) => {
-      console.warn('⚠️ Connection failed:', err.message)
-      setStatus('disconnected')
-    })
-
-    // === PONG EVENT (latency measurement) ===
-    socketRef.current.on('pong', () => {
-      if (socketRef.current?.connected) {
-        const now = performance.now()
-        const latencyMs = Math.round(now - lastPingTime.current)
-        setLatency(latencyMs)
-      }
-    })
-
-    // === DATA EVENTS ===
-
-    // Batch Listener
-    // No throttling for batch data to prevent data loss. The backend controls the rate (approx 30Hz).
-    socketRef.current.on('bio_data_batch', (batchData) => {
-      if (!batchData || !batchData.samples || batchData.samples.length === 0) return
-
-      // Optimized parsing: Avoid try-catch block for clean data to reduce V8 deopt
-      // Only wrap critical parts or assume backend data shape is mostly correct.
-
-      const lastSample = batchData.samples[batchData.samples.length - 1]
-
-      // Fast path reconstruction
-      const rawPayload = {
-        stream_name: batchData.stream_name,
-        // We only strictly need channels/timestamp for 'lastMessage' consumers (non-LiveView)
-        // LiveView uses _batch directly.
-        channels: lastSample.channels,
-        sample_rate: batchData.sample_rate,
-        sample_count: lastSample.sample_count,
-        timestamp: lastSample.timestamp,
-        _batch: batchData.samples
-      }
-
-      setLastMessage({
-        // Avoid JSON.stringify if not strictly needed by consumers, but useWebSocket contract implies string 'data'
-        data: JSON.stringify(rawPayload),
-        timestamp: Date.now(),
-        raw: rawPayload
       })
-    })
 
-    let lastUpdate = 0
-    socketRef.current.on('bio_data_update', (data) => {
-      try {
-        // Throttle updates to ~30Hz (33ms)
+      socketRef.current.on('disconnect', () => {
+        setTransportConnected(false)
+        setIsConnecting(false)
+        setLatency(0)
+        clearTimers()
+      })
+
+      socketRef.current.on('error', () => {
+        setTransportConnected(false)
+        setIsConnecting(false)
+      })
+
+      socketRef.current.on('connect_error', () => {
+        setTransportConnected(false)
+        setIsConnecting(false)
+      })
+
+      socketRef.current.on('pong', () => {
+        if (socketRef.current?.connected) {
+          const now = performance.now()
+          setLatency(Math.round(now - lastPingTime.current))
+        }
+      })
+
+      socketRef.current.on('bio_data_batch', (batchData) => {
+        if (!batchData?.samples?.length) return
+
+        const lastSample = batchData.samples[batchData.samples.length - 1]
+        const rawPayload = {
+          stream_name: batchData.stream_name,
+          channels: lastSample.channels,
+          sample_rate: batchData.sample_rate,
+          sample_count: lastSample.sample_count,
+          timestamp: lastSample.timestamp,
+          _batch: batchData.samples
+        }
+
         const now = Date.now()
-        if (now - lastUpdate < 33) return
-        lastUpdate = now
+        lastStreamAtRef.current = now
+        setLastStreamAt(now)
+        setStreamActive(true)
+        setLastMessage({
+          data: JSON.stringify(rawPayload),
+          timestamp: Date.now(),
+          raw: rawPayload
+        })
+      })
 
-        // Handle NEW LSL format
-        if (data.stream_name && data.channels && typeof data.channels === 'object') {
-          const channels = data.channels
-          const normalized = {}
+      let lastUpdate = 0
+      socketRef.current.on('bio_data_update', (data) => {
+        try {
+          const now = Date.now()
+          if (now - lastUpdate < 33) return
+          lastUpdate = now
 
-          Object.entries(channels).forEach(([idx, ch]) => {
-            if (typeof ch === 'object') {
-              normalized[idx] = {
-                value: ch.value ?? 0,
-                sensor: ch.type || ch.label || 'UNKNOWN',
-                label: ch.label,
-                timestamp: ch.timestamp
+          if (data.stream_name && data.channels && typeof data.channels === 'object') {
+            const channels = data.channels
+            const normalized = {}
+
+            Object.entries(channels).forEach(([idx, ch]) => {
+              if (typeof ch === 'object') {
+                normalized[idx] = {
+                  value: ch.value ?? 0,
+                  sensor: ch.type || ch.label || 'UNKNOWN',
+                  label: ch.label,
+                  timestamp: ch.timestamp
+                }
+              } else {
+                normalized[idx] = {
+                  value: ch,
+                  sensor: 'UNKNOWN'
+                }
               }
-            } else {
-              normalized[idx] = {
-                value: ch,
-                sensor: 'UNKNOWN'
-              }
+            })
+
+            let timestamp = data.timestamp || Date.now()
+            if (timestamp < 10000000000) {
+              timestamp = timestamp * 1000
             }
-          })
 
-          let timestamp = data.timestamp || Date.now()
-          if (timestamp < 10000000000) {
-            timestamp = timestamp * 1000 // Convert to milliseconds
+            const now = Date.now()
+            lastStreamAtRef.current = now
+            setLastStreamAt(now)
+            setStreamActive(true)
+            setLastMessage({
+              data: JSON.stringify(data),
+              timestamp: Date.now(),
+              raw: {
+                timestamp,
+                channels: normalized,
+                sample_rate: data.sample_rate,
+                num_channels: data.channel_count,
+                stream_name: data.stream_name,
+                sample_count: data.sample_count
+              }
+            })
+          } else if (data.channels) {
+            const now = Date.now()
+            lastStreamAtRef.current = now
+            setLastStreamAt(now)
+            setStreamActive(true)
+            setLastMessage({
+              data: JSON.stringify(data),
+              timestamp: Date.now(),
+              raw: data
+            })
           }
-
-          setLastMessage({
-            data: JSON.stringify(data),
-            timestamp: Date.now(),
-            raw: {
-              timestamp,
-              channels: normalized,
-              sample_rate: data.sample_rate,
-              num_channels: data.channel_count,
-              stream_name: data.stream_name,
-              sample_count: data.sample_count
-            }
-          })
+        } catch (error) {
+          console.warn('Failed to parse bio_data_update:', error)
         }
-        else if (data.channels) {
-          setLastMessage({
-            data: JSON.stringify(data),
-            timestamp: Date.now(),
-            raw: data
-          })
+      })
+
+      socketRef.current.on('signal_update', (data) => {
+        try {
+          if (data.channels) {
+            const now = Date.now()
+            lastStreamAtRef.current = now
+            setLastStreamAt(now)
+            setStreamActive(true)
+            setLastMessage({
+              data: JSON.stringify(data),
+              timestamp: Date.now(),
+              raw: data
+            })
+          }
+        } catch (error) {
+          console.warn('Failed to parse signal_update:', error)
         }
-      } catch (e) {
-        console.warn('⚠️ Failed to parse bio_data_update:', e)
-      }
-    })
+      })
 
-    // === ALTERNATIVE DATA EVENT ===
-    socketRef.current.on('signal_update', (data) => {
-      try {
-        if (data.channels) {
-          setLastMessage({
-            data: JSON.stringify(data),
-            timestamp: Date.now(),
-            raw: data
-          })
+      socketRef.current.on('config_updated', (data) => {
+        if (data?.config) {
+          setLastConfig(data.config)
         }
-      } catch (e) {
-        console.warn('⚠️ Failed to parse signal_update:', e)
-      }
-    })
+      })
 
-    // === CONFIG UPDATE EVENT ===
-    socketRef.current.on('config_updated', (data) => {
-      console.log('🔄 Config updated from server:', data)
-      if (data && data.config) {
-        setLastConfig(data.config)
-      }
-    })
+      socketRef.current.on('bio_event', (eventData) => {
+        setLastEvent(eventData)
+      })
 
-    // === EVENT STREAM ===
-    socketRef.current.on('bio_event', (eventData) => {
-      setLastEvent(eventData)
-    })
+      socketRef.current.on('eeg_prediction', (data) => {
+        setLastEvent({ event: 'eeg_prediction', ...data })
+      })
 
-    socketRef.current.on('eeg_prediction', (data) => {
-      setLastEvent({ event: 'eeg_prediction', ...data })
-    })
+      socketRef.current.on('eeg_mode_result', (data) => {
+        setLastEvent({ event: 'eeg_mode_result', ...data })
+      })
 
-    socketRef.current.on('eeg_mode_result', (data) => {
-      setLastEvent({ event: 'eeg_mode_result', ...data })
-    })
-
-    socketRef.current.on('emg_prediction', (data) => {
-      setLastEvent({ type: 'emg_prediction', ...data })
-    })
-
-    // === STATUS EVENTS ===
-    socketRef.current.on('status', (data) => {
-      console.log('📊 Server status:', data)
-    })
+      socketRef.current.on('emg_prediction', (data) => {
+        setLastEvent({ type: 'emg_prediction', ...data })
+      })
+    } catch (error) {
+      setTransportConnected(false)
+      setIsConnecting(false)
+    }
   }
 
   const disconnect = () => {
-    console.log('🔌 Disconnecting...')
-
-    if (pingTimer.current) {
-      clearInterval(pingTimer.current)
-      pingTimer.current = null
-    }
-
-    if (socketRef.current) {
-      socketRef.current.disconnect()
-      socketRef.current = null
-    }
-
-    setStatus('disconnected')
+    teardownSocket()
+    setTransportConnected(false)
+    setApiReachable(false)
+    setStreamActive(false)
+    setIsConnecting(false)
     setLatency(0)
-    console.log('✅ Disconnected')
   }
 
   const sendMessage = (data) => {
-    if (!socketRef.current || !socketRef.current.connected) {
-      console.warn('⚠️ WebSocket not connected, cannot send message:', data)
+    if (!socketRef.current?.connected) {
       return false
     }
 
     try {
       socketRef.current.emit('message', data)
-      console.log('📤 Sent message:', data)
       return true
-    } catch (e) {
-      console.error('❌ Error sending message:', e)
+    } catch {
       return false
     }
   }
@@ -280,18 +330,26 @@ export function useWebSocket(url = 'http://localhost:5005') {
   const requestStatus = () => {
     if (socketRef.current?.connected) {
       socketRef.current.emit('request_status')
-      console.log('📡 Status request sent')
     }
   }
 
-  useEffect(() => {
-    return () => {
-      disconnect()
-    }
-  }, [])
+  useEffect(() => () => disconnect(), [])
+
+  const status = useMemo(() => getConnectionState({
+    isConnecting,
+    transportConnected,
+    apiReachable,
+    streamActive,
+    hasServerStatus: Boolean(serverStatus)
+  }), [apiReachable, isConnecting, serverStatus, streamActive, transportConnected])
 
   return {
     status,
+    connectionState: status,
+    transportConnected,
+    apiReachable,
+    streamActive,
+    serverStatus,
     lastMessage,
     lastConfig,
     lastEvent,

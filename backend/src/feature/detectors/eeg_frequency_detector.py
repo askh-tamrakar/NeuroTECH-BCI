@@ -1,3 +1,4 @@
+import json
 import time
 from collections import deque
 
@@ -6,7 +7,6 @@ import numpy as np
 
 from src.feature.ssvep_utils import DEFAULT_TARGET_FREQS, compute_ssvep_features
 from src.utils.paths import get_models_dir
-
 
 class EEGFrequencyDetector:
     """
@@ -33,6 +33,7 @@ class EEGFrequencyDetector:
         self.model = None
         self.scaler = None
         self.model_name = None
+        self.frequency_native_classes = False
         self._load_config()
 
     def _load_config(self):
@@ -63,6 +64,7 @@ class EEGFrequencyDetector:
         self.model = None
         self.scaler = None
         self.model_name = None
+        self.frequency_native_classes = False
 
         active_models = self.config.get("active_models", {})
         requested_model = active_models.get("EEG")
@@ -72,6 +74,7 @@ class EEGFrequencyDetector:
         models_dir = get_models_dir("EEG")
         model_path = models_dir / f"{requested_model}.joblib"
         scaler_path = models_dir / f"{requested_model}_scaler.joblib"
+        meta_path = models_dir / f"{requested_model}_meta.json"
         if not model_path.exists():
             return
 
@@ -79,21 +82,55 @@ class EEGFrequencyDetector:
             self.model = joblib.load(model_path)
             self.scaler = joblib.load(scaler_path) if scaler_path.exists() else None
             self.model_name = requested_model
+            if meta_path.exists():
+                try:
+                    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+                    self.frequency_native_classes = bool(meta.get("frequency_classes"))
+                except Exception:
+                    self.frequency_native_classes = False
             print(f"\n{'='*50}\n[EEGFrequencyDetector] MODEL LOADED SUCCESSFULLY: {requested_model}\n{'='*50}\n", flush=True)
         except Exception as e:
             print(f"[EEGFrequencyDetector] Failed to load model {requested_model}: {e}")
             self.model = None
             self.scaler = None
             self.model_name = None
+            self.frequency_native_classes = False
 
     def _normalize_event(self, prediction_idx: int | None) -> str:
-        if prediction_idx is None or prediction_idx <= 0:
+        if prediction_idx is None:
             return "REST"
-        target_idx = prediction_idx - 1
+        try:
+            prediction_value = float(prediction_idx)
+        except (TypeError, ValueError):
+            return "REST"
+        if prediction_value <= 0:
+            return "REST"
+        if self._uses_frequency_native_classes():
+            freq = prediction_value
+            return f"TARGET_{str(freq).replace('.', '_')}HZ"
+        target_idx = int(round(prediction_value)) - 1
         if 0 <= target_idx < len(self.target_freqs):
             freq = self.target_freqs[target_idx]
             return f"TARGET_{str(freq).replace('.', '_')}HZ"
         return "REST"
+
+    def _uses_frequency_native_classes(self) -> bool:
+        if self.frequency_native_classes:
+            return True
+        if self.model is None or not hasattr(self.model, "classes_"):
+            return False
+        classes = np.asarray(getattr(self.model, "classes_", []), dtype=float)
+        if classes.size == 0:
+            return False
+        positive = classes[classes > 0]
+        if positive.size == 0:
+            return False
+        integer_like = np.all(np.isclose(positive, np.round(positive)))
+        if not integer_like:
+            return True
+        if np.max(positive) > len(self.target_freqs):
+            return True
+        return False
 
     def _base_score_vector(self, features: dict) -> np.ndarray:
         return np.asarray(features.get("score_vector") or [
@@ -232,7 +269,7 @@ class EEGFrequencyDetector:
         if self.scaler is not None:
             vector = self.scaler.transform(vector)
 
-        prediction = int(self.model.predict(vector)[0])
+        prediction = self.model.predict(vector)[0]
         confidence = 0.0
         if hasattr(self.model, "predict_proba"):
             try:
@@ -240,10 +277,15 @@ class EEGFrequencyDetector:
             except Exception:
                 confidence = 0.0
 
-        if prediction <= 0:
+        try:
+            prediction_value = float(prediction)
+        except (TypeError, ValueError):
             return "REST", confidence
 
-        return self._normalize_event(prediction), confidence
+        if prediction_value <= 0:
+            return "REST", confidence
+
+        return self._normalize_event(prediction_value), confidence
 
     def detect(self, features: dict):
         if not features:

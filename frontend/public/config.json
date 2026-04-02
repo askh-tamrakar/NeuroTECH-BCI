@@ -1,6 +1,6 @@
 {
     "general": {
-        "apiUrl": "http://localhost:8000",
+        "apiUrl": "http://localhost:5005",
         "wsUrl": "ws://localhost:5005",
         "useMock": false
     },

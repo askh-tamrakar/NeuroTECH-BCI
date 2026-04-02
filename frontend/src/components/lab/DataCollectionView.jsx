@@ -20,6 +20,7 @@ import {
     ZoomIn, ArrowUpDown, ArrowDown, ArrowUp, Sigma
 } from 'lucide-react';
 import { soundHandler } from '../../handlers/SoundHandler'
+import { getRuntimeConnection } from '../../utils/runtimeConnection';
 
 // Workers
 import SessionWorker from '../../workers/session.worker.js?worker';
@@ -62,7 +63,7 @@ import AutoCalibrationWizard from '../data_collection/AutoCalibrationWizard';
 export default function DataCollectionView({ wsData, wsEvent, config: initialConfig, wsUrl, onSwitchLab }) {
     const { settings, updateSettings } = useSettings();
     const { currentTheme } = useTheme();
-    const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+    const API_BASE_URL = getRuntimeConnection().apiUrl;
 
     // Top-level states
     const [activeSensor, setActiveSensor] = useState('EMG'); // 'EMG' | 'EOG' | 'EEG'
@@ -477,7 +478,7 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
         };
 
         // Initial Worker Config
-        sessionWorkerRef.current.postMessage({ type: 'INIT', payload: { sensor: activeSensor, isTestMode: mode === 'test' } });
+        sessionWorkerRef.current.postMessage({ type: 'INIT', payload: { sensor: activeSensor, isTestMode: mode === 'test', apiBaseUrl: API_BASE_URL } });
         windowWorkerRef.current.postMessage({
             type: 'INIT',
             payload: {

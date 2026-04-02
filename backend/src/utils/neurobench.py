@@ -15,6 +15,7 @@ import numpy as np
 import socket
 import brainflow
 from brainflow.board_shim import BoardShim, BrainFlowInputParams, BoardIds
+from src.utils.paths import get_config_dir
 
 # Optional: serial backend
 try:
@@ -25,8 +26,7 @@ except Exception:
     list_ports = None
 
 APP_NAME = "SignalForge (mock device)"
-# Fix path to be relative to this script location
-CONFIG_PATH = Path(__file__).parent.parent.parent / "config" / "sensor_config.json"
+CONFIG_PATH = get_config_dir() / "sensor_config.json"
 SYNC1 = 0xC7
 SYNC2 = 0x7C
 END_BYTE = 0x01

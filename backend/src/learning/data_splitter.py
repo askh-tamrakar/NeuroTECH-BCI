@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable
 
-import numpy as np
 import pandas as pd
 from sklearn.model_selection import StratifiedKFold, train_test_split
 
@@ -23,12 +22,30 @@ class SplitBundle:
 def _resolve_group_col(sensor: str, df: pd.DataFrame) -> tuple[str | None, str]:
     sensor = sensor.upper()
     if sensor in {"EMG", "EEG"}:
+        if "trial_id" in df.columns and df["trial_id"].astype(str).str.strip().ne("").any():
+            return "trial_id", "trial"
         if "trial_group_id" in df.columns and df["trial_group_id"].astype(str).str.strip().ne("").any():
-            return "trial_group_id", "trial"
+            return "trial_group_id", "trial_legacy"
         if "session_id" in df.columns and df["session_id"].astype(str).str.strip().ne("").any():
             return "session_id", "session"
-        raise ValueError(f"{sensor} grouped split requires trial_group_id or session_id.")
+        raise ValueError(f"{sensor} grouped split requires trial_id or session_id.")
     return None, "row"
+
+
+def resolve_label_col(sensor: str, df: pd.DataFrame, requested: str | None = None) -> str:
+    sensor = sensor.upper()
+    if requested not in {None, "", "label"} and requested in df.columns:
+        return requested
+    if sensor in {"EMG", "EEG"} and "class_label" in df.columns:
+        return "class_label"
+    if requested and requested in df.columns:
+        return requested
+    if "label" in df.columns:
+        return "label"
+
+    if requested:
+        raise ValueError(f"Required label column {requested} not found in dataset.")
+    raise ValueError("No supported label column found in dataset.")
 
 
 def load_sensor_dataset(
@@ -58,7 +75,9 @@ def load_sensor_dataset(
     for col in feature_cols:
         if col not in df.columns:
             df[col] = 0.0
+    label_col = resolve_label_col(sensor, df, label_col)
     df = df[df[label_col].notna()].copy()
+    df.attrs["label_col"] = label_col
     if df.empty:
         raise ValueError("No labeled rows available after preprocessing.")
     return df
@@ -83,6 +102,7 @@ def build_train_val_test_split(
     if test_ratio <= 0 or train_ratio <= 0 or val_ratio <= 0:
         raise ValueError("Train, validation, and test ratios must all be greater than zero.")
 
+    label_col = resolve_label_col(sensor, df, label_col or df.attrs.get("label_col"))
     group_col, split_mode = _resolve_group_col(sensor, df)
     sensor = sensor.upper()
 
@@ -91,7 +111,7 @@ def build_train_val_test_split(
             df[[group_col, label_col]]
             .assign(**{group_col: df[group_col].astype(str).str.strip()})
             .groupby(group_col, as_index=False)[label_col]
-            .agg(lambda values: int(pd.Series(values).mode().iloc[0]))
+            .agg(lambda values: pd.Series(values).mode().iloc[0])
         )
         if group_frame.empty or group_frame[label_col].nunique() < 2:
             raise ValueError(f"{sensor} requires at least 2 grouped classes to split.")
@@ -137,14 +157,14 @@ def iter_cv_folds(
     df = split_bundle.train_val_df
     label_col = split_bundle.label_col
     group_col = split_bundle.group_col
-    y = df[label_col].astype(int)
+    y = df[label_col]
 
     if group_col:
         grouped = (
             df[[group_col, label_col]]
             .assign(**{group_col: df[group_col].astype(str).str.strip()})
             .groupby(group_col, as_index=False)[label_col]
-            .agg(lambda values: int(pd.Series(values).mode().iloc[0]))
+            .agg(lambda values: pd.Series(values).mode().iloc[0])
         )
         if len(grouped) < n_splits:
             raise ValueError(f"Need at least {n_splits} groups for grouped {n_splits}-fold tuning.")

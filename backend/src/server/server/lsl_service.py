@@ -77,6 +77,7 @@ def resolve_lsl_stream() -> bool:
     """Resolve and connect to LSL stream."""
     if not LSL_AVAILABLE:
         print("❌ pylsl not available")
+        state.connected = False
         return False
 
     try:
@@ -102,12 +103,14 @@ def resolve_lsl_stream() -> bool:
             state.inlet = pylsl.StreamInlet(target, max_buflen=1, recover=True)
             state.channel_mapping = create_channel_mapping(state.inlet.info())
             state.connected = True
+            state.last_sample_ts = 0.0
             print(f"✅ Connected to: {target.name()}")
             print(f"Channels: {state.num_channels} @ {state.sr} Hz")
             return True
 
         print("❌ Could not find LSL stream")
         print("Make sure filter_router is running!")
+        state.connected = False
         return False
 
     except Exception as e:
@@ -200,6 +203,7 @@ def broadcast_data(socketio):
                 for sample, ts in zip(samples, timestamps):
                     if len(sample) == state.num_channels:
                         state.sample_count += 1
+                        state.last_sample_ts = time.time()
 
                         channels_data = {}
                         for ch_idx in range(state.num_channels):

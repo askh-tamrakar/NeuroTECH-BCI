@@ -1,3 +1,5 @@
+import { buildApiUrl } from '../utils/runtimeConnection'
+
 const CONFIG_KEY = 'biosignals-config'
 const CONFIG_DEFAULTS = {
     sampling_rate: 1000,
@@ -92,7 +94,7 @@ export const ConfigService = {
             console.warn('⚠️ Failed to load from localStorage:', e)
         }
 
-        const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+        const API_BASE_URL = buildApiUrl('');
 
         // If no cache, try to load from backend (if endpoint exists)
         try {
@@ -154,7 +156,7 @@ export const ConfigService = {
      * Gracefully handles missing endpoint
      */
     async syncFromBackend() {
-        const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+        const API_BASE_URL = buildApiUrl('');
         try {
             const response = await fetch(`${API_BASE_URL}/api/config`)
 
@@ -183,7 +185,7 @@ export const ConfigService = {
      * FIXED: Gracefully handles missing endpoint
      */
     async saveToBackend(config) {
-        const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+        const API_BASE_URL = buildApiUrl('');
         try {
             const response = await fetch(`${API_BASE_URL}/api/config`, {
                 method: 'POST',
@@ -217,7 +219,7 @@ export const ConfigService = {
      * Clear all config (localStorage + backend if available)
      */
     async clearConfig() {
-        const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+        const API_BASE_URL = buildApiUrl('');
         try {
             localStorage.removeItem(CONFIG_KEY)
             console.log('🗑️ Config cleared from localStorage')

@@ -30,10 +30,58 @@ from src.learning.eog_trainer import (
 from src.learning.eeg_lda_trainer import train_eeg_lda_model, evaluate_eeg_lda_model
 from src.config.window_config import SESSION_CONFIG
 from src.feature.extractors.rps_extractor import EMG_BASE_FEATURES, EMG_FEATURE_COLUMNS
+from src.utils.trial_utils import get_next_trial_id
 
 training_bp = Blueprint('training', __name__)
 TRAINING_JOBS = {}
 TRAINING_JOBS_LOCK = threading.Lock()
+
+
+def _safe_int(value, default=None):
+    if value in (None, "", "None", "null", "undefined"):
+        return default
+    return int(value)
+
+
+def _safe_float(value, default=None):
+    if value in (None, "", "None", "null", "undefined"):
+        return default
+    return float(value)
+
+
+def _resolve_eeg_target_frequency(label_value, metadata=None):
+    metadata = metadata or {}
+    explicit = (
+        metadata.get('targetFrequency')
+        or metadata.get('target_frequency')
+        or metadata.get('frequency')
+    )
+    if explicit not in (None, "", "None", "null", "undefined"):
+        return float(explicit)
+
+    cfg = state.config or load_config()
+    eeg_cfg = cfg.get('features', {}).get('EEG', {})
+    target_freqs = [float(freq) for freq in eeg_cfg.get('target_freqs', [8, 9, 12, 14.4, 16, 18])]
+
+    if label_value in (None, "", "Rest", "rest", 0, "0"):
+        return 0.0
+
+    try:
+        label_int = int(label_value)
+    except Exception:
+        label_str = str(label_value).strip().lower()
+        if label_str.startswith('target '):
+            try:
+                label_int = int(label_str.split()[-1])
+            except Exception:
+                return 0.0
+        else:
+            return 0.0
+
+    if 0 < label_int <= len(target_freqs):
+        return float(target_freqs[label_int - 1])
+    return 0.0
+
 
 def extract_features_wrapper(sensor: str, samples: list, sr: int = 1000) -> dict:
     """Route to sensor-specific feature extraction."""
@@ -53,6 +101,13 @@ def _update_training_job(job_id: str, **fields):
         job = TRAINING_JOBS.get(job_id)
         if not job:
             return
+        
+        history_item = fields.pop("history_item", None)
+        if history_item:
+            if "history" not in job:
+                job["history"] = []
+            job["history"].append(history_item)
+            
         job.update(fields)
         if "progress" in fields:
             job["updated_at"] = time.time()
@@ -78,6 +133,7 @@ def _launch_training_job(sensor: str, params: dict, trainer_fn):
             "updated_at": time.time(),
             "result": None,
             "error": None,
+            "history": [],
         }
 
     def progress_callback(payload):
@@ -122,25 +178,25 @@ def api_train_emg():
         params = request.get_json() or {}
         max_d = params.get('max_depth')
         launch_payload = {
-            "n_estimators": int(params.get('n_estimators', 200)),
-            "max_depth": 15 if max_d in {'None', None, ''} else int(max_d),
-            "min_impurity_decrease": float(params.get('min_impurity_decrease', 0.0)),
+            "n_estimators": _safe_int(params.get('n_estimators', 200), 200),
+            "max_depth": _safe_int(max_d, 15),
+            "min_impurity_decrease": _safe_float(params.get('min_impurity_decrease', 0.0), 0.0),
             "table_name": params.get('table_name', 'emg_windows'),
             "model_name": params.get('model_name', 'emg_rf_model'),
-            "train_ratio": float(params.get('train_ratio', 0.7)),
-            "val_ratio": float(params.get('val_ratio', 0.15)),
-            "test_ratio": float(params.get('test_ratio', 0.15)),
-            "k_folds": int(params.get('k_folds', 5)),
-            "random_state": int(params.get('random_state', 42)),
-            "n_estimators_min": params.get('n_estimators_min'),
-            "n_estimators_max": params.get('n_estimators_max'),
-            "max_depth_min": params.get('max_depth_min'),
-            "max_depth_max": params.get('max_depth_max'),
-            "min_impurity_decrease_min": params.get('min_impurity_decrease_min'),
-            "min_impurity_decrease_max": params.get('min_impurity_decrease_max'),
+            "train_ratio": _safe_float(params.get('train_ratio', 0.7), 0.7),
+            "val_ratio": _safe_float(params.get('val_ratio', 0.15), 0.15),
+            "test_ratio": _safe_float(params.get('test_ratio', 0.15), 0.15),
+            "k_folds": _safe_int(params.get('k_folds', 5), 5),
+            "random_state": _safe_int(params.get('random_state', 42), 42),
+            "n_estimators_min": _safe_int(params.get('n_estimators_min')),
+            "n_estimators_max": _safe_int(params.get('n_estimators_max')),
+            "max_depth_min": _safe_int(params.get('max_depth_min')),
+            "max_depth_max": _safe_int(params.get('max_depth_max')),
+            "min_impurity_decrease_min": _safe_float(params.get('min_impurity_decrease_min')),
+            "min_impurity_decrease_max": _safe_float(params.get('min_impurity_decrease_max')),
             "criterion": params.get('criterion', 'gini'),
             "max_features": params.get('max_features', 'sqrt'),
-            "search_resolution": int(params.get('search_resolution', 3)),
+            "search_resolution": _safe_int(params.get('search_resolution', 3), 3),
         }
         return jsonify(_launch_training_job('EMG', launch_payload, train_emg_model)), 202
     except Exception as e:
@@ -152,25 +208,25 @@ def api_train_eog():
         params = request.get_json() or {}
         max_d = params.get('max_depth')
         launch_payload = {
-            "n_estimators": int(params.get('n_estimators', 100)),
-            "max_depth": None if max_d in {'None', None, ''} else int(max_d),
-            "min_impurity_decrease": float(params.get('min_impurity_decrease', 0.0)),
+            "n_estimators": _safe_int(params.get('n_estimators', 100), 100),
+            "max_depth": _safe_int(max_d, None),
+            "min_impurity_decrease": _safe_float(params.get('min_impurity_decrease', 0.0), 0.0),
             "table_name": params.get('table_name', 'eog_windows'),
             "model_name": params.get('model_name', 'eog_rf'),
-            "train_ratio": float(params.get('train_ratio', 0.7)),
-            "val_ratio": float(params.get('val_ratio', 0.15)),
-            "test_ratio": float(params.get('test_ratio', 0.15)),
-            "k_folds": int(params.get('k_folds', 5)),
-            "random_state": int(params.get('random_state', 42)),
-            "n_estimators_min": params.get('n_estimators_min'),
-            "n_estimators_max": params.get('n_estimators_max'),
-            "max_depth_min": params.get('max_depth_min'),
-            "max_depth_max": params.get('max_depth_max'),
-            "min_impurity_decrease_min": params.get('min_impurity_decrease_min'),
-            "min_impurity_decrease_max": params.get('min_impurity_decrease_max'),
+            "train_ratio": _safe_float(params.get('train_ratio', 0.7), 0.7),
+            "val_ratio": _safe_float(params.get('val_ratio', 0.15), 0.15),
+            "test_ratio": _safe_float(params.get('test_ratio', 0.15), 0.15),
+            "k_folds": _safe_int(params.get('k_folds', 5), 5),
+            "random_state": _safe_int(params.get('random_state', 42), 42),
+            "n_estimators_min": _safe_int(params.get('n_estimators_min')),
+            "n_estimators_max": _safe_int(params.get('n_estimators_max')),
+            "max_depth_min": _safe_int(params.get('max_depth_min')),
+            "max_depth_max": _safe_int(params.get('max_depth_max')),
+            "min_impurity_decrease_min": _safe_float(params.get('min_impurity_decrease_min')),
+            "min_impurity_decrease_max": _safe_float(params.get('min_impurity_decrease_max')),
             "criterion": params.get('criterion', 'gini'),
             "max_features": params.get('max_features', 'sqrt'),
-            "search_resolution": int(params.get('search_resolution', 3)),
+            "search_resolution": _safe_int(params.get('search_resolution', 3), 3),
         }
         return jsonify(_launch_training_job('EOG', launch_payload, train_eog_model)), 202
     except Exception as e:
@@ -186,15 +242,15 @@ def api_train_eeg_lda():
             "model_name": params.get('model_name', 'eeg_lda'),
             "solver": params.get('solver', 'eigen'),
             "shrinkage": params.get('shrinkage', 'auto'),
-            "train_ratio": float(params.get('train_ratio', 0.7)),
-            "val_ratio": float(params.get('val_ratio', 0.15)),
-            "test_ratio": float(params.get('test_ratio', 0.15)),
-            "k_folds": int(params.get('k_folds', 5)),
-            "random_state": int(params.get('random_state', 42)),
-            "tol": params.get('tol', 0.0001),
-            "tol_min": params.get('tol_min'),
-            "tol_max": params.get('tol_max'),
-            "search_resolution": int(params.get('search_resolution', 3)),
+            "train_ratio": _safe_float(params.get('train_ratio', 0.7), 0.7),
+            "val_ratio": _safe_float(params.get('val_ratio', 0.15), 0.15),
+            "test_ratio": _safe_float(params.get('test_ratio', 0.15), 0.15),
+            "k_folds": _safe_int(params.get('k_folds', 5), 5),
+            "random_state": _safe_int(params.get('random_state', 42), 42),
+            "tol": _safe_float(params.get('tol', 0.0001), 0.0001),
+            "tol_min": _safe_float(params.get('tol_min')),
+            "tol_max": _safe_float(params.get('tol_max')),
+            "search_resolution": _safe_int(params.get('search_resolution', 3), 3),
         }
         return jsonify(_launch_training_job('EEG', launch_payload, train_eeg_lda_model)), 202
     except Exception as e:
@@ -269,6 +325,10 @@ def api_list_models():
                     "created_at": meta.get("created_at"),
                     "accuracy": meta.get("test_accuracy", meta.get("accuracy")),
                     "hyperparameters": {k:v for k,v in meta.items() if k not in ["created_at", "accuracy"]},
+                    "training_duration_seconds": meta.get("training_duration_seconds"),
+                    "total_candidates": meta.get("total_candidates"),
+                    "total_models": meta.get("total_models"),
+                    "k_folds": meta.get("k_folds"),
                     "active": (name == active_name)
                 })
             models.sort(key=lambda x: x.get("created_at") or "", reverse=True)
@@ -526,8 +586,8 @@ def _save_window_payload(payload):
         collection_context = state.session.get_collection_context(sensor_upper) if hasattr(state.session, 'get_collection_context') else None
         effective_metadata = dict(collection_context or {})
         effective_metadata.update(metadata)
-        if sensor_upper in {'EMG', 'EEG'} and not effective_metadata.get('trial_group_id'):
-            effective_metadata['trial_group_id'] = payload.get('trial_group_id') or str(uuid.uuid4())
+        if sensor_upper in {'EMG', 'EEG'} and not effective_metadata.get('trial_id'):
+            effective_metadata['trial_id'] = payload.get('trial_id') or payload.get('trial_group_id') or get_next_trial_id()
         collection_mode = str(
             effective_metadata.get('collectionMode')
             or effective_metadata.get('mode')
@@ -572,14 +632,15 @@ def _save_window_payload(payload):
             features['gap_ms'] = float(gap_ms)
             features['metadata_json'] = json.dumps(effective_metadata)
             features['source'] = str(effective_metadata.get('source', 'manual_window'))
-            features['trial_group_id'] = str(effective_metadata.get('trial_group_id', ''))
+            features['trial_id'] = str(effective_metadata.get('trial_id', ''))
         elif sensor_upper == 'EEG':
-            features['target_frequency'] = float(effective_metadata.get('targetFrequency', effective_metadata.get('frequency', 0)) or 0)
+            features['target_frequency'] = _resolve_eeg_target_frequency(action, effective_metadata)
             features['channel_index'] = int(effective_metadata.get('channelIndex', payload.get('channel', 0)) or 0)
             features['sample_count'] = int(effective_metadata.get('sampleCount', len(samples)) or len(samples))
             features['window_ms'] = float(effective_metadata.get('windowMs', (len(samples) / sr) * 1000.0) or 0)
+            effective_metadata['target_frequency'] = float(features['target_frequency'])
             features['metadata_json'] = json.dumps(effective_metadata)
-            features['trial_group_id'] = str(effective_metadata.get('trial_group_id', ''))
+            features['trial_id'] = str(effective_metadata.get('trial_id', ''))
 
         ts = time.time()
         features['timestamp'] = ts
@@ -599,7 +660,7 @@ def _save_window_payload(payload):
                 "sensor": "EMG",
                 "table_name": table_name,
                 "session_name": session_name,
-                "storage_format": "compact_emg_v1",
+                "storage_format": "compact_emg_v2",
                 "feature_columns": EMG_FEATURE_COLUMNS,
                 "training_window_ms": float(features.get('session_window_ms', SESSION_CONFIG["window_ms"])),
                 "capture_window_ms": float(features.get('window_ms', SESSION_CONFIG["window_ms"])),
@@ -608,6 +669,31 @@ def _save_window_payload(payload):
                 "stride_ms": float(features.get('session_stride_ms', 0.0)),
                 "gap_ms": float(features.get('gap_ms', 0.0)),
                 "channel_index": int(features.get('channel_index', 0) or 0),
+                "source": str(effective_metadata.get('source', 'frontend_auto_window')),
+            })
+        elif sensor_upper == 'EOG':
+            window_ms = float(effective_metadata.get('windowMs', (len(samples) / sr) * 1000.0) or 0)
+            db_manager.save_session_metadata('EOG', table_name, {
+                "sensor": "EOG",
+                "table_name": table_name,
+                "session_name": session_name,
+                "window_ms": window_ms,
+                "stride_ms": window_ms,
+                "overlap": 0.0,
+                "sampling_rate": float(effective_metadata.get('samplingRate', effective_metadata.get('sampling_rate', sr)) or sr),
+                "channel_index": int(effective_metadata.get('channelIndex', effective_metadata.get('channel_index', payload.get('channel', 0))) or 0),
+                "source": str(effective_metadata.get('source', 'frontend_auto_window')),
+            })
+        elif sensor_upper == 'EEG':
+            db_manager.save_session_metadata('EEG', table_name, {
+                "sensor": "EEG",
+                "table_name": table_name,
+                "session_name": session_name,
+                "window_ms": float(features.get('window_ms', 0.0)),
+                "stride_ms": float(features.get('window_ms', 0.0)),
+                "sampling_rate": float(effective_metadata.get('samplingRate', effective_metadata.get('sampling_rate', sr)) or sr),
+                "channel_index": int(features.get('channel_index', 0) or 0),
+                "target_frequency": float(features.get('target_frequency', 0.0) or 0.0),
                 "source": str(effective_metadata.get('source', 'frontend_auto_window')),
             })
         
@@ -753,6 +839,9 @@ def api_save_windows_batch():
         shared_sensor = payload.get('sensor')
         shared_session_name = payload.get('session_name') or payload.get('sessionName')
         shared_mode = payload.get('mode')
+        shared_trial_id = None
+        if str(shared_sensor or '').upper() in {'EMG', 'EEG'}:
+            shared_trial_id = payload.get('trial_id') or payload.get('trial_group_id') or get_next_trial_id()
 
         results = []
         saved_count = 0
@@ -766,6 +855,8 @@ def api_save_windows_batch():
                 window_payload['session_name'] = shared_session_name
             if shared_mode and not window_payload.get('mode'):
                 window_payload['mode'] = shared_mode
+            if shared_trial_id and not (window_payload.get('trial_id') or window_payload.get('trial_group_id')):
+                window_payload['trial_id'] = shared_trial_id
 
             response = _save_window_payload(window_payload)
             if isinstance(response, tuple):

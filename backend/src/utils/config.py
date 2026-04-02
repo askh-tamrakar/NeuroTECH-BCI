@@ -6,6 +6,9 @@ Loads and watches multiple configuration JSON files:
 - sensor_config.json (main hardware config)
 - filter_config.json (filter parameters by sensor)
 - calibration_config.json (calibration data by channel)
+- feature_config.json (detector/model config by sensor)
+- detection_state.json (runtime routing state)
+- sensor_presets.json (runtime preset library)
 
 Provides:
 1. ConfigWatcher - Auto-reload on file changes
@@ -186,6 +189,7 @@ class ConfigManager:
     - sensor_config.json (main config)
     - filter_config.json (filters by sensor)
     - calibration_config.json (calibration by channel)
+    - sensor_presets.json (preset library)
     """
 
     def __init__(self, config_dir: Optional[Path] = None):
@@ -222,6 +226,12 @@ class ConfigManager:
         )
         self.feature_writer = ConfigWriter(
             self.config_dir / "feature_config.json", name="FeatureConfig"
+        )
+        self.sensor_presets = ConfigWatcher(
+            self.config_dir / "sensor_presets.json", name="SensorPresets"
+        )
+        self.sensor_presets_writer = ConfigWriter(
+            self.config_dir / "sensor_presets.json", name="SensorPresets"
         )
 
     # ============== SENSOR CONFIG ==============
@@ -308,6 +318,14 @@ class ConfigManager:
         
         config["active_models"][sensor.upper()] = model_name
         return self.save_sensor_config(config)
+
+    def get_sensor_presets(self) -> Dict[str, Any]:
+        """Return the runtime sensor preset library."""
+        return self.sensor_presets.get_all()
+
+    def save_sensor_presets(self, config: Dict[str, Any]) -> bool:
+        """Persist the runtime sensor preset library."""
+        return self.sensor_presets_writer.save(config, validate=True, backup=True)
 
     def get_config_version_hash(self) -> str:
         """

@@ -5,8 +5,7 @@ let activeSensor = 'EMG';
 let isTestMode = false;
 let sessions = [];
 let loading = false;
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+let apiBaseUrl = '';
 
 // --- Message Handler ---
 self.onmessage = async function (e) {
@@ -16,6 +15,7 @@ self.onmessage = async function (e) {
         case 'INIT':
             activeSensor = payload.sensor || activeSensor;
             isTestMode = payload.isTestMode !== undefined ? payload.isTestMode : isTestMode;
+            apiBaseUrl = payload.apiBaseUrl || apiBaseUrl;
             await fetchSessions();
             break;
         case 'SET_SENSOR':
@@ -56,8 +56,8 @@ async function fetchSessions(silent = false) {
     }
     try {
         const url = isTestMode
-            ? `${API_BASE_URL}/api/prediction/sessions`
-            : `${API_BASE_URL}/api/sessions/${activeSensor}`;
+            ? `${apiBaseUrl}/api/prediction/sessions`
+            : `${apiBaseUrl}/api/sessions/${activeSensor}`;
 
         const res = await fetch(url);
         const data = await res.json();
@@ -101,7 +101,7 @@ async function handleRename(oldName, newName) {
     const cleanNew = newName.trim().replace(/[^a-zA-Z0-9]/g, '_');
 
     try {
-        const res = await fetch(`${API_BASE_URL}/api/sessions/${activeSensor}/${encodeURIComponent(oldName)}/rename`, {
+        const res = await fetch(`${apiBaseUrl}/api/sessions/${activeSensor}/${encodeURIComponent(oldName)}/rename`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ new_name: cleanNew })
@@ -121,8 +121,8 @@ async function handleRename(oldName, newName) {
 async function handleDeleteSession(name) {
     try {
         const url = isTestMode
-            ? `${API_BASE_URL}/api/prediction/sessions/${name}`
-            : `${API_BASE_URL}/api/sessions/${activeSensor}/${name}`;
+            ? `${apiBaseUrl}/api/prediction/sessions/${name}`
+            : `${apiBaseUrl}/api/sessions/${activeSensor}/${name}`;
 
         const res = await fetch(url, { method: 'DELETE' });
 
@@ -142,8 +142,8 @@ async function handleDeleteSession(name) {
 async function handleClearSession(name) {
     try {
         const url = isTestMode
-            ? `${API_BASE_URL}/api/prediction/sessions/${name}/clear`
-            : `${API_BASE_URL}/api/sessions/${activeSensor}/${name}/clear`;
+            ? `${apiBaseUrl}/api/prediction/sessions/${name}/clear`
+            : `${apiBaseUrl}/api/sessions/${activeSensor}/${name}/clear`;
 
         const res = await fetch(url, { method: 'DELETE' });
 
@@ -162,7 +162,7 @@ async function handleMultiMerge(sourceSessions, targetName) {
     const targetClean = targetName.trim().replace(/[^a-zA-Z0-9]/g, '_');
 
     try {
-        const res = await fetch(`${API_BASE_URL}/api/sessions/${activeSensor}/merge_multiple`, {
+        const res = await fetch(`${apiBaseUrl}/api/sessions/${activeSensor}/merge_multiple`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -187,10 +187,10 @@ async function fetchSessionDetails({ fullName, limit = 20, offset = 0, isReset =
     try {
         let url;
         if (isTestMode) {
-            url = `${API_BASE_URL}/api/prediction/sessions/${fullName}`;
+            url = `${apiBaseUrl}/api/prediction/sessions/${fullName}`;
         } else {
             const sensor = fullName.split('_')[0].toUpperCase(); // Extract sensor from fullName
-            url = `${API_BASE_URL}/api/sessions/${sensor}/${fullName}?limit=${limit}&offset=${offset}`;
+            url = `${apiBaseUrl}/api/sessions/${sensor}/${fullName}?limit=${limit}&offset=${offset}`;
             if (sortBy) url += `&sortBy=${sortBy}`;
             if (order) url += `&order=${order}`;
             if (label !== null && label !== undefined) url += `&label=${label}`;
@@ -222,8 +222,8 @@ async function fetchSessionDetails({ fullName, limit = 20, offset = 0, isReset =
 async function handleDeleteRow({ fullName, rowId }) {
     try {
         const url = isTestMode
-            ? `${API_BASE_URL}/api/prediction/sessions/${fullName}/rows/${rowId}`
-            : `${API_BASE_URL}/api/sessions/${activeSensor}/${fullName}/rows/${rowId}`;
+            ? `${apiBaseUrl}/api/prediction/sessions/${fullName}/rows/${rowId}`
+            : `${apiBaseUrl}/api/sessions/${activeSensor}/${fullName}/rows/${rowId}`;
 
         const res = await fetch(url, { method: 'DELETE' });
 

@@ -89,7 +89,7 @@ const MoveImage = ({ move, assetType, type, onImageError, globalFallbackMode }) 
 };
 
 const RPSGame = ({ wsEvent }) => {
-    const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+    const API_BASE_URL = buildApiUrl('');
 
     // Game State
     const [gameState, setGameState] = useState('idle'); // 'idle', 'waiting', 'revealed', 'resetting'
@@ -510,147 +510,7 @@ const RPSGame = ({ wsEvent }) => {
     };
 
     return (
-        <div className="rps-container overflow-hidden pt-[72px] pb-[32px] relative h-full flex flex-row-reverse w-full">
-
-            {/* Main Game Area */}
-            <div className="flex-1 flex flex-col items-center justify-start h-full overflow-hidden w-full relative">
-
-                {/* Header (Play Button, Scoreboard, Title) */}
-                <div className="rps-header flex items-center justify-between w-full px-4 md:px-8 py-2 md:py-4 z-20 shrink-0 relative">
-                    {/* Play Button & Status on left */}
-                    <div className="w-1/3 flex justify-start items-center gap-4 z-50">
-                        {gameState === 'idle' ? (
-                            <button
-                                onClick={handlePlay}
-                                className="px-6 md:px-8 py-2 bg-primary text-primary-contrast rounded-xl font-bold text-lg shadow-lg hover:scale-105 transition-transform animate-in zoom-in duration-300"
-                            >
-                                PLAY
-                            </button>
-                        ) : (
-                            <button
-                                onClick={() => {
-                                    setGameState('idle');
-                                    togglePrediction(false);
-                                }}
-                                className="px-4 md:px-6 py-2 bg-red-600/90 hover:bg-red-500 text-white rounded-xl font-bold text-lg shadow-lg hover:scale-105 transition-transform animate-in zoom-in duration-300"
-                            >
-                                STOP
-                            </button>
-                        )}
-
-                        {gameState === 'waiting' && !manualMode && (
-                            <span className="pulse text-lg md:text-xl font-bold">
-                                {currentPrediction === 'REST' || currentPrediction === 'UNKNOWN'
-                                    ? "Waiting for Gesture..."
-                                    : "Recording..."}
-                            </span>
-                        )}
-                        {gameState === 'waiting_for_rest' && !manualMode && (
-                            <span className="animate-pulse text-yellow-400 text-lg md:text-xl font-bold">Release Gesture...</span>
-                        )}
-                        {gameState === 'waiting' && manualMode && (
-                            <span className="pulse text-lg md:text-xl font-bold">Manual Mode: press <strong className="text-primary font-black">R</strong>/<strong className="text-primary font-black">P</strong>/<strong className="text-primary font-black">S</strong></span>
-                        )}
-                    </div>
-
-                    {/* Centered Scoreboard */}
-                    <div className="scoreboard-container flex flex-col items-center absolute left-1/2 -translate-x-1/2 pointer-events-none">
-                        <div className="scoreboard transform-none left-auto top-auto pointer-events-auto" style={{ margin: 0 }}>
-                            <div>Player: <strong>{score.player}</strong></div>
-                            <div>Computer: <strong>{score.computer}</strong></div>
-                        </div>
-                        {gameState !== 'waiting' && result && countdown > 0 && (
-                            <div className="mt-2 text-center animate-in slide-in-from-top duration-300">
-                                <div className="text-muted font-mono tracking-widest text-sm md:text-lg">
-                                    RESETTING IN {countdown}...
-                                </div>
-                            </div>
-                        )}
-                    </div>
-
-                    {/* Title on right */}
-                    <div className="w-1/3 flex justify-end">
-                        <div className="rps-title text-right m-0 whitespace-nowrap">NEURO RPS</div>
-                    </div>
-                </div>
-
-                {/* Arena */}
-                <div className="rps-arena flex-1 flex flex-col items-center justify-center relative w-full px-4 overflow-hidden md:mb-8">
-
-                    {/* Celebration Overlay */}
-                    {matchWinner && (
-                        <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm animate-in fade-in duration-500">
-                            <div className="flex flex-col items-center p-8 bg-surface border border-primary/50 rounded-2xl shadow-[0_0_50px_rgba(0,243,255,0.3)] animate-in zoom-in duration-700 delay-150">
-                                <Trophy size={64} className={`mb-4 ${matchWinner === 'player' ? 'text-green-400' : 'text-red-400'} animate-bounce`} />
-                                <h2 className="text-4xl md:text-5xl font-black mb-2 uppercase tracking-widest text-center" style={{ textShadow: '0 4px 20px rgba(0,0,0,0.5)' }}>
-                                    {matchWinner === 'player' ? 'You Win!' : 'Computer Wins!'}
-                                </h2>
-                                <p className="text-muted text-lg font-mono mb-8 uppercase tracking-widest">Match Over</p>
-                                <button
-                                    onClick={resetMatch}
-                                    className="px-8 py-3 bg-primary text-primary-contrast rounded-xl font-bold text-xl shadow-[0_0_20px_rgba(0,243,255,0.4)] hover:scale-105 transition-transform"
-                                >
-                                    Play Again
-                                </button>
-                            </div>
-                        </div>
-                    )}
-
-                    <div className="status-text shrink-0" style={{ minHeight: '60px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1rem' }}>
-                        {gameState !== 'waiting' && gameState !== 'waiting_for_rest' && gameState !== 'idle' && (
-                            <span className="animate-in fade-in zoom-in duration-300 text-2xl md:text-3xl font-black text-primary tracking-widest uppercase" style={{ textShadow: '0 0 15px rgba(0, 243, 255, 0.4)' }}>
-                                {result === 'TIE' ? "IT'S A TIE!" : `YOU ${result}!`}
-                            </span>
-                        )}
-                    </div>
-
-                    <div className="cards-row flex flex-row items-center justify-center gap-2 md:gap-12 w-full mt-4 md:mt-12 shrink-0">
-                        {renderCard('player', playerMove, !!playerMove)}
-                        <div className="vs-badge shrink-0">VS</div>
-                        {renderCard('computer', computerMove, gameState !== 'waiting')}
-                    </div>
-
-                    {feedbackPending && lastDetectionMeta && (
-                        <div className="mt-6 flex flex-col items-center gap-3 bg-surface/70 border border-border rounded-2xl px-5 py-4 shadow-xl animate-in fade-in duration-300">
-                            <div className="text-sm font-bold uppercase tracking-widest text-muted">Detection Feedback</div>
-                            <div className="text-base text-text text-center">
-                                Detected: <span className="font-black text-primary">{lastDetectionMeta.prediction}</span>
-                            </div>
-                            {!showCorrectionPicker ? (
-                                <div className="flex gap-3">
-                                    <button
-                                        onClick={() => submitFeedback()}
-                                        disabled={feedbackSaving}
-                                        className="px-4 py-2 rounded-xl bg-green-500/10 border border-green-500/30 text-green-400 font-bold hover:bg-green-500/20 transition-colors"
-                                    >
-                                        YES
-                                    </button>
-                                    <button
-                                        onClick={() => setShowCorrectionPicker(true)}
-                                        disabled={feedbackSaving}
-                                        className="px-4 py-2 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 font-bold hover:bg-red-500/20 transition-colors"
-                                    >
-                                        NO
-                                    </button>
-                                </div>
-                            ) : (
-                                <div className="flex flex-wrap items-center justify-center gap-2">
-                                    {MOVES.map((move) => (
-                                        <button
-                                            key={move}
-                                            onClick={() => submitFeedback(move)}
-                                            disabled={feedbackSaving}
-                                            className="px-3 py-2 rounded-xl bg-primary/10 border border-primary/30 text-primary font-bold hover:bg-primary/20 transition-colors"
-                                        >
-                                            {move}
-                                        </button>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    )}
-                </div>
-            </div>
+        <div className="rps-container overflow-hidden relative h-full flex flex-row w-full">
 
             {/* Left Sidebar Container */}
             <div className={`transition-all duration-300 ease-in-out border-r border-border bg-surface/80 backdrop-blur-md flex flex-col h-full relative ${!isSidebarCollapsed ? 'w-80 overflow-y-auto overflow-x-hidden' : 'w-[4.5rem] overflow-visible'} [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']`}>
@@ -800,49 +660,200 @@ const RPSGame = ({ wsEvent }) => {
                                 <span className="text-xs font-bold text-primary mr-2 uppercase tracking-wide">
                                     {assetType === 'set1' ? 'Classic' : 'Variant'}
                                 </span>
-                                <ImageIcon size={16} className="text-primary" />
+                                <ImageIcon size={14} className="text-primary/70" />
                             </button>
                         </div>
                     </div>
 
-                    {/* Match Controls */}
-                    <button
-                        onClick={resetMatch}
-                        className="flex items-center justify-center gap-2 w-full py-3 mt-2 rounded-xl bg-red-500/10 border border-red-500/30 text-red-500 font-bold uppercase tracking-widest hover:bg-red-500/20 hover:border-red-500/50 transition-all shrink-0"
-                    >
-                        Reset Match
-                    </button>
+                    <div className="h-[20px] shrink-0" />
 
-                    {/* Event Log Panel */}
-                    <div className="w-full h-full flex flex-col bg-surface/30 border border-text/40 rounded-2xl p-4 backdrop-blur-md shadow-2xl">
-                        <div className="text-sm font-bold text-muted uppercase tracking-wider mb-4 flex justify-between items-center pb-3 border-b border-text/40 flex-shrink-0">
-                            <span>Event Log</span>
-                            <span className="text-[11px] opacity-60">Last 10 events</span>
+                    {/* Event Log */}
+                    <div className="flex-1 flex flex-col min-h-0 bg-bg/20 rounded-2xl border border-border/40 overflow-hidden">
+                        <div className="px-4 py-3 border-b border-border/40 bg-white/5 flex items-center justify-between">
+                            <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted flex items-center gap-2">
+                                <History size={14} /> Event Log
+                            </div>
+                            <span className="text-[9px] font-bold text-primary/50 uppercase tracking-tighter">Last 10 events</span>
                         </div>
-                        <div className="space-y-1.5 font-mono text-xs overflow-y-auto flex-1 pr-2 custom-scrollbar">
-                            {eventLogs.length === 0 ? (
-                                <div className="text-muted/50 italic py-4 text-center text-xs">No events received yet...</div>
-                            ) : (
+                        <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-2 custom-scrollbar">
+                            {eventLogs.length > 0 ? (
                                 eventLogs.map((log) => (
-                                    <div key={log.id} className="flex gap-3 py-1.5 border-b border-white/5 last:border-0 hover:bg-white/5 px-2 rounded text-xs">
-                                        <span className="text-muted text-[12px] shrink-0">{log.time}</span>
-                                        <span className={`font-bold text-[18px] ${log.name === 'ROCK' ? 'text-amber-400' :
-                                            log.name === 'PAPER' ? 'text-blue-400' :
-                                                log.name === 'SCISSORS' ? 'text-pink-400' : 'text-text'
-                                            }`}>
-                                            {log.name}
-                                        </span>
-                                        <span className="text-muted ml-auto text-[15px] shrink-0">{log.channel}</span>
+                                    <div key={log.id} className="flex items-center justify-between p-2.5 rounded-xl bg-surface/50 border border-border/30 animate-in slide-in-from-left duration-300">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                                                {log.name === 'ROCK' ? <HandFist size={16} className="text-primary" /> : log.name === 'PAPER' ? <Hand size={16} className="text-primary" /> : log.name === 'SCISSORS' ? <Scissors size={16} className="text-primary" /> : <Activity size={16} className="text-primary" />}
+                                            </div>
+                                            <div>
+                                                <div className="text-xs font-bold text-text tracking-wider">{log.name}</div>
+                                                <div className="text-[9px] text-muted">{log.time}</div>
+                                            </div>
+                                        </div>
+                                        <div className="text-[10px] font-bold text-primary/60">{log.channel}</div>
                                     </div>
                                 ))
+                            ) : (
+                                <div className="h-full flex flex-col items-center justify-center text-muted opacity-40 py-8">
+                                    <ScrollText size={32} strokeWidth={1} />
+                                    <span className="text-[10px] font-bold uppercase tracking-widest mt-3">No events received yet...</span>
+                                </div>
                             )}
                         </div>
                     </div>
 
+                    <div className="px-2 py-3 shrink-0">
+                        <button
+                            onClick={resetMatch}
+                            className="w-full py-3.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-500 font-bold text-xs uppercase tracking-[0.2em] hover:bg-red-500/20 transition-all active:scale-95"
+                        >
+                            Reset Match
+                        </button>
+                    </div>
                 </div>
             </div>
+
+            {/* Main Game Area */}
+            <div className="flex-1 flex flex-col items-center justify-start h-full overflow-hidden w-full relative">
+
+                {/* Header (Play Button, Scoreboard, Title) */}
+                <div className="rps-header flex items-center justify-between w-full px-4 md:px-8 py-2 md:py-4 z-20 shrink-0 relative">
+                    {/* Play Button & Status on left */}
+                    <div className="w-1/3 flex justify-start items-center gap-4 z-50">
+                        {gameState === 'idle' ? (
+                            <button
+                                onClick={handlePlay}
+                                className="px-6 md:px-8 py-2 bg-primary text-primary-contrast rounded-xl font-bold text-lg shadow-lg hover:scale-105 transition-transform animate-in zoom-in duration-300"
+                            >
+                                PLAY
+                            </button>
+                        ) : (
+                            <button
+                                onClick={() => {
+                                    setGameState('idle');
+                                    togglePrediction(false);
+                                }}
+                                className="px-4 md:px-6 py-2 bg-red-600/90 hover:bg-red-500 text-white rounded-xl font-bold text-lg shadow-lg hover:scale-105 transition-transform animate-in zoom-in duration-300"
+                            >
+                                STOP
+                            </button>
+                        )}
+
+                        {gameState === 'waiting' && !manualMode && (
+                            <span className="pulse text-lg md:text-xl font-bold">
+                                {currentPrediction === 'REST' || currentPrediction === 'UNKNOWN'
+                                    ? "Waiting for Gesture..."
+                                    : "Recording..."}
+                            </span>
+                        )}
+                        {gameState === 'waiting_for_rest' && !manualMode && (
+                            <span className="animate-pulse text-yellow-400 text-lg md:text-xl font-bold">Release Gesture...</span>
+                        )}
+                        {gameState === 'waiting' && manualMode && (
+                            <span className="pulse text-lg md:text-xl font-bold">Manual Mode: press <strong className="text-primary font-black">R</strong>/<strong className="text-primary font-black">P</strong>/<strong className="text-primary font-black">S</strong></span>
+                        )}
+                    </div>
+
+                    {/* Centered Scoreboard */}
+                    <div className="scoreboard-container flex flex-col items-center absolute left-1/2 -translate-x-1/2 pointer-events-none">
+                        <div className="scoreboard transform-none left-auto top-auto pointer-events-auto" style={{ margin: 0 }}>
+                            <div>Player: <strong>{score.player}</strong></div>
+                            <div>Computer: <strong>{score.computer}</strong></div>
+                        </div>
+                        {gameState !== 'waiting' && result && countdown > 0 && (
+                            <div className="mt-2 text-center animate-in slide-in-from-top duration-300">
+                                <div className="text-muted font-mono tracking-widest text-sm md:text-lg">
+                                    RESETTING IN {countdown}...
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Title on right */}
+                    <div className="w-1/3 flex justify-end">
+                        <div className="rps-title text-right m-0 whitespace-nowrap">NEURO RPS</div>
+                    </div>
+                </div>
+
+                {/* Arena */}
+                <div className="rps-arena flex-1 flex flex-col items-center justify-center relative w-full px-4 overflow-hidden md:mb-8">
+
+                    {/* Celebration Overlay */}
+                    {matchWinner && (
+                        <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm animate-in fade-in duration-500">
+                            <div className="flex flex-col items-center p-8 bg-surface border border-primary/50 rounded-2xl shadow-[0_0_50px_rgba(0,243,255,0.3)] animate-in zoom-in duration-700 delay-150">
+                                <Trophy size={64} className={`mb-4 ${matchWinner === 'player' ? 'text-green-400' : 'text-red-400'} animate-bounce`} />
+                                <h2 className="text-4xl md:text-5xl font-black mb-2 uppercase tracking-widest text-center" style={{ textShadow: '0 4px 20px rgba(0,0,0,0.5)' }}>
+                                    {matchWinner === 'player' ? 'You Win!' : 'Computer Wins!'}
+                                </h2>
+                                <p className="text-muted text-lg font-mono mb-8 uppercase tracking-widest">Match Over</p>
+                                <button
+                                    onClick={resetMatch}
+                                    className="px-8 py-3 bg-primary text-primary-contrast rounded-xl font-bold text-xl shadow-[0_0_20px_rgba(0,243,255,0.4)] hover:scale-105 transition-transform"
+                                >
+                                    Play Again
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="status-text shrink-0" style={{ minHeight: '60px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1rem' }}>
+                        {gameState !== 'waiting' && gameState !== 'waiting_for_rest' && gameState !== 'idle' && (
+                            <span className="animate-in fade-in zoom-in duration-300 text-2xl md:text-3xl font-black text-primary tracking-widest uppercase" style={{ textShadow: '0 0 15px rgba(0, 243, 255, 0.4)' }}>
+                                {result === 'TIE' ? "IT'S A TIE!" : `YOU ${result}!`}
+                            </span>
+                        )}
+                    </div>
+
+                    <div className="cards-row flex flex-row items-center justify-center gap-2 md:gap-12 w-full mt-4 md:mt-12 shrink-0">
+                        {renderCard('player', playerMove, !!playerMove)}
+                        <div className="vs-badge shrink-0">VS</div>
+                        {renderCard('computer', computerMove, gameState !== 'waiting')}
+                    </div>
+
+                    {feedbackPending && lastDetectionMeta && (
+                        <div className="mt-6 flex flex-col items-center gap-3 bg-surface/70 border border-border rounded-2xl px-5 py-4 shadow-xl animate-in fade-in duration-300">
+                            <div className="text-sm font-bold uppercase tracking-widest text-muted">Detection Feedback</div>
+                            <div className="text-base text-text text-center">
+                                Detected: <span className="font-black text-primary">{lastDetectionMeta.prediction}</span>
+                            </div>
+                            {!showCorrectionPicker ? (
+                                <div className="flex gap-3">
+                                    <button
+                                        onClick={() => submitFeedback()}
+                                        disabled={feedbackSaving}
+                                        className="px-4 py-2 rounded-xl bg-green-500/10 border border-green-500/30 text-green-400 font-bold hover:bg-green-500/20 transition-colors"
+                                    >
+                                        YES
+                                    </button>
+                                    <button
+                                        onClick={() => setShowCorrectionPicker(true)}
+                                        disabled={feedbackSaving}
+                                        className="px-4 py-2 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 font-bold hover:bg-red-500/20 transition-colors"
+                                    >
+                                        NO
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="flex flex-wrap items-center justify-center gap-2">
+                                    {MOVES.map((move) => (
+                                        <button
+                                            key={move}
+                                            onClick={() => submitFeedback(move)}
+                                            disabled={feedbackSaving}
+                                            className="px-3 py-2 rounded-xl bg-primary/10 border border-primary/30 text-primary font-bold hover:bg-primary/20 transition-colors"
+                                        >
+                                            {move}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            </div>
+
         </div>
     );
 };
 
 export default RPSGame;
+import { buildApiUrl } from '../../utils/runtimeConnection';

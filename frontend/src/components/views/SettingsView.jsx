@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
+
 import { useTheme } from '../../contexts/ThemeContext'
 import { useAuth } from '../../contexts/AuthContext'
 import {
@@ -43,6 +45,7 @@ import { soundHandler } from '../../handlers/SoundHandler'
 import { Music, Volume2, Upload, VolumeX } from 'lucide-react'
 import { audioStorage } from '../../utils/AudioStorage'
 import { Reorder } from 'framer-motion'
+import { buildApiUrl } from '../../utils/runtimeConnection'
 
 // Helper for color inputs
 const ColorInput = ({ label, value, onChange }) => (
@@ -129,14 +132,18 @@ const generateRandomHex = () => {
 
 export default function SettingsView({
   latency = 0,
+  connectionState = 'disconnected',
+  connectionStatus = null,
+  apiUrl = '',
   localWs = '',
   setLocalWs = () => { },
   ngrokWs = '',
   setNgrokWs = () => { },
-  connect = () => { },
-  activeSection: controlledSection,
-  onSectionChange
+  connect = () => { }
 }) {
+  const navigate = useNavigate();
+  const location = useLocation();
+
   const {
     themes,
     currentTheme,
@@ -160,19 +167,49 @@ export default function SettingsView({
 
   // Telemetry state
   const [fps, setFps] = useState(0);
-  const [activeSection, setActiveSection] = useState(controlledSection || 'account');
+  // activeSection derived from path
+  const activeSection = useMemo(() => {
+    const path = location.pathname;
+    if (path.includes('/account')) return 'account';
+    if (path.includes('/style')) return 'appearance';
+    if (path.includes('/link')) return 'connectivity';
+    if (path.includes('/sountrack')) return 'audio';
+    if (path.includes('/keys')) return 'hotkeys';
+    return 'account';
+  }, [location.pathname]);
 
-  // Sync with prop
-  useEffect(() => {
-    if (controlledSection) {
-      setActiveSection(controlledSection);
-    }
-  }, [controlledSection]);
+  const isConnectedState = connectionState === 'connected' || connectionState === 'streaming' || connectionState === 'stream_offline';
+  const connectionLabel = connectionState === 'streaming'
+    ? 'Streaming'
+    : connectionState === 'stream_offline'
+      ? 'Stream Offline'
+      : connectionState === 'connected'
+        ? 'Connected'
+        : connectionState === 'connecting'
+          ? 'Connecting'
+          : 'Disconnected';
+  const connectionColorClass = connectionState === 'streaming' || connectionState === 'connected'
+    ? 'text-emerald-500'
+    : connectionState === 'stream_offline' || connectionState === 'connecting'
+      ? 'text-amber-500'
+      : 'text-red-500';
+  const connectionDotClass = connectionState === 'streaming' || connectionState === 'connected'
+    ? 'bg-emerald-500'
+    : connectionState === 'stream_offline' || connectionState === 'connecting'
+      ? 'bg-amber-500'
+      : 'bg-red-500';
 
   const handleSectionChange = (id) => {
-    setActiveSection(id);
-    if (onSectionChange) onSectionChange(id);
+    const pathMap = {
+      'account': 'account',
+      'appearance': 'style',
+      'connectivity': 'link',
+      'audio': 'sountrack',
+      'hotkeys': 'keys'
+    };
+    navigate(`/dashboard/settings/${pathMap[id] || id}`);
   };
+
 
   // Theme Builder State
   const [builderName, setBuilderName] = useState('Custom Theme');
@@ -373,10 +410,9 @@ export default function SettingsView({
 
       // 3. Optional: Try to upload to backend if online
       try {
-        const API_BASE_URL = import.meta.env.VITE_API_URL || '';
         const formData = new FormData();
         formData.append('file', file);
-        fetch(`${API_BASE_URL}/api/audio/upload`, { method: 'POST', body: formData })
+        fetch(buildApiUrl('/api/audio/upload'), { method: 'POST', body: formData })
           .catch(e => console.log('Offline: Could not sync to server, but saved locally.'));
       } catch (e) {
         // Ignore backend sync errors
@@ -408,8 +444,7 @@ export default function SettingsView({
 
       // 3. Optional: Try to delete from server
       try {
-        const API_BASE_URL = import.meta.env.VITE_API_URL || '';
-        fetch(`${API_BASE_URL}/api/audio/track/${filename}`, { method: 'DELETE' })
+        fetch(buildApiUrl(`/api/audio/track/${filename}`), { method: 'DELETE' })
           .catch(e => console.log('Offline: Could not delete from server.'));
       } catch (e) { }
 
@@ -438,8 +473,7 @@ export default function SettingsView({
           } else if (track?.isDefault) {
             trackUrl = `data/audio/${track.name}`;
           } else {
-            const API_BASE_URL = import.meta.env.VITE_API_URL || '';
-            trackUrl = `${API_BASE_URL}/api/audio/track/${settings.audio.bgmTrack}`;
+            trackUrl = buildApiUrl(`/api/audio/track/${settings.audio.bgmTrack}`);
           }
 
           if (trackUrl) {
@@ -497,12 +531,11 @@ export default function SettingsView({
       <aside className="w-[82px] bg-surface/90 border-r border-border flex flex-col items-center py-6 gap-2 shrink-0 z-20">
         {[
           { id: 'account', icon: UserPlus, label: 'Account' },
+          { id: 'appearance', icon: Palette, label: 'Style', path: 'style' },
+          { id: 'connectivity', icon: Globe, label: 'Link', path: 'link' },
           { divider: true },
-          { id: 'appearance', icon: Palette, label: 'Style' },
-          { id: 'connectivity', icon: Globe, label: 'Link' },
-          { divider: true },
-          { id: 'audio', icon: Music, label: 'Audio' },
-          { id: 'hotkeys', icon: Keyboard, label: 'Keys' }
+          { id: 'audio', icon: Music, label: 'Audio', path: 'sountrack' },
+          { id: 'hotkeys', icon: Keyboard, label: 'Keys', path: 'keys' }
         ].map((item, i) => {
           if (item.divider) return <div key={`div-${i}`} className="w-[38px] h-px bg-border my-2" />;
           const isActive = activeSection === item.id;
@@ -510,10 +543,11 @@ export default function SettingsView({
           return (
             <button
               key={item.id}
-              onClick={() => handleSectionChange(item.id)}
+              onClick={() => navigate(`/dashboard/settings/${item.path || item.id}`)}
               className={`relative w-[58px] h-[58px] rounded-2xl flex flex-col items-center justify-center gap-1 cursor-pointer transition-all border border-transparent group ${isActive ? 'bg-primary/10 border-primary/20' : 'hover:bg-surface'}`}
               title={item.label}
             >
+
               <Icon size={22} className={`transition-all ${isActive ? 'text-primary' : 'text-muted group-hover:text-text'}`} strokeWidth={1.8} />
               <span className={`text-[10px] font-black tracking-[0.1em] uppercase transition-all ${isActive ? 'text-primary' : 'text-muted group-hover:text-text'}`}>
                 {item.label}
@@ -832,7 +866,7 @@ export default function SettingsView({
                   <h2 className="text-[30px] font-bold tracking-tight text-white">Connectivity</h2>
                   <p className="text-[15px] text-muted mt-1.5 font-medium">Manage BCI device link and stream configuration</p>
                 </div>
-                <span className={`text-[12px] font-bold tracking-[0.06em] ${latency > 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                <span className={`text-[12px] font-bold tracking-[0.06em] ${connectionColorClass}`}>
                   ● {latency > 0 ? 'Connected' : 'Disconnected'}
                 </span>
               </div>
@@ -854,6 +888,14 @@ export default function SettingsView({
                         <label className="text-[11px] font-bold uppercase tracking-[0.2em] text-muted">Active Master Socket</label>
                         <input type="text" value={settings.general.wsUrl} onChange={e => updateDeepSettings('general.wsUrl', e.target.value)} className="w-full px-5 py-2.5 bg-bg border border-border rounded-xl outline-none focus:border-primary text-[14px] font-mono tabular-nums transition-all" />
                       </div>
+                    </div>
+                    <div className="h-px bg-border/50" />
+                    <div className="rounded-xl border border-border/60 bg-bg/60 px-4 py-3 text-[12px] font-mono text-muted">
+                      <div>Resolved API: {apiUrl || settings.general.apiUrl || 'unavailable'}</div>
+                      <div>Transport: {connectionState}</div>
+                      {connectionStatus?.stream_active !== undefined && (
+                        <div>Stream active: {connectionStatus.stream_active ? 'yes' : 'no'}</div>
+                      )}
                     </div>
                     <div className="h-px bg-border/50" />
                     <div className="flex flex-col md:flex-row gap-5">
@@ -894,9 +936,9 @@ export default function SettingsView({
                     {latency > 0 ? latency : '—'}
                     <span className="text-[14px] font-normal text-muted ml-1.5 uppercase">ms</span>
                   </div>
-                  <div className={`text-[12px] font-bold mt-2 flex items-center gap-1.5 ${latency > 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-                    <div className={`w-1.5 h-1.5 rounded-full ${latency > 0 ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`} />
-                    {latency > 0 ? 'Connected' : 'No device connected'}
+                  <div className={`text-[12px] font-bold mt-2 flex items-center gap-1.5 ${connectionColorClass}`}>
+                    <div className={`w-1.5 h-1.5 rounded-full ${connectionDotClass} ${isConnectedState ? 'animate-pulse' : ''}`} />
+                    {connectionLabel}
                   </div>
                   <div className="absolute right-0 bottom-0 flex items-end gap-[4px] opacity-20 p-4 h-[50px] pointer-events-none">
                     {[...Array(12)].map((_, i) => (
@@ -1098,7 +1140,7 @@ export default function SettingsView({
                 <div className="bg-surface/95 border border-border rounded-xl p-6 flex flex-col relative overflow-hidden">
                   <div className="text-[11px] font-bold tracking-[0.1em] uppercase text-muted mb-2">Neural Pipeline</div>
                   <div className="text-[32px] font-bold tracking-tight leading-none text-text">{latency > 0 ? latency : '—'}<span className="text-[15px] font-normal text-muted ml-1 font-mono">ms</span></div>
-                  <div className={`text-[14px] mt-2 font-medium ${latency > 0 ? 'text-emerald-500' : 'text-red-500'}`}>{latency > 0 ? 'Connected' : 'No device connected'}</div>
+                  <div className={`text-[14px] mt-2 font-medium ${connectionColorClass}`}>{connectionLabel}</div>
                   <div className="absolute right-0 bottom-0 flex items-end gap-[3px] opacity-30 p-3 h-[40px] pointer-events-none">
                     {[...Array(10)].map((_, i) => <div key={i} className="w-[3px] bg-primary rounded-t-[2px]" style={{ height: `${Math.floor(Math.random() * 20 + 4)}px` }} />)}
                   </div>
@@ -1165,7 +1207,7 @@ export default function SettingsView({
                     {[
                       { label: 'Available themes', value: themes.length, icon: Palette },
                       { label: 'Active hotkeys', value: Object.keys(settings.keymap?.collection || {}).length, icon: Keyboard },
-                      { label: 'Device status', value: latency > 0 ? 'Online' : 'Offline', icon: Activity, isStatus: true },
+                      { label: 'Device status', value: isConnectedState ? 'Online' : 'Offline', icon: Activity, isStatus: true },
                       { label: 'Target Protocol', value: (settings.general.wsUrl || '').replace('ws://', '').replace('wss://', ''), icon: Globe, highlight: true }
                     ].map((stat, i) => {
                       const StatIcon = stat.icon;
@@ -1177,7 +1219,7 @@ export default function SettingsView({
                             </div>
                             <span className="text-[17px] text-muted font-bold group-hover/item:text-white transition-colors duration-300 leading-tight uppercase tracking-tight">{stat.label}</span>
                           </div>
-                          <span className={`font-black ${stat.isStatus ? (latency > 0 ? 'text-emerald-500 drop-shadow-[0_0_6px_rgba(16,185,129,0.3)] text-[18px]' : 'text-red-500 font-medium text-[18px]') : (stat.highlight ? 'text-amber-400 font-mono text-[14px] bg-amber-500/10 px-3.5 py-1.5 rounded-md border border-amber-500/20 cursor-default shadow-sm inline-block max-w-[200px] truncate' : 'text-text text-[21px]')}`}>
+                          <span className={`font-black ${stat.isStatus ? (isConnectedState ? 'text-emerald-500 drop-shadow-[0_0_6px_rgba(16,185,129,0.3)] text-[18px]' : 'text-red-500 font-medium text-[18px]') : (stat.highlight ? 'text-amber-400 font-mono text-[14px] bg-amber-500/10 px-3.5 py-1.5 rounded-md border border-amber-500/20 cursor-default shadow-sm inline-block max-w-[200px] truncate' : 'text-text text-[21px]')}`}>
                             {stat.value}
                           </span>
                         </div>

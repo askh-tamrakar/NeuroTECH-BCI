@@ -1,3 +1,5 @@
+import { buildApiUrl } from '../utils/runtimeConnection';
+
 /**
  * DataService
  * Handles persistence of recorded sessions to the backend.
@@ -10,7 +12,7 @@ export const DataService = {
      * @returns {Promise<Object>} The server response.
      */
     async saveSession(filename, payload, sensorType = 'recordings') {
-        const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+        const API_BASE_URL = buildApiUrl('');
         try {
             const response = await fetch(`${API_BASE_URL}/api/record`, {
                 method: 'POST',

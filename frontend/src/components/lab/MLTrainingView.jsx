@@ -13,6 +13,7 @@ import CustomSelect from '../ui/inputs/CustomSelect';
 import CustomSlider from '../ui/inputs/CustomSlider';
 import RangeSlider from '../ui/inputs/RangeSlider';
 import { AccuracyRadialChart } from '../ui/display/AccuracyRadialChart';
+import HalfCircleProgress from '../ui/display/HalfCircleProgress';
 
 
 // Helper for tree
@@ -374,124 +375,361 @@ const getVerdict = (trainAcc, valAcc, testAcc) => {
     return { text: 'MODERATE FIT', color: 'text-[var(--primary)]', bg: 'bg-[var(--primary)]/10 border-[var(--primary)]/30', desc: 'Acceptable performance' };
 };
 
-const ControlPanelCard = ({ params, setParamsTab, job, activeTab }) => {
-    const [view, setView] = useState('params'); // 'params' or 'progress'
+const historyId = (item) => item?.model_id || item?.id || '--';
+const historyCandidate = (item) => item?.candidate_index || item?.candidate_idx || 0;
+const historyFold = (item) => item?.fold_index || item?.fold_idx || 0;
+const historyParams = (item) => item?.hyperparameters || item?.params || {};
 
-    const minVal = Math.round((params.train_ratio || 0.7) * 100);
-    const maxVal = Math.round(((params.train_ratio || 0.7) + (params.val_ratio || 0.15)) * 100);
+const HistoryList = ({ history = [], selectedId, onSelect, emptyText = 'No training history available.' }) => {
+    const grouped = useMemo(() => {
+        const groups = {};
+        history.forEach((item) => {
+            const key = historyCandidate(item);
+            if (!groups[key]) groups[key] = { idx: key, params: historyParams(item), folds: [] };
+            groups[key].folds.push(item);
+        });
+        return Object.values(groups)
+            .sort((a, b) => a.idx - b.idx)
+            .map(group => ({ ...group, folds: group.folds.sort((a, b) => historyFold(a) - historyFold(b)) }));
+    }, [history]);
 
-    const getDashes = (pct) => Array.from({ length: Math.max(1, Math.round(pct / 10)) }).map(() => '-').join('');
+    if (!grouped.length) {
+        return <div className="flex h-full items-center justify-center text-sm italic text-[var(--muted)] opacity-60">{emptyText}</div>;
+    }
 
     return (
-        <div className={`p-4 ${card} h-full flex flex-col relative`}>
-            <div className="flex items-center justify-between gap-2 border-b border-[var(--border)] pb-2 mb-4 shrink-0">
-                <div className="flex items-center gap-2 text-sm font-bold text-[var(--muted)] uppercase tracking-widest">
-                    {view === 'params' ? <Sliders className="w-5 h-5 text-[var(--text)]" /> : <Rocket className="w-5 h-5 text-[var(--text)]" />}
-                    {view === 'params' ? 'Hyperparameters' : 'Tuning Progress'}
-                </div>
-                <button
-                    onClick={() => setView(view === 'params' ? 'progress' : 'params')}
-                    className="p-1.5 rounded-lg bg-[var(--bg)] border border-[var(--border)] text-[var(--muted)] hover:text-[var(--primary)] hover:border-[var(--primary)] transition-all flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider shadow-sm"
-                >
-                    {view === 'params' ? <Rocket size={14} /> : <Sliders size={14} />}
-                    {view === 'params' ? 'Progress' : 'Params'}
-                </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto pr-1 [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-                {view === 'params' ? (
-                    <div className="space-y-4">
-                        <div className="mb-2">
-                            <div className="text-[12px] font-bold text-[var(--muted)] uppercase tracking-tight mb-2 pl-2">Data Split Configuration</div>
-                            <div className="px-2 pb-2">
-                                <RangeSlider
-                                    min={0} max={100} step={1}
-                                    minValue={minVal} maxValue={maxVal}
-                                    leftColor="var(--text)"
-                                    middleColor="var(--muted)"
-                                    rightColor="var(--accent)"
-                                    hideLabels={false}
-                                    onChange={(vals) => {
-                                        setParamsTab({
-                                            train_ratio: vals.left / 100,
-                                            val_ratio: vals.middle / 100,
-                                            test_ratio: vals.right / 100,
-                                            k_folds: Math.round((vals.left + vals.middle) / vals.middle)
-                                        });
-                                    }}
-                                />
+        <div className="space-y-2">
+            {grouped.map((cand) => (
+                <div key={cand.idx} className="p-3 rounded-xl bg-[var(--bg)]/50 border border-[var(--border)]">
+                    <div className="flex items-center justify-between mb-2">
+                        <div>
+                            <div className="text-[10px] font-black text-[var(--muted)] uppercase tracking-[0.18em]">Candidate {cand.idx}</div>
+                            <div className="text-[10px] text-[var(--text)] font-mono truncate">
+                                {Object.entries(cand.params).map(([k, v]) => `${k}: ${v}`).join(' | ') || 'No hyperparameters recorded'}
                             </div>
                         </div>
-
-                        <div><div className="flex justify-between text-sm mb-1"><span className="font-bold text-[var(--text)] uppercase tracking-tight">Search Res</span><span className="font-black text-[var(--primary)]">{params.search_resolution}</span></div><CustomSlider min={2} max={10} step={1} value={params.search_resolution} onChange={(value) => setParamsTab({ search_resolution: value })} /></div>
-
-                        {activeTab !== 'EEG' ? (
-                            <>
-                                <div>
-                                    <div className="flex justify-between items-end mb-1">
-                                        <span className="font-bold text-[var(--text)] uppercase tracking-tight">Estimators</span>
-                                        <div className="flex items-center gap-1 font-mono text-xs"><span className="font-black text-[var(--primary)]">{params.n_estimators_min || 50}</span><span className="text-[var(--muted)]">-</span><span className="font-black text-[var(--primary)]">{params.n_estimators_max || 200}</span></div>
-                                    </div>
-                                    <div className="px-2 pb-2"><RangeSlider min={10} max={500} step={10} minValue={params.n_estimators_min || 50} maxValue={params.n_estimators_max || 200} hideLabels={true} color="var(--primary)" onChange={(vals) => setParamsTab({ n_estimators_min: vals.min, n_estimators_max: vals.max })} /></div>
-                                </div>
-                                <div>
-                                    <div className="flex justify-between items-end mb-1">
-                                        <span className="font-bold text-[var(--text)] uppercase tracking-tight">Max Depth</span>
-                                        <div className="flex items-center gap-1 font-mono text-xs"><span className="font-black text-[var(--primary)]">{params.max_depth_min || 5}</span><span className="text-[var(--muted)]">-</span><span className="font-black text-[var(--primary)]">{params.max_depth_max || 15}</span></div>
-                                    </div>
-                                    <div className="px-2 pb-2"><RangeSlider min={2} max={30} step={1} minValue={params.max_depth_min || 5} maxValue={params.max_depth_max || 15} hideLabels={true} color="var(--primary)" onChange={(vals) => setParamsTab({ max_depth_min: vals.min, max_depth_max: vals.max })} /></div>
-                                </div>
-                                <div>
-                                    <div className="flex justify-between items-end mb-1">
-                                        <span className="font-bold text-[var(--text)] uppercase tracking-tight">Min Impurity</span>
-                                        <div className="flex items-center gap-1 font-mono text-xs"><span className="font-black text-[var(--primary)]">{params.min_impurity_decrease_min || 0}</span><span className="text-[var(--muted)]">-</span><span className="font-black text-[var(--primary)]">{params.min_impurity_decrease_max || 0.05}</span></div>
-                                    </div>
-                                    <div className="px-2 pb-2"><RangeSlider min={0} max={0.1} step={0.005} minValue={params.min_impurity_decrease_min || 0} maxValue={params.min_impurity_decrease_max || 0.05} hideLabels={true} color="var(--primary)" onChange={(vals) => setParamsTab({ min_impurity_decrease_min: vals.min, min_impurity_decrease_max: vals.max })} /></div>
-                                </div>
-                                <div className="grid grid-cols-2 gap-2 mt-2">
-                                    <div><div className="text-[10px] font-bold text-[var(--muted)] uppercase tracking-tight mb-1">Criterion</div><CustomSelect value={params.criterion || 'gini'} onChange={(value) => setParamsTab({ criterion: value })} options={[{ value: 'gini', label: 'Gini' }, { value: 'entropy', label: 'Entropy' }, { value: 'gini,entropy', label: 'Both' }]} /></div>
-                                    <div><div className="text-[10px] font-bold text-[var(--muted)] uppercase tracking-tight mb-1">Features</div><CustomSelect value={params.max_features || 'sqrt'} onChange={(value) => setParamsTab({ max_features: value })} options={[{ value: 'sqrt', label: 'Sqrt' }, { value: 'log2', label: 'Log2' }, { value: 'None', label: 'None' }, { value: 'sqrt,log2', label: 'Sqrt+Log2' }]} /></div>
-                                </div>
-                            </>
-                        ) : (
-                            <>
-                                <div>
-                                    <div className="flex justify-between items-end mb-1 mt-4">
-                                        <span className="font-bold text-[var(--text)] uppercase tracking-tight">Tolerance</span>
-                                        <div className="flex items-center gap-1 font-mono text-xs"><span className="font-black text-[var(--primary)]">{params.tol_min || 0.0001}</span><span className="text-[var(--muted)]">-</span><span className="font-black text-[var(--primary)]">{params.tol_max || 0.001}</span></div>
-                                    </div>
-                                    <div className="px-2 pb-2"><RangeSlider min={0.0001} max={0.01} step={0.0001} minValue={params.tol_min || 0.0001} maxValue={params.tol_max || 0.001} hideLabels={true} color="var(--primary)" onChange={(vals) => setParamsTab({ tol_min: vals.min, tol_max: vals.max })} /></div>
-                                </div>
-                                <div className="grid grid-cols-2 gap-2 mt-2">
-                                    <div><div className="text-[10px] font-bold text-[var(--muted)] uppercase tracking-tight mb-1">Solver</div><CustomSelect value={params.solver || 'eigen'} onChange={(value) => setParamsTab({ solver: value })} options={[{ value: 'svd', label: 'SVD' }, { value: 'lsqr', label: 'LSQR' }, { value: 'eigen', label: 'Eigen' }, { value: 'svd,lsqr,eigen', label: 'All' }]} /></div>
-                                    <div><div className="text-[10px] font-bold text-[var(--muted)] uppercase tracking-tight mb-1">Shrinkage</div><CustomSelect value={params.shrinkage || 'auto'} onChange={(value) => setParamsTab({ shrinkage: value })} options={[{ value: 'auto', label: 'Auto' }, { value: 'none', label: 'None' }, { value: 'auto,none', label: 'Both' }]} /></div>
-                                </div>
-                            </>
-                        )}
+                        <div className="text-xs font-black text-[var(--primary)]">
+                            {Math.round((cand.folds.reduce((acc, fold) => acc + (fold.accuracy || 0), 0) / cand.folds.length) * 100)}%
+                        </div>
                     </div>
-                ) : (
-                    <div className="h-full flex flex-col justify-center">
-                        {!job ? <div className="text-sm text-[var(--muted)] flex items-center justify-center h-full italic opacity-50 text-center">Start a training job to see pipeline progression.</div> : <>
-                            <div className="space-y-4 text-sm mt-2">
-                                <div className="flex justify-between items-center"><span className="text-[var(--muted)] uppercase font-bold tracking-wider">Status</span><span className="font-black text-[var(--primary)] uppercase border border-[var(--primary)] bg-[var(--primary)]/10 px-2 py-0.5 rounded">{job.status}</span></div>
-                                <div className="flex justify-between"><span className="text-[var(--muted)] font-medium">Candidate Build</span><span className="font-bold text-[var(--text)] font-mono">{job.candidate_index || 0} / {job.total_candidates || 0}</span></div>
-                                <div className="flex justify-between"><span className="text-[var(--muted)] font-medium">Cross-Val Fold</span><span className="font-bold text-[var(--text)] font-mono">{job.fold_index || 0} / {job.total_folds || 0}</span></div>
-                                <div className="flex justify-between"><span className="text-[var(--muted)] font-medium">Est. Time Rem.</span><span className="font-black text-[var(--accent)] text-lg">{(job.eta_seconds === undefined || job.eta_seconds === null ? '--' : `${Math.round(job.eta_seconds)}s`)}</span></div>
-                            </div>
-                            <div className="mt-10 pb-4">
-                                <div className="flex justify-between text-xs mb-1 font-bold text-[var(--muted)]"><span>Overall Progress</span><span>{Math.round((job?.progress || 0) * 100)}%</span></div>
-                                <div className="w-full h-4 rounded-full bg-[var(--bg)] border border-[var(--border)] overflow-hidden shadow-inner"><div className="h-full bg-[var(--primary)] shadow-[0_0_8px_var(--primary)] transition-all duration-300" style={{ width: `${Math.round((job?.progress || 0) * 100)}%` }} /></div>
-                            </div>
-                        </>}
+                    <div className="flex flex-wrap gap-2">
+                        {cand.folds.map((item) => {
+                            const id = historyId(item);
+                            return (
+                                <button
+                                    key={id}
+                                    onClick={() => onSelect?.(item)}
+                                    className={`px-2 py-1 rounded-md border font-mono text-[10px] transition-all ${selectedId === id ? 'bg-[var(--primary)]/15 border-[var(--primary)] text-[var(--primary)]' : 'bg-[var(--surface)] border-[var(--border)] text-[var(--text)] hover:border-[var(--primary)]/50'}`}
+                                >
+                                    {id}
+                                </button>
+                            );
+                        })}
                     </div>
-                )}
+                </div>
+            ))}
+        </div>
+    );
+};
+
+const HistoryDetailCard = ({ item }) => {
+    if (!item) {
+        return <div className="flex h-full items-center justify-center text-sm italic text-[var(--muted)] opacity-60">Click a model ID like C01F1 to inspect it.</div>;
+    }
+
+    const params = historyParams(item);
+    return (
+        <div className="h-full p-4 rounded-xl bg-[var(--bg)]/40 border border-[var(--border)] space-y-3 overflow-y-auto [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+            <div className="flex items-center justify-between">
+                <div>
+                    <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--muted)] font-black">Model ID</div>
+                    <div className="text-2xl font-black text-[var(--primary)] font-mono">{historyId(item)}</div>
+                </div>
+                <div className="text-right">
+                    <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--muted)] font-black">Validation</div>
+                    <div className="text-xl font-black text-[var(--text)]">{pct(item.validation_accuracy ?? item.accuracy)}</div>
+                </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+                <div className="p-3 rounded-lg border border-[var(--border)] bg-[var(--surface)]">
+                    <div className="text-[10px] uppercase text-[var(--muted)] font-black mb-1">Candidate / Fold</div>
+                    <div className="text-sm font-mono text-[var(--text)]">{historyCandidate(item)} / {historyFold(item)}</div>
+                </div>
+                <div className="p-3 rounded-lg border border-[var(--border)] bg-[var(--surface)]">
+                    <div className="text-[10px] uppercase text-[var(--muted)] font-black mb-1">Train Accuracy</div>
+                    <div className="text-sm font-mono text-[var(--text)]">{pct(item.train_accuracy)}</div>
+                </div>
+                <div className="p-3 rounded-lg border border-[var(--border)] bg-[var(--surface)]">
+                    <div className="text-[10px] uppercase text-[var(--muted)] font-black mb-1">Train Samples</div>
+                    <div className="text-sm font-mono text-[var(--text)]">{item.n_train_samples ?? '--'}</div>
+                </div>
+                <div className="p-3 rounded-lg border border-[var(--border)] bg-[var(--surface)]">
+                    <div className="text-[10px] uppercase text-[var(--muted)] font-black mb-1">Validation Samples</div>
+                    <div className="text-sm font-mono text-[var(--text)]">{item.n_validation_samples ?? '--'}</div>
+                </div>
+            </div>
+            <div className="p-3 rounded-lg border border-[var(--border)] bg-[var(--surface)]">
+                <div className="text-[10px] uppercase text-[var(--muted)] font-black mb-2">Hyperparameters</div>
+                <div className="grid grid-cols-2 gap-2">
+                    {Object.entries(params).map(([key, value]) => (
+                        <div key={key} className="rounded-md bg-[var(--bg)] px-2 py-1 border border-[var(--border)]">
+                            <div className="text-[9px] uppercase text-[var(--muted)] font-black">{key}</div>
+                            <div className="text-[11px] font-mono text-[var(--text)] truncate">{String(value)}</div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+            <div className="p-3 rounded-lg border border-[var(--border)] bg-[var(--surface)]">
+                <div className="text-[10px] uppercase text-[var(--muted)] font-black mb-1">Saved Artifact</div>
+                <div className="text-[11px] font-mono text-[var(--primary)] break-all">{item.artifact_path || '--'}</div>
             </div>
         </div>
     );
 };
 
-const InsightCard = ({ result, sensor, onToggle }) => {
-    if (!result) return <div className={`p-4 ${card} h-full text-[var(--muted)] flex items-center justify-center italic relative`}><button className="absolute top-2 right-2 hover:text-[var(--primary)] p-1 rounded border border-transparent hover:border-[var(--primary)] transition-all" onClick={onToggle}><RefreshCw size={14} /></button>No insight data available yet.</div>;
+const TrainingHistoryCard = ({ title = 'Training History', history = [], selectedItem, onSelectItem, detailLabel = 'Model Detail' }) => (
+    <div className={`${card} h-full flex flex-col overflow-hidden`}>
+        <div className="p-3 border-b border-[var(--border)] flex items-center justify-between shrink-0">
+            <div className="flex items-center gap-2">
+                <ListOrdered className="w-4 h-4 text-[var(--primary)]" />
+                <span className="text-xs font-black text-[var(--muted)] uppercase tracking-[0.2em]">{title}</span>
+            </div>
+            <span className="text-[10px] text-[var(--muted)] font-bold">{history.length} Models</span>
+        </div>
+        <div className="flex-1 min-h-0 grid grid-cols-12 gap-3 p-3">
+            <div className="col-span-12 lg:col-span-7 overflow-y-auto pr-1 [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                <HistoryList history={history} selectedId={historyId(selectedItem)} onSelect={onSelectItem} />
+            </div>
+            <div className="col-span-12 lg:col-span-5 min-h-0">
+                <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--muted)] font-black mb-2">{detailLabel}</div>
+                <HistoryDetailCard item={selectedItem} />
+            </div>
+        </div>
+    </div>
+);
+
+const formatDuration = (seconds) => {
+    if (seconds === undefined || seconds === null || Number.isNaN(Number(seconds))) return '--';
+    const total = Math.max(0, Math.round(Number(seconds)));
+    const mins = Math.floor(total / 60);
+    const secs = total % 60;
+    return mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+};
+
+const StoredRunsList = ({ models = [], activeModelName, onSelectRun }) => (
+    <div className="space-y-2">
+        {models.length === 0 ? (
+            <div className="flex h-full items-center justify-center text-sm italic text-[var(--muted)] opacity-60">No saved training runs yet.</div>
+        ) : models.map((model) => (
+            <button
+                key={model.name}
+                onClick={() => onSelectRun?.(model.name)}
+                className={`w-full text-left rounded-xl border p-3 transition-all ${activeModelName === model.name ? 'bg-[var(--primary)]/10 border-[var(--primary)]' : 'bg-[var(--bg)]/40 border-[var(--border)] hover:border-[var(--primary)]/40'}`}
+            >
+                <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                        <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--muted)] font-black">Best Model</div>
+                        <div className="text-sm font-black text-[var(--text)] truncate">{model.name}</div>
+                    </div>
+                    <div className="text-xs font-black text-[var(--primary)]">{pct(model.accuracy)}</div>
+                </div>
+                <div className="grid grid-cols-2 gap-2 mt-3 text-[10px] font-mono">
+                    <div className="rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1">Candidates: {model.total_candidates ?? '--'}</div>
+                    <div className="rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1">Folds: {model.k_folds ?? '--'}</div>
+                    <div className="rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1">Saved Models: {model.total_models ?? '--'}</div>
+                    <div className="rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1">Time: {formatDuration(model.training_duration_seconds)}</div>
+                </div>
+                <div className="mt-2 text-[10px] text-[var(--muted)]">{model.created_at ? new Date(model.created_at).toLocaleString() : 'Unknown time'}</div>
+            </button>
+        ))}
+    </div>
+);
+
+const ControlPanelCard = ({ params, setParamsTab, job, activeTab, models = [], activeModelName, onSelectRun }) => {
+    const minVal = Math.round((params.train_ratio || 0.7) * 100);
+    const maxVal = Math.round(((params.train_ratio || 0.7) + (params.val_ratio || 0.15)) * 100);
+
+    return (
+        <div className={`p-4 ${card} h-full flex flex-col relative`}>
+            <div className="flex items-center justify-between gap-2 border-b border-[var(--border)] pb-2 mb-4 shrink-0">
+                <div className="flex items-center gap-2 text-sm font-bold text-[var(--muted)] uppercase tracking-widest">
+                    <Sliders className="w-5 h-5 text-[var(--text)]" />
+                    Hyperparameters
+                </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto pr-1 [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                <div className="space-y-4">
+                    <div className="mb-2">
+                        <div className="text-[12px] font-bold text-[var(--muted)] uppercase tracking-tight mb-2 pl-2">Data Split Configuration</div>
+                        <div className="px-2 pb-2">
+                            <RangeSlider
+                                min={0} max={100} step={1}
+                                minValue={minVal} maxValue={maxVal}
+                                leftColor="var(--text)"
+                                middleColor="var(--muted)"
+                                rightColor="var(--accent)"
+                                hideLabels={false}
+                                onChange={(vals) => {
+                                    setParamsTab({
+                                        train_ratio: vals.left / 100,
+                                        val_ratio: vals.middle / 100,
+                                        test_ratio: vals.right / 100,
+                                        k_folds: Math.round((vals.left + vals.middle) / vals.middle)
+                                    });
+                                }}
+                            />
+                        </div>
+                    </div>
+
+                    <div><div className="flex justify-between text-sm mb-1"><span className="font-bold text-[var(--text)] uppercase tracking-tight">Search Res</span><span className="font-black text-[var(--primary)]">{params.search_resolution}</span></div><CustomSlider min={2} max={10} step={1} value={params.search_resolution} onChange={(value) => setParamsTab({ search_resolution: value })} /></div>
+
+                    {activeTab !== 'EEG' ? (
+                        <>
+                            <div>
+                                <div className="flex justify-between items-end mb-1">
+                                    <span className="font-bold text-[var(--text)] uppercase tracking-tight">Estimators</span>
+                                    <div className="flex items-center gap-1 font-mono text-xs"><span className="font-black text-[var(--primary)]">{params.n_estimators_min || 50}</span><span className="text-[var(--muted)]">-</span><span className="font-black text-[var(--primary)]">{params.n_estimators_max || 200}</span></div>
+                                </div>
+                                <div className="px-2 pb-2"><RangeSlider min={10} max={500} step={10} minValue={params.n_estimators_min || 50} maxValue={params.n_estimators_max || 200} hideLabels={true} color="var(--primary)" onChange={(vals) => setParamsTab({ n_estimators_min: vals.min, n_estimators_max: vals.max })} /></div>
+                            </div>
+                            <div>
+                                <div className="flex justify-between items-end mb-1">
+                                    <span className="font-bold text-[var(--text)] uppercase tracking-tight">Max Depth</span>
+                                    <div className="flex items-center gap-1 font-mono text-xs"><span className="font-black text-[var(--primary)]">{params.max_depth_min || 5}</span><span className="text-[var(--muted)]">-</span><span className="font-black text-[var(--primary)]">{params.max_depth_max || 15}</span></div>
+                                </div>
+                                <div className="px-2 pb-2"><RangeSlider min={2} max={30} step={1} minValue={params.max_depth_min || 5} maxValue={params.max_depth_max || 15} hideLabels={true} color="var(--primary)" onChange={(vals) => setParamsTab({ max_depth_min: vals.min, max_depth_max: vals.max })} /></div>
+                            </div>
+                            <div>
+                                <div className="flex justify-between items-end mb-1">
+                                    <span className="font-bold text-[var(--text)] uppercase tracking-tight">Min Impurity</span>
+                                    <div className="flex items-center gap-1 font-mono text-xs"><span className="font-black text-[var(--primary)]">{params.min_impurity_decrease_min || 0}</span><span className="text-[var(--muted)]">-</span><span className="font-black text-[var(--primary)]">{params.min_impurity_decrease_max || 0.05}</span></div>
+                                </div>
+                                <div className="px-2 pb-2"><RangeSlider min={0} max={0.1} step={0.005} minValue={params.min_impurity_decrease_min || 0} maxValue={params.min_impurity_decrease_max || 0.05} hideLabels={true} color="var(--primary)" onChange={(vals) => setParamsTab({ min_impurity_decrease_min: vals.min, min_impurity_decrease_max: vals.max })} /></div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2 mt-2">
+                                <div><div className="text-[10px] font-bold text-[var(--muted)] uppercase tracking-tight mb-1">Criterion</div><CustomSelect value={params.criterion || 'gini'} onChange={(value) => setParamsTab({ criterion: value })} options={[{ value: 'gini', label: 'Gini' }, { value: 'entropy', label: 'Entropy' }, { value: 'gini,entropy', label: 'Both' }]} /></div>
+                                <div><div className="text-[10px] font-bold text-[var(--muted)] uppercase tracking-tight mb-1">Features</div><CustomSelect value={params.max_features || 'sqrt'} onChange={(value) => setParamsTab({ max_features: value })} options={[{ value: 'sqrt', label: 'Sqrt' }, { value: 'log2', label: 'Log2' }, { value: 'None', label: 'None' }, { value: 'sqrt,log2', label: 'Sqrt+Log2' }]} /></div>
+                            </div>
+                        </>
+                    ) : (
+                        <>
+                            <div>
+                                <div className="flex justify-between items-end mb-1 mt-4">
+                                    <span className="font-bold text-[var(--text)] uppercase tracking-tight">Tolerance</span>
+                                    <div className="flex items-center gap-1 font-mono text-xs"><span className="font-black text-[var(--primary)]">{params.tol_min || 0.0001}</span><span className="text-[var(--muted)]">-</span><span className="font-black text-[var(--primary)]">{params.tol_max || 0.001}</span></div>
+                                </div>
+                                <div className="px-2 pb-2"><RangeSlider min={0.0001} max={0.01} step={0.0001} minValue={params.tol_min || 0.0001} maxValue={params.tol_max || 0.001} hideLabels={true} color="var(--primary)" onChange={(vals) => setParamsTab({ tol_min: vals.min, tol_max: vals.max })} /></div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2 mt-2">
+                                <div><div className="text-[10px] font-bold text-[var(--muted)] uppercase tracking-tight mb-1">Solver</div><CustomSelect value={params.solver || 'eigen'} onChange={(value) => setParamsTab({ solver: value })} options={[{ value: 'svd', label: 'SVD' }, { value: 'lsqr', label: 'LSQR' }, { value: 'eigen', label: 'Eigen' }, { value: 'svd,lsqr,eigen', label: 'All' }]} /></div>
+                                <div><div className="text-[10px] font-bold text-[var(--muted)] uppercase tracking-tight mb-1">Shrinkage</div><CustomSelect value={params.shrinkage || 'auto'} onChange={(value) => setParamsTab({ shrinkage: value })} options={[{ value: 'auto', label: 'Auto' }, { value: 'none', label: 'None' }, { value: 'auto,none', label: 'Both' }]} /></div>
+                            </div>
+                        </>
+                    )}
+
+                    <div className="pt-3 border-t border-[var(--border)]/50">
+                        <div className="flex items-center justify-between mb-2">
+                            <div className="text-[12px] font-bold text-[var(--muted)] uppercase tracking-tight">Saved Training Runs</div>
+                            <div className="text-[10px] font-mono text-[var(--primary)]">{models.length} Runs</div>
+                        </div>
+                        <div className="max-h-48 overflow-y-auto pr-1 [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                            <StoredRunsList models={models} activeModelName={activeModelName} onSelectRun={onSelectRun} />
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const TrainingStatusDashboard = ({ job, countdown, params, activeTab, selectedHistoryItem, onSelectHistory }) => {
+    const latestFold = job?.history?.[job.history.length - 1];
+
+    return (
+        <div className="flex flex-col h-full gap-4 overflow-hidden animate-in fade-in duration-500">
+            {/* Top Row: Progress and Current Stats */}
+            <div className="grid grid-cols-12 gap-4 h-1/2">
+                <div className={`col-span-12 lg:col-span-8 ${card} flex flex-col items-center justify-center relative overflow-hidden group`}>
+                    <div className="absolute inset-0 bg-gradient-to-b from-[var(--primary)]/5 to-transparent opacity-50" />
+
+                    <div className="relative z-10 flex flex-col items-center">
+                        <HalfCircleProgress
+                            progress={job?.progress || 0}
+                            size={320}
+                            strokeWidth={16}
+                            label={countdown !== null ? "Loading Results" : "Training Progress"}
+                            statusText={countdown !== null ? `Evaluation starting in ${countdown}s` : `Candidate ${job?.candidate_index || 0} / ${job?.total_candidates || 0}`}
+                        />
+
+                        {countdown !== null && (
+                            <div className="mt-4 flex items-center gap-3 px-4 py-2 rounded-full bg-[var(--primary)]/20 border border-[var(--primary)] text-[var(--primary)] font-bold animate-bounce shadow-[0_0_15px_rgba(var(--primary-rgb),0.3)]">
+                                <RefreshCw className="w-4 h-4 animate-spin" />
+                                <span className="text-sm uppercase tracking-widest">Finalizing Model... {countdown}s</span>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                <div className={`col-span-12 lg:col-span-4 ${card} flex flex-col overflow-hidden`}>
+                    <div className="p-3 border-b border-[var(--border)] flex items-center justify-between bg-[var(--surface)]/50">
+                        <span className="text-xs font-black text-[var(--muted)] uppercase tracking-[0.2em]">Live Metrics</span>
+                        {latestFold && (
+                            <span className="text-[10px] font-mono bg-[var(--primary)]/10 text-[var(--primary)] px-2 py-0.5 rounded border border-[var(--primary)]/20">
+                                {historyId(latestFold)}
+                            </span>
+                        )}
+                    </div>
+                    <div className="flex-1 p-4 flex flex-col justify-center gap-6">
+                        <div className="flex flex-col items-center">
+                            <span className="text-[10px] font-bold text-[var(--muted)] uppercase mb-1">Current Accuracy</span>
+                            <span className="text-5xl font-black text-[var(--text)] font-mono">
+                                {latestFold ? Math.round(latestFold.accuracy * 100) : '--'}<span className="text-xl opacity-30">%</span>
+                            </span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="flex flex-col items-center p-3 rounded-xl bg-[var(--bg)] border border-[var(--border)]">
+                                <span className="text-[9px] font-bold text-[var(--muted)] uppercase mb-1">Candidate</span>
+                                <span className="text-lg font-black text-[var(--primary)] font-mono">#{job?.candidate_index || 0}</span>
+                            </div>
+                            <div className="flex flex-col items-center p-3 rounded-xl bg-[var(--bg)] border border-[var(--border)]">
+                                <span className="text-[9px] font-bold text-[var(--muted)] uppercase mb-1">Fold</span>
+                                <span className="text-lg font-black text-[var(--primary)] font-mono">{job?.fold_index || 0}/{job?.total_folds || 5}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Bottom Row: History and Params */}
+            <div className="grid grid-cols-12 gap-4 h-1/2 min-h-0">
+                <div className="col-span-12 lg:col-span-7 min-h-0">
+                    <TrainingHistoryCard title="Training History" history={job?.history || []} selectedItem={selectedHistoryItem} onSelectItem={onSelectHistory} detailLabel="Current Fold Detail" />
+                </div>
+
+                <div className={`col-span-12 lg:col-span-5 ${card} flex flex-col overflow-hidden`}>
+                    <div className="p-3 border-b border-[var(--border)] flex items-center gap-2 shrink-0">
+                        <Sliders className="w-4 h-4 text-[var(--primary)]" />
+                        <span className="text-xs font-black text-[var(--muted)] uppercase tracking-[0.2em]">Active Parameters</span>
+                    </div>
+                    <div className="flex-1 p-4 grid grid-cols-2 gap-3 overflow-y-auto [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                        {Object.entries(params)
+                            .filter(([k]) => !['table_name', 'model_name', 'train_ratio', 'val_ratio', 'test_ratio'].includes(k))
+                            .map(([key, val]) => (
+                                <div key={key} className="p-3 rounded-xl bg-[var(--bg)] border border-[var(--border)] flex flex-col">
+                                    <span className="text-[8px] font-black text-[var(--muted)] uppercase mb-1 tracking-wider">{key.replace(/_/g, ' ')}</span>
+                                    <span className="text-sm font-black text-[var(--primary)] truncate">{val?.toString() || '--'}</span>
+                                </div>
+                            ))}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const InsightCard = ({ result, sensor, onMatrixToggle, onHistoryToggle }) => {
+    if (!result) return <div className={`p-4 ${card} h-full text-[var(--muted)] flex items-center justify-center italic relative`}>No insight data available yet.</div>;
 
     const v = getVerdict(result.train_accuracy, result.validation_accuracy, result.test_accuracy || result.accuracy);
     const mRow = (label, val, perc = false, mono = false) => (
@@ -505,11 +743,18 @@ const InsightCard = ({ result, sensor, onToggle }) => {
         <div className={`p-4 ${card} h-full overflow-auto flex flex-col [&::-webkit-scrollbar]:hidden`} style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
             <div className="flex items-center justify-between border-b border-[var(--border)] pb-2 mb-3 shrink-0">
                 <div className="flex items-center gap-2 text-[15px] font-bold text-[var(--muted)] uppercase tracking-widest"><Info className="w-5 h-5 text-[var(--text)]" /> {sensor} Data Insights</div>
-                {onToggle && (
-                    <button onClick={onToggle} className="p-1.5 rounded-lg bg-[var(--bg)] border border-[var(--border)] text-[var(--muted)] hover:text-[var(--primary)] hover:border-[var(--primary)] transition-all flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider shadow-sm">
-                        <Grid3X3 size={14} /> Matrix
-                    </button>
-                )}
+                <div className="flex items-center gap-2">
+                    {onHistoryToggle && (
+                        <button onClick={onHistoryToggle} className="p-1.5 rounded-lg bg-[var(--bg)] border border-[var(--border)] text-[var(--muted)] hover:text-[var(--primary)] hover:border-[var(--primary)] transition-all flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider shadow-sm">
+                            <BookOpen size={14} /> Training History
+                        </button>
+                    )}
+                    {onMatrixToggle && (
+                        <button onClick={onMatrixToggle} className="p-1.5 rounded-lg bg-[var(--bg)] border border-[var(--border)] text-[var(--muted)] hover:text-[var(--primary)] hover:border-[var(--primary)] transition-all flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider shadow-sm">
+                            <Grid3X3 size={14} /> Matrix
+                        </button>
+                    )}
+                </div>
             </div>
 
             <div className="flex-1 overflow-y-auto pr-1 [&::-webkit-scrollbar]:hidden space-y-4" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
@@ -564,7 +809,7 @@ const InsightCard = ({ result, sensor, onToggle }) => {
 
 
 
-const EEGModelInsightCard = ({ result, selectedSessionName, params }) => {
+const EEGModelInsightCard = ({ result, selectedSessionName, params, onHistoryToggle }) => {
     // Calculate split from RangeSlider ratios
     const trainPct = Math.round((params?.train_ratio || 0.7) * 100);
     const valPct = Math.round((params?.val_ratio || 0.15) * 100);
@@ -572,9 +817,16 @@ const EEGModelInsightCard = ({ result, selectedSessionName, params }) => {
 
     return (
         <div className="card h-full flex flex-col p-4 bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-sm relative group/insight">
-            <h3 className="text-[18px] flex items-center font-bold text-[var(--muted)] uppercase tracking-widest border-b border-[var(--border)] pb-2">
-                <Brain size={32} className='mr-4 border border-text bg-bg rounded-[4px]' color='var(--text)' /> EEG Model Insight
-            </h3>
+            <div className="flex items-center justify-between border-b border-[var(--border)] pb-2">
+                <h3 className="text-[18px] flex items-center font-bold text-[var(--muted)] uppercase tracking-widest">
+                    <Brain size={32} className='mr-4 border border-text bg-bg rounded-[4px]' color='var(--text)' /> EEG Model Insight
+                </h3>
+                {onHistoryToggle && (
+                    <button onClick={onHistoryToggle} className="p-1.5 rounded-lg bg-[var(--bg)] border border-[var(--border)] text-[var(--muted)] hover:text-[var(--primary)] hover:border-[var(--primary)] transition-all flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider shadow-sm">
+                        <BookOpen size={14} /> Training History
+                    </button>
+                )}
+            </div>
 
             <div className="flex-1 grid grid-cols-3 gap-6 py-4 min-h-0">
                 {/* Left: Identity - Highly Legible */}
@@ -813,25 +1065,9 @@ const RenderClassLabel = ({ label, sensor }) => {
 
     // EEG / SSVEP frequency labels
     if (sensor === 'EEG') {
-        const freqMap = {
-            'Target 1': '8Hz',
-            'Target 2': '9Hz',
-            'Target 3': '12Hz',
-            'Target 4': '14.4Hz',
-            'Target 5': '16Hz',
-            'Target 6': '18Hz',
-            '1': '8Hz',
-            '2': '9Hz',
-            '3': '12Hz',
-            '4': '14.4Hz',
-            '5': '16Hz',
-            '6': '18Hz'
-        };
-
         // If the label is already a frequency (e.g. "8Hz"), just show it
         if (val.includes('Hz')) return <span>{val}</span>;
-        // If it's a known generic target name or index, map it
-        if (freqMap[val]) return <span>{freqMap[val]}</span>;
+        if (!Number.isNaN(Number(val)) && Number(val) > 0) return <span>{`${Number(val)}Hz`}</span>;
         // Rest handling
         if (val === '0' || val.toLowerCase() === 'rest') return <span>Rest</span>;
     }
@@ -1106,7 +1342,7 @@ const ControlPanel = ({
 
 export default function MLTrainingView({ onSwitchLab }) {
     const { currentThemeId } = useTheme();
-    const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+    const API_BASE_URL = buildApiUrl('');
     const [activeTab, setActiveTab] = useState('EMG');
 
     // --- SESSIONS ---
@@ -1182,7 +1418,10 @@ export default function MLTrainingView({ onSwitchLab }) {
     const [results, setResults] = useState({ EMG: null, EOG: null, EEG: null });
     const [evalResults, setEvalResults] = useState({ EMG: null, EOG: null, EEG: null });
     const [trainingJob, setTrainingJob] = useState(null);
-    const [insightView, setInsightView] = useState('matrix'); // 'matrix' or 'insight'
+    const [countdown, setCountdown] = useState(null);
+    const [lastHistory, setLastHistory] = useState({ EMG: [], EOG: [], EEG: [] });
+    const [selectedHistoryItems, setSelectedHistoryItems] = useState({ EMG: null, EOG: null, EEG: null });
+    const [insightView, setInsightView] = useState('matrix'); // 'matrix' or 'insight' or 'history'
 
     // Params per sensor
     const [params, setParams] = useState({
@@ -1194,6 +1433,8 @@ export default function MLTrainingView({ onSwitchLab }) {
     const activeResult = results[activeTab];
     const activeEvalResult = evalResults[activeTab];
     const activeParams = params[activeTab];
+    const activeHistory = trainingJob?.history?.length ? trainingJob.history : ((activeResult || activeEvalResult)?.training_history || lastHistory[activeTab] || []);
+    const selectedHistoryItem = selectedHistoryItems[activeTab] || activeHistory[activeHistory.length - 1] || null;
     const selectedSessionName = selectedSession
         ? (availableSessions.find(s => s.table === selectedSession)?.name || selectedSession)
         : 'All Available Data';
@@ -1207,19 +1448,13 @@ export default function MLTrainingView({ onSwitchLab }) {
 
                 // Smarter Auto-load: Only if nothing is selected or current selection is invalid
                 if (data.length > 0) {
-                    const activeModel = data.find(m => m.active);
                     const currentName = forcedName || selectedModelName;
                     const currentModelExists = data.find(m => m.name === currentName);
 
                     if (!currentName || !currentModelExists) {
-                        if (activeModel) {
-                            setSelectedModels(prev => ({ ...prev, [activeTab]: activeModel.name }));
-                        } else if (!currentName) {
-                            // Only force-load the first model if we have NO selection at all (Initial Page Load)
-                            const firstModel = data[0].name;
-                            setSelectedModels(prev => ({ ...prev, [activeTab]: firstModel }));
-                            handleLoadModel(firstModel);
-                        }
+                        // We NO LONGER auto-load the active or first model.
+                        // The user must explicitly select a model to fill the workspace.
+                        setSelectedModels(prev => ({ ...prev, [activeTab]: null }));
                     }
                     // If we have a currentName and it exists in the list, we DON'T override 
                     // it with the 'active' flag from the backend yet to avoid race conditions.
@@ -1280,14 +1515,18 @@ export default function MLTrainingView({ onSwitchLab }) {
     useEffect(() => {
         fetchSessions();
         fetchModels();
-        // Initial eval info for active Tab default model
-        handleEval();
+        // Initial eval info only if a model is already selected
+        if (selectedModelName) {
+            handleEval();
+        }
     }, [activeTab]); // When tab changes
 
     // Also re-fetch if session changes? Maybe useful for context, but not critical for model list.
     useEffect(() => {
-        // Reload evaluation if a model is "active" or just generally for the current view
-        handleEval();
+        // Reload evaluation only if a model is already selected
+        if (selectedModelName) {
+            handleEval(selectedModelName);
+        }
     }, [selectedSession]);
 
 
@@ -1366,12 +1605,8 @@ export default function MLTrainingView({ onSwitchLab }) {
             const res = await fetch(`${API_BASE_URL}/api/train-jobs/${jobId}`);
             const data = await res.json();
             setTrainingJob(data);
-            if (data.status === 'completed' || data.status === 'failed') {
+            if (data.status === 'completed' || data.status === 'failed' || data.status === 'error') {
                 return data; // Done
-            } else if (data.status === 'error') {
-                console.error("Training error from backend", data.error);
-                setTrainingJob(prev => ({ ...prev, status: 'failed', error: data.error }));
-                throw new Error(data.error || "Job failed on backend");
             }
             // Poll again very quickly (150ms ping)
             await new Promise(r => setTimeout(r, 150));
@@ -1384,6 +1619,7 @@ export default function MLTrainingView({ onSwitchLab }) {
     };
 
     const handleTrain = async () => {
+        soundHandler.playMLTrain();
         if (!trainModelNameInput.trim()) {
             setError("Please name your model");
             return;
@@ -1415,28 +1651,60 @@ export default function MLTrainingView({ onSwitchLab }) {
 
             if (data.job_id) {
                 const finalJobResult = await pollJob(data.job_id);
-                if (finalJobResult && finalJobResult.result) {
-                    setResults(prev => ({ ...prev, [activeTab]: { ...finalJobResult.result, source: getSourceName(true) } }));
+                if (finalJobResult && (finalJobResult.status === 'completed' || finalJobResult.status === 'success')) {
+                    // Start 5-second countdown
+                    setCountdown(5);
+                    const timer = setInterval(() => {
+                        setCountdown(c => {
+                            if (c <= 1) {
+                                clearInterval(timer);
+                                // Finalize
+                                const resObj = finalJobResult.result || finalJobResult;
+                                setResults(prev => ({ ...prev, [activeTab]: { ...resObj, source: getSourceName(true) } }));
+                                setEvalResults(prev => ({ ...prev, [activeTab]: null }));
+                                setSelectedModels(prev => ({ ...prev, [activeTab]: modelNameFinal }));
+                                const history = finalJobResult.history || resObj.training_history || [];
+                                setLastHistory(prev => ({ ...prev, [activeTab]: history }));
+                                setSelectedHistoryItems(prev => ({ ...prev, [activeTab]: history[history.length - 1] || null }));
+                                setTreeIndex(0);
+                                fetchModels(modelNameFinal);
+                                setTrainingJob(null);
+                                setCountdown(null);
+                                setLoading(false);
+                                soundHandler.playSuccess();
+                                return 0;
+                            }
+                            return c - 1;
+                        });
+                    }, 1000);
                 } else {
-                    throw new Error("Job failed or returned no result.");
+                    const errorMsg = finalJobResult?.error || "Job failed or returned no result.";
+                    throw new Error(errorMsg);
                 }
             } else {
                 setResults(prev => ({ ...prev, [activeTab]: { ...data, source: getSourceName(true) } }));
+                setEvalResults(prev => ({ ...prev, [activeTab]: null }));
+                setSelectedModels(prev => ({ ...prev, [activeTab]: modelNameFinal }));
+                setTreeIndex(0);
+                await fetchModels(modelNameFinal);
+                setLoading(false);
+                setTrainingJob(null);
             }
-
-            // Clear previous evaluation result so training result shows instead
-            setEvalResults(prev => ({ ...prev, [activeTab]: null }));
-            setSelectedModels(prev => ({ ...prev, [activeTab]: modelNameFinal }));
-            setTreeIndex(0);
-
-            // Refresh list but without triggering it to override our selection
-            await fetchModels(modelNameFinal);
-        } catch (e) { setError(e.message); } finally { setLoading(false); setTrainingJob(null); }
+        } catch (e) {
+            setError(e.message);
+            setLoading(false);
+            setTrainingJob(null);
+            setCountdown(null);
+        }
     };
 
     const handleEval = async (forceModelName = null) => {
+        // Early return if no model provided and nothing selected
+        if (!forceModelName && !selectedModelName) {
+            setEvalResults(prev => ({ ...prev, [activeTab]: null }));
+            return;
+        }
         setEvalLoading(true); setError(null);
-        // setEvalResults(prev => ({ ...prev, [activeTab]: null }));
 
         try {
             const endpointMap = {
@@ -1460,16 +1728,31 @@ export default function MLTrainingView({ onSwitchLab }) {
             }
 
             setEvalResults(prev => ({ ...prev, [activeTab]: { ...data, source: getSourceName(false) } }));
+            if (data.training_history?.length) {
+                setLastHistory(prev => ({ ...prev, [activeTab]: data.training_history }));
+                setSelectedHistoryItems(prev => ({ ...prev, [activeTab]: data.training_history[data.training_history.length - 1] || null }));
+            }
 
             if (data.hyperparameters) {
+                const meta = data.hyperparameters || {};
+                const selectedHyperparameters = meta.selected_hyperparameters || {};
                 setParams(prev => ({
                     ...prev,
-                    [activeTab]: { ...prev[activeTab], ...data.hyperparameters }
+                    [activeTab]: {
+                        ...prev[activeTab],
+                        ...selectedHyperparameters,
+                        train_ratio: meta.train_ratio ?? prev[activeTab]?.train_ratio,
+                        val_ratio: meta.val_ratio ?? prev[activeTab]?.val_ratio,
+                        test_ratio: meta.test_ratio ?? prev[activeTab]?.test_ratio,
+                        k_folds: meta.k_folds ?? prev[activeTab]?.k_folds,
+                        random_state: meta.random_state ?? prev[activeTab]?.random_state,
+                    }
                 }));
             }
 
-            // Only update selection if it was null (e.g. initial load) or if we explicitly requested a model
-            if (data.model_name && (!selectedModelName || forceModelName)) {
+            // We NO LONGER auto-select a model if it was null.
+            // Only update selection if explicitly requested via forceModelName
+            if (data.model_name && forceModelName) {
                 setSelectedModels(prev => ({ ...prev, [activeTab]: data.model_name }));
             }
         } catch (e) {
@@ -1537,6 +1820,16 @@ export default function MLTrainingView({ onSwitchLab }) {
                                     setParamsTab={(updates) => setParams(prev => ({ ...prev, [activeTab]: { ...prev[activeTab], ...updates } }))}
                                     job={trainingJob}
                                     activeTab={activeTab}
+                                    models={models}
+                                    activeModelName={selectedModelName}
+                                    onSelectRun={(name) => {
+                                        setInsightView('history');
+                                        if (name === selectedModelName) {
+                                            handleEval(name);
+                                            return;
+                                        }
+                                        handleLoadModel(name);
+                                    }}
                                 />
                             ) : (
                                 <EEGHyperparametersCard
@@ -1548,7 +1841,18 @@ export default function MLTrainingView({ onSwitchLab }) {
                     </div>
 
                     {/* MAIN BENTO GRID (Span 9) */}
-                    {(activeResult || activeEvalResult) ? (
+                    {trainingJob ? (
+                        <div className="col-span-12 md:col-span-9 row-span-6 min-h-0 flex flex-col overflow-hidden">
+                            <TrainingStatusDashboard
+                                job={trainingJob}
+                                countdown={countdown}
+                                params={activeParams}
+                                activeTab={activeTab}
+                                selectedHistoryItem={selectedHistoryItem}
+                                onSelectHistory={(item) => setSelectedHistoryItems(prev => ({ ...prev, [activeTab]: item }))}
+                            />
+                        </div>
+                    ) : (activeResult || (selectedModelName && activeEvalResult)) ? (
                         <>
                             {activeTab !== 'EEG' ? (
                                 <>
@@ -1579,6 +1883,12 @@ export default function MLTrainingView({ onSwitchLab }) {
                                                 >
                                                     <Info size={14} /> Insights
                                                 </button>
+                                                <button
+                                                    onClick={() => setInsightView('history')}
+                                                    className="absolute top-2 right-24 z-10 p-1.5 rounded-lg bg-[var(--bg)]/80 backdrop-blur-sm border border-[var(--border)] text-[var(--muted)] hover:text-[var(--primary)] hover:border-[var(--primary)] transition-all flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider shadow-sm opacity-0 group-hover:opacity-100"
+                                                >
+                                                    <BookOpen size={14} /> Training History
+                                                </button>
                                                 <ConfusionMatrixCard
                                                     matrix={(activeResult || activeEvalResult).confusion_matrix}
                                                     labels={(activeResult || activeEvalResult).labels || []}
@@ -1586,11 +1896,20 @@ export default function MLTrainingView({ onSwitchLab }) {
                                                     sensor={activeTab}
                                                 />
                                             </div>
+                                        ) : insightView === 'history' ? (
+                                            <TrainingHistoryCard
+                                                title={`${activeTab} Training History`}
+                                                history={activeHistory}
+                                                selectedItem={selectedHistoryItem}
+                                                onSelectItem={(item) => setSelectedHistoryItems(prev => ({ ...prev, [activeTab]: item }))}
+                                                detailLabel="Saved Fold Detail"
+                                            />
                                         ) : (
                                             <InsightCard
                                                 result={activeResult || activeEvalResult}
                                                 sensor={activeTab}
-                                                onToggle={() => setInsightView('matrix')}
+                                                onMatrixToggle={() => setInsightView('matrix')}
+                                                onHistoryToggle={() => setInsightView('history')}
                                             />
                                         )}
                                     </div>
@@ -1621,11 +1940,22 @@ export default function MLTrainingView({ onSwitchLab }) {
                                                 />
                                             </div>
                                             <div className="col-span-12 lg:col-span-8 row-span-2 min-h-0 flex flex-col overflow-hidden">
-                                                <EEGModelInsightCard
-                                                    result={activeResult || activeEvalResult}
-                                                    selectedSessionName={selectedSessionName}
-                                                    params={activeParams}
-                                                />
+                                                {insightView === 'history' ? (
+                                                    <TrainingHistoryCard
+                                                        title="EEG Training History"
+                                                        history={activeHistory}
+                                                        selectedItem={selectedHistoryItem}
+                                                        onSelectItem={(item) => setSelectedHistoryItems(prev => ({ ...prev, [activeTab]: item }))}
+                                                        detailLabel="Saved Fold Detail"
+                                                    />
+                                                ) : (
+                                                    <EEGModelInsightCard
+                                                        result={activeResult || activeEvalResult}
+                                                        selectedSessionName={selectedSessionName}
+                                                        params={activeParams}
+                                                        onHistoryToggle={() => setInsightView('history')}
+                                                    />
+                                                )}
                                             </div>
                                         </div>
                                     </div>
@@ -1634,7 +1964,6 @@ export default function MLTrainingView({ onSwitchLab }) {
                         </>
                     ) : (
                         <div className="col-span-12 lg:col-span-9 row-span-6 card border-2 border-dashed border-[var(--border)] rounded-xl flex flex-col items-center justify-center text-[var(--muted)] bg-[var(--surface)]/50">
-                            {/* Empty state showing Hyperparams Card as preview/setup if desired, or just empty */}
                             <div className="text-center">
                                 <div className="text-6xl mb-6 opacity-20 flex justify-center"><PieChart className="w-24 h-24" /></div>
                                 <p className="text-lg font-medium">Model workspace empty</p>
@@ -1648,3 +1977,4 @@ export default function MLTrainingView({ onSwitchLab }) {
     );
 }
 
+import { buildApiUrl } from '../../utils/runtimeConnection';

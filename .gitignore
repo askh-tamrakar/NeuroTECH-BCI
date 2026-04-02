@@ -25,3 +25,4 @@ htmlcov/
 data/processed/windows
 DIY-Muscle-BioAmp-Shield-main/
 *.mp4
+rejected_models/

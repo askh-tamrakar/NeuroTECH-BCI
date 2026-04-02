@@ -1,0 +1,24 @@
+{
+  "sampling_rate": 1000,
+  "channel_mapping": {
+    "ch0": {
+      "enabled": true,
+      "sensor": "EEG"
+    },
+    "ch1": {
+      "enabled": true,
+      "sensor": "EEG"
+    }
+  },
+  "display": {
+    "timeWindowMs": 10000,
+    "showGrid": true,
+    "scannerX": 0
+  },
+  "num_channels": 2,
+  "active_models": {
+    "EMG": "Neuro",
+    "EOG": "New",
+    "EEG": "new"
+  }
+}

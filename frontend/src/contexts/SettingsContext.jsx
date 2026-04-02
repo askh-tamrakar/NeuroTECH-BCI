@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { audioStorage } from '../utils/AudioStorage';
+import { buildApiUrl, getPublicRuntimeConfig, loadPublicRuntimeConfig, setPublicRuntimeConfig } from '../utils/runtimeConnection';
 
 const SettingsContext = createContext(null);
 
@@ -13,7 +14,7 @@ export const useSettings = () => {
 
 const DEFAULT_SETTINGS = {
     general: {
-        apiUrl: 'http://localhost:8000',
+        apiUrl: 'http://localhost:5005',
         wsUrl: 'ws://localhost:5005',
         useMock: false,
     },
@@ -102,6 +103,8 @@ const DEFAULT_SETTINGS = {
 
 export function SettingsProvider({ children }) {
     const [settings, setSettings] = useState(() => {
+        const publicConfig = getPublicRuntimeConfig();
+        const baseSettings = deepMerge(DEFAULT_SETTINGS, publicConfig || {});
         try {
             const saved = localStorage.getItem('neurotech_settings');
             if (saved) {
@@ -113,12 +116,12 @@ export function SettingsProvider({ children }) {
                     delete parsed.audio.bgmFile;
                 }
 
-                return deepMerge(DEFAULT_SETTINGS, parsed);
+                return deepMerge(baseSettings, parsed);
             }
         } catch (e) {
             console.error('Failed to load settings:', e);
         }
-        return DEFAULT_SETTINGS;
+        return baseSettings;
     });
 
     // Update a specific setting section
@@ -155,18 +158,17 @@ export function SettingsProvider({ children }) {
                 [section]: DEFAULT_SETTINGS[section]
             }));
         } else {
-            setSettings(DEFAULT_SETTINGS);
+            setSettings(deepMerge(DEFAULT_SETTINGS, getPublicRuntimeConfig() || {}));
         }
     }, []);
 
     // Initial fetch of available tracks and config
     useEffect(() => {
         const fetchInitialData = async () => {
-            // 1. Load public/config.json as base overrides
             try {
-                const configRes = await fetch('./config.json');
-                if (configRes.ok) {
-                    const publicConfig = await configRes.json();
+                const publicConfig = getPublicRuntimeConfig() || await loadPublicRuntimeConfig();
+                if (publicConfig) {
+                    setPublicRuntimeConfig(publicConfig);
                     setSettings(prev => deepMerge(prev, publicConfig));
                 }
             } catch (e) {
@@ -185,7 +187,7 @@ export function SettingsProvider({ children }) {
                 // 2. Try to get server tracks (optional/fallback)
                 let serverTracks = [];
                 try {
-                    const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+                    const API_BASE_URL = buildApiUrl('');
                     if (API_BASE_URL && !API_BASE_URL.includes('localhost')) {
                         const res = await fetch(`${API_BASE_URL}/api/audio/tracks`, { signal: AbortSignal.timeout(2000) });
                         if (res.ok) {

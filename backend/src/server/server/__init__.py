@@ -34,6 +34,14 @@ def create_app():
     
     # Init SocketIO
     socketio.init_app(app)
+
+    @socketio.on('connect')
+    def handle_connect():
+        state.clients += 1
+
+    @socketio.on('disconnect')
+    def handle_disconnect():
+        state.clients = max(0, state.clients - 1)
     
     @socketio.on('ping')
     def handle_ping():

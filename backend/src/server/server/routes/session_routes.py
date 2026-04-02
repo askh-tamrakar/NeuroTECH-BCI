@@ -7,6 +7,7 @@ from src.server.server.state import state
 from src.database.db_manager import db_manager
 from src.config.window_config import SESSION_CONFIG, get_window_samples
 from src.feature.extractors.rps_extractor import EMG_FEATURE_COLUMNS
+from src.utils.trial_utils import get_next_trial_id
 # from src.server.server.lsl_service import extract_emg_features # If needed for saving EMG buffer
 # Import extract_emg_features from lsl_service to avoid duplication if possible, 
 # but lsl_service.py has it.
@@ -19,6 +20,31 @@ EMG_COLLECTION_GAP_MS = 500.0
 
 def _resolve_sampling_rate():
     return float((state.config or {}).get('sampling_rate') or state.sr or SESSION_CONFIG["sampling_rate"])
+
+
+def _resolve_eeg_target_frequency(label_value, target_freqs=None):
+    cfg = state.config or {}
+    eeg_cfg = cfg.get('features', {}).get('EEG', {})
+    target_freqs = [float(freq) for freq in (target_freqs or eeg_cfg.get('target_freqs', [8, 9, 12, 14.4, 16, 18]))]
+
+    if label_value in (None, "", "Rest", "rest", 0, "0"):
+        return 0.0
+
+    try:
+        label_int = int(label_value)
+    except Exception:
+        label_str = str(label_value).strip().lower()
+        if label_str.startswith('target '):
+            try:
+                label_int = int(label_str.split()[-1])
+            except Exception:
+                return 0.0
+        else:
+            return 0.0
+
+    if 0 < label_int <= len(target_freqs):
+        return float(target_freqs[label_int - 1])
+    return 0.0
 
 
 def _normalize_collection_context(sensor_type, payload=None):
@@ -53,11 +79,10 @@ def _normalize_collection_context(sensor_type, payload=None):
         else:
             stride_ms = window_ms
 
-    return {
+    context = {
         "mode": payload.get('mode', 'collection'),
         "label": payload.get('class_label') or payload.get('label'),
         "session_name": payload.get('session_name', 'Manual_Windows'),
-        "trial_group_id": payload.get('trial_group_id') or str(uuid.uuid4()),
         "sampling_rate": sampling_rate,
         "window_duration_ms": window_ms,
         "overlap": overlap,
@@ -66,6 +91,9 @@ def _normalize_collection_context(sensor_type, payload=None):
         "time_window_ms": float(payload.get('time_window_ms') or payload.get('time_window') or 0),
         "channel_index": int(payload.get('channel_index', payload.get('channel', 0)) or 0),
     }
+    if sensor in {'EMG', 'EEG'}:
+        context["trial_id"] = payload.get('trial_id') or payload.get('trial_group_id') or get_next_trial_id()
+    return context
 
 @session_bp.route('/api/sessions/<sensor_type>', methods=['GET'])
 def api_list_sessions(sensor_type):
@@ -263,9 +291,9 @@ def api_emg_stop():
     # Process and save collected data to DB
     try:
         session_id = str(uuid.uuid4())
-        trial_group_id = str(uuid.uuid4())
         data_store = state.session.data_store['EMG']
         collection_context = state.session.get_collection_context('EMG') or {}
+        trial_id = str(collection_context.get('trial_id') or get_next_trial_id())
         sr = state.sr or SESSION_CONFIG["sampling_rate"]
         window_ms = float(collection_context.get('window_duration_ms') or SESSION_CONFIG["window_ms"])
         requested_stride_ms = float(collection_context.get('stride_ms') or 0)
@@ -342,13 +370,13 @@ def api_emg_stop():
                 feats['session_overlap'] = float(overlap)
                 feats['session_stride_ms'] = float((step_size / sr) * 1000.0)
                 feats['gap_ms'] = float(gap_ms)
-                feats['trial_group_id'] = str(collection_context.get('trial_group_id') or trial_group_id)
+                feats['trial_id'] = trial_id
                 feats['metadata_json'] = json.dumps({
                     "source": "backend_session_buffer",
                     "mode": collection_context.get('mode', 'buffer_recording'),
-                    "label": label_str,
+                    "class_label": label_int,
                     "session_name": state.session.current_session_name,
-                    "trial_group_id": str(collection_context.get('trial_group_id') or trial_group_id),
+                    "trial_id": trial_id,
                     "collection_context": collection_context,
                 })
                 prev_features = feats.copy()
@@ -447,7 +475,18 @@ def api_eog_stop():
     try:
         session_id = str(uuid.uuid4())
         data_store = state.session.data_store['EOG']
+        collection_context = state.session.get_collection_context('EOG') or {}
+        sr = state.sr or 1000
         saved_count = 0
+
+        db_manager.save_session_metadata('EOG', target_table, {
+            "sensor": "EOG",
+            "table_name": target_table,
+            "session_name": state.session.current_session_name,
+            "sampling_rate": float(sr),
+            "overlap": 0.0,
+            "source": "backend_session_buffer",
+        })
         
         for label_str, samples in data_store.items():
             if len(samples) < 50:
@@ -461,29 +500,32 @@ def api_eog_stop():
             raw_data = np.array(samples)
             if raw_data.ndim > 1:
                 raw_data = raw_data.flatten()
-                
-            sr = state.sr or 1000
-            window_size = int(sr * 0.6) # 600ms to capture full blink
-            step_size = int(window_size * 0.5)
-            
-            for i in range(0, len(raw_data) - window_size + 1, step_size):
-                window = raw_data[i : i + window_size]
-                
-                # Extract
-                feats = extract_eog_features(window, sr)
-                feats['timestamp'] = time.time()
-                
-                if db_manager.insert_eog_window(feats, label_int, session_id, table_name=target_table):
-                    saved_count += 1
-                    # Also append to global table if not a merged session
-                    if "merge" not in target_table.lower():
-                        db_manager.insert_eog_window(feats, label_int, session_id, table_name="eog_windows")
+            if raw_data.size == 0:
+                continue
+
+            feats = extract_eog_features(raw_data, sr)
+            feats['timestamp'] = time.time()
+
+            db_manager.save_session_metadata('EOG', target_table, {
+                "window_ms": float(collection_context.get('window_duration_ms') or ((len(raw_data) / sr) * 1000.0)),
+                "stride_ms": float(collection_context.get('window_duration_ms') or ((len(raw_data) / sr) * 1000.0)),
+                "capture_window_ms": float((len(raw_data) / sr) * 1000.0),
+                "channel_index": int(collection_context.get('channel_index', 0) or 0),
+            })
+
+            if db_manager.insert_eog_window(feats, label_int, session_id, table_name=target_table):
+                saved_count += 1
+                # Also append to global table if not a merged session
+                if "merge" not in target_table.lower():
+                    db_manager.insert_eog_window(feats, label_int, session_id, table_name="eog_windows")
 
         print(f"💾 Saved {saved_count} EOG windows to {target_table}")
         state.session.reset_recording_state()
+        state.session.stop_collection_context('EOG')
         
     except Exception as e:
         print(f"❌ Error processing EOG session: {e}")
+        state.session.stop_collection_context('EOG')
 
     return jsonify({"status": "stopped", "saved_windows": saved_count if 'saved_count' in locals() else 0})
 
@@ -531,11 +573,15 @@ def api_eeg_stop():
     # Process and save EEG data
     try:
         session_id = str(uuid.uuid4())
-        trial_group_id = str(uuid.uuid4())
         data_store = state.session.data_store['EEG']
+        collection_context = state.session.get_collection_context('EEG') or {}
+        trial_id = str(collection_context.get('trial_id') or get_next_trial_id())
         saved_count = 0
         eeg_cfg = (state.config or {}).get('features', {}).get('EEG', {})
         target_freqs = [float(freq) for freq in eeg_cfg.get('target_freqs', [8, 9, 12, 14.4, 16, 18])]
+        sr = state.sr or 1000
+        window_size = max(1, int(sr * float(eeg_cfg.get('window_len_sec', 1.5))))
+        step_size = max(1, int(sr * float(eeg_cfg.get('step_sec', 0.25))))
         channel_mapping = (state.config or {}).get('channel_mapping', {})
         eeg_channel_index = 0
         for channel_key, channel_info in channel_mapping.items():
@@ -545,6 +591,18 @@ def api_eeg_stop():
                 except Exception:
                     eeg_channel_index = 0
                 break
+
+        db_manager.save_session_metadata('EEG', target_table, {
+            "sensor": "EEG",
+            "table_name": target_table,
+            "session_name": state.session.current_session_name,
+            "sampling_rate": float(sr),
+            "window_ms": float((window_size / sr) * 1000.0),
+            "stride_ms": float((step_size / sr) * 1000.0),
+            "channel_index": int(eeg_channel_index),
+            "target_frequencies": target_freqs,
+            "source": "backend_session_buffer",
+        })
         
         for label_str, samples in data_store.items():
             if len(samples) < 50:
@@ -557,10 +615,6 @@ def api_eeg_stop():
                 
             raw_data = np.array(samples)
             
-            sr = state.sr or 1000
-            window_size = max(1, int(sr * float(eeg_cfg.get('window_len_sec', 1.5))))
-            step_size = max(1, int(sr * float(eeg_cfg.get('step_sec', 0.25))))
-            
             for i in range(0, len(raw_data) - window_size + 1, step_size):
                 window = raw_data[i : i + window_size]
                 
@@ -570,12 +624,14 @@ def api_eeg_stop():
                 feats['sample_count'] = int(len(window))
                 feats['window_ms'] = float((len(window) / sr) * 1000.0)
                 feats['channel_index'] = eeg_channel_index
-                feats['target_frequency'] = float(target_freqs[label_int - 1]) if 0 < label_int <= len(target_freqs) else 0.0
-                feats['trial_group_id'] = str(trial_group_id)
+                feats['target_frequency'] = _resolve_eeg_target_frequency(label_int, target_freqs=target_freqs)
+                feats['trial_id'] = trial_id
                 feats['metadata_json'] = json.dumps({
                     "source": "backend_session_buffer",
                     "session_name": state.session.current_session_name,
-                    "trial_group_id": str(trial_group_id),
+                    "class_label": label_int,
+                    "trial_id": trial_id,
+                    "target_frequency": feats['target_frequency'],
                 })
                 
                 if db_manager.insert_eeg_window(feats, label_int, session_id, table_name=target_table):
@@ -586,9 +642,11 @@ def api_eeg_stop():
 
         print(f"💾 Saved {saved_count} EEG windows to {target_table}")
         state.session.reset_recording_state()
+        state.session.stop_collection_context('EEG')
         
     except Exception as e:
         print(f"❌ Error processing EEG session: {e}")
+        state.session.stop_collection_context('EEG')
 
     return jsonify({"status": "stopped", "saved_windows": saved_count if 'saved_count' in locals() else 0})
 

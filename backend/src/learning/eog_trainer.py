@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from datetime import datetime
+from pathlib import Path
 
 import joblib
 import numpy as np
@@ -11,6 +13,7 @@ from sklearn.metrics import accuracy_score, confusion_matrix
 from sklearn.preprocessing import StandardScaler
 
 from src.learning.data_splitter import build_train_val_test_split, iter_cv_folds, load_sensor_dataset, split_summary
+from src.learning.emg_trainer import create_training_run_dir, save_candidate_snapshot
 from src.learning.tree_utils import tree_to_json
 from src.utils.paths import get_base_data_dir
 
@@ -146,6 +149,7 @@ def train_eog_model(
     search_resolution=3,
     progress_callback=None,
 ):
+    training_started_at = time.time()
     table_name = "eog_windows" if not table_name or table_name in {"ALL", "undefined", "null"} else table_name
     df = load_sensor_dataset("EOG", table_name, EOG_FEATURES)
     split_bundle = build_train_val_test_split("EOG", df, EOG_FEATURES, train_ratio, val_ratio, test_ratio, random_state=random_state)
@@ -170,6 +174,9 @@ def train_eog_model(
     total_steps = max(1, len(candidates) * int(k_folds))
     completed_steps = 0
     best_result = None
+    training_history = []
+    run_dir = create_training_run_dir("EOG", model_name)
+    candidate_digits = max(2, len(str(len(candidates))))
 
     for candidate_index, candidate in enumerate(candidates, start=1):
         fold_train_scores = []
@@ -187,10 +194,40 @@ def train_eog_model(
             val_metrics = _score(model, scaler, val_df)
             fold_train_scores.append(train_metrics["accuracy"])
             fold_val_scores.append(val_metrics["accuracy"])
+            accuracy = val_metrics["accuracy"]
+            id_str = f"C{candidate_index:0{candidate_digits}d}F{fold_index}"
+            artifact_path = save_candidate_snapshot(run_dir, id_str, {
+                "sensor": "EOG",
+                "classifier": "RandomForest",
+                "model": model,
+                "scaler": scaler,
+                "feature_order": EOG_FEATURES,
+                "hyperparameters": dict(candidate),
+                "train_metrics": train_metrics,
+                "validation_metrics": val_metrics,
+                "model_id": id_str,
+            })
+            
+            history_item = {
+                "model_id": id_str,
+                "candidate_index": candidate_index,
+                "fold_index": fold_index,
+                "accuracy": accuracy,
+                "hyperparameters": dict(candidate),
+                "train_accuracy": train_metrics["accuracy"],
+                "validation_accuracy": val_metrics["accuracy"],
+                "n_train_samples": train_metrics["n_samples"],
+                "n_validation_samples": val_metrics["n_samples"],
+                "artifact_path": artifact_path,
+                "timestamp": time.time(),
+            }
+            training_history.append(history_item)
+            
             completed_steps += 1
             _emit_progress(
                 progress_callback,
                 stage="tuning",
+                model_id=id_str,
                 candidate_index=candidate_index,
                 total_candidates=len(candidates),
                 fold_index=fold_index,
@@ -198,6 +235,7 @@ def train_eog_model(
                 completed_steps=completed_steps,
                 total_steps=total_steps,
                 progress=float(completed_steps / total_steps),
+                history_item=history_item
             )
         validation_accuracy = float(np.mean(fold_val_scores))
         train_accuracy = float(np.mean(fold_train_scores))
@@ -236,6 +274,9 @@ def train_eog_model(
         "test_ratio": float(test_ratio),
         "k_folds": int(k_folds),
         "random_state": int(random_state),
+        "total_candidates": int(len(candidates)),
+        "total_models": int(len(training_history)),
+        "training_duration_seconds": float(time.time() - training_started_at),
         "selected_hyperparameters": best_result["candidate"],
         "train_accuracy": train_metrics["accuracy"],
         "validation_accuracy": best_result["validation_accuracy"],
@@ -249,6 +290,8 @@ def train_eog_model(
         "train_val_gap": best_result["train_val_gap"],
         "bias_indicator": best_result["bias_indicator"],
         "variance_indicator": best_result["variance_indicator"],
+        "training_history": training_history,
+        "training_history_dir": str(run_dir),
         "confusion_matrix": test_metrics["confusion_matrix"],
         "labels": STANDARD_LABELS,
         "split_summary": split_summary(split_bundle, int(k_folds)),
@@ -309,6 +352,8 @@ def evaluate_saved_eog_model(table_name="eog_windows", model_name=None):
         "train_val_gap": meta.get("train_val_gap"),
         "bias_indicator": meta.get("bias_indicator"),
         "variance_indicator": meta.get("variance_indicator"),
+        "training_history": meta.get("training_history", []),
+        "training_history_dir": meta.get("training_history_dir"),
         "split_summary": meta.get("split_summary", {}),
         "accuracy": meta.get("test_accuracy", meta.get("accuracy")),
         "confusion_matrix": meta.get("confusion_matrix"),
@@ -347,6 +392,10 @@ def list_saved_models():
             "created_at": meta.get("created_at"),
             "accuracy": meta.get("test_accuracy", meta.get("accuracy")),
             "hyperparameters": meta.get("selected_hyperparameters", {}),
+            "training_duration_seconds": meta.get("training_duration_seconds"),
+            "total_candidates": meta.get("total_candidates"),
+            "total_models": meta.get("total_models"),
+            "k_folds": meta.get("k_folds"),
         })
     models.sort(key=lambda item: item.get("created_at") or "", reverse=True)
     return models
