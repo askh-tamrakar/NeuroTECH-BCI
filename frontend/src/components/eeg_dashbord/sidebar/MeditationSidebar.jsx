@@ -6,7 +6,6 @@ import {
     Sparkles, VolumeX
 } from 'lucide-react';
 
-/* ── DAILY WISDOM QUOTES ─────────────────────────── */
 const WISDOM = [
     { quote: 'Wherever you are, be there totally.', author: '— Eckhart Tolle' },
     { quote: 'The present moment is the only moment available to us, and it is the door to all moments.', author: '— Thích Nhất Hạnh' },
@@ -17,23 +16,10 @@ const WISDOM = [
     { quote: 'Peace comes from within. Do not seek it without.', author: '— Buddha' },
 ];
 
-/* ── PRESETS (minutes) ─────────────────────────── */
 const PRESETS = [3, 5, 10, 15];
 
-/**
- * MeditationSidebar — page-specific controls sidebar for MeditationView.
- * Props: showSidebar, setShowSidebar, sidebarTab, setSidebarTab,
- *        containerRef, currentView, onNavigate, stats, musicState,
- *        toggleMusic, updateVol, wisdomIdx
- */
 const MeditationSidebar = ({
-    showSidebar,
-    setShowSidebar,
-    sidebarTab,
-    setSidebarTab,
     containerRef,
-    currentView,
-    onNavigate,
     stats,
     musicState,
     toggleMusic,
@@ -43,216 +29,125 @@ const MeditationSidebar = ({
     const wisdom = WISDOM[wisdomIdx] || WISDOM[0];
 
     return (
-        <div className={`absolute left-0 top-0 bottom-0 z-10 transition-all duration-300 ease-in-out border-r border-border bg-surface/80 backdrop-blur-md flex flex-col h-full ${showSidebar ? 'w-80 overflow-y-auto overflow-x-hidden' : 'w-[4.25rem] overflow-visible'} [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']`}>
-
-            {/* ── Collapsed Sidebar ──────────────────────────────── */}
-            {!showSidebar && (
-                <div className="flex flex-col items-center justify-start py-4 w-full animate-fade-in shrink-0 h-full overflow-visible">
-                    <button onClick={() => { setShowSidebar(true); setSidebarTab('nav'); }} className="hover:bg-white/10 p-2 rounded-full transition-colors group relative mb-2" title="App Navigation">
-                        <Grid size={28} className="text-muted group-hover:text-primary" />
-                        <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none z-50">App Navigation</div>
-                    </button>
-
-                    <div className="w-full h-px bg-border/80 shrink-0 my-2" />
-
-                    <button onClick={() => { setShowSidebar(true); setSidebarTab('controls'); }} className="p-2 hover:bg-white/10 rounded-full transition-colors" title="Expand Controls">
-                        <Menu size={30} className="text-primary" />
-                    </button>
-
-                    <div className="w-full h-px bg-border/80 shrink-0 my-2" />
-
-                    <div className="flex flex-col items-center cursor-default group relative w-full" title="Calm Signal">
-                        <Activity size={24} className="text-primary mb-1" />
-                        <span id="med-col-calm-val" className="text-[18px] font-black tabular-nums mt-1 text-primary">0</span>
-                        <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none z-50">Calm Signal %</div>
-                    </div>
-
-                    <div className="w-full h-px bg-border/80 shrink-0 my-2" />
-
-                    <button id="med-col-session-btn" onClick={() => containerRef.current?.sessionBtnHandler()} title="Start/Stop Session" className="transition-colors group relative p-3 rounded-full text-green-500 hover:bg-green-500/20">
-                        <Play id="med-col-play" size={26} />
-                        <Square id="med-col-stop" size={26} className="hidden" />
-                        <div id="med-col-tooltip-session" className="absolute left-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none z-50">Start Session</div>
-                    </button>
-
-                    <div className="w-full h-px bg-border/80 shrink-0 my-2" />
-
-                    <button onClick={() => setShowSidebar(true)} title="Controls Settings" className="hover:text-primary transition-colors group relative p-2">
-                        <Settings size={28} className="text-muted group-hover:text-primary" />
-                        <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none z-50">Settings & Presets</div>
-                    </button>
-
-                    <div className="w-full h-px bg-border/80 shrink-0 my-2" />
-
-                    <div className="flex flex-col w-full items-center shrink-0 mt-auto">
-                        <button id="med-col-conn-btn" onClick={() => containerRef.current?.toggleConnHandler()} className="w-[42px] h-[42px] flex items-center justify-center rounded-full border transition-all cursor-pointer shadow-sm group relative bg-red-500/10 border-red-500/30 text-red-500" title="Connection Mode">
-                            <Zap id="med-col-zap" size={24} className="hidden" />
-                            <Power id="med-col-power" size={24} />
-                            <div id="med-col-conn-lbl" className="absolute left-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none z-50">Simulate Mode</div>
-                        </button>
-                    </div>
+        <div className="flex-grow flex flex-col p-4 gap-4 font-mono transition-opacity duration-300 w-full shrink-0">
+            {/* Header */}
+            <div className="flex items-center justify-between shrink-0 mb-1">
+                <div>
+                    <h2 className="text-[22px] font-bold text-text mb-1 flex items-center gap-3 tracking-[2px]">
+                        <Wind size={26} className="text-primary" />
+                        <span style={{ letterSpacing: '2.3px' }}>NEURO TRAINER</span>
+                    </h2>
                 </div>
-            )}
+            </div>
 
-            {/* ── Expanded Sidebar ───────────────────────────────── */}
-            <div className={`flex-grow flex flex-col p-4 gap-4 font-mono transition-opacity duration-300 w-80 shrink-0 ${!showSidebar ? 'opacity-0 h-0 hidden' : 'opacity-100'}`}>
+            <div className="flex flex-col gap-4 h-full overflow-y-auto [&::-webkit-scrollbar]:hidden pb-10">
 
-                {/* Header */}
-                <div className="flex items-center justify-between shrink-0 mb-1">
-                    <div>
-                        <h2 className="text-[22px] font-bold text-text mb-1 flex items-center gap-3 tracking-[2px]">
-                            {sidebarTab === 'controls' ? <Wind size={26} className="text-primary" /> : <Grid size={26} className="text-primary" />}
-                            <span style={{ letterSpacing: '2.3px' }}>{sidebarTab === 'controls' ? 'TRAINER' : 'NEURO SUITE'}</span>
-                        </h2>
-                    </div>
-                    <div className="flex gap-2">
-                        <button onClick={() => setShowSidebar(false)} className="p-2 hover:bg-white/10 rounded-full transition-colors" title="Collapse Sidebar">
-                            <ChevronLeft size={24} />
-                        </button>
-                    </div>
-                </div>
-
-                {/* Tab Switcher */}
-                <div className="flex bg-bg/50 border border-border p-1 rounded-xl shrink-0 mb-1">
-                    <button onClick={() => setSidebarTab('controls')} className={`flex-1 py-1.5 rounded-lg text-[11px] border ${sidebarTab === 'controls' ? 'border-primary/20' : 'border-transparent'} font-bold tracking-widest uppercase flex items-center justify-center gap-2 transition-all ${sidebarTab === 'controls' ? 'bg-primary/10 text-primary shadow-glow' : 'text-muted hover:text-text hover:bg-white/5'}`}>
-                        <Settings size={14} /> Controls
-                    </button>
-                    <button onClick={() => setSidebarTab('nav')} className={`flex-1 py-1.5 rounded-lg text-[11px] border ${sidebarTab === 'nav' ? 'border-primary/20' : 'border-transparent'} font-bold tracking-widest uppercase flex items-center justify-center gap-2 transition-all ${sidebarTab === 'nav' ? 'bg-primary/10 text-primary shadow-glow' : 'text-muted hover:text-text hover:bg-white/5'}`}>
-                        <Grid size={14} /> Navigation
+                {/* Start Session Button */}
+                <div className="shrink-0">
+                    <button id="med-session-btn" onClick={() => containerRef.current?.sessionBtnHandler()} className="w-full py-4 rounded-xl text-sm font-black uppercase tracking-[3px] transition-all flex items-center justify-center gap-3 border-2 shadow-lg bg-green-500/10 border-green-500/40 text-green-500 hover:bg-green-500/20 shadow-glow">
+                        <Play size={20} /> NEW SESSION
                     </button>
                 </div>
 
-                {sidebarTab === 'controls' && (
-                    <div className="flex flex-col gap-4 h-full overflow-y-auto [&::-webkit-scrollbar]:hidden pb-10">
-
-                        {/* Start Session Button */}
-                        <div className="shrink-0">
-                            <button id="med-session-btn" onClick={() => containerRef.current?.sessionBtnHandler()} className="w-full py-4 rounded-xl text-sm font-black uppercase tracking-[3px] transition-all flex items-center justify-center gap-3 border-2 shadow-lg bg-green-500/10 border-green-500/40 text-green-500 hover:bg-green-500/20 shadow-glow">
-                                <Play size={20} /> NEW SESSION
-                            </button>
+                {/* Live Focus Mode */}
+                <div className="bg-bg/50 border border-primary/20 rounded-xl p-3 shrink-0 flex flex-col gap-3">
+                    <h4 className="text-[10px] font-bold text-muted/80 uppercase tracking-widest flex items-center gap-2">
+                        <Activity size={14} /> Live Focus Mode
+                    </h4>
+                    <div id="med-exp-conn-box" className="bg-surface/50 border border-red-500/20 rounded-lg p-2.5 flex items-center justify-between cursor-pointer hover:bg-bg/70 transition-all" onClick={() => containerRef.current?.toggleConnHandler()}>
+                        <div className="flex items-center gap-3">
+                            <Zap id="med-exp-conn-icon-live" size={18} className="text-green-500 hidden" />
+                            <Power id="med-exp-conn-icon-sim" size={18} className="text-red-500" />
+                            <span id="med-exp-conn-text" className="text-xs font-bold tracking-widest">SIMULATING</span>
                         </div>
-
-                        {/* Live Focus Mode */}
-                        <div className="bg-bg/50 border border-primary/20 rounded-xl p-3 shrink-0 flex flex-col gap-3">
-                            <h4 className="text-[10px] font-bold text-muted/80 uppercase tracking-widest flex items-center gap-2">
-                                <Activity size={14} /> Live Focus Mode
-                            </h4>
-                            <div id="med-exp-conn-box" className="bg-surface/50 border border-red-500/20 rounded-lg p-2.5 flex items-center justify-between cursor-pointer hover:bg-bg/70 transition-all" onClick={() => containerRef.current?.toggleConnHandler()}>
-                                <div className="flex items-center gap-3">
-                                    <Zap id="med-exp-conn-icon-live" size={18} className="text-green-500 hidden" />
-                                    <Power id="med-exp-conn-icon-sim" size={18} className="text-red-500" />
-                                    <span id="med-exp-conn-text" className="text-xs font-bold tracking-widest">SIMULATING</span>
-                                </div>
-                                <span className="text-[9px] bg-red-500/10 text-red-500 px-1.5 py-0.5 rounded border border-red-500/20">MOCK</span>
-                            </div>
-                            <div className="flex flex-col gap-2 p-2.5 bg-surface/30 border border-border/50 rounded-lg">
-                                <div className="flex justify-between items-center mb-1">
-                                    <div id="med-phase-badge" className="text-[11px] font-black tracking-widest text-muted">READY</div>
-                                    <div id="med-timer-big" className="text-lg font-black text-primary font-mono tabular-nums">05:00</div>
-                                </div>
-                                <div className="w-full h-1 bg-border rounded-full overflow-hidden">
-                                    <div id="med-exp-calm-pip" className="h-full bg-primary transition-all duration-300" style={{ width: '0%' }} />
-                                </div>
-                            </div>
-                            <div className="grid grid-cols-4 gap-1.5">
-                                {PRESETS.map(min => (
-                                    <button key={min} className={`med-preset-btn py-1.5 rounded-md border transition-all font-mono text-[10px] tracking-wider ${min === 5 ? 'bg-primary text-bg border-primary' : 'bg-surface/50 border-border text-muted hover:border-primary'}`} data-min={min} onClick={() => containerRef.current?.presetHandler(min)}>{min}M</button>
-                                ))}
-                            </div>
+                        <span className="text-[9px] bg-red-500/10 text-red-500 px-1.5 py-0.5 rounded border border-red-500/20">MOCK</span>
+                    </div>
+                    <div className="flex flex-col gap-2 p-2.5 bg-surface/30 border border-border/50 rounded-lg">
+                        <div className="flex justify-between items-center mb-1">
+                            <div id="med-phase-badge" className="text-[11px] font-black tracking-widest text-muted">READY</div>
+                            <div id="med-timer-big" className="text-lg font-black text-primary font-mono tabular-nums">05:00</div>
                         </div>
-
-                        {/* Soundscape Mixer */}
-                        <div className="bg-bg/50 border border-primary/20 rounded-xl p-3 shrink-0 flex flex-col gap-3">
-                            <h4 className="text-[10px] font-bold text-muted/80 uppercase tracking-widest flex items-center gap-2">
-                                <Volume2 size={14} /> Soundscape Mixer
-                            </h4>
-                            <div className="flex flex-col gap-2.5">
-                                {musicState.map(m => (
-                                    <div key={m.id} className="flex flex-col gap-2 p-2 rounded-lg bg-surface/30 border border-border/30 hover:border-primary/30 transition-all">
-                                        <div className="flex items-center justify-between">
-                                            <span className={`text-[11px] font-bold tracking-tight ${m.active ? 'text-primary' : 'text-muted'}`}>{m.label}</span>
-                                            <button onClick={() => toggleMusic(m.id)} className={`p-1 rounded-md transition-all ${m.active ? 'bg-primary text-bg' : 'bg-surface border border-border text-muted hover:text-text'}`}>
-                                                {m.active ? <Volume2 size={12} /> : <VolumeX size={12} />}
-                                            </button>
-                                        </div>
-                                        {m.active && (
-                                            <input type="range" min="0" max="1" step="0.01" value={m.vol} onChange={e => updateVol(m.id, parseFloat(e.target.value))} className="w-full h-1 bg-primary/20 rounded-lg appearance-none cursor-pointer accent-primary" />
-                                        )}
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-
-                        {/* Performance */}
-                        <div className="bg-bg/50 border border-primary/20 rounded-xl p-3 shrink-0 flex flex-col gap-3">
-                            <h4 className="text-[10px] font-bold text-muted/80 uppercase tracking-widest flex items-center gap-2">
-                                <Trophy size={14} /> Performance
-                            </h4>
-                            <div className="grid grid-cols-2 gap-2">
-                                <div className="bg-surface/30 p-2.5 rounded-lg border border-border/50 flex flex-col items-center">
-                                    <span className="text-[10px] text-muted uppercase tracking-tighter mb-1">STREAK</span>
-                                    <span className="text-xl font-black text-orange-500">🔥 {stats.streak}D</span>
-                                </div>
-                                <div className="bg-surface/30 p-2.5 rounded-lg border border-border/50 flex flex-col items-center">
-                                    <span className="text-[10px] text-muted uppercase tracking-tighter mb-1">TOTAL</span>
-                                    <span className="text-xl font-black text-primary">{stats.totalMin}M</span>
-                                </div>
-                            </div>
-                            <div className="p-2.5 bg-surface/30 border border-border/50 rounded-lg">
-                                <div className="flex justify-between items-center mb-1.5">
-                                    <span className="text-[10px] font-bold text-muted">LEVEL {Math.floor(stats.xp / 1000) + 1}</span>
-                                    <span className="text-[10px] font-mono text-primary">{stats.xp % 1000}/1000 XP</span>
-                                </div>
-                                <div className="w-full h-1.5 bg-border rounded-full overflow-hidden">
-                                    <div className="h-full bg-gradient-to-r from-primary to-blue-400" style={{ width: `${(stats.xp % 1000) / 10}%` }} />
-                                </div>
-                            </div>
-                            {stats.sessions.length > 0 && (
-                                <div className="mt-2 space-y-1.5">
-                                    <span className="text-[9px] font-black text-muted uppercase tracking-widest block mb-2">RECENT SESSIONS</span>
-                                    {stats.sessions.slice(0, 3).map((s, idx) => (
-                                        <div key={idx} className="flex items-center justify-between text-[10px] bg-bg/30 p-1.5 rounded border border-border/40">
-                                            <div className="flex gap-2 items-center">
-                                                <Calendar size={10} className="text-primary" />
-                                                <span className="font-bold opacity-80">{s.duration}</span>
-                                            </div>
-                                            <span className="font-mono text-primary font-black">{s.avgCalm}% CALM</span>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Daily Wisdom */}
-                        <div className="mt-2 border border-border/50 bg-bg/20 rounded-xl p-3 shrink-0">
-                            <div className="flex items-center gap-2 text-primary/80 font-mono text-[9px] font-bold uppercase tracking-widest mb-1.5">
-                                <BookOpen size={12} /> Daily Wisdom
-                            </div>
-                            <p className="text-[11px] text-text/80 italic mb-1.5 leading-relaxed">"{wisdom.quote}"</p>
-                            <p className="text-[10px] text-primary/70">{wisdom.author}</p>
+                        <div className="w-full h-1 bg-border rounded-full overflow-hidden">
+                            <div id="med-exp-calm-pip" className="h-full bg-primary transition-all duration-300" style={{ width: '0%' }} />
                         </div>
                     </div>
-                )}
-
-                {sidebarTab === 'nav' && (
-                    <div className="flex flex-col gap-2 h-full overflow-y-auto [&::-webkit-scrollbar]:hidden pb-4">
-                        {[
-                            { view: 'overview', Icon: Grid, label: 'Dashboard Overview' },
-                            { view: 'music', Icon: Music, label: 'Music Control' },
-                            { view: 'meditation', Icon: Wind, label: 'Meditation Trainer' },
-                            { view: 'bubble', Icon: Activity, label: 'Bubble Game' },
-                            { view: 'ssvep', Icon: Eye, label: 'SSVEP Interface' },
-                        ].map(({ view, Icon, label }) => (
-                            <button
-                                key={view}
-                                className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold text-sm border ${currentView === view ? 'bg-primary/10 text-primary border-primary/30 shadow-sm' : 'text-text hover:bg-bg border-border/50'}`}
-                                onClick={() => onNavigate && onNavigate(view)}
-                            >
-                                <Icon size={18} /> {label}
-                            </button>
+                    <div className="grid grid-cols-4 gap-1.5">
+                        {PRESETS.map(min => (
+                            <button key={min} className={`med-preset-btn py-1.5 rounded-md border transition-all font-mono text-[10px] tracking-wider ${min === 5 ? 'bg-primary text-bg border-primary shadow-glow' : 'bg-surface/50 border-border text-muted hover:border-primary'}`} data-min={min} onClick={() => containerRef.current?.presetHandler(min)}>{min}M</button>
                         ))}
                     </div>
-                )}
+                </div>
+
+                {/* Soundscape Mixer */}
+                <div className="bg-bg/50 border border-primary/20 rounded-xl p-3 shrink-0 flex flex-col gap-3">
+                    <h4 className="text-[10px] font-bold text-muted/80 uppercase tracking-widest flex items-center gap-2">
+                        <Volume2 size={14} /> Soundscape Mixer
+                    </h4>
+                    <div className="flex flex-col gap-2.5">
+                        {musicState.map(m => (
+                            <div key={m.id} className="flex flex-col gap-2 p-2 rounded-lg bg-surface/30 border border-border/30 hover:border-primary/30 transition-all">
+                                <div className="flex items-center justify-between">
+                                    <span className={`text-[11px] font-bold tracking-tight ${m.active ? 'text-primary' : 'text-muted'}`}>{m.label}</span>
+                                    <button onClick={() => toggleMusic(m.id)} className={`p-1 rounded-md transition-all ${m.active ? 'bg-primary text-bg' : 'bg-surface border border-border text-muted hover:text-text'}`}>
+                                        {m.active ? <Volume2 size={12} /> : <VolumeX size={12} />}
+                                    </button>
+                                </div>
+                                {m.active && (
+                                    <input type="range" min="0" max="1" step="0.01" value={m.vol} onChange={e => updateVol(m.id, parseFloat(e.target.value))} className="w-full h-1 bg-primary/20 rounded-lg appearance-none cursor-pointer accent-primary" />
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Performance */}
+                <div className="bg-bg/50 border border-primary/20 rounded-xl p-3 shrink-0 flex flex-col gap-3">
+                    <h4 className="text-[10px] font-bold text-muted/80 uppercase tracking-widest flex items-center gap-2">
+                        <Trophy size={14} /> Performance
+                    </h4>
+                    <div className="grid grid-cols-2 gap-2">
+                        <div className="bg-surface/30 p-2.5 rounded-lg border border-border/50 flex flex-col items-center">
+                            <span className="text-[10px] text-muted uppercase tracking-tighter mb-1">STREAK</span>
+                            <span className="text-xl font-black text-orange-500">🔥 {stats.streak}D</span>
+                        </div>
+                        <div className="bg-surface/30 p-2.5 rounded-lg border border-border/50 flex flex-col items-center">
+                            <span className="text-[10px] text-muted uppercase tracking-tighter mb-1">TOTAL</span>
+                            <span className="text-xl font-black text-primary">{stats.totalMin}M</span>
+                        </div>
+                    </div>
+                    <div className="p-2.5 bg-surface/30 border border-border/50 rounded-lg">
+                        <div className="flex justify-between items-center mb-1.5">
+                            <span className="text-[10px] font-bold text-muted">LEVEL {Math.floor(stats.xp / 1000) + 1}</span>
+                            <span className="text-[10px] font-mono text-primary">{stats.xp % 1000}/1000 XP</span>
+                        </div>
+                        <div className="w-full h-1.5 bg-border rounded-full overflow-hidden">
+                            <div className="h-full bg-gradient-to-r from-primary to-blue-400" style={{ width: `${(stats.xp % 1000) / 10}%` }} />
+                        </div>
+                    </div>
+                    {stats.sessions.length > 0 && (
+                        <div className="mt-2 space-y-1.5">
+                            <span className="text-[9px] font-black text-muted uppercase tracking-widest block mb-2">RECENT SESSIONS</span>
+                            {stats.sessions.slice(0, 3).map((s, idx) => (
+                                <div key={idx} className="flex items-center justify-between text-[10px] bg-bg/30 p-1.5 rounded border border-border/40">
+                                    <div className="flex gap-2 items-center">
+                                        <Calendar size={10} className="text-primary" />
+                                        <span className="font-bold opacity-80">{s.duration}</span>
+                                    </div>
+                                    <span className="font-mono text-primary font-black">{s.avgCalm}% CALM</span>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+
+                {/* Daily Wisdom */}
+                <div className="mt-2 border border-border/50 bg-bg/20 rounded-xl p-3 shrink-0">
+                    <div className="flex items-center gap-2 text-primary/80 font-mono text-[9px] font-bold uppercase tracking-widest mb-1.5">
+                        <BookOpen size={12} /> Daily Wisdom
+                    </div>
+                    <p className="text-[11px] text-text/80 italic mb-1.5 leading-relaxed">"{wisdom.quote}"</p>
+                    <p className="text-[10px] text-primary/70">{wisdom.author}</p>
+                </div>
             </div>
         </div>
     );

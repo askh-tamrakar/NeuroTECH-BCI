@@ -11,8 +11,12 @@ export const SidebarProvider = ({ children }) => {
     const [sidebarMode, setSidebarMode] = useState('main'); // 'main' | 'page'
     const [sidebarSlot, setSidebarSlot] = useState(null);
 
+    const value = React.useMemo(() => ({
+        sidebarMode, setSidebarMode, sidebarSlot, setSidebarSlot
+    }), [sidebarMode, sidebarSlot]);
+
     return (
-        <SidebarCtx.Provider value={{ sidebarMode, setSidebarMode, sidebarSlot, setSidebarSlot }}>
+        <SidebarCtx.Provider value={value}>
             {children}
         </SidebarCtx.Provider>
     );

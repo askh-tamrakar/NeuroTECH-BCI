@@ -1,8 +1,9 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { Settings, Play, Square, Activity, MousePointer2, Zap, History, Menu, ChevronLeft, ChevronUp, Power, ChevronDown, Gamepad2, Mouse, Trash2 } from 'lucide-react';
 import { useTheme } from '../../contexts/ThemeContext';
 import '../../styles/views/BubbleGameView.css';
 import BubbleSidebar from './sidebar/BubbleSidebar';
+import { useSidebar } from './SidebarContext';
 
 const BubbleGameView = ({ result, isConnected, onBackToMenu }) => {
   const containerRef = useRef(null);
@@ -17,12 +18,38 @@ const BubbleGameView = ({ result, isConnected, onBackToMenu }) => {
   const [difficulty, setDifficulty] = useState(1);
   const isConnectedRef = useRef(isConnected);
 
-  // Expose these for React to read
   const [realTimeFreq, setRealTimeFreq] = useState(0);
   const [focusScore, setFocusScore] = useState(0);
 
+  const { setSidebarSlot, setSidebarMode } = useSidebar();
+
+  const sidebarContent = useMemo(() => (
+    <BubbleSidebar
+      onBackToMenu={onBackToMenu}
+      mouseMode={mouseMode}
+      setMouseMode={setMouseMode}
+      realTimeFreq={realTimeFreq}
+      focusScore={focusScore}
+      globalRunning={globalRunning}
+      containerRef={containerRef}
+      difficulty={difficulty}
+      setDifficulty={setDifficulty}
+    />
+  ), [onBackToMenu, mouseMode, realTimeFreq, focusScore, globalRunning, difficulty]);
+
+  const lastSidebarUpdateRef = useRef(0);
+
+  useEffect(() => {
+    const now = Date.now();
+    if (now - lastSidebarUpdateRef.current > 200) {
+      setSidebarSlot(sidebarContent);
+      lastSidebarUpdateRef.current = now;
+    }
+  }, [sidebarContent, setSidebarSlot]);
+
   useEffect(() => { themeRef.current = currentTheme; }, [currentTheme]);
   useEffect(() => { resultRef.current = result; }, [result]);
+
   useEffect(() => {
     isConnectedRef.current = isConnected;
     if (containerRef.current && containerRef.current.onConnectionChange) {
@@ -147,8 +174,13 @@ const BubbleGameView = ({ result, isConnected, onBackToMenu }) => {
       if (fill) { fill.style.width = (eegSignal * 100) + '%'; fill.className = 'signal-fill ' + (eegSignal > .65 ? 'high' : eegSignal < .3 ? 'low' : ''); }
 
       // Update React state explicitly for sidebar UI
-      setRealTimeFreq(isNaN(rawSignal) ? 0 : rawSignal);
-      setFocusScore(Math.round(eegSignal * 100));
+      // Throttle state updates for the sidebar to 10Hz (once every 6 frames at 60fps)
+      if (typeof window !== 'undefined' && (!window._bubbleThrottle || window._bubbleThrottle > 6)) {
+        setRealTimeFreq(isNaN(rawSignal) ? 0 : rawSignal);
+        setFocusScore(Math.round(eegSignal * 100));
+        window._bubbleThrottle = 0;
+      }
+      window._bubbleThrottle = (window._bubbleThrottle || 0) + 1;
 
       drawWave();
       updateBandPanel();
@@ -545,7 +577,7 @@ const BubbleGameView = ({ result, isConnected, onBackToMenu }) => {
       <div id="game-difficulty" data-val={difficulty} className="hidden"></div>
 
       {/* ── GAME CANVAS MAIN AREA ── */}
-      <div className={`flex-grow flex flex-col items-center justify-center relative transition-all duration-300 ${showSidebar ? 'ml-80' : 'ml-[4.25rem]'}`}>
+      <div className="flex-grow flex flex-col items-center justify-center relative transition-all duration-300">
         <div className="absolute inset-0 bubble-canvas-wrap" ref={canvasWrapRef}>
           <canvas id="gameCanvas"></canvas>
 
@@ -615,20 +647,6 @@ const BubbleGameView = ({ result, isConnected, onBackToMenu }) => {
           </div>
         </div>
       </div>
-
-      {/* ── Page-Specific Sidebar (BubbleSidebar) ── */}
-      <BubbleSidebar
-        showSidebar={showSidebar}
-        setShowSidebar={setShowSidebar}
-        onBackToMenu={onBackToMenu}
-        mouseMode={mouseMode}
-        setMouseMode={setMouseMode}
-        realTimeFreq={realTimeFreq}
-        globalRunning={globalRunning}
-        containerRef={containerRef}
-        difficulty={difficulty}
-        setDifficulty={setDifficulty}
-      />
     </div>
   );
 };

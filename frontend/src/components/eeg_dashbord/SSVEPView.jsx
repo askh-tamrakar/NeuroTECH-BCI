@@ -4,6 +4,7 @@ import SSVEPStimulus from './SSVEPStimulus';
 import { soundHandler } from '../../handlers/SoundHandler';
 import { CalibrationApi } from '../../services/calibrationApi';
 import SSVEPSidebar from './sidebar/SSVEPSidebar';
+import { useSidebar } from './SidebarContext';
 
 const COMMON_KEYS = ['None', 'W', 'A', 'S', 'D', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'Enter', 'Escape', 'P', 'Q', '0', '1', '2', '3'];
 const MOUSE_ACTIONS = ['None', 'Left Click', 'Right Click', 'Double Click', 'Scroll Up', 'Scroll Down'];
@@ -87,7 +88,6 @@ export default function SSVEPView({ isConnected, wsEvent, onBackToMenu }) {
     }, [refreshRate]);
 
     const [globalRunning, setGlobalRunning] = useState(false);
-    const [isSyncing, setIsSyncing] = useState(false);
 
     // --- UI & Logging State ---
     const [openDropdownId, setOpenDropdownId] = useState(null);
@@ -96,30 +96,115 @@ export default function SSVEPView({ isConnected, wsEvent, onBackToMenu }) {
     const [realTimeFreq, setRealTimeFreq] = useState(0);
 
     // --- Protocol State ---
-    const [protocolMode, setProtocolMode] = useState(false);
-    const [protocolState, setProtocolState] = useState('IDLE');
-    const [currentTrialIdx, setCurrentTrialIdx] = useState(0);
-    const [trials, setTrials] = useState([]);
-    const [useML, setUseML] = useState(true);
-    const [scoreVector, setScoreVector] = useState([]);
+    const { setSidebarSlot, setSidebarMode } = useSidebar();
+
+    const [lastModifiedTargetId, setLastModifiedTargetId] = useState(null);
+    const [isSyncing, setIsSyncing] = useState(false);
+    const [isConfigLoaded, setIsConfigLoaded] = useState(false);
+
     const [availableModels, setAvailableModels] = useState([]);
     const [selectedModel, setSelectedModel] = useState('');
     const [predictedFreq, setPredictedFreq] = useState(0);
+    const [scoreVector, setScoreVector] = useState([]);
+    const [useML, setUseML] = useState(true);
+    const [trials, setTrials] = useState([]);
+    const [currentTrialIdx, setCurrentTrialIdx] = useState(0);
+    const [protocolMode, setProtocolMode] = useState(false);
+    const [protocolState, setProtocolState] = useState('IDLE');
 
     const addLog = useCallback((message, type = 'INFO') => {
         const time = new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
         setLogs(prev => [...prev, { id: Date.now() + Math.random(), time, message, type }].slice(-100));
     }, []);
 
-    const [lastModifiedTargetId, setLastModifiedTargetId] = useState(null);
-
     const updateConfig = (id, newValues) => {
         setLastModifiedTargetId(id);
         setConfigs(prev => prev.map(cfg => cfg.id === id ? { ...cfg, ...newValues } : cfg));
     };
 
+    // --- Controls ---
+    const startFlicker = () => {
+        setProtocolMode(false);
+        setGlobalRunning(true);
+        CalibrationApi.togglePrediction('EEG', true).catch(err => console.error('EEG prediction start failed:', err));
+        addLog('Manual simulation started');
+    };
+
+    const stopFlicker = () => {
+        setGlobalRunning(false);
+        setProtocolMode(false);
+        CalibrationApi.togglePrediction('EEG', false).catch(err => console.error('EEG prediction stop failed:', err));
+        addLog('Simulation stopped');
+    };
+
+    const runProtocol = () => {
+        const newTrials = [];
+        const rounds = 3;
+        for (let r = 0; r < rounds; r++) {
+            const roundTargets = configs.filter(c => c.enabled).sort(() => Math.random() - 0.5);
+            roundTargets.forEach(t => newTrials.push(t.id));
+        }
+
+        if (newTrials.length === 0) {
+            addLog('Cannot start protocol: No enabled targets', 'ERROR');
+            return;
+        }
+
+        setTrials(newTrials);
+        setCurrentTrialIdx(0);
+        setProtocolMode(true);
+        setGlobalRunning(true);
+        CalibrationApi.togglePrediction('EEG', true).catch(err => console.error('EEG prediction start failed:', err));
+        addLog(`Protocol started (${newTrials.length} trials)`);
+    };
+
+    useEffect(() => {
+        setSidebarSlot(
+            <SSVEPSidebar
+                onBackToMenu={onBackToMenu}
+                useML={useML}
+                setUseML={setUseML}
+                availableModels={availableModels}
+                selectedModel={selectedModel}
+                setSelectedModel={setSelectedModel}
+                addLog={addLog}
+                realTimeFreq={realTimeFreq}
+                predictedFreq={predictedFreq}
+                scoreVector={scoreVector}
+                configs={configs}
+                updateConfig={updateConfig}
+                isSyncing={isSyncing}
+                lastModifiedTargetId={lastModifiedTargetId}
+                globalRunning={globalRunning}
+                protocolMode={protocolMode}
+                startFlicker={startFlicker}
+                stopFlicker={stopFlicker}
+                runProtocol={runProtocol}
+                brightness={brightness}
+                setBrightness={setBrightness}
+                refreshRate={refreshRate}
+                setRefreshRate={setRefreshRate}
+                logs={logs}
+                setLogs={setLogs}
+                showTargets={showTargets}
+                setShowTargets={setShowTargets}
+                openDropdownId={openDropdownId}
+                setOpenDropdownId={setOpenDropdownId}
+                isConnected={isConnected}
+            />
+        );
+        return () => setSidebarSlot(null);
+    }, [
+        onBackToMenu, useML, setUseML, availableModels, selectedModel, setSelectedModel,
+        addLog, realTimeFreq, predictedFreq, scoreVector, configs, updateConfig,
+        isSyncing, lastModifiedTargetId, globalRunning, protocolMode, startFlicker,
+        stopFlicker, runProtocol, brightness, setBrightness, refreshRate, setRefreshRate,
+        logs, setLogs, showTargets, setShowTargets, openDropdownId, setOpenDropdownId,
+        isConnected, setSidebarSlot
+    ]);
+
+
     // --- Load Config on Mount ---
-    const [isConfigLoaded, setIsConfigLoaded] = useState(false);
     useEffect(() => {
         fetch('/api/config')
             .then(res => res.json())
@@ -277,41 +362,6 @@ export default function SSVEPView({ isConnected, wsEvent, onBackToMenu }) {
         return () => clearTimeout(timeoutId);
     }, [configs, refreshRate, isConfigLoaded, useML, selectedModel]);
 
-    // --- Controls ---
-    const startFlicker = () => {
-        setProtocolMode(false);
-        setGlobalRunning(true);
-        CalibrationApi.togglePrediction('EEG', true).catch(err => console.error('EEG prediction start failed:', err));
-        addLog('Manual simulation started');
-    };
-
-    const stopFlicker = () => {
-        setGlobalRunning(false);
-        setProtocolMode(false);
-        CalibrationApi.togglePrediction('EEG', false).catch(err => console.error('EEG prediction stop failed:', err));
-        addLog('Simulation stopped');
-    };
-
-    const runProtocol = () => {
-        const newTrials = [];
-        const rounds = 3;
-        for (let r = 0; r < rounds; r++) {
-            const roundTargets = configs.filter(c => c.enabled).sort(() => Math.random() - 0.5);
-            roundTargets.forEach(t => newTrials.push(t.id));
-        }
-
-        if (newTrials.length === 0) {
-            addLog('Cannot start protocol: No enabled targets', 'ERROR');
-            return;
-        }
-
-        setTrials(newTrials);
-        setCurrentTrialIdx(0);
-        setProtocolMode(true);
-        setGlobalRunning(true);
-        CalibrationApi.togglePrediction('EEG', true).catch(err => console.error('EEG prediction start failed:', err));
-        addLog(`Protocol started (${newTrials.length} trials)`);
-    };
 
     useEffect(() => {
         return () => {
@@ -319,13 +369,12 @@ export default function SSVEPView({ isConnected, wsEvent, onBackToMenu }) {
         };
     }, []);
 
-    // rightWidth kept for legacy reference; sidebar is managed by SSVEPSidebar component
-    const rightWidth = showSidebar ? 'mr-80' : 'mr-[4.5rem]';
+    // Layout is now full-width as parent handles sidebar
 
     return (
         <div className="w-full flex bg-[var(--bg)] overflow-hidden relative h-full">
             {/* Main Stimulus View */}
-            <div className={`flex-grow flex flex-col items-center justify-center relative transition-all duration-300 ${showSidebar ? 'ml-80' : 'ml-[4.5rem]'}`}>
+            <div className="flex-grow flex flex-col items-center justify-center relative transition-all duration-300">
                 <SSVEPStimulus
                     configs={configs}
                     brightness={brightness}
@@ -361,42 +410,6 @@ export default function SSVEPView({ isConnected, wsEvent, onBackToMenu }) {
                     </div>
                 )}
             </div>
-
-            {/* ── Page-Specific Sidebar (SSVEPSidebar) ── */}
-            <SSVEPSidebar
-                showSidebar={showSidebar}
-                setShowSidebar={setShowSidebar}
-                onBackToMenu={onBackToMenu}
-                useML={useML}
-                setUseML={setUseML}
-                availableModels={availableModels}
-                selectedModel={selectedModel}
-                setSelectedModel={setSelectedModel}
-                addLog={addLog}
-                realTimeFreq={realTimeFreq}
-                predictedFreq={predictedFreq}
-                scoreVector={scoreVector}
-                configs={configs}
-                updateConfig={updateConfig}
-                isSyncing={isSyncing}
-                lastModifiedTargetId={lastModifiedTargetId}
-                globalRunning={globalRunning}
-                protocolMode={protocolMode}
-                startFlicker={startFlicker}
-                stopFlicker={stopFlicker}
-                runProtocol={runProtocol}
-                brightness={brightness}
-                setBrightness={setBrightness}
-                refreshRate={refreshRate}
-                setRefreshRate={setRefreshRate}
-                logs={logs}
-                setLogs={setLogs}
-                showTargets={showTargets}
-                setShowTargets={setShowTargets}
-                openDropdownId={openDropdownId}
-                setOpenDropdownId={setOpenDropdownId}
-                isConnected={isConnected}
-            />
         </div>
     );
 }

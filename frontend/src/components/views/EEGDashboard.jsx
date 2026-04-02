@@ -35,7 +35,7 @@ const OverviewGrid = ({ onSelect }) => (
 const EEGDashboardContent = ({ wsEvent, isConnected, wsUrl }) => {
   const [currentView, setCurrentView] = useState("overview");
   const [eegResult, setEegResult] = useState(null);
-  const { sidebarMode, setSidebarMode } = useSidebar();
+  const { sidebarMode, setSidebarMode, sidebarSlot } = useSidebar();
 
   useEffect(() => {
     let modePreset = "frontal_fp1";
@@ -109,16 +109,15 @@ const EEGDashboardContent = ({ wsEvent, isConnected, wsUrl }) => {
 
           {/* Page-Specific Sidebar Panel (Empty for overview) */}
           <div className={`sidebar-panel ${sidebarMode === 'page' ? 'sidebar-active' : 'sidebar-hidden'}`}>
-            {/* Note: The physical sidebars are currently embedded IN the views for state proximity. 
-                  In this unified layout, the views will render their sidebars, but the EEGDashboard 
-                  could also render a shared "Controls" area. For now, we maintain the view-ownership 
-                  to avoid massive prop-drilling, but the Global Navigator (MainSidebar) is now 
-                  consistently available via this toggle. */}
-            <div className="flex flex-col items-center justify-center h-full opacity-40 text-center px-6">
-              <MonitorPlay size={40} className="mb-4 text-[var(--primary)]" />
-              <p className="text-[10px] font-bold tracking-widest uppercase">
-                Page controls active in main view
-              </p>
+            <div className="h-full">
+              {sidebarSlot || (
+                <div className="flex flex-col items-center justify-center h-full opacity-40 text-center px-6">
+                  <MonitorPlay size={40} className="mb-4 text-[var(--primary)]" />
+                  <p className="text-[10px] font-bold tracking-widest uppercase">
+                    Select a view to see controls
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         </div>
