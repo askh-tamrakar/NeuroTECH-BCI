@@ -1,7 +1,9 @@
-import React, { useEffect, useRef, useState, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Music, Volume2, VolumeX, Pause, Play, Headphones, FastForward, Activity } from 'lucide-react';
-import '../../styles/views/MusicView.css'; // Assuming this exists or using standard classes
+import '../../styles/views/MusicView.css';
 import MusicSidebar from './sidebar/MusicSidebar';
+import { useSidebar } from './SidebarContext';
+import { musicHandler } from '../../handlers/MusicHandler';
 
 const MusicView = ({ result, onNavigate }) => {
   const canvasRef = useRef(null);
@@ -22,6 +24,32 @@ const MusicView = ({ result, onNavigate }) => {
       default: return { primary: '#94a3b8', secondary: '#cbd5e1', accent: '#e2e8f0', glow: 'rgba(148, 163, 184, 0.3)' };
     }
   }, [result?.state]);
+
+  const { setSidebarSlot } = useSidebar();
+
+  const togglePlayback = async () => {
+    if (!isPlaying) {
+      await musicHandler.resume();
+      musicHandler.play();
+    } else {
+      musicHandler.stop();
+    }
+    setIsPlaying(!isPlaying);
+  };
+
+  useEffect(() => {
+    setSidebarSlot(
+      <MusicSidebar
+        isPlaying={isPlaying}
+        togglePlayback={togglePlayback}
+        isMuted={isMuted}
+        setIsMuted={setIsMuted}
+        result={result}
+        stateTheme={stateTheme}
+      />
+    );
+    return () => setSidebarSlot(null);
+  }, [isPlaying, isMuted, result, stateTheme, setSidebarSlot]);
 
   // Track initialization
   useEffect(() => {
@@ -124,21 +152,11 @@ const MusicView = ({ result, onNavigate }) => {
     return () => cancelAnimationFrame(animationRef.current);
   }, [stateTheme]);
 
-  const togglePlayback = async () => {
-    if (!isPlaying) {
-      await musicHandler.resume();
-      musicHandler.play();
-    } else {
-      musicHandler.stop();
-    }
-    setIsPlaying(!isPlaying);
-  };
-
   return (
     <div className="w-full h-full flex bg-[var(--bg)] overflow-hidden relative select-none">
 
       {/* ── MAIN CONTENT AREA ── */}
-      <div className={`flex-grow flex flex-col items-center justify-center relative transition-all duration-300 ${showSidebar ? 'ml-80' : 'ml-[4.25rem]'}`}>
+      <div className="flex-grow flex flex-col items-center justify-center relative transition-all duration-300">
 
         <div className="eeg-view-header">
           <div className="eeg-view-icon" style={{ background: `${stateTheme.primary}20`, borderColor: stateTheme.primary }}>
@@ -170,34 +188,6 @@ const MusicView = ({ result, onNavigate }) => {
               <div className="eeg-progress-fill pulse-glow" style={{ width: result ? '100%' : '0%', background: `linear-gradient(90deg, ${stateTheme.primary}, ${stateTheme.secondary})` }}></div>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', marginBottom: '30px' }}>
-              <button
-                onClick={togglePlayback}
-                style={{
-                  width: '64px', height: '64px', borderRadius: '50%', border: 'none',
-                  background: `linear-gradient(135deg, ${stateTheme.primary}, ${stateTheme.secondary})`,
-                  color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  boxShadow: `0 8px 16px ${stateTheme.glow}`, transition: 'all 0.3s ease'
-                }}
-                onMouseEnter={(e) => e.target.style.transform = 'scale(1.1)'}
-                onMouseLeave={(e) => e.target.style.transform = 'scale(1.0)'}
-              >
-                {isPlaying ? <Pause size={32} /> : <Play size={32} fill="currentColor" />}
-              </button>
-
-              <button
-                onClick={() => setIsMuted(!isMuted)}
-                style={{
-                  width: '64px', height: '64px', borderRadius: '50%', border: `1px solid ${stateTheme.primary}40`,
-                  background: 'rgba(255,255,255,0.05)',
-                  color: stateTheme.primary, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  transition: 'all 0.3s ease'
-                }}
-              >
-                {isMuted ? <VolumeX size={32} /> : <Volume2 size={32} />}
-              </button>
-            </div>
-
             <div className="eeg-meta-text" style={{
               display: 'inline-flex', alignItems: 'center', gap: '12px',
               color: '#fff', background: 'rgba(255,255,255,0.05)',
@@ -214,15 +204,6 @@ const MusicView = ({ result, onNavigate }) => {
           </div>
         </div>
       </div>
-
-      {/* ── Page-Specific Sidebar (MusicSidebar) ── */}
-      <MusicSidebar
-        showSidebar={showSidebar}
-        setShowSidebar={setShowSidebar}
-        onBackToMenu={() => onNavigate('overview')}
-        currentView="music"
-        onSelect={onNavigate}
-      />
     </div>
   );
 };

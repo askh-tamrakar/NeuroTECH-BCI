@@ -4,6 +4,7 @@ import { Settings, Play, Square, Activity, Wind, Power, Zap, History, Menu, Chev
 import { motion, AnimatePresence } from 'framer-motion';
 import '../../styles/views/MeditationView.css';
 import MeditationSidebar from './sidebar/MeditationSidebar';
+import { useSidebar } from './SidebarContext';
 
 /* ── DAILY WISDOM QUOTES ───────────────────────── */
 const WISDOM = [
@@ -38,6 +39,14 @@ const MeditationView = ({ result, currentView, onNavigate }) => {
   const [showSidebar, setShowSidebar] = useState(true);
   const [sidebarTab, setSidebarTab] = useState('controls');
 
+  /* ── MUSIC MIXER STATE ─────────────────────── */
+  const [musicState, setMusicState] = useState([
+    { id: 'rain', label: 'Rain/Storm', active: false, vol: 0.5 },
+    { id: 'forest', label: 'Deep Forest', active: false, vol: 0.5 },
+    { id: 'alpha', label: 'Binaural-α', active: false, vol: 0.3 },
+    { id: 'theta', label: 'Binaural-θ', active: false, vol: 0.3 },
+  ]);
+
   /* ── PERSISTENT STATS ──────────────────────── */
   const [stats, setStats] = useState(() => {
     try {
@@ -55,18 +64,6 @@ const MeditationView = ({ result, currentView, onNavigate }) => {
     }
   });
 
-  useEffect(() => {
-    localStorage.setItem('med_stats', JSON.stringify(stats));
-  }, [stats]);
-
-  /* ── MUSIC MIXER STATE ─────────────────────── */
-  const [musicState, setMusicState] = useState([
-    { id: 'rain', label: 'Rain/Storm', active: false, vol: 0.5 },
-    { id: 'forest', label: 'Deep Forest', active: false, vol: 0.5 },
-    { id: 'alpha', label: 'Binaural-α', active: false, vol: 0.3 },
-    { id: 'theta', label: 'Binaural-θ', active: false, vol: 0.3 },
-  ]);
-
   const toggleMusic = (id) => {
     setMusicState(prev => prev.map(m => m.id === id ? { ...m, active: !m.active } : m));
   };
@@ -74,6 +71,27 @@ const MeditationView = ({ result, currentView, onNavigate }) => {
   const updateVol = (id, vol) => {
     setMusicState(prev => prev.map(m => m.id === id ? { ...m, vol } : m));
   };
+
+  useEffect(() => {
+    localStorage.setItem('med_stats', JSON.stringify(stats));
+  }, [stats]);
+
+  const { setSidebarSlot } = useSidebar();
+
+  useEffect(() => {
+    setSidebarSlot(
+      <MeditationSidebar
+        containerRef={containerRef}
+        musicState={musicState}
+        toggleMusic={toggleMusic}
+        updateVol={updateVol}
+        stats={stats}
+        wisdomIdx={wisdomIdx}
+      />
+    );
+    return () => setSidebarSlot(null);
+  }, [musicState, stats, wisdomIdx, setSidebarSlot]);
+
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -611,13 +629,12 @@ const MeditationView = ({ result, currentView, onNavigate }) => {
   }, []);
 
   const wisdom = WISDOM[wisdomIdx];
-  const leftWidth = showSidebar ? 'ml-80' : 'ml-[4.25rem]';
 
   return (
     <div className="w-full h-full flex bg-bg overflow-hidden relative" ref={containerRef}>
 
       {/* ══ CENTER AREA: Main Charts ═══════════════════════════════ */}
-      <div className={`flex-grow flex flex-col transition-all duration-300 ${leftWidth}`}>
+      <div className="flex-grow flex flex-col transition-all duration-300">
         <div className="med-main">
           {/* Top row: Brain Activity & Focus Orb */}
           <div className="med-charts-row">
@@ -690,23 +707,6 @@ const MeditationView = ({ result, currentView, onNavigate }) => {
           </div>
         </div>
       </div>
-
-      {/* ── Page-Specific Sidebar (MeditationSidebar) ── */}
-      <MeditationSidebar
-        showSidebar={showSidebar}
-        setShowSidebar={setShowSidebar}
-        sidebarTab={sidebarTab}
-        setSidebarTab={setSidebarTab}
-        containerRef={containerRef}
-        PRESETS={PRESETS}
-        musicState={musicState}
-        toggleMusic={toggleMusic}
-        updateVol={updateVol}
-        stats={stats}
-        wisdom={wisdom}
-        currentView={currentView}
-        onNavigate={onNavigate}
-      />
     </div>
   );
 };
