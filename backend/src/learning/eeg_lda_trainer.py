@@ -206,6 +206,9 @@ def train_eeg_lda_model(
     training_started_at = time.time()
     table_name = "eeg_windows" if not table_name or table_name == "ALL" else table_name
     df = load_sensor_dataset("EEG", table_name, EEG_LDA_FEATURES, label_col="target_frequency")
+    # Cast target frequency to string to avoid 'continuous' classification target error with floats
+    df[df.attrs["label_col"]] = df[df.attrs["label_col"]].astype(str)
+    
     split_bundle = build_train_val_test_split("EEG", df, EEG_LDA_FEATURES, train_ratio, val_ratio, test_ratio, random_state=random_state, label_col="target_frequency")
     class_labels = sorted(pd.Series(df[split_bundle.label_col]).dropna().unique().tolist())
 
@@ -447,6 +450,9 @@ def evaluate_eeg_lda_model(table_name="eeg_windows", model_name=None):
     label_col = meta.get("label_col", "target_frequency")
     class_labels = meta.get("frequency_classes") or getattr(model, "classes_", [])
     df = load_sensor_dataset("EEG", table_name, feature_order, label_col=label_col)
+    # Ensure targets are strings for consistent multiclass evaluation
+    df[df.attrs["label_col"]] = df[df.attrs["label_col"]].astype(str)
+    
     metrics = _score(model, scaler, df, feature_order, label_col, class_labels)
     response.update({
         "accuracy": metrics["accuracy"],

@@ -14,96 +14,96 @@
   },
   "EEG": {
     "target_freqs": [
-      3.5,
-      3.94,
-      5.25,
-      6.3,
-      7,
-      7.88
+      5.89,
+      6.63,
+      8.83,
+      10.6,
+      11.78,
+      13.25
     ],
     "targets": [
       {
-        "controlType": "Keyboard",
-        "divisor": 18,
-        "enabled": true,
-        "freq": 3.5,
         "id": 0,
-        "isManual": false,
+        "freq": 5.89,
         "label": "Target 1",
         "mappedKey": "W",
         "mappedMouse": "Left Click",
-        "source": "dynamic"
+        "enabled": true,
+        "controlType": "Keyboard",
+        "divisor": 18,
+        "source": "dynamic",
+        "isManual": false
       },
       {
-        "controlType": "Keyboard",
-        "divisor": 16,
-        "enabled": true,
-        "freq": 3.94,
         "id": 1,
-        "isManual": false,
+        "freq": 6.63,
         "label": "Target 2",
         "mappedKey": "A",
         "mappedMouse": "None",
-        "source": "dynamic"
+        "enabled": true,
+        "controlType": "Keyboard",
+        "divisor": 16,
+        "source": "dynamic",
+        "isManual": false
       },
       {
-        "controlType": "Keyboard",
-        "divisor": 12,
-        "enabled": true,
-        "freq": 5.25,
         "id": 2,
-        "isManual": false,
+        "freq": 8.83,
         "label": "Target 3",
         "mappedKey": "S",
         "mappedMouse": "None",
-        "source": "dynamic"
+        "enabled": true,
+        "controlType": "Keyboard",
+        "divisor": 12,
+        "source": "dynamic",
+        "isManual": false
       },
       {
-        "controlType": "Keyboard",
-        "divisor": 10,
-        "enabled": true,
-        "freq": 6.3,
         "id": 3,
-        "isManual": false,
+        "freq": 10.6,
         "label": "Target 4",
         "mappedKey": "D",
         "mappedMouse": "None",
-        "source": "dynamic"
+        "enabled": true,
+        "controlType": "Keyboard",
+        "divisor": 10,
+        "source": "dynamic",
+        "isManual": false
       },
       {
-        "controlType": "Keyboard",
-        "divisor": 9,
-        "enabled": true,
-        "freq": 7,
         "id": 4,
-        "isManual": false,
+        "freq": 11.78,
         "label": "Target 5",
         "mappedKey": "Space",
         "mappedMouse": "None",
-        "source": "dynamic"
+        "enabled": true,
+        "controlType": "Keyboard",
+        "divisor": 9,
+        "source": "dynamic",
+        "isManual": false
       },
       {
-        "controlType": "Keyboard",
-        "divisor": 8,
-        "enabled": true,
-        "freq": 7.88,
         "id": 5,
-        "isManual": false,
+        "freq": 13.25,
         "label": "Target 6",
         "mappedKey": "W",
         "mappedMouse": "None",
-        "source": "dynamic"
+        "enabled": true,
+        "controlType": "Keyboard",
+        "divisor": 8,
+        "source": "dynamic",
+        "isManual": false
       }
     ],
     "rest_threshold": 0.6,
     "window_len_sec": 1.5,
     "ratio_threshold": 1.2,
-    "classifier": "fbcca",
+    "classifier": "lda",
     "num_harmonics": 4,
     "step_sec": 0.25,
     "smoothing_windows": 7,
-    "refresh_rate": 63,
-    "use_ml_pipeline": false
+    "refresh_rate": 106,
+    "use_ml_pipeline": true
   },
   "EOG": {
     "detection_method": "ML",

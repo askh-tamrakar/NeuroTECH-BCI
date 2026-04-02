@@ -363,13 +363,13 @@ const FeatureInsightCard = ({ importances, featureOrder, sensor }) => {
 const pct = (val) => val === undefined || val === null || isNaN(val) ? '--' : `${(val * 100).toFixed(1)}%`;
 const card = "bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-sm";
 
-const getVerdict = (trainAcc, valAcc, testAcc) => {
+const getVerdict = (trainAcc, valAcc) => {
     if (!trainAcc || !valAcc) return { text: '--', color: 'text-[var(--muted)]', bg: 'bg-[var(--bg)]/10', desc: 'No data' };
     const gap = trainAcc - valAcc;
 
-    if (trainAcc < 0.65) return { text: 'HIGH BIAS ( UNDERFIT )', color: 'text-orange-400', bg: 'bg-orange-500/10 border-orange-500/30', desc: 'Model lacks capacity or features' };
+    if (trainAcc < 0.65) return { text: 'UNDERFIT', color: 'text-orange-400', bg: 'bg-orange-500/10 border-orange-500/30', desc: 'Model lacks capacity or features' };
     if (trainAcc > 0.98 && valAcc < 0.85) return { text: 'SEVERE OVERFIT', color: 'text-red-400', bg: 'bg-red-500/10 border-red-500/30', desc: 'Memorized training data' };
-    if (gap > 0.12) return { text: 'HIGH VARIANCE ( OVERFIT )', color: 'text-yellow-400', bg: 'bg-yellow-500/10 border-yellow-500/30', desc: 'Poor generalization / wide gap' };
+    if (gap > 0.12) return { text: 'OVERFIT', color: 'text-yellow-400', bg: 'bg-yellow-500/10 border-yellow-500/30', desc: 'Poor generalization / wide gap' };
     if (valAcc > 0.80) return { text: 'OPTIMAL FIT', color: 'text-green-400', bg: 'bg-green-500/10 border-green-500/30', desc: 'Model generalized well' };
 
     return { text: 'MODERATE FIT', color: 'text-[var(--primary)]', bg: 'bg-[var(--primary)]/10 border-[var(--primary)]/30', desc: 'Acceptable performance' };
@@ -545,99 +545,145 @@ const StoredRunsList = ({ models = [], activeModelName, onSelectRun }) => (
     </div>
 );
 
-const ControlPanelCard = ({ params, setParamsTab, job, activeTab, models = [], activeModelName, onSelectRun }) => {
+const HyperparametersCard = ({ params, setParamsTab, job, activeTab, models = [], activeModelName, onSelectRun }) => {
+    const [view, setView] = useState('params'); // 'params' or 'runs'
     const minVal = Math.round((params.train_ratio || 0.7) * 100);
     const maxVal = Math.round(((params.train_ratio || 0.7) + (params.val_ratio || 0.15)) * 100);
 
     return (
-        <div className={`p-4 ${card} h-full flex flex-col relative`}>
-            <div className="flex items-center justify-between gap-2 border-b border-[var(--border)] pb-2 mb-4 shrink-0">
-                <div className="flex items-center gap-2 text-sm font-bold text-[var(--muted)] uppercase tracking-widest">
-                    <Sliders className="w-5 h-5 text-[var(--text)]" />
-                    Hyperparameters
-                </div>
+        <div className="card h-full flex flex-col p-4 bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-sm relative group/card overflow-hidden">
+            <div className="flex justify-between items-center mb-4 border-b border-[var(--border)] pb-2">
+                <h3 className="text-[18px] flex items-center font-bold text-[var(--muted)] uppercase tracking-widest">
+                    <Sliders size={32} className='mr-4 border border-text bg-bg rounded-[4px] p-1' color='var(--text)' />
+                    <span className="flex items-center gap-2">
+                        {view === 'params' ? 'Configuration' : 'Saved Runs'}
+                        <span className="text-[12px] bg-[var(--bg)] border border-[var(--border)] px-2 py-0.5 rounded-full text-[var(--text)] font-mono">
+                            {view === 'params' ? (activeTab === 'EEG' ? 5 : 7) : models.length}
+                        </span>
+                    </span>
+                    <span className="ml-3 text-[10px] bg-[var(--primary)]/20 text-[var(--primary)] px-2 py-0.5 rounded-full">{activeTab}</span>
+                </h3>
+
+                <button
+                    onClick={() => setView(view === 'params' ? 'runs' : 'params')}
+                    className="p-1.5 rounded-lg bg-[var(--bg)] border border-[var(--border)] text-[var(--muted)] hover:text-[var(--primary)] hover:border-[var(--primary)] transition-all flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider shadow-sm"
+                >
+                    {view === 'params' ? <ListOrdered size={14} /> : <Sliders size={14} />}
+                    {view === 'params' ? 'History' : 'Params'}
+                </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto pr-1 [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-                <div className="space-y-4">
-                    <div className="mb-2">
-                        <div className="text-[12px] font-bold text-[var(--muted)] uppercase tracking-tight mb-2 pl-2">Data Split Configuration</div>
-                        <div className="px-2 pb-2">
-                            <RangeSlider
-                                min={0} max={100} step={1}
-                                minValue={minVal} maxValue={maxVal}
-                                leftColor="var(--text)"
-                                middleColor="var(--muted)"
-                                rightColor="var(--accent)"
-                                hideLabels={false}
-                                onChange={(vals) => {
-                                    setParamsTab({
-                                        train_ratio: vals.left / 100,
-                                        val_ratio: vals.middle / 100,
-                                        test_ratio: vals.right / 100,
-                                        k_folds: Math.round((vals.left + vals.middle) / vals.middle)
-                                    });
-                                }}
-                            />
-                        </div>
-                    </div>
+            <div className="flex-1 min-h-0 relative">
+                <AnimatePresence mode="wait">
+                    <motion.div
+                        key={view}
+                        initial={{ opacity: 0, scale: 0.98, filter: 'blur(10px)' }}
+                        animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
+                        exit={{ opacity: 0, scale: 1.02, filter: 'blur(10px)' }}
+                        transition={{ duration: 0.3 }}
+                        className="h-full"
+                    >
+                        {view === 'params' ? (
+                            <div className="h-full overflow-y-auto pr-1 [&::-webkit-scrollbar]:hidden space-y-6" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                                <div className="space-y-4">
+                                    <div className="mb-2">
+                                        <div className="text-[11px] font-black text-[var(--muted)] uppercase tracking-[0.2em] mb-3 pl-2 border-l-2 border-[var(--primary)]">Data Split Distribution</div>
+                                        <div className="px-2 pb-2">
+                                            <RangeSlider
+                                                min={0} max={100} step={1}
+                                                minValue={minVal} maxValue={maxVal}
+                                                leftColor="var(--text)"
+                                                middleColor="var(--muted)"
+                                                rightColor="var(--accent)"
+                                                hideLabels={false}
+                                                onChange={(vals) => {
+                                                    setParamsTab({
+                                                        train_ratio: vals.left / 100,
+                                                        val_ratio: vals.middle / 100,
+                                                        test_ratio: vals.right / 100,
+                                                        k_folds: Math.round((vals.left + vals.middle) / (vals.middle || 1))
+                                                    });
+                                                }}
+                                            />
+                                        </div>
+                                    </div>
 
-                    <div><div className="flex justify-between text-sm mb-1"><span className="font-bold text-[var(--text)] uppercase tracking-tight">Search Res</span><span className="font-black text-[var(--primary)]">{params.search_resolution}</span></div><CustomSlider min={2} max={10} step={1} value={params.search_resolution} onChange={(value) => setParamsTab({ search_resolution: value })} /></div>
+                                    <div className="p-3 rounded-xl bg-[var(--bg)]/30 border border-[var(--border)] group/item hover:border-[var(--primary)]/30 transition-all">
+                                        <div className="flex justify-between text-[11px] mb-2 font-black text-[var(--muted)] uppercase tracking-widest px-1">
+                                            <span>Search Resolution</span>
+                                            <span className="text-[var(--primary)] font-mono">{params.search_resolution}</span>
+                                        </div>
+                                        <CustomSlider min={2} max={10} step={1} value={params.search_resolution} onChange={(value) => setParamsTab({ search_resolution: value })} />
+                                    </div>
 
-                    {activeTab !== 'EEG' ? (
-                        <>
-                            <div>
-                                <div className="flex justify-between items-end mb-1">
-                                    <span className="font-bold text-[var(--text)] uppercase tracking-tight">Estimators</span>
-                                    <div className="flex items-center gap-1 font-mono text-xs"><span className="font-black text-[var(--primary)]">{params.n_estimators_min || 50}</span><span className="text-[var(--muted)]">-</span><span className="font-black text-[var(--primary)]">{params.n_estimators_max || 200}</span></div>
-                                </div>
-                                <div className="px-2 pb-2"><RangeSlider min={10} max={500} step={10} minValue={params.n_estimators_min || 50} maxValue={params.n_estimators_max || 200} hideLabels={true} color="var(--primary)" onChange={(vals) => setParamsTab({ n_estimators_min: vals.min, n_estimators_max: vals.max })} /></div>
-                            </div>
-                            <div>
-                                <div className="flex justify-between items-end mb-1">
-                                    <span className="font-bold text-[var(--text)] uppercase tracking-tight">Max Depth</span>
-                                    <div className="flex items-center gap-1 font-mono text-xs"><span className="font-black text-[var(--primary)]">{params.max_depth_min || 5}</span><span className="text-[var(--muted)]">-</span><span className="font-black text-[var(--primary)]">{params.max_depth_max || 15}</span></div>
-                                </div>
-                                <div className="px-2 pb-2"><RangeSlider min={2} max={30} step={1} minValue={params.max_depth_min || 5} maxValue={params.max_depth_max || 15} hideLabels={true} color="var(--primary)" onChange={(vals) => setParamsTab({ max_depth_min: vals.min, max_depth_max: vals.max })} /></div>
-                            </div>
-                            <div>
-                                <div className="flex justify-between items-end mb-1">
-                                    <span className="font-bold text-[var(--text)] uppercase tracking-tight">Min Impurity</span>
-                                    <div className="flex items-center gap-1 font-mono text-xs"><span className="font-black text-[var(--primary)]">{params.min_impurity_decrease_min || 0}</span><span className="text-[var(--muted)]">-</span><span className="font-black text-[var(--primary)]">{params.min_impurity_decrease_max || 0.05}</span></div>
-                                </div>
-                                <div className="px-2 pb-2"><RangeSlider min={0} max={0.1} step={0.005} minValue={params.min_impurity_decrease_min || 0} maxValue={params.min_impurity_decrease_max || 0.05} hideLabels={true} color="var(--primary)" onChange={(vals) => setParamsTab({ min_impurity_decrease_min: vals.min, min_impurity_decrease_max: vals.max })} /></div>
-                            </div>
-                            <div className="grid grid-cols-2 gap-2 mt-2">
-                                <div><div className="text-[10px] font-bold text-[var(--muted)] uppercase tracking-tight mb-1">Criterion</div><CustomSelect value={params.criterion || 'gini'} onChange={(value) => setParamsTab({ criterion: value })} options={[{ value: 'gini', label: 'Gini' }, { value: 'entropy', label: 'Entropy' }, { value: 'gini,entropy', label: 'Both' }]} /></div>
-                                <div><div className="text-[10px] font-bold text-[var(--muted)] uppercase tracking-tight mb-1">Features</div><CustomSelect value={params.max_features || 'sqrt'} onChange={(value) => setParamsTab({ max_features: value })} options={[{ value: 'sqrt', label: 'Sqrt' }, { value: 'log2', label: 'Log2' }, { value: 'None', label: 'None' }, { value: 'sqrt,log2', label: 'Sqrt+Log2' }]} /></div>
-                            </div>
-                        </>
-                    ) : (
-                        <>
-                            <div>
-                                <div className="flex justify-between items-end mb-1 mt-4">
-                                    <span className="font-bold text-[var(--text)] uppercase tracking-tight">Tolerance</span>
-                                    <div className="flex items-center gap-1 font-mono text-xs"><span className="font-black text-[var(--primary)]">{params.tol_min || 0.0001}</span><span className="text-[var(--muted)]">-</span><span className="font-black text-[var(--primary)]">{params.tol_max || 0.001}</span></div>
-                                </div>
-                                <div className="px-2 pb-2"><RangeSlider min={0.0001} max={0.01} step={0.0001} minValue={params.tol_min || 0.0001} maxValue={params.tol_max || 0.001} hideLabels={true} color="var(--primary)" onChange={(vals) => setParamsTab({ tol_min: vals.min, tol_max: vals.max })} /></div>
-                            </div>
-                            <div className="grid grid-cols-2 gap-2 mt-2">
-                                <div><div className="text-[10px] font-bold text-[var(--muted)] uppercase tracking-tight mb-1">Solver</div><CustomSelect value={params.solver || 'eigen'} onChange={(value) => setParamsTab({ solver: value })} options={[{ value: 'svd', label: 'SVD' }, { value: 'lsqr', label: 'LSQR' }, { value: 'eigen', label: 'Eigen' }, { value: 'svd,lsqr,eigen', label: 'All' }]} /></div>
-                                <div><div className="text-[10px] font-bold text-[var(--muted)] uppercase tracking-tight mb-1">Shrinkage</div><CustomSelect value={params.shrinkage || 'auto'} onChange={(value) => setParamsTab({ shrinkage: value })} options={[{ value: 'auto', label: 'Auto' }, { value: 'none', label: 'None' }, { value: 'auto,none', label: 'Both' }]} /></div>
-                            </div>
-                        </>
-                    )}
+                                    {activeTab !== 'EEG' ? (
+                                        <div className="space-y-4">
+                                            <div className="p-3 rounded-xl bg-[var(--bg)]/30 border border-[var(--border)] group/item hover:border-[var(--primary)]/30 transition-all">
+                                                <div className="flex justify-between items-end mb-2 px-1">
+                                                    <span className="text-[11px] font-black text-[var(--muted)] uppercase tracking-widest">Estimators Range</span>
+                                                    <div className="flex items-center gap-1 font-mono text-[11px]"><span className="font-black text-[var(--primary)]">{params.n_estimators_min || 50}</span><span className="text-[var(--muted)]">-</span><span className="font-black text-[var(--primary)]">{params.n_estimators_max || 200}</span></div>
+                                                </div>
+                                                <div className="px-2 pb-2"><RangeSlider min={10} max={500} step={10} minValue={params.n_estimators_min || 50} maxValue={params.n_estimators_max || 200} hideLabels={true} color="var(--primary)" onChange={(vals) => setParamsTab({ n_estimators_min: vals.min, n_estimators_max: vals.max })} /></div>
+                                            </div>
 
-                    <div className="pt-3 border-t border-[var(--border)]/50">
-                        <div className="flex items-center justify-between mb-2">
-                            <div className="text-[12px] font-bold text-[var(--muted)] uppercase tracking-tight">Saved Training Runs</div>
-                            <div className="text-[10px] font-mono text-[var(--primary)]">{models.length} Runs</div>
-                        </div>
-                        <div className="max-h-48 overflow-y-auto pr-1 [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-                            <StoredRunsList models={models} activeModelName={activeModelName} onSelectRun={onSelectRun} />
-                        </div>
-                    </div>
-                </div>
+                                            <div className="p-3 rounded-xl bg-[var(--bg)]/30 border border-[var(--border)] group/item hover:border-[var(--primary)]/30 transition-all">
+                                                <div className="flex justify-between items-end mb-2 px-1">
+                                                    <span className="text-[11px] font-black text-[var(--muted)] uppercase tracking-widest">Max Depth Range</span>
+                                                    <div className="flex items-center gap-1 font-mono text-[11px]"><span className="font-black text-[var(--primary)]">{params.max_depth_min || 5}</span><span className="text-[var(--muted)]">-</span><span className="font-black text-[var(--primary)]">{params.max_depth_max || 15}</span></div>
+                                                </div>
+                                                <div className="px-2 pb-2"><RangeSlider min={2} max={30} step={1} minValue={params.max_depth_min || 5} maxValue={params.max_depth_max || 15} hideLabels={true} color="var(--primary)" onChange={(vals) => setParamsTab({ max_depth_min: vals.min, max_depth_max: vals.max })} /></div>
+                                            </div>
+
+                                            <div className="p-3 rounded-xl bg-[var(--bg)]/30 border border-[var(--border)] group/item hover:border-[var(--primary)]/30 transition-all">
+                                                <div className="flex justify-between items-end mb-2 px-1">
+                                                    <span className="text-[11px] font-black text-[var(--muted)] uppercase tracking-widest">Min Impurity Range</span>
+                                                    <div className="flex items-center gap-1 font-mono text-[11px]"><span className="font-black text-[var(--primary)]">{params.min_impurity_decrease_min || 0}</span><span className="text-[var(--muted)]">-</span><span className="font-black text-[var(--primary)]">{params.min_impurity_decrease_max || 0.05}</span></div>
+                                                </div>
+                                                <div className="px-2 pb-2"><RangeSlider min={0} max={0.01} step={0.0005} minValue={params.min_impurity_decrease_min || 0} maxValue={params.min_impurity_decrease_max || 0.05} hideLabels={true} color="var(--primary)" onChange={(vals) => setParamsTab({ min_impurity_decrease_min: vals.min, min_impurity_decrease_max: vals.max })} /></div>
+                                            </div>
+
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <div className="p-3 rounded-xl bg-[var(--bg)]/30 border border-[var(--border)]">
+                                                    <div className="text-[10px] font-black text-[var(--muted)] uppercase tracking-widest mb-2 px-1">Criterion</div>
+                                                    <CustomSelect value={params.criterion || 'gini'} onChange={(value) => setParamsTab({ criterion: value })} options={[{ value: 'gini', label: 'Gini' }, { value: 'entropy', label: 'Entropy' }, { value: 'gini,entropy', label: 'Both' }]} />
+                                                </div>
+                                                <div className="p-3 rounded-xl bg-[var(--bg)]/30 border border-[var(--border)]">
+                                                    <div className="text-[10px] font-black text-[var(--muted)] uppercase tracking-widest mb-2 px-1">Max Features</div>
+                                                    <CustomSelect value={params.max_features || 'sqrt'} onChange={(value) => setParamsTab({ max_features: value })} options={[{ value: 'sqrt', label: 'Sqrt' }, { value: 'log2', label: 'Log2' }, { value: 'None', label: 'None' }, { value: 'sqrt,log2', label: 'Both' }]} />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-4">
+                                            <div className="p-3 rounded-xl bg-[var(--bg)]/30 border border-[var(--border)] group/item hover:border-[var(--primary)]/30 transition-all">
+                                                <div className="flex justify-between items-end mb-2 px-1">
+                                                    <span className="text-[11px] font-black text-[var(--muted)] uppercase tracking-widest">Tolerance Range</span>
+                                                    <div className="flex items-center gap-1 font-mono text-[11px]"><span className="font-black text-[var(--primary)]">{params.tol_min || 0.0001}</span><span className="text-[var(--muted)]">-</span><span className="font-black text-[var(--primary)]">{params.tol_max || 0.01}</span></div>
+                                                </div>
+                                                <div className="px-2 pb-2"><RangeSlider min={0.0001} max={0.1} step={0.001} minValue={params.tol_min || 0.0001} maxValue={params.tol_max || 0.01} hideLabels={true} color="var(--primary)" onChange={(vals) => setParamsTab({ tol_min: vals.min, tol_max: vals.max })} /></div>
+                                            </div>
+
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <div className="p-3 rounded-xl bg-[var(--bg)]/30 border border-[var(--border)]">
+                                                    <div className="text-[10px] font-black text-[var(--muted)] uppercase tracking-widest mb-2 px-1">Solver</div>
+                                                    <CustomSelect value={params.solver || 'svd'} onChange={(value) => setParamsTab({ solver: value })} options={[{ value: 'svd', label: 'SVD' }, { value: 'lsqr', label: 'LSQR' }, { value: 'eigen', label: 'Eigen' }, { value: 'svd,lsqr,eigen', label: 'All' }]} />
+                                                </div>
+                                                <div className="p-3 rounded-xl bg-[var(--bg)]/30 border border-[var(--border)]">
+                                                    <div className="text-[10px] font-black text-[var(--muted)] uppercase tracking-widest mb-2 px-1">Shrinkage</div>
+                                                    <CustomSelect value={params.shrinkage || 'auto'} onChange={(value) => setParamsTab({ shrinkage: value })} options={[{ value: 'auto', label: 'Auto' }, { value: 'none', label: 'None' }, { value: 'auto,none', label: 'Both' }]} />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="h-full overflow-y-auto pr-1 [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                                <StoredRunsList models={models} activeModelName={activeModelName} onSelectRun={(name) => { onSelectRun(name); }} />
+                            </div>
+                        )}
+                    </motion.div>
+                </AnimatePresence>
             </div>
         </div>
     );
@@ -807,8 +853,6 @@ const InsightCard = ({ result, sensor, onMatrixToggle, onHistoryToggle }) => {
     );
 };
 
-
-
 const EEGModelInsightCard = ({ result, selectedSessionName, params, onHistoryToggle }) => {
     // Calculate split from RangeSlider ratios
     const trainPct = Math.round((params?.train_ratio || 0.7) * 100);
@@ -901,40 +945,6 @@ const EEGModelInsightCard = ({ result, selectedSessionName, params, onHistoryTog
         </div>
     );
 };
-
-const EEGHyperparametersCard = ({ params, onChange }) => (
-    <div className="card h-full flex flex-col p-4 bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-sm">
-        <h3 className="text-[18px] flex items-center font-bold text-[var(--muted)] uppercase tracking-widest border-b border-[var(--border)] pb-2">
-            <Sliders size={32} className='mr-4 border border-text bg-bg rounded-[4px]' color='var(--text)' /> EEG Parameters
-        </h3>
-        <div className="py-2 px-2 space-y-3 flex-1 overflow-visible">
-            <div>
-                <div className="text-base font-bold text-[var(--text)] uppercase tracking-tight mb-1">Solver</div>
-                <CustomSelect
-                    value={params.solver || 'eigen'}
-                    onChange={(value) => onChange({ target: { name: 'solver', value } })}
-                    options={[
-                        { value: 'svd', label: 'SVD' },
-                        { value: 'lsqr', label: 'LSQR' },
-                        { value: 'eigen', label: 'Eigen' }
-                    ]}
-                />
-            </div>
-            <div>
-                <div className="text-base font-bold text-[var(--text)] uppercase tracking-tight mb-1">Shrinkage</div>
-                <CustomSelect
-                    value={params.shrinkage || 'auto'}
-                    onChange={(value) => onChange({ target: { name: 'shrinkage', value } })}
-                    options={[
-                        { value: 'auto', label: 'Auto' },
-                        { value: 'none', label: 'Manual' }
-                    ]}
-                />
-            </div>
-        </div>
-    </div>
-);
-
 
 const EEGLDAVisualizationCard = ({ result }) => {
     const [view, setView] = useState('data'); // 'data' or 'guide'
@@ -1425,9 +1435,9 @@ export default function MLTrainingView({ onSwitchLab }) {
 
     // Params per sensor
     const [params, setParams] = useState({
-        EMG: { n_estimators_min: 50, n_estimators_max: 200, max_depth_min: 5, max_depth_max: 15, test_ratio: 0.15, val_ratio: 0.15, train_ratio: 0.7, k_folds: 5, search_resolution: 3, min_impurity_decrease_max: 0.05 },
-        EOG: { n_estimators_min: 50, n_estimators_max: 200, max_depth_min: 5, max_depth_max: 15, test_ratio: 0.15, val_ratio: 0.15, train_ratio: 0.7, k_folds: 5, search_resolution: 3, min_impurity_decrease_max: 0.05 },
-        EEG: { test_size: 0.2, solver: 'eigen', shrinkage: 'auto' }
+        EMG: { n_estimators_min: 50, n_estimators_max: 200, max_depth_min: 5, max_depth_max: 15, test_ratio: 0.15, val_ratio: 0.15, train_ratio: 0.7, k_folds: 5, search_resolution: 3, min_impurity_decrease_min: 0.001, min_impurity_decrease_max: 0.005 },
+        EOG: { n_estimators_min: 50, n_estimators_max: 200, max_depth_min: 5, max_depth_max: 15, test_ratio: 0.15, val_ratio: 0.15, train_ratio: 0.7, k_folds: 5, search_resolution: 3, min_impurity_decrease_min: 0.001, min_impurity_decrease_max: 0.005 },
+        EEG: { tol_min: 0.0001, tol_max: 0.01, solver: 'svd', shrinkage: 'auto', test_ratio: 0.15, val_ratio: 0.15, train_ratio: 0.7, k_folds: 5, search_resolution: 3 }
     });
 
     const activeResult = results[activeTab];
@@ -1814,29 +1824,22 @@ export default function MLTrainingView({ onSwitchLab }) {
                         </div>
 
                         <div className="flex-1 flex-grow-4 min-h-0">
-                            {activeTab !== 'EEG' ? (
-                                <ControlPanelCard
-                                    params={activeParams}
-                                    setParamsTab={(updates) => setParams(prev => ({ ...prev, [activeTab]: { ...prev[activeTab], ...updates } }))}
-                                    job={trainingJob}
-                                    activeTab={activeTab}
-                                    models={models}
-                                    activeModelName={selectedModelName}
-                                    onSelectRun={(name) => {
-                                        setInsightView('history');
-                                        if (name === selectedModelName) {
-                                            handleEval(name);
-                                            return;
-                                        }
-                                        handleLoadModel(name);
-                                    }}
-                                />
-                            ) : (
-                                <EEGHyperparametersCard
-                                    params={activeParams}
-                                    onChange={handleParamChange}
-                                />
-                            )}
+                            <HyperparametersCard
+                                params={activeParams}
+                                setParamsTab={(updates) => setParams(prev => ({ ...prev, [activeTab]: { ...prev[activeTab], ...updates } }))}
+                                job={trainingJob}
+                                activeTab={activeTab}
+                                models={models}
+                                activeModelName={selectedModelName}
+                                onSelectRun={(name) => {
+                                    setInsightView('history');
+                                    if (name === selectedModelName) {
+                                        handleEval(name);
+                                        return;
+                                    }
+                                    handleLoadModel(name);
+                                }}
+                            />
                         </div>
                     </div>
 

@@ -1,9 +1,6 @@
 {
   "sensor": "EMG",
-  "table_name": "emg_session_synthetic",
-  "created_at": "2026-04-01T18:04:07Z",
-  "sample_count": 10000,
-  "type": "synthetic",
+  "table_name": "emg_session_synthetic_session_10k",
   "storage_format": "compact_emg_v2",
   "feature_columns": [
     "mav",

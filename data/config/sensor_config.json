@@ -3,11 +3,11 @@
   "channel_mapping": {
     "ch0": {
       "enabled": true,
-      "sensor": "EEG"
+      "sensor": "EMG"
     },
     "ch1": {
       "enabled": true,
-      "sensor": "EEG"
+      "sensor": "EOG"
     }
   },
   "display": {
@@ -17,8 +17,8 @@
   },
   "num_channels": 2,
   "active_models": {
-    "EMG": "Neuro",
-    "EOG": "New",
-    "EEG": "new"
+    "EMG": "10k",
+    "EOG": "10k",
+    "EEG": "test_synthetic_lda"
   }
 }

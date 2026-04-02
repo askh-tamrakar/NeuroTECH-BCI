@@ -71,7 +71,7 @@ const RangeSlider = ({
         const newValue = getValueFromPosition(e.clientX);
 
         if (activeHandle === 'min') {
-            const minGap = Math.max(step, 2); // 2 units minimum distance
+            const minGap = step; // Use step instead of hardcoded 2
             const effectiveValue = Math.min(newValue, maxValue - minGap);
             if (effectiveValue !== minValue) {
                 onChange({ 
@@ -83,7 +83,7 @@ const RangeSlider = ({
                 });
             }
         } else {
-            const minGap = Math.max(step, 2);
+            const minGap = step;
             const effectiveValue = Math.max(newValue, minValue + minGap);
             if (effectiveValue !== maxValue) {
                 onChange({ 
