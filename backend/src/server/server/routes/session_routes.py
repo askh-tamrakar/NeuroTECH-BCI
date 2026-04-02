@@ -57,6 +57,7 @@ def _normalize_collection_context(sensor_type, payload=None):
         "mode": payload.get('mode', 'collection'),
         "label": payload.get('class_label') or payload.get('label'),
         "session_name": payload.get('session_name', 'Manual_Windows'),
+        "trial_group_id": payload.get('trial_group_id') or str(uuid.uuid4()),
         "sampling_rate": sampling_rate,
         "window_duration_ms": window_ms,
         "overlap": overlap,
@@ -77,6 +78,22 @@ def api_list_sessions(sensor_type):
     # We return the full table names as strings, as frontend parser handles `_session_` split.
     # We return the full table names as strings, as frontend parser handles `_session_` split.
     return jsonify({"tables": tables})
+
+
+@session_bp.route('/api/dataset-size/<sensor_type>', methods=['GET'])
+def api_get_dataset_size(sensor_type):
+    """Fallback route to get count of rows in the base dataset table."""
+    try:
+        sensor = str(sensor_type).upper()
+        conn = db_manager.connect(sensor)
+        cursor = conn.cursor()
+        table_name = f"{sensor.lower()}_windows"
+        cursor.execute(f"SELECT COUNT(*) FROM {table_name}")
+        count = cursor.fetchone()[0]
+        return jsonify({"total": count})
+    except Exception as e:
+        print(f"Error fetching base dataset size for {sensor_type}: {e}")
+        return jsonify({"total": 0})
 
 
 @session_bp.route('/api/sessions/<sensor_type>/<session_name>', methods=['GET'])
@@ -246,6 +263,7 @@ def api_emg_stop():
     # Process and save collected data to DB
     try:
         session_id = str(uuid.uuid4())
+        trial_group_id = str(uuid.uuid4())
         data_store = state.session.data_store['EMG']
         collection_context = state.session.get_collection_context('EMG') or {}
         sr = state.sr or SESSION_CONFIG["sampling_rate"]
@@ -324,11 +342,13 @@ def api_emg_stop():
                 feats['session_overlap'] = float(overlap)
                 feats['session_stride_ms'] = float((step_size / sr) * 1000.0)
                 feats['gap_ms'] = float(gap_ms)
+                feats['trial_group_id'] = str(collection_context.get('trial_group_id') or trial_group_id)
                 feats['metadata_json'] = json.dumps({
                     "source": "backend_session_buffer",
                     "mode": collection_context.get('mode', 'buffer_recording'),
                     "label": label_str,
                     "session_name": state.session.current_session_name,
+                    "trial_group_id": str(collection_context.get('trial_group_id') or trial_group_id),
                     "collection_context": collection_context,
                 })
                 prev_features = feats.copy()
@@ -511,6 +531,7 @@ def api_eeg_stop():
     # Process and save EEG data
     try:
         session_id = str(uuid.uuid4())
+        trial_group_id = str(uuid.uuid4())
         data_store = state.session.data_store['EEG']
         saved_count = 0
         eeg_cfg = (state.config or {}).get('features', {}).get('EEG', {})
@@ -550,6 +571,12 @@ def api_eeg_stop():
                 feats['window_ms'] = float((len(window) / sr) * 1000.0)
                 feats['channel_index'] = eeg_channel_index
                 feats['target_frequency'] = float(target_freqs[label_int - 1]) if 0 < label_int <= len(target_freqs) else 0.0
+                feats['trial_group_id'] = str(trial_group_id)
+                feats['metadata_json'] = json.dumps({
+                    "source": "backend_session_buffer",
+                    "session_name": state.session.current_session_name,
+                    "trial_group_id": str(trial_group_id),
+                })
                 
                 if db_manager.insert_eeg_window(feats, label_int, session_id, table_name=target_table):
                     saved_count += 1

@@ -52,6 +52,7 @@ COMPACT_EMG_SESSION_COLUMN_DEFS = {
     "d_spectral_entropy": "REAL NOT NULL DEFAULT 0",
     "label": "INTEGER NOT NULL",
     "session_id": "TEXT",
+    "trial_group_id": "TEXT DEFAULT ''",
     "timestamp": "REAL",
     "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
 }
@@ -150,6 +151,7 @@ class DatabaseManager:
                 corrected_label INTEGER,
                 label INTEGER NOT NULL,
                 session_id TEXT,
+                trial_group_id TEXT DEFAULT '',
                 timestamp REAL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
@@ -184,6 +186,7 @@ class DatabaseManager:
                 corrected_label INTEGER,
                 label INTEGER NOT NULL,
                 session_id TEXT,
+                trial_group_id TEXT DEFAULT '',
                 timestamp REAL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
@@ -270,6 +273,7 @@ class DatabaseManager:
             "confidence": "REAL DEFAULT 0",
             "source": "TEXT DEFAULT 'manual'",
             "corrected_label": "INTEGER",
+            "trial_group_id": "TEXT DEFAULT ''",
         })
 
     def _ensure_emg_session_columns(self, conn, table_name: str):
@@ -294,6 +298,7 @@ class DatabaseManager:
             "d_mean_freq": "REAL NOT NULL DEFAULT 0",
             "d_median_freq": "REAL NOT NULL DEFAULT 0",
             "d_spectral_entropy": "REAL NOT NULL DEFAULT 0",
+            "trial_group_id": "TEXT DEFAULT ''",
         })
 
     def _migrate_emg_session_tables(self, conn):
@@ -325,6 +330,7 @@ class DatabaseManager:
                 "id": "NULL",
                 "label": "0",
                 "session_id": "''",
+                "trial_group_id": "''",
                 "timestamp": "0",
                 "created_at": "CURRENT_TIMESTAMP",
             }
@@ -422,6 +428,7 @@ class DatabaseManager:
             "sample_count": "INTEGER DEFAULT 0",
             "window_ms": "REAL DEFAULT 0",
             "metadata_json": "TEXT DEFAULT ''",
+            "trial_group_id": "TEXT DEFAULT ''",
         })
 
     def _ensure_eog_columns(self, conn, table_name: str):
@@ -827,8 +834,8 @@ class DatabaseManager:
                     INSERT INTO {table_name} (
                         mav, rms, iemg, var, wl, zc, ssc, mean_freq, median_freq, spectral_entropy,
                         d_mav, d_rms, d_iemg, d_var, d_wl, d_zc, d_ssc, d_mean_freq, d_median_freq, d_spectral_entropy,
-                        label, session_id, timestamp
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        label, session_id, trial_group_id, timestamp
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
                     features.get('mav', 0), features.get('rms', 0), features.get('iemg', 0),
                     features.get('var', 0), features.get('wl', 0), features.get('zc', 0),
@@ -838,7 +845,7 @@ class DatabaseManager:
                     features.get('d_var', 0), features.get('d_wl', 0), features.get('d_zc', 0),
                     features.get('d_ssc', 0), features.get('d_mean_freq', 0),
                     features.get('d_median_freq', 0), features.get('d_spectral_entropy', 0),
-                    label, session_id, features.get('timestamp', 0)
+                    label, session_id, features.get('trial_group_id', ''), features.get('timestamp', 0)
                 ))
             else:
                 cursor.execute(f'''
@@ -848,8 +855,8 @@ class DatabaseManager:
                         d_mav, d_rms, d_iemg, d_var, d_wl, d_zc, d_ssc, d_mean_freq, d_median_freq, d_spectral_entropy,
                         channel_index, sample_count, window_ms, sampling_rate, session_window_ms, session_overlap, session_stride_ms, gap_ms, metadata_json,
                         confidence, source, corrected_label,
-                        label, session_id, timestamp
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        label, session_id, trial_group_id, timestamp
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
                     features.get('rms', 0), features.get('mav', 0),
                     features.get('var', 0), features.get('wl', 0), features.get('peak', 0),
@@ -873,7 +880,7 @@ class DatabaseManager:
                     self._serialize_metadata(features.get('metadata_json', features.get('metadata', {}))),
                     features.get('confidence', 0), features.get('source', 'manual'),
                     features.get('corrected_label'),
-                    label, session_id, features.get('timestamp', 0)
+                    label, session_id, features.get('trial_group_id', ''), features.get('timestamp', 0)
                 ))
             conn.commit()
             conn.close()
@@ -969,8 +976,8 @@ class DatabaseManager:
                     score_1, score_2, score_3, score_4, score_5, score_6,
                     max_score, second_max_score, score_ratio, score_mean, score_std, dominant_freq, peak_freq,
                     target_frequency, channel_index, sample_count, window_ms, metadata_json,
-                    label, session_id, timestamp
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    label, session_id, trial_group_id, timestamp
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 features.get('bp_delta', 0), features.get('bp_theta', 0),
                 features.get('bp_alpha', 0), features.get('bp_beta', 0),
@@ -989,7 +996,7 @@ class DatabaseManager:
                 features.get('target_frequency', 0), features.get('channel_index', 0),
                 features.get('sample_count', 0), features.get('window_ms', 0),
                 features.get('metadata_json', ''),
-                label, session_id, features.get('timestamp', 0)
+                label, session_id, features.get('trial_group_id', ''), features.get('timestamp', 0)
             ))
             conn.commit()
             conn.close()

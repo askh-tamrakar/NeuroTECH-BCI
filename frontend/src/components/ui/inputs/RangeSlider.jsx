@@ -14,12 +14,21 @@ const RangeSlider = ({
     onFinalChange,
     color = '#3b82f6',
     bgColor = '#3b3b3b',
+    labelSuffix = '',
     labelPrefix = '',
-    labelSuffix = ''
+    leftColor,
+    middleColor,
+    rightColor,
+    hideLabels = false
 }) => {
     const trackRef = useRef(null);
     const containerRef = useRef(null);
     const [activeHandle, setActiveHandle] = useState(null); // 'min' or 'max'
+
+    // Compute left/middle/right for output
+    const left = minValue - min;
+    const middle = maxValue - minValue;
+    const right = max - maxValue;
 
     // Clean up handle on global mouse release
     useEffect(() => {
@@ -56,41 +65,54 @@ const RangeSlider = ({
     };
 
     const handlePointerMove = (e) => {
-        // MUST stop propagation to prevent parent containers (like FFT Chart) 
-        // from receiving these move events while we are dragging.
+        if (!activeHandle) return;
         e.stopPropagation();
-
-        if (!activeHandle || e.buttons !== 1) {
-            if (activeHandle) setActiveHandle(null);
-            return;
-        }
 
         const newValue = getValueFromPosition(e.clientX);
 
         if (activeHandle === 'min') {
-            const effectiveValue = Math.min(newValue, maxValue - step);
+            const minGap = Math.max(step, 2); // 2 units minimum distance
+            const effectiveValue = Math.min(newValue, maxValue - minGap);
             if (effectiveValue !== minValue) {
-                onChange({ min: effectiveValue, max: maxValue });
+                onChange({ 
+                    min: effectiveValue, 
+                    max: maxValue,
+                    left: effectiveValue - min,
+                    middle: maxValue - effectiveValue,
+                    right: max - maxValue
+                });
             }
         } else {
-            const effectiveValue = Math.max(newValue, minValue + step);
+            const minGap = Math.max(step, 2);
+            const effectiveValue = Math.max(newValue, minValue + minGap);
             if (effectiveValue !== maxValue) {
-                onChange({ min: minValue, max: effectiveValue });
+                onChange({ 
+                    min: minValue, 
+                    max: effectiveValue,
+                    left: minValue - min,
+                    middle: effectiveValue - minValue,
+                    right: max - effectiveValue
+                });
             }
         }
     };
 
     const handlePointerUp = (e) => {
+        if (!activeHandle) return;
         e.stopPropagation();
-        if (activeHandle) {
-            if (containerRef.current) {
-                containerRef.current.releasePointerCapture(e.pointerId);
-            }
-            if (onFinalChange) {
-                onFinalChange({ min: minValue, max: maxValue });
-            }
-            setActiveHandle(null);
+        if (containerRef.current) {
+            containerRef.current.releasePointerCapture(e.pointerId);
         }
+        if (onFinalChange) {
+            onFinalChange({ 
+                min: minValue, 
+                max: maxValue,
+                left,
+                middle,
+                right
+            });
+        }
+        setActiveHandle(null);
     };
 
     const minPos = getPercentage(minValue);
@@ -116,46 +138,78 @@ const RangeSlider = ({
                     startDragging(e, handle);
                 }}
             >
-                {/* Secondary 'light' fill for the entire track */}
-                <div 
-                    className="absolute inset-0 rounded-full opacity-20"
-                    style={{ backgroundColor: color }}
-                />
-                {/* Active Range Highlight - Exactly between handles */}
+                {/* Full Track Fill - Handled below via segments if leftColor/middleColor/rightColor are provided */}
+                {(!leftColor && !middleColor && !rightColor) && (
+                    <div 
+                        className="absolute inset-0 rounded-full opacity-20"
+                        style={{ backgroundColor: color }}
+                    />
+                )}
+
+                {/* Optional 3-segment Active Highlights */}
+                {leftColor && (
+                    <div
+                        className="absolute h-full rounded-full pointer-events-none"
+                        style={{
+                            left: '0%',
+                            width: `${minPos}%`,
+                            backgroundColor: leftColor,
+                            boxShadow: `0 0 10px ${leftColor}60`
+                        }}
+                    />
+                )}
+                
+                {/* Middle 'Active Range' Highlight - Exactly between handles */}
                 <div
                     className="absolute h-full rounded-full pointer-events-none"
                     style={{
                         left: `${minPos}%`,
                         right: `${Math.max(0, 100 - maxPos)}%`,
-                        backgroundColor: color,
-                        boxShadow: `0 0 10px ${color}60`
+                        backgroundColor: middleColor || color,
+                        boxShadow: `0 0 10px ${middleColor || color}60`
                     }}
                 />
 
+                {rightColor && (
+                    <div
+                        className="absolute h-full rounded-full pointer-events-none"
+                        style={{
+                            left: `${maxPos}%`,
+                            width: `${Math.max(0, 100 - maxPos)}%`,
+                            backgroundColor: rightColor,
+                            boxShadow: `0 0 10px ${rightColor}60`
+                        }}
+                    />
+                )}
+
                 {/* Left Handle */}
                 <div 
-                    className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-5 h-5 bg-white rounded-full shadow-xl cursor-grab active:cursor-grabbing border-2 transition-transform hover:scale-110 z-30 flex items-center justify-center"
-                    style={{ left: `${minPos}%`, borderColor: color }}
+                    className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-5 h-5 bg-white rounded-full shadow-xl cursor-grab active:cursor-grabbing border-2 transition-transform hover:scale-110 flex items-center justify-center"
+                    style={{ left: `${minPos}%`, borderColor: color, zIndex: activeHandle === 'min' ? 40 : 30 }}
                     onPointerDown={(e) => startDragging(e, 'min')}
                 >
                     {/* Tooltip Label */}
-                    <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-surface-lighter px-2 py-1 rounded-md text-[11px] font-black text-text border border-border/60 whitespace-nowrap shadow-xl pointer-events-none z-50">
-                        {labelPrefix}{Number(minValue.toFixed(step.toString().includes('.') ? step.toString().split('.')[1].length : 0))}{labelSuffix}
-                    </div>
+                    {!hideLabels && (
+                        <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-surface-lighter px-2 py-1 rounded-md text-[11px] font-black text-text border border-border/60 whitespace-nowrap shadow-xl pointer-events-none z-50">
+                            {labelPrefix}{Number(minValue.toFixed(step.toString().includes('.') ? step.toString().split('.')[1].length : 0))}{labelSuffix}
+                        </div>
+                    )}
                     {/* Inner dot for handle */}
-                    <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: color, opacity: 0.5 }} />
+                    <div className="w-1.5 h-1.5 rounded-full pointer-events-none" style={{ backgroundColor: color, opacity: 0.5 }} />
                 </div>
 
                 {/* Right Handle */}
                 <div 
-                    className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-5 h-5 bg-white rounded-full shadow-xl cursor-grab active:cursor-grabbing border-2 transition-transform hover:scale-110 z-30 flex items-center justify-center"
-                    style={{ left: `${maxPos}%`, borderColor: color }}
+                    className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-5 h-5 bg-white rounded-full shadow-xl cursor-grab active:cursor-grabbing border-2 transition-transform hover:scale-110 flex items-center justify-center"
+                    style={{ left: `${maxPos}%`, borderColor: color, zIndex: activeHandle === 'max' ? 40 : 30 }}
                     onPointerDown={(e) => startDragging(e, 'max')}
                 >
                     {/* Tooltip Label */}
-                    <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-surface-lighter px-2 py-1 rounded-md text-[11px] font-black text-text border border-border/60 whitespace-nowrap shadow-xl pointer-events-none z-50">
-                        {labelPrefix}{Number(maxValue.toFixed(step.toString().includes('.') ? step.toString().split('.')[1].length : 0))}{labelSuffix}
-                    </div>
+                    {!hideLabels && (
+                        <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-surface-lighter px-2 py-1 rounded-md text-[11px] font-black text-text border border-border/60 whitespace-nowrap shadow-xl pointer-events-none z-50">
+                            {labelPrefix}{Number(maxValue.toFixed(step.toString().includes('.') ? step.toString().split('.')[1].length : 0))}{labelSuffix}
+                        </div>
+                    )}
                     {/* Inner dot for handle */}
                     <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: color, opacity: 0.5 }} />
                 </div>

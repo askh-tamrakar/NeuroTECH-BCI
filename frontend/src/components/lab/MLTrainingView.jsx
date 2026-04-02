@@ -1,26 +1,19 @@
 import Tree from 'react-d3-tree';
-import { useState, useEffect, Fragment } from 'react';
+import { useState, useEffect, Fragment, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-    Trash2, Rocket, ArrowRight, Save, Target, ListOrdered, Database, Hand, Eye, Network, Grid3X3, Brain, PieChart, RefreshCw, Sliders, ChevronLeft, ChevronRight, Circle,
-    ArrowRightFromLine, Info, BookOpen
+    Trash2, Rocket, ArrowRight, Save, Target, ListOrdered,
+    Database, Hand, Eye, Network, Grid3X3, Brain, PieChart,
+    RefreshCw, Sliders, ChevronLeft, ChevronRight, Circle,
+    ArrowRightFromLine, Info, BookOpen, BrainCircuit
 } from 'lucide-react';
 import { soundHandler } from '../../handlers/SoundHandler';
 import { useTheme } from '../../contexts/ThemeContext';
 import CustomSelect from '../ui/inputs/CustomSelect';
 import CustomSlider from '../ui/inputs/CustomSlider';
+import RangeSlider from '../ui/inputs/RangeSlider';
+import { AccuracyRadialChart } from '../ui/display/AccuracyRadialChart';
 
-const TabButton = ({ active, onClick, children }) => (
-    <button
-        onClick={onClick}
-        className={`px-6 py-2 font-medium rounded-t-lg transition-colors ${active
-            ? 'bg-[var(--surface)] text-[var(--accent)] border-t border-x border-[var(--border)]'
-            : 'text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--surface)]/50'
-            }`}
-    >
-        {children}
-    </button>
-);
 
 // Helper for tree
 const renderCustomNodeElement = ({ nodeDatum, toggleNode }) => (
@@ -39,12 +32,12 @@ const renderCustomNodeElement = ({ nodeDatum, toggleNode }) => (
 
 const SavedModelsList = ({ models, selectedModelName, onSelect, onDelete }) => (
     <div className="flex flex-col h-full overflow-hidden">
-        <div className="text-lg flex justify-around items-center font-bold text-[var(--muted)] uppercase tracking-widest mb-2 border-b border-[var(--border)] pb-2 px-1">
+        <div className="text-lg flex justify-around items-center font-bold text-[var(--muted)] uppercase tracking-widest mb-2 border-b border-[var(--border)] pb-1 px-1">
             <span className=' flex flex-row items-center'>
-                <Save color='var(--text)' className="mr-2 w-5 h-5" /> Saved Models
+                <Save color='var(--text)' className="mr-2 w-5 h-5" /> Models
             </span>
         </div>
-        <div className="flex-1 overflow-y-auto pr-1 space-y-1 [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+        <div className="flex-1 overflow-y-auto space-y-1 [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
             {models.length === 0 ? (
                 <div className="text-xs text-[var(--muted)] text-center py-4 italic opacity-50">No saved models</div>
             ) : (
@@ -52,25 +45,30 @@ const SavedModelsList = ({ models, selectedModelName, onSelect, onDelete }) => (
                     <div
                         key={m.name}
                         onClick={() => onSelect(m.name)}
-                        className={`group flex items-center justify-between p-2 rounded cursor-pointer transition-colors ${selectedModelName === m.name
-                            ? 'bg-[var(--primary)]/10 border border-[var(--primary)]'
+                        className={`group flex items-center justify-between p-1 rounded cursor-pointer transition-colors ${selectedModelName === m.name
+                            ? 'bg-text/5 border border-text/60'
                             : 'bg-[var(--bg)] border border-transparent hover:border-[var(--border)]'
                             }`}
                     >
                         <div className="min-w-0">
-                            <div className={`text-sm font-medium truncate ${selectedModelName === m.name ? 'text-[var(--primary)]' : 'text-[var(--text)]'}`}>
-                                {m.name}
-                            </div>
-                            <div className="text-[10px] text-[var(--muted)] truncate">
-                                {new Date(m.created_at).toLocaleDateString()}
-                            </div>
+                            <span className='flex flex-row items-center'>
+                                <BrainCircuit size={24} className={`mr-2 ${selectedModelName === m.name ? 'text-primary/90' : 'text-text/50'}`} />
+                                <div className='flex flex-col items-start'>
+                                    <div className={`text-[16px] font-medium truncate ${selectedModelName === m.name ? 'text-primary' : 'text-[var(--text)]'}`}>
+                                        {m.name}
+                                    </div>
+                                    <div className="text-[12px] text-[var(--muted)] truncate">
+                                        {new Date(m.created_at).toLocaleDateString()}
+                                    </div>
+                                </div>
+                            </span>
                         </div>
                         <button
                             onClick={(e) => { e.stopPropagation(); onDelete(m.name); }}
                             className="p-1 text-[var(--muted)] hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
                             title="Delete Model"
                         >
-                            <Trash2 className="w-4 h-4" />
+                            <Trash2 size={22} />
                         </button>
                     </div>
                 ))
@@ -79,47 +77,81 @@ const SavedModelsList = ({ models, selectedModelName, onSelect, onDelete }) => (
     </div>
 );
 
-const SplitAccuracyCard = ({ accuracy, n_samples, source, models, selectedModelName, onSelectModel, onDeleteModel }) => (
-    <div className="card h-full flex flex-col p-4 bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-sm hover:shadow-md transition-shadow">
+const SplitAccuracyCard = ({ result, models, selectedModelName, onSelectModel, onDeleteModel, params, totalSamples }) => {
+    const accuracy = result?.accuracy;
+    const n_samples = result?.n_samples;
+    const source = result?.source;
+    const verdict = getVerdict(result?.train_accuracy, result?.validation_accuracy, result?.test_accuracy || result?.accuracy);
 
-        <div className="flex-1 flex flex-row gap-2 min-h-0 w-full">
-            {/* LEFT: List */}
-            <div className="w-1/2 border-r border-[var(--border)] pr-2">
-                <SavedModelsList
-                    models={models}
-                    selectedModelName={selectedModelName}
-                    onSelect={onSelectModel}
-                    onDelete={onDeleteModel}
-                />
-            </div>
+    const tSamples = Math.round((n_samples || result?.split_summary?.total_samples || totalSamples || 0) * (params?.train_ratio || 0.7));
+    const vSamples = Math.round((n_samples || result?.split_summary?.total_samples || totalSamples || 0) * (params?.val_ratio || 0.15));
+    const teSamples = Math.round((n_samples || result?.split_summary?.total_samples || totalSamples || 0) * (params?.test_ratio || 0.15));
 
-            {/* RIGHT: Accuracy Display */}
-            <div className="w-1/2 border-[var(--border)]">
-                <div className="flex flex-col h-full overflow-hidden">
-                    <h3 className="text-lg flex justify-around items-center font-bold text-[var(--muted)] uppercase tracking-widest border-b border-[var(--border)] pb-2">
-                        <span className=' flex flex-row items-center'>
-                            <Target color='var(--text)' className="mr-2 w-5 h-5" /> Accuracy
-                        </span>
-                    </h3>
-                    <div className="flex flex-col justify-center items-center text-center h-full w-full">
-                        {accuracy !== null && accuracy !== undefined ? (
-                            <>
-                                <div className="text-4xl lg:text-5xl font-black text-[var(--primary)] mb-2">{(accuracy * 100).toFixed(1)}%</div>
-                                <p className="text-sm text-[var(--text)] opacity-70">on {n_samples} test samples</p>
-                                {source && <p className="text-xs text-[var(--muted)] mt-2 font-mono bg-[var(--bg)] px-2 py-1 rounded border border-[var(--border)] max-w-full truncate" title={source}>{source}</p>}
-                            </>
-                        ) : (
-                            <div className="text-center opacity-50">
-                                <div className="text-2xl text-[var(--muted)] mb-1">--</div>
-                                <p className="text-xs text-[var(--muted)]">Select or Train a Model</p>
-                            </div>
-                        )}
+    let descStr = '';
+    if (tSamples > 0) {
+        descStr = `${tSamples} Trn|${vSamples} Val|${teSamples} Tst`;
+    }
+
+    return (
+        <div className="card h-full flex flex-col bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-sm hover:shadow-md transition-shadow">
+            <div className="flex-1 flex flex-row gap-2 min-h-0 w-full">
+                <div className="w-2/5 border-r border-[var(--border)] pr-2">
+                    <SavedModelsList
+                        models={models}
+                        selectedModelName={selectedModelName}
+                        onSelect={onSelectModel}
+                        onDelete={onDeleteModel}
+                    />
+                </div>
+
+                <div className="w-3/5 border-[var(--border)]">
+                    <div className="flex flex-col h-full overflow-hidden">
+                        <h3 className="text-lg flex justify-around items-center font-bold text-[var(--muted)] uppercase tracking-widest border-b border-[var(--border)] pb-1 px-1">
+                            <span className=' flex flex-row items-center'>
+                                <Target color='var(--text)' className="mr-2 w-5 h-5" /> {!selectedModelName ? 'Data Partition' : 'Performance'}
+                            </span>
+                        </h3>
+                        <div className="flex-1 flex items-center justify-center min-h-0">
+                            {!selectedModelName ? (
+                                <AccuracyRadialChart
+                                    mode="split"
+                                    trainAcc={params?.train_ratio || 0.7}
+                                    valAcc={params?.val_ratio || 0.15}
+                                    testAcc={params?.test_ratio || 0.15}
+                                    trainSamples={tSamples}
+                                    valSamples={vSamples}
+                                    testSamples={teSamples}
+                                    verdict={{
+                                        text: `${params ? Math.round(((params.train_ratio || 0.7) + (params.val_ratio || 0.15)) / (params.val_ratio || 0.15)) : 5} FOLDS`,
+                                        color: 'text-[var(--primary)]',
+                                        bg: 'bg-transparent',
+                                        desc: descStr
+                                    }}
+                                />
+                            ) : accuracy !== null && accuracy !== undefined ? (
+                                <AccuracyRadialChart
+                                    mode="accuracy"
+                                    trainAcc={result.train_accuracy}
+                                    valAcc={result.validation_accuracy}
+                                    testAcc={result.test_accuracy || result.accuracy}
+                                    trainSamples={result.split_summary?.train_samples || null}
+                                    valSamples={result.split_summary?.val_samples || null}
+                                    testSamples={result.split_summary?.test_samples || null}
+                                    verdict={verdict}
+                                />
+                            ) : (
+                                <div className="text-center opacity-50">
+                                    <div className="text-2xl text-[var(--muted)] mb-1">--</div>
+                                    <p className="text-xs text-[var(--muted)]">Select or Train</p>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
-    </div>
-);
+    );
+};
 
 const FEATURE_METADATA = {
     'EEG': {
@@ -327,73 +359,216 @@ const FeatureInsightCard = ({ importances, featureOrder, sensor }) => {
     );
 };
 
-const HyperparametersCard = ({ params, onChange }) => (
-    <div className="card h-full flex flex-col p-4 bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-sm">
-        <div className="text-[18px] flex items-center font-bold text-[var(--muted)] uppercase tracking-widest border-b border-[var(--border)] pb-2">
-            <Sliders size={32} className='mr-4 border border-text bg-bg rounded-[4px]' color='var(--text)' /> Hyperparameters
+const pct = (val) => val === undefined || val === null || isNaN(val) ? '--' : `${(val * 100).toFixed(1)}%`;
+const card = "bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-sm";
+
+const getVerdict = (trainAcc, valAcc, testAcc) => {
+    if (!trainAcc || !valAcc) return { text: '--', color: 'text-[var(--muted)]', bg: 'bg-[var(--bg)]/10', desc: 'No data' };
+    const gap = trainAcc - valAcc;
+
+    if (trainAcc < 0.65) return { text: 'HIGH BIAS ( UNDERFIT )', color: 'text-orange-400', bg: 'bg-orange-500/10 border-orange-500/30', desc: 'Model lacks capacity or features' };
+    if (trainAcc > 0.98 && valAcc < 0.85) return { text: 'SEVERE OVERFIT', color: 'text-red-400', bg: 'bg-red-500/10 border-red-500/30', desc: 'Memorized training data' };
+    if (gap > 0.12) return { text: 'HIGH VARIANCE ( OVERFIT )', color: 'text-yellow-400', bg: 'bg-yellow-500/10 border-yellow-500/30', desc: 'Poor generalization / wide gap' };
+    if (valAcc > 0.80) return { text: 'OPTIMAL FIT', color: 'text-green-400', bg: 'bg-green-500/10 border-green-500/30', desc: 'Model generalized well' };
+
+    return { text: 'MODERATE FIT', color: 'text-[var(--primary)]', bg: 'bg-[var(--primary)]/10 border-[var(--primary)]/30', desc: 'Acceptable performance' };
+};
+
+const ControlPanelCard = ({ params, setParamsTab, job, activeTab }) => {
+    const [view, setView] = useState('params'); // 'params' or 'progress'
+
+    const minVal = Math.round((params.train_ratio || 0.7) * 100);
+    const maxVal = Math.round(((params.train_ratio || 0.7) + (params.val_ratio || 0.15)) * 100);
+
+    const getDashes = (pct) => Array.from({ length: Math.max(1, Math.round(pct / 10)) }).map(() => '-').join('');
+
+    return (
+        <div className={`p-4 ${card} h-full flex flex-col relative`}>
+            <div className="flex items-center justify-between gap-2 border-b border-[var(--border)] pb-2 mb-4 shrink-0">
+                <div className="flex items-center gap-2 text-sm font-bold text-[var(--muted)] uppercase tracking-widest">
+                    {view === 'params' ? <Sliders className="w-5 h-5 text-[var(--text)]" /> : <Rocket className="w-5 h-5 text-[var(--text)]" />}
+                    {view === 'params' ? 'Hyperparameters' : 'Tuning Progress'}
+                </div>
+                <button
+                    onClick={() => setView(view === 'params' ? 'progress' : 'params')}
+                    className="p-1.5 rounded-lg bg-[var(--bg)] border border-[var(--border)] text-[var(--muted)] hover:text-[var(--primary)] hover:border-[var(--primary)] transition-all flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider shadow-sm"
+                >
+                    {view === 'params' ? <Rocket size={14} /> : <Sliders size={14} />}
+                    {view === 'params' ? 'Progress' : 'Params'}
+                </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto pr-1 [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                {view === 'params' ? (
+                    <div className="space-y-4">
+                        <div className="mb-2">
+                            <div className="text-[12px] font-bold text-[var(--muted)] uppercase tracking-tight mb-2 pl-2">Data Split Configuration</div>
+                            <div className="px-2 pb-2">
+                                <RangeSlider
+                                    min={0} max={100} step={1}
+                                    minValue={minVal} maxValue={maxVal}
+                                    leftColor="var(--text)"
+                                    middleColor="var(--muted)"
+                                    rightColor="var(--accent)"
+                                    hideLabels={false}
+                                    onChange={(vals) => {
+                                        setParamsTab({
+                                            train_ratio: vals.left / 100,
+                                            val_ratio: vals.middle / 100,
+                                            test_ratio: vals.right / 100,
+                                            k_folds: Math.round((vals.left + vals.middle) / vals.middle)
+                                        });
+                                    }}
+                                />
+                            </div>
+                        </div>
+
+                        <div><div className="flex justify-between text-sm mb-1"><span className="font-bold text-[var(--text)] uppercase tracking-tight">Search Res</span><span className="font-black text-[var(--primary)]">{params.search_resolution}</span></div><CustomSlider min={2} max={10} step={1} value={params.search_resolution} onChange={(value) => setParamsTab({ search_resolution: value })} /></div>
+
+                        {activeTab !== 'EEG' ? (
+                            <>
+                                <div>
+                                    <div className="flex justify-between items-end mb-1">
+                                        <span className="font-bold text-[var(--text)] uppercase tracking-tight">Estimators</span>
+                                        <div className="flex items-center gap-1 font-mono text-xs"><span className="font-black text-[var(--primary)]">{params.n_estimators_min || 50}</span><span className="text-[var(--muted)]">-</span><span className="font-black text-[var(--primary)]">{params.n_estimators_max || 200}</span></div>
+                                    </div>
+                                    <div className="px-2 pb-2"><RangeSlider min={10} max={500} step={10} minValue={params.n_estimators_min || 50} maxValue={params.n_estimators_max || 200} hideLabels={true} color="var(--primary)" onChange={(vals) => setParamsTab({ n_estimators_min: vals.min, n_estimators_max: vals.max })} /></div>
+                                </div>
+                                <div>
+                                    <div className="flex justify-between items-end mb-1">
+                                        <span className="font-bold text-[var(--text)] uppercase tracking-tight">Max Depth</span>
+                                        <div className="flex items-center gap-1 font-mono text-xs"><span className="font-black text-[var(--primary)]">{params.max_depth_min || 5}</span><span className="text-[var(--muted)]">-</span><span className="font-black text-[var(--primary)]">{params.max_depth_max || 15}</span></div>
+                                    </div>
+                                    <div className="px-2 pb-2"><RangeSlider min={2} max={30} step={1} minValue={params.max_depth_min || 5} maxValue={params.max_depth_max || 15} hideLabels={true} color="var(--primary)" onChange={(vals) => setParamsTab({ max_depth_min: vals.min, max_depth_max: vals.max })} /></div>
+                                </div>
+                                <div>
+                                    <div className="flex justify-between items-end mb-1">
+                                        <span className="font-bold text-[var(--text)] uppercase tracking-tight">Min Impurity</span>
+                                        <div className="flex items-center gap-1 font-mono text-xs"><span className="font-black text-[var(--primary)]">{params.min_impurity_decrease_min || 0}</span><span className="text-[var(--muted)]">-</span><span className="font-black text-[var(--primary)]">{params.min_impurity_decrease_max || 0.05}</span></div>
+                                    </div>
+                                    <div className="px-2 pb-2"><RangeSlider min={0} max={0.1} step={0.005} minValue={params.min_impurity_decrease_min || 0} maxValue={params.min_impurity_decrease_max || 0.05} hideLabels={true} color="var(--primary)" onChange={(vals) => setParamsTab({ min_impurity_decrease_min: vals.min, min_impurity_decrease_max: vals.max })} /></div>
+                                </div>
+                                <div className="grid grid-cols-2 gap-2 mt-2">
+                                    <div><div className="text-[10px] font-bold text-[var(--muted)] uppercase tracking-tight mb-1">Criterion</div><CustomSelect value={params.criterion || 'gini'} onChange={(value) => setParamsTab({ criterion: value })} options={[{ value: 'gini', label: 'Gini' }, { value: 'entropy', label: 'Entropy' }, { value: 'gini,entropy', label: 'Both' }]} /></div>
+                                    <div><div className="text-[10px] font-bold text-[var(--muted)] uppercase tracking-tight mb-1">Features</div><CustomSelect value={params.max_features || 'sqrt'} onChange={(value) => setParamsTab({ max_features: value })} options={[{ value: 'sqrt', label: 'Sqrt' }, { value: 'log2', label: 'Log2' }, { value: 'None', label: 'None' }, { value: 'sqrt,log2', label: 'Sqrt+Log2' }]} /></div>
+                                </div>
+                            </>
+                        ) : (
+                            <>
+                                <div>
+                                    <div className="flex justify-between items-end mb-1 mt-4">
+                                        <span className="font-bold text-[var(--text)] uppercase tracking-tight">Tolerance</span>
+                                        <div className="flex items-center gap-1 font-mono text-xs"><span className="font-black text-[var(--primary)]">{params.tol_min || 0.0001}</span><span className="text-[var(--muted)]">-</span><span className="font-black text-[var(--primary)]">{params.tol_max || 0.001}</span></div>
+                                    </div>
+                                    <div className="px-2 pb-2"><RangeSlider min={0.0001} max={0.01} step={0.0001} minValue={params.tol_min || 0.0001} maxValue={params.tol_max || 0.001} hideLabels={true} color="var(--primary)" onChange={(vals) => setParamsTab({ tol_min: vals.min, tol_max: vals.max })} /></div>
+                                </div>
+                                <div className="grid grid-cols-2 gap-2 mt-2">
+                                    <div><div className="text-[10px] font-bold text-[var(--muted)] uppercase tracking-tight mb-1">Solver</div><CustomSelect value={params.solver || 'eigen'} onChange={(value) => setParamsTab({ solver: value })} options={[{ value: 'svd', label: 'SVD' }, { value: 'lsqr', label: 'LSQR' }, { value: 'eigen', label: 'Eigen' }, { value: 'svd,lsqr,eigen', label: 'All' }]} /></div>
+                                    <div><div className="text-[10px] font-bold text-[var(--muted)] uppercase tracking-tight mb-1">Shrinkage</div><CustomSelect value={params.shrinkage || 'auto'} onChange={(value) => setParamsTab({ shrinkage: value })} options={[{ value: 'auto', label: 'Auto' }, { value: 'none', label: 'None' }, { value: 'auto,none', label: 'Both' }]} /></div>
+                                </div>
+                            </>
+                        )}
+                    </div>
+                ) : (
+                    <div className="h-full flex flex-col justify-center">
+                        {!job ? <div className="text-sm text-[var(--muted)] flex items-center justify-center h-full italic opacity-50 text-center">Start a training job to see pipeline progression.</div> : <>
+                            <div className="space-y-4 text-sm mt-2">
+                                <div className="flex justify-between items-center"><span className="text-[var(--muted)] uppercase font-bold tracking-wider">Status</span><span className="font-black text-[var(--primary)] uppercase border border-[var(--primary)] bg-[var(--primary)]/10 px-2 py-0.5 rounded">{job.status}</span></div>
+                                <div className="flex justify-between"><span className="text-[var(--muted)] font-medium">Candidate Build</span><span className="font-bold text-[var(--text)] font-mono">{job.candidate_index || 0} / {job.total_candidates || 0}</span></div>
+                                <div className="flex justify-between"><span className="text-[var(--muted)] font-medium">Cross-Val Fold</span><span className="font-bold text-[var(--text)] font-mono">{job.fold_index || 0} / {job.total_folds || 0}</span></div>
+                                <div className="flex justify-between"><span className="text-[var(--muted)] font-medium">Est. Time Rem.</span><span className="font-black text-[var(--accent)] text-lg">{(job.eta_seconds === undefined || job.eta_seconds === null ? '--' : `${Math.round(job.eta_seconds)}s`)}</span></div>
+                            </div>
+                            <div className="mt-10 pb-4">
+                                <div className="flex justify-between text-xs mb-1 font-bold text-[var(--muted)]"><span>Overall Progress</span><span>{Math.round((job?.progress || 0) * 100)}%</span></div>
+                                <div className="w-full h-4 rounded-full bg-[var(--bg)] border border-[var(--border)] overflow-hidden shadow-inner"><div className="h-full bg-[var(--primary)] shadow-[0_0_8px_var(--primary)] transition-all duration-300" style={{ width: `${Math.round((job?.progress || 0) * 100)}%` }} /></div>
+                            </div>
+                        </>}
+                    </div>
+                )}
+            </div>
         </div>
-        <div className="pt-2 px-2 space-y-1 flex-1 overflow-hidden">
-            <div>
-                <div className="flex justify-between">
-                    <span className="text-xs font-bold text-[var(--text)] uppercase tracking-tight">Trees</span>
-                    <span className="text-sm font-black font-mono text-[var(--primary)]">{params.n_estimators}</span>
-                </div>
-                <CustomSlider
-                    min={5}
-                    max={500}
-                    step={5}
-                    value={params.n_estimators}
-                    onChange={(v) => onChange({ target: { name: 'n_estimators', value: v } })}
-                />
+    );
+};
+
+const InsightCard = ({ result, sensor, onToggle }) => {
+    if (!result) return <div className={`p-4 ${card} h-full text-[var(--muted)] flex items-center justify-center italic relative`}><button className="absolute top-2 right-2 hover:text-[var(--primary)] p-1 rounded border border-transparent hover:border-[var(--primary)] transition-all" onClick={onToggle}><RefreshCw size={14} /></button>No insight data available yet.</div>;
+
+    const v = getVerdict(result.train_accuracy, result.validation_accuracy, result.test_accuracy || result.accuracy);
+    const mRow = (label, val, perc = false, mono = false) => (
+        <div className="flex justify-between items-center py-1.5 border-b border-[var(--border)]/50 last:border-0">
+            <span className="text-[11px] font-bold text-[var(--muted)] uppercase tracking-wider">{label}</span>
+            <span className={`text-[13px] font-black ${mono ? 'font-mono' : ''} text-[var(--text)]`}>{val === '--' ? val : (perc ? pct(val) : val)}</span>
+        </div>
+    );
+
+    return (
+        <div className={`p-4 ${card} h-full overflow-auto flex flex-col [&::-webkit-scrollbar]:hidden`} style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+            <div className="flex items-center justify-between border-b border-[var(--border)] pb-2 mb-3 shrink-0">
+                <div className="flex items-center gap-2 text-[15px] font-bold text-[var(--muted)] uppercase tracking-widest"><Info className="w-5 h-5 text-[var(--text)]" /> {sensor} Data Insights</div>
+                {onToggle && (
+                    <button onClick={onToggle} className="p-1.5 rounded-lg bg-[var(--bg)] border border-[var(--border)] text-[var(--muted)] hover:text-[var(--primary)] hover:border-[var(--primary)] transition-all flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider shadow-sm">
+                        <Grid3X3 size={14} /> Matrix
+                    </button>
+                )}
             </div>
-            <div>
-                <div className="flex justify-between">
-                    <span className="text-xs font-bold text-[var(--text)] uppercase tracking-tight">Max Depth</span>
-                    <span className="text-sm font-black font-mono text-[var(--primary)]">{params.max_depth}</span>
+
+            <div className="flex-1 overflow-y-auto pr-1 [&::-webkit-scrollbar]:hidden space-y-4" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                <div className="h-64 border border-[var(--border)] bg-[var(--bg)]/10 rounded-2xl overflow-hidden shadow-inner">
+                    <AccuracyRadialChart
+                        trainAcc={result.train_accuracy}
+                        valAcc={result.validation_accuracy}
+                        testAcc={result.test_accuracy || result.accuracy}
+                        trainSamples={result.split_summary?.train_samples}
+                        valSamples={result.split_summary?.val_samples}
+                        testSamples={result.split_summary?.test_samples}
+                        verdict={v}
+                    />
                 </div>
-                <CustomSlider
-                    min={2}
-                    max={50}
-                    step={1}
-                    value={params.max_depth}
-                    onChange={(v) => onChange({ target: { name: 'max_depth', value: v } })}
-                />
-            </div>
-            <div>
-                <div className="flex justify-between">
-                    <span className="text-xs font-bold text-[var(--text)] uppercase tracking-tight">Test Size</span>
-                    <span className="text-sm font-black font-mono text-[var(--primary)]">{params.test_size}</span>
+
+                <div className={`border ${v.bg} rounded-xl p-4 shadow-inner relative overflow-hidden group`}>
+                    <div className="absolute top-0 right-0 p-2 opacity-10 blur-[1px] group-hover:opacity-20 transition-opacity">
+                        <Target size={48} color='var(--primary)' />
+                    </div>
+                    <div className="flex justify-between items-center mb-1">
+                        <div className="text-[10px] text-[var(--muted)] uppercase font-black tracking-widest">Model Suitability</div>
+                        <div className="text-[10px] uppercase tracking-widest text-[var(--primary)] font-bold">{sensor} Pipeline</div>
+                    </div>
+                    <div className={`text-2xl font-black tracking-tight ${v.color}`}>{v.text}</div>
+                    {v.desc && <div className="text-xs text-[var(--text)] opacity-80 mt-1.5 font-medium leading-relaxed">{v.desc}</div>}
                 </div>
-                <CustomSlider
-                    min={0.1}
-                    max={0.9}
-                    step={0.05}
-                    value={params.test_size}
-                    onChange={(v) => onChange({ target: { name: 'test_size', value: v } })}
-                />
-            </div>
-            <div>
-                <div className="flex justify-between">
-                    <span className="text-xs font-bold text-[var(--text)] uppercase tracking-tight">Pruning</span>
-                    <span className="text-sm font-black font-mono text-[var(--primary)]">{params.min_impurity_decrease}</span>
+
+                <div className="grid grid-cols-2 gap-3">
+                    <div className="p-3 bg-[var(--surface)] rounded-xl border border-[var(--border)] shadow-sm">
+                        <div className="text-[11px] uppercase text-[var(--primary)] font-black tracking-widest mb-2 border-b border-[var(--border)]/50 pb-1">Performance Details</div>
+                        {mRow('Mean CV Score', result.mean_accuracy, true, true)}
+                        {mRow('Total Average', result.average_accuracy, true, true)}
+                        {mRow('Fold Variance Dev', result.fold_std, false, true)}
+                        {mRow('Train-Val Spread', result.train_val_gap, false, true)}
+                        {mRow('Worst Fold', result.fold_min, true, true)}
+                    </div>
+                    <div className="p-3 bg-[var(--surface)] rounded-xl border border-[var(--border)] shadow-sm">
+                        <div className="text-[11px] uppercase text-[var(--accent)] font-black tracking-widest mb-2 border-b border-[var(--border)]/50 pb-1">Split Distribution</div>
+                        {mRow('Train Samples', result.split_summary?.train_samples || '--', false, true)}
+                        {mRow('Val Samples', result.split_summary?.val_samples || '--', false, true)}
+                        {mRow('Test Samples', result.split_summary?.test_samples ?? '--', false, true)}
+                        {mRow('Class Groups', result.group_counts ? Object.keys(result.group_counts).length : '--', false, true)}
+                        <div className="mt-2 pt-2 border-t border-[var(--border)]/50 text-[10px] text-[var(--muted)] font-mono text-right truncate">
+                            MODE: {result.split_summary?.split_mode ?? 'K-FOLD'}
+                        </div>
+                    </div>
                 </div>
-                <CustomSlider
-                    min={0}
-                    max={0.1}
-                    step={0.001}
-                    value={params.min_impurity_decrease}
-                    onChange={(v) => onChange({ target: { name: 'min_impurity_decrease', value: v } })}
-                />
             </div>
         </div>
-    </div>
-);
+    );
+};
+
+
 
 const EEGModelInsightCard = ({ result, selectedSessionName, params }) => {
-    // Calculate split from test_size (e.g. 0.2 -> 80/20)
-    const testSize = params?.test_size || 0.2;
-    const trainPct = Math.round((1 - testSize) * 100);
-    const testPct = Math.round(testSize * 100);
+    // Calculate split from RangeSlider ratios
+    const trainPct = Math.round((params?.train_ratio || 0.7) * 100);
+    const valPct = Math.round((params?.val_ratio || 0.15) * 100);
+    const testPct = Math.round((params?.test_ratio || 0.15) * 100);
 
     return (
         <div className="card h-full flex flex-col p-4 bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-sm relative group/insight">
@@ -427,12 +602,14 @@ const EEGModelInsightCard = ({ result, selectedSessionName, params }) => {
                     <div className="space-y-3.5">
                         <div>
                             <div className="text-[11px] uppercase tracking-[0.2em] text-[var(--muted)] mb-1 font-bold">Data Split</div>
-                            <div className="text-4xl font-black text-[var(--text)] tracking-tighter">
+                            <div className="text-2xl font-black text-[var(--text)] tracking-tighter">
                                 <span className="text-[var(--primary)]">{trainPct}</span>
                                 <span className="mx-1 text-[var(--muted)] opacity-50">/</span>
-                                <span className="text-[var(--accent)]">{testPct}</span>
+                                <span className="text-[var(--accent)]">{valPct}</span>
+                                <span className="mx-1 text-[var(--muted)] opacity-50">/</span>
+                                <span className="text-[var(--text)]">{testPct}</span>
                             </div>
-                            <div className="text-[10px] uppercase text-[var(--muted)] mt-0.5 font-mono font-bold tracking-tight">Train/Test %</div>
+                            <div className="text-[10px] uppercase text-[var(--muted)] mt-0.5 font-mono font-bold tracking-tight">Train/Val/Test %</div>
                         </div>
 
                         <div className="pt-3 border-t border-[var(--border)]/50">
@@ -500,19 +677,6 @@ const EEGHyperparametersCard = ({ params, onChange }) => (
                         { value: 'auto', label: 'Auto' },
                         { value: 'none', label: 'Manual' }
                     ]}
-                />
-            </div>
-            <div>
-                <div className="flex justify-between mb-0.5">
-                    <span className="text-base font-bold text-[var(--text)] uppercase tracking-tight">Test Size</span>
-                    <span className="text-sm font-black font-mono text-[var(--primary)]">{params.test_size}</span>
-                </div>
-                <CustomSlider
-                    min={0.1}
-                    max={0.5}
-                    step={0.05}
-                    value={params.test_size}
-                    onChange={(v) => onChange({ target: { name: 'test_size', value: v } })}
                 />
             </div>
         </div>
@@ -738,7 +902,7 @@ const ConfusionMatrixCard = ({ matrix, labels, n_samples, sensor }) => {
                                             ? 'bg-[var(--primary)]/20 font-black text-[var(--primary)]'
                                             : cell > 0 ? 'bg-red-500/10 text-red-400 font-medium' : 'text-[var(--muted)] opacity-20'
                                             }`}
-                                            style={sensor === 'EEG' ? { width: cellSize, height: cellSize, p: 0, fontSize: 15 * scale } : { p: 2 }}>
+                                            style={sensor === 'EEG' ? { width: cellSize, height: cellSize, padding: 0, fontSize: 20 * scale } : (sensor === 'EMG' ? { fontSize: 20 * scale, padding: 2 } : { fontSize: 24 * scale, padding: 2 })}>
                                             {cell}
                                         </td>
                                     ))}
@@ -948,6 +1112,40 @@ export default function MLTrainingView({ onSwitchLab }) {
     // --- SESSIONS ---
     const [availableSessions, setAvailableSessions] = useState([]);
     const [selectedSession, setSelectedSession] = useState(null);
+    const [sessionTotalSamples, setSessionTotalSamples] = useState(0);
+
+    // Fetch total samples for selected session to display in Split UI
+    useEffect(() => {
+        if (!selectedSession) {
+            fetch(`${API_BASE_URL}/api/dataset-size/${activeTab}`)
+                .then(res => res.json())
+                .then(data => {
+                    if (data && typeof data.total !== 'undefined') {
+                        setSessionTotalSamples(data.total);
+                    } else {
+                        setSessionTotalSamples(0);
+                    }
+                })
+                .catch(e => {
+                    console.error("Base dataset fetch error:", e);
+                    setSessionTotalSamples(0);
+                });
+            return;
+        }
+        fetch(`${API_BASE_URL}/api/sessions/${activeTab}/${selectedSession}?limit=1`)
+            .then(res => res.json())
+            .then(data => {
+                if (data && typeof data.total !== 'undefined') {
+                    setSessionTotalSamples(data.total);
+                } else {
+                    setSessionTotalSamples(0);
+                }
+            })
+            .catch(e => {
+                console.error("Session fetch error:", e);
+                setSessionTotalSamples(0);
+            });
+    }, [selectedSession, activeTab]);
 
     // Fetch sessions
     const fetchSessions = async () => {
@@ -983,11 +1181,13 @@ export default function MLTrainingView({ onSwitchLab }) {
     // Let's use a ref or object to cache if we wanted, but state is fine.
     const [results, setResults] = useState({ EMG: null, EOG: null, EEG: null });
     const [evalResults, setEvalResults] = useState({ EMG: null, EOG: null, EEG: null });
+    const [trainingJob, setTrainingJob] = useState(null);
+    const [insightView, setInsightView] = useState('matrix'); // 'matrix' or 'insight'
 
     // Params per sensor
     const [params, setParams] = useState({
-        EMG: { n_estimators: 100, max_depth: 8, test_size: 0.2, min_impurity_decrease: 0.0 },
-        EOG: { n_estimators: 50, max_depth: 5, test_size: 0.2, min_impurity_decrease: 0.0 },
+        EMG: { n_estimators_min: 50, n_estimators_max: 200, max_depth_min: 5, max_depth_max: 15, test_ratio: 0.15, val_ratio: 0.15, train_ratio: 0.7, k_folds: 5, search_resolution: 3, min_impurity_decrease_max: 0.05 },
+        EOG: { n_estimators_min: 50, n_estimators_max: 200, max_depth_min: 5, max_depth_max: 15, test_ratio: 0.15, val_ratio: 0.15, train_ratio: 0.7, k_folds: 5, search_resolution: 3, min_impurity_decrease_max: 0.05 },
         EEG: { test_size: 0.2, solver: 'eigen', shrinkage: 'auto' }
     });
 
@@ -1044,6 +1244,14 @@ export default function MLTrainingView({ onSwitchLab }) {
     };
 
     const handleLoadModel = async (name) => {
+        if (name === selectedModelName) {
+            // Unselect if already selected
+            setSelectedModels(prev => ({ ...prev, [activeTab]: null }));
+            setResults(prev => ({ ...prev, [activeTab]: null }));
+            setEvalResults(prev => ({ ...prev, [activeTab]: null }));
+            return;
+        }
+
         setSelectedModels(prev => ({ ...prev, [activeTab]: name }));
         // Clear previous training result so evaluation shows instead
         setResults(prev => ({ ...prev, [activeTab]: null }));
@@ -1153,14 +1361,34 @@ export default function MLTrainingView({ onSwitchLab }) {
 
     // --- GENERIC TRAIN/EVAL ---
 
+    const pollJob = async (jobId) => {
+        try {
+            const res = await fetch(`${API_BASE_URL}/api/train-jobs/${jobId}`);
+            const data = await res.json();
+            setTrainingJob(data);
+            if (data.status === 'completed' || data.status === 'failed') {
+                return data; // Done
+            } else if (data.status === 'error') {
+                console.error("Training error from backend", data.error);
+                setTrainingJob(prev => ({ ...prev, status: 'failed', error: data.error }));
+                throw new Error(data.error || "Job failed on backend");
+            }
+            // Poll again very quickly (150ms ping)
+            await new Promise(r => setTimeout(r, 150));
+            return pollJob(jobId);
+        } catch (e) {
+            console.error("Polling error", e);
+            setTrainingJob(prev => ({ ...prev, status: 'failed' }));
+            throw e;
+        }
+    };
+
     const handleTrain = async () => {
         if (!trainModelNameInput.trim()) {
             setError("Please name your model");
             return;
         }
         setLoading(true); setError(null);
-        // Clear result for this tab
-        // setResults(prev => ({ ...prev, [activeTab]: null }));
 
         try {
             const endpointMap = {
@@ -1175,6 +1403,7 @@ export default function MLTrainingView({ onSwitchLab }) {
                 method: 'POST',
                 body: JSON.stringify({
                     ...activeParams,
+                    k_folds: Math.round((activeParams.train_ratio + activeParams.val_ratio) / activeParams.val_ratio),
                     table_name: selectedSession || 'ALL',
                     model_name: modelNameFinal,
                     sensor: activeTab
@@ -1184,7 +1413,17 @@ export default function MLTrainingView({ onSwitchLab }) {
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Training failed');
 
-            setResults(prev => ({ ...prev, [activeTab]: { ...data, source: getSourceName(true) } }));
+            if (data.job_id) {
+                const finalJobResult = await pollJob(data.job_id);
+                if (finalJobResult && finalJobResult.result) {
+                    setResults(prev => ({ ...prev, [activeTab]: { ...finalJobResult.result, source: getSourceName(true) } }));
+                } else {
+                    throw new Error("Job failed or returned no result.");
+                }
+            } else {
+                setResults(prev => ({ ...prev, [activeTab]: { ...data, source: getSourceName(true) } }));
+            }
+
             // Clear previous evaluation result so training result shows instead
             setEvalResults(prev => ({ ...prev, [activeTab]: null }));
             setSelectedModels(prev => ({ ...prev, [activeTab]: modelNameFinal }));
@@ -1192,7 +1431,7 @@ export default function MLTrainingView({ onSwitchLab }) {
 
             // Refresh list but without triggering it to override our selection
             await fetchModels(modelNameFinal);
-        } catch (e) { setError(e.message); } finally { setLoading(false); }
+        } catch (e) { setError(e.message); } finally { setLoading(false); setTrainingJob(null); }
     };
 
     const handleEval = async (forceModelName = null) => {
@@ -1252,7 +1491,7 @@ export default function MLTrainingView({ onSwitchLab }) {
             <div className="flex-1 overflow-hidden">
                 <div className="h-full grid grid-cols-12 grid-rows-6 gap-4 overflow-visible">
                     {/* LEFT SIDEBAR CONTROLS (Span 3) - NOW CONTAINS ACCURACY & FEATURES TOO */}
-                    <div className="col-span-12 lg:col-span-3 row-span-6 flex flex-col gap-4 min-h-0">
+                    <div className="col-span-12 lg:col-span-3 row-span-6 flex flex-col gap-5 min-h-0">
                         {/* 1. CONTROLS */}
                         <div className="shrink-0">
                             <ControlPanel
@@ -1267,29 +1506,44 @@ export default function MLTrainingView({ onSwitchLab }) {
                                 activeTab={activeTab}
                                 setActiveTab={setActiveTab}
                                 modelName={trainModelNameInput}
-                                setModelName={setTrainModelNameInput}
+                                setModelName={(name) => {
+                                    setTrainModelNameInput(name);
+                                    if (name && name !== '') {
+                                        setSelectedModels(prev => ({ ...prev, [activeTab]: null }));
+                                        setResults(prev => ({ ...prev, [activeTab]: null }));
+                                        setEvalResults(prev => ({ ...prev, [activeTab]: null }));
+                                    }
+                                }}
                             />
                         </div>
 
                         {/* 2. ACCURACY - SPLIT PANEL */}
-                        <div className="shrink-0 h-64">
+                        <div className="shrink-0 h-[339px]">
                             <SplitAccuracyCard
-                                accuracy={(activeResult || activeEvalResult)?.accuracy}
-                                n_samples={(activeResult || activeEvalResult)?.n_samples}
-                                source={(activeResult || activeEvalResult)?.source}
+                                result={activeResult || activeEvalResult}
                                 models={models}
                                 selectedModelName={selectedModelName}
                                 onSelectModel={handleLoadModel}
                                 onDeleteModel={handleDeleteModel}
+                                params={activeParams}
+                                totalSamples={sessionTotalSamples}
                             />
                         </div>
 
                         <div className="flex-1 flex-grow-4 min-h-0">
-                            <FeatureInsightCard
-                                importances={(activeResult || activeEvalResult)?.feature_importances}
-                                featureOrder={(activeResult || activeEvalResult)?.feature_order}
-                                sensor={activeTab}
-                            />
+                            {activeTab !== 'EEG' ? (
+                                <ControlPanelCard
+                                    params={activeParams}
+                                    setParamsTab={(updates) => setParams(prev => ({ ...prev, [activeTab]: { ...prev[activeTab], ...updates } }))}
+                                    job={trainingJob}
+                                    activeTab={activeTab}
+                                />
+                            ) : (
+                                <EEGHyperparametersCard
+                                    params={activeParams}
+                                    onChange={handleParamChange}
+                                />
+                            )}
                         </div>
                     </div>
 
@@ -1309,19 +1563,36 @@ export default function MLTrainingView({ onSwitchLab }) {
                                     </div>
 
                                     <div className="col-span-12 md:col-span-3 row-span-2 min-h-0 flex flex-col overflow-hidden">
-                                        <HyperparametersCard
-                                            params={activeParams}
-                                            onChange={handleParamChange}
+                                        <FeatureInsightCard
+                                            importances={(activeResult || activeEvalResult)?.feature_importances}
+                                            featureOrder={(activeResult || activeEvalResult)?.feature_order}
+                                            sensor={activeTab}
                                         />
                                     </div>
 
-                                    <div className="col-span-12 md:col-span-6 row-span-2 min-h-0 flex flex-col overflow-hidden">
-                                        <ConfusionMatrixCard
-                                            matrix={(activeResult || activeEvalResult).confusion_matrix}
-                                            labels={(activeResult || activeEvalResult).labels || []}
-                                            n_samples={(activeResult || activeEvalResult).n_samples}
-                                            sensor={activeTab}
-                                        />
+                                    <div className="col-span-12 md:col-span-6 row-span-2 min-h-0 flex flex-col overflow-hidden relative group">
+                                        {insightView === 'matrix' ? (
+                                            <div className="h-full flex flex-col relative">
+                                                <button
+                                                    onClick={() => setInsightView('insight')}
+                                                    className="absolute top-2 right-2 z-10 p-1.5 rounded-lg bg-[var(--bg)]/80 backdrop-blur-sm border border-[var(--border)] text-[var(--muted)] hover:text-[var(--primary)] hover:border-[var(--primary)] transition-all flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider shadow-sm opacity-0 group-hover:opacity-100"
+                                                >
+                                                    <Info size={14} /> Insights
+                                                </button>
+                                                <ConfusionMatrixCard
+                                                    matrix={(activeResult || activeEvalResult).confusion_matrix}
+                                                    labels={(activeResult || activeEvalResult).labels || []}
+                                                    n_samples={(activeResult || activeEvalResult).n_samples}
+                                                    sensor={activeTab}
+                                                />
+                                            </div>
+                                        ) : (
+                                            <InsightCard
+                                                result={activeResult || activeEvalResult}
+                                                sensor={activeTab}
+                                                onToggle={() => setInsightView('matrix')}
+                                            />
+                                        )}
                                     </div>
                                 </>
                             ) : (
@@ -1335,6 +1606,7 @@ export default function MLTrainingView({ onSwitchLab }) {
                                                     labels={(activeResult || activeEvalResult).labels || []}
                                                     n_samples={(activeResult || activeEvalResult).n_samples}
                                                     sensor={activeTab}
+                                                    isFit={true}
                                                 />
                                                 <div className="flex-grow min-h-0 flex flex-col overflow-hidden">
                                                     <EEGLDAVisualizationCard result={activeResult || activeEvalResult} />
@@ -1342,9 +1614,10 @@ export default function MLTrainingView({ onSwitchLab }) {
                                             </div>
 
                                             <div className="col-span-12 lg:col-span-4 row-span-2 min-h-0 flex flex-col overflow-hidden">
-                                                <EEGHyperparametersCard
-                                                    params={activeParams}
-                                                    onChange={handleParamChange}
+                                                <FeatureInsightCard
+                                                    importances={(activeResult || activeEvalResult)?.feature_importances}
+                                                    featureOrder={(activeResult || activeEvalResult)?.feature_order}
+                                                    sensor={activeTab}
                                                 />
                                             </div>
                                             <div className="col-span-12 lg:col-span-8 row-span-2 min-h-0 flex flex-col overflow-hidden">

@@ -1,0 +1,21 @@
+{
+  "candidate_index": 0,
+  "completed_steps": 0,
+  "elapsed_seconds": 118.08906197547913,
+  "error": "EMG table emg_windows mixes collection configs. Found {'window_ms': [300.0, 900.0], 'stride_ms': [150.0, 1400.0]}.",
+  "eta_seconds": null,
+  "fold_index": 0,
+  "job_id": "9f593292-e4a6-497c-a808-e1526522a373",
+  "progress": 1.0,
+  "result": {
+    "error": "EMG table emg_windows mixes collection configs. Found {'window_ms': [300.0, 900.0], 'stride_ms': [150.0, 1400.0]}."
+  },
+  "sensor": "EMG",
+  "stage": "queued",
+  "started_at": 1774990063.2509766,
+  "status": "error",
+  "total_candidates": 0,
+  "total_folds": 5,
+  "total_steps": 0,
+  "updated_at": 1774990063.5480034
+}
