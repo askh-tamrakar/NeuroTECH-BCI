@@ -1,0 +1,39 @@
+.eeg-view-header {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  margin-bottom: 30px;
+  width: min(90%, 800px);
+}
+
+.eeg-view-title {
+  font-size: 2.2rem;
+  font-weight: 800;
+  margin: 0;
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  letter-spacing: -0.5px;
+}
+
+.eeg-score-display {
+  font-size: 4rem;
+  font-weight: 900;
+  font-family: 'Outfit', sans-serif;
+  letter-spacing: -2px;
+}
+
+.eeg-meta-text {
+  font-family: 'Inter', sans-serif;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+}
+
+/* Additional styles to ensure proper layout transition with the dual sidebar */
+.ml-80 {
+  margin-left: 20rem; /* Matches 80 * 0.25rem */
+}
+
+.ml-\[4\.25rem\] {
+  margin-left: 4.25rem;
+}
