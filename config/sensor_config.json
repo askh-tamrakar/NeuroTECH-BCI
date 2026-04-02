@@ -17,8 +17,8 @@
   },
   "num_channels": 2,
   "active_models": {
-    "EMG": "newr",
-    "EOG": "Neuro",
+    "EMG": "Neuro",
+    "EOG": "syn",
     "EEG": "new"
   }
 }

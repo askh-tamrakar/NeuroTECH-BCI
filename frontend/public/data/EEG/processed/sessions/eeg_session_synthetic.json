@@ -1,0 +1,8 @@
+{
+  "sensor": "EEG",
+  "table_name": "eeg_session_synthetic",
+  "created_at": "2026-04-01T18:04:06Z",
+  "sample_count": 10000,
+  "type": "synthetic",
+  "storage_format": "eeg_v1"
+}

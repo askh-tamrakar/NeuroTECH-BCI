@@ -10,7 +10,6 @@ import RPSGame from './views/RPSGame'
 import LabView from './views/LabView'
 import SettingsView from './views/SettingsView'
 import ServoClawView from './views/ServoClawView'
-import MLTrainingView from './lab/Split'
 
 import '../styles/App.css';
 import ScrollStack, { ScrollStackItem } from './ui/navigation/ScrollStack';
@@ -112,7 +111,6 @@ export default function Dashboard() {
     { label: 'Lab', onClick: () => setCurrentPage('lab'), href: '#lab' },
     { label: 'Servo Claw', onClick: () => setCurrentPage('servo_claw'), href: '#servo_claw' },
     { label: 'Settings', onClick: () => { setCurrentPage('settings'); setActiveSettingsSection('account'); }, href: '#settings' },
-    { label: 'ML Training', onClick: () => setCurrentPage('ml_training'), href: '#ml_training' },
     ...(isMobile ? [] : [{
       label: 'Theme',
       type: 'pill',
@@ -214,7 +212,6 @@ export default function Dashboard() {
                 {currentPage === 'lab' && <LabView wsData={lastMessage} wsEvent={lastEvent} config={lastConfig} wsUrl={status === 'connected' ? (currentUrl || defaultWsSource) : null} />}
                 {currentPage === 'servo_claw' && <ServoClawView wsEvent={lastEvent} isConnected={!!lastMessage} />}
                 {currentPage === 'settings' && <SettingsView latency={latency} localWs={localWs} setLocalWs={setLocalWs} ngrokWs={ngrokWs} setNgrokWs={setNgrokWs} activeSection={activeSettingsSection} onSectionChange={setActiveSettingsSection} connect={(url) => { updateDeepSettings('general.wsUrl', url); connect(url); }} />}
-                {currentPage === 'ml_training' && <MLTrainingView wsData={lastMessage} wsEvent={lastEvent} config={lastConfig} wsUrl={status === 'connected' ? (currentUrl || defaultWsSource) : null} />}
 
                 {showSpacers && <div className="h-[35px] shrink-0" />}
               </>
