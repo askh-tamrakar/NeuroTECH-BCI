@@ -18,15 +18,72 @@ const WISDOM = [
 
 const PRESETS = [3, 5, 10, 15];
 
+/* ── TRACK ROW sub-component ──────────────────── */
+const TrackRow = ({ m, onToggle, onVol }) => (
+    <div className={`flex flex-col gap-2 p-2.5 rounded-lg border transition-all ${m.active ? 'bg-primary/8 border-primary/40' : 'bg-surface/30 border-border/30 hover:border-primary/20'}`}>
+
+        {/* Top row: animated bars + label + toggle */}
+        <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+                {/* animated equalizer bars when playing */}
+                <span className="flex items-end gap-[2px] h-3.5 shrink-0">
+                    {m.active ? (
+                        <>
+                            <span className="w-[2px] bg-primary rounded-full" style={{ height: '40%',  animation: 'musicbar 0.7s ease-in-out infinite', animationDelay: '0s'   }} />
+                            <span className="w-[2px] bg-primary rounded-full" style={{ height: '100%', animation: 'musicbar 0.7s ease-in-out infinite', animationDelay: '0.18s' }} />
+                            <span className="w-[2px] bg-primary rounded-full" style={{ height: '60%',  animation: 'musicbar 0.7s ease-in-out infinite', animationDelay: '0.36s' }} />
+                            <span className="w-[2px] bg-primary rounded-full" style={{ height: '80%',  animation: 'musicbar 0.7s ease-in-out infinite', animationDelay: '0.54s' }} />
+                        </>
+                    ) : (
+                        <>
+                            <span className="w-[2px] bg-border rounded-full" style={{ height: '30%' }} />
+                            <span className="w-[2px] bg-border rounded-full" style={{ height: '55%' }} />
+                            <span className="w-[2px] bg-border rounded-full" style={{ height: '40%' }} />
+                            <span className="w-[2px] bg-border rounded-full" style={{ height: '65%' }} />
+                        </>
+                    )}
+                </span>
+                <span className={`text-[11px] font-bold truncate leading-none ${m.active ? 'text-primary' : 'text-muted'}`}>{m.label}</span>
+            </div>
+            <button
+                onClick={() => onToggle(m.id)}
+                className={`relative shrink-0 p-1.5 rounded-md transition-all ${m.active ? 'bg-primary text-bg shadow-[0_0_10px_var(--primary)]' : 'bg-surface border border-border text-muted hover:text-primary hover:border-primary/40'}`}
+            >
+                {m.active ? <Volume2 size={12} /> : <VolumeX size={12} />}
+            </button>
+        </div>
+
+        {/* Volume slider — always visible, shows % */}
+        <div className="flex items-center gap-2">
+            <input
+                type="range" min="0" max="100" step="1"
+                value={Math.round(m.vol * 100)}
+                onChange={e => onVol(m.id, parseInt(e.target.value) / 100)}
+                className={`flex-1 h-1.5 rounded-lg appearance-none cursor-pointer ${m.active ? 'accent-primary' : 'accent-muted'}`}
+                style={{ background: m.active
+                    ? `linear-gradient(to right, var(--primary) 0%, var(--primary) ${Math.round(m.vol*100)}%, rgba(255,255,255,0.1) ${Math.round(m.vol*100)}%, rgba(255,255,255,0.1) 100%)`
+                    : `linear-gradient(to right, var(--muted) 0%, var(--muted) ${Math.round(m.vol*100)}%, rgba(255,255,255,0.07) ${Math.round(m.vol*100)}%, rgba(255,255,255,0.07) 100%)`
+                }}
+            />
+            <span className={`text-[10px] font-black font-mono w-7 text-right shrink-0 ${m.active ? 'text-primary' : 'text-muted/60'}`}>
+                {Math.round(m.vol * 100)}%
+            </span>
+        </div>
+    </div>
+);
+
 const MeditationSidebar = ({
     containerRef,
     stats,
     musicState,
     toggleMusic,
     updateVol,
+    masterVol = 1.0,
+    onMasterVol = () => {},
     wisdomIdx = 0,
 }) => {
     const wisdom = WISDOM[wisdomIdx] || WISDOM[0];
+
 
     return (
         <div className="flex-grow flex flex-col p-4 gap-4 font-mono transition-opacity duration-300 w-full shrink-0">
@@ -80,25 +137,63 @@ const MeditationSidebar = ({
 
                 {/* Soundscape Mixer */}
                 <div className="bg-bg/50 border border-primary/20 rounded-xl p-3 shrink-0 flex flex-col gap-3">
-                    <h4 className="text-[10px] font-bold text-muted/80 uppercase tracking-widest flex items-center gap-2">
-                        <Volume2 size={14} /> Soundscape Mixer
-                    </h4>
-                    <div className="flex flex-col gap-2.5">
-                        {musicState.map(m => (
-                            <div key={m.id} className="flex flex-col gap-2 p-2 rounded-lg bg-surface/30 border border-border/30 hover:border-primary/30 transition-all">
-                                <div className="flex items-center justify-between">
-                                    <span className={`text-[11px] font-bold tracking-tight ${m.active ? 'text-primary' : 'text-muted'}`}>{m.label}</span>
-                                    <button onClick={() => toggleMusic(m.id)} className={`p-1 rounded-md transition-all ${m.active ? 'bg-primary text-bg' : 'bg-surface border border-border text-muted hover:text-text'}`}>
-                                        {m.active ? <Volume2 size={12} /> : <VolumeX size={12} />}
-                                    </button>
-                                </div>
-                                {m.active && (
-                                    <input type="range" min="0" max="1" step="0.01" value={m.vol} onChange={e => updateVol(m.id, parseFloat(e.target.value))} className="w-full h-1 bg-primary/20 rounded-lg appearance-none cursor-pointer accent-primary" />
-                                )}
-                            </div>
+                    <div className="flex items-center justify-between">
+                        <h4 className="text-[10px] font-bold text-muted/80 uppercase tracking-widest flex items-center gap-2">
+                            <Volume2 size={14} /> Soundscape Mixer
+                        </h4>
+                        <div className="flex items-center gap-2">
+                            {musicState.some(m => m.active) && (
+                                <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">
+                                    {musicState.filter(m => m.active).length} PLAYING
+                                </span>
+                            )}
+                            {musicState.some(m => m.active) && (
+                                <button
+                                    onClick={() => musicState.filter(m=>m.active).forEach(m => toggleMusic(m.id))}
+                                    className="text-[9px] font-black px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 transition-all"
+                                >
+                                    STOP ALL
+                                </button>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Master Volume */}
+                    <div className="flex items-center gap-2 px-0.5">
+                        <Volume2 size={10} className="text-muted shrink-0" />
+                        <input
+                            type="range" min="0" max="100" step="1"
+                            value={Math.round(masterVol * 100)}
+                            onChange={e => onMasterVol(parseInt(e.target.value) / 100)}
+                            className="flex-1 h-1.5 rounded-lg appearance-none cursor-pointer"
+                            style={{ background: `linear-gradient(to right, var(--primary) 0%, var(--primary) ${Math.round(masterVol*100)}%, rgba(255,255,255,0.08) ${Math.round(masterVol*100)}%, rgba(255,255,255,0.08) 100%)` }}
+                        />
+                        <span className="text-[10px] font-black font-mono text-primary w-7 text-right shrink-0">
+                            {Math.round(masterVol * 100)}%
+                        </span>
+                    </div>
+
+                    {/* Meditation tracks */}
+                    <div className="flex flex-col gap-1.5">
+                        <span className="text-[9px] font-black tracking-widest uppercase text-primary/60 flex items-center gap-1.5 px-0.5">
+                            <span className="inline-block w-1.5 h-1.5 rounded-full bg-indigo-400" /> Meditation
+                        </span>
+                        {musicState.filter(m => m.category === 'meditation').map(m => (
+                            <TrackRow key={m.id} m={m} onToggle={toggleMusic} onVol={updateVol} />
+                        ))}
+                    </div>
+
+                    {/* Focus tracks */}
+                    <div className="flex flex-col gap-1.5 mt-1">
+                        <span className="text-[9px] font-black tracking-widest uppercase text-primary/60 flex items-center gap-1.5 px-0.5">
+                            <span className="inline-block w-1.5 h-1.5 rounded-full bg-cyan-400" /> Focus
+                        </span>
+                        {musicState.filter(m => m.category === 'focus').map(m => (
+                            <TrackRow key={m.id} m={m} onToggle={toggleMusic} onVol={updateVol} />
                         ))}
                     </div>
                 </div>
+
 
                 {/* Performance */}
                 <div className="bg-bg/50 border border-primary/20 rounded-xl p-3 shrink-0 flex flex-col gap-3">

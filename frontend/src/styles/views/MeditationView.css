@@ -200,3 +200,9 @@ input[type=range].accent-primary::-webkit-slider-runnable-track {
   border-radius: 20px;
   opacity: 0.3;
 }
+
+/* ── NOW-PLAYING BAR ANIMATION ───────────────── */
+@keyframes musicbar {
+  0%, 100% { transform: scaleY(0.4); opacity: 0.6; }
+  50%       { transform: scaleY(1.0); opacity: 1.0; }
+}

@@ -1,10 +1,21 @@
-import React, { useEffect, useRef, useState, useMemo } from 'react';
+import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
 import { Settings, Play, Square, Activity, Wind, Power, Zap, History, Menu, ChevronLeft, ChevronRight, Brain, BookOpen, Eye, Grid, Music, Volume2, Trophy, Clock, Calendar, CheckSquare, Sparkles, VolumeX } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import '../../styles/views/MeditationView.css';
 import MeditationSidebar from './sidebar/MeditationSidebar';
 import { useSidebar } from './SidebarContext';
+
+/* ── REAL SOUNDSCAPE TRACKS ────────────────────── */
+const TRACKS = [
+  { id: 'stress_melt',   label: 'Singing Bowl Waves',  file: '/Resources/eeg_music/meditativetiger-stress-melt-gentle-singing-bowl-waves-489168.mp3', category: 'meditation' },
+  { id: 'nature_calm',   label: 'Nature Calm',          file: '/Resources/eeg_music/andriig-nature-calm-music-507173.mp3',                              category: 'meditation' },
+  { id: 'xylophone',    label: 'Xylophone & Forest',   file: '/Resources/eeg_music/mandakimdk-xylophone-and-forest-307174.mp3',                        category: 'meditation' },
+  { id: 'soft_calm',    label: 'Soft Calm Background', file: '/Resources/eeg_music/krasnoshchok-background-music-soft-calm-404429.mp3',                category: 'focus'     },
+  { id: 'dark_ambient', label: 'Dark Desolation',      file: '/Resources/eeg_music/aberrantrealities-dark-desolation-ambience-219091.mp3',             category: 'focus'     },
+  { id: 'funk_rock',    label: 'Funk Rock',             file: '/Resources/eeg_music/kandlaker-funk-rock-2-226325.mp3',                                  category: 'focus'     },
+  { id: 'countdown',    label: 'Countdown',             file: '/Resources/eeg_music/kaden_cook-countdown-219722.mp3',                                   category: 'focus'     },
+];
 
 /* ── DAILY WISDOM QUOTES ───────────────────────── */
 const WISDOM = [
@@ -40,12 +51,36 @@ const MeditationView = ({ result, currentView, onNavigate }) => {
   const [sidebarTab, setSidebarTab] = useState('controls');
 
   /* ── MUSIC MIXER STATE ─────────────────────── */
-  const [musicState, setMusicState] = useState([
-    { id: 'rain', label: 'Rain/Storm', active: false, vol: 0.5 },
-    { id: 'forest', label: 'Deep Forest', active: false, vol: 0.5 },
-    { id: 'alpha', label: 'Binaural-α', active: false, vol: 0.3 },
-    { id: 'theta', label: 'Binaural-θ', active: false, vol: 0.3 },
-  ]);
+  const [musicState, setMusicState] = useState(
+    TRACKS.map(t => ({ id: t.id, label: t.label, active: false, vol: 0.8, category: t.category }))
+  );
+
+  /* ── AUDIO REFS (one Audio object per track) ── */
+  const audioRefs = useRef({});
+  useEffect(() => {
+    // Create Audio objects once on mount — high initial volume
+    TRACKS.forEach(t => {
+      const audio = new Audio(t.file);
+      audio.loop = true;
+      audio.volume = 0.8;
+      audio.preload = 'auto';
+      audioRefs.current[t.id] = audio;
+    });
+    return () => {
+      Object.values(audioRefs.current).forEach(a => { a.pause(); a.src = ''; });
+    };
+  }, []);
+
+  /* ── VOLUME SYNC ONLY (no play/pause here) ──── */
+  // play/pause must happen synchronously inside the user-click handler
+  // to satisfy browser autoplay policy — see toggleMusic below
+  useEffect(() => {
+    musicState.forEach(m => {
+      const audio = audioRefs.current[m.id];
+      if (!audio) return;
+      audio.volume = Math.max(0, Math.min(1, m.vol));
+    });
+  }, [musicState]);
 
   /* ── PERSISTENT STATS ──────────────────────── */
   const [stats, setStats] = useState(() => {
@@ -64,13 +99,46 @@ const MeditationView = ({ result, currentView, onNavigate }) => {
     }
   });
 
-  const toggleMusic = (id) => {
-    setMusicState(prev => prev.map(m => m.id === id ? { ...m, active: !m.active } : m));
-  };
+  const toggleMusic = useCallback((id) => {
+    // Play/pause synchronously HERE — this is the direct user-gesture context.
+    // Browsers block audio.play() inside useEffect (not a user gesture).
+    const audio = audioRefs.current[id];
+    setMusicState(prev => {
+      const next = prev.map(m => m.id === id ? { ...m, active: !m.active } : m);
+      const track = next.find(m => m.id === id);
+      if (audio) {
+        if (track.active) {
+          audio.volume = track.vol;
+          audio.play().catch(err => console.warn('[Audio] Play blocked:', err));
+        } else {
+          audio.pause();
+        }
+      }
+      return next;
+    });
+  }, []);
 
-  const updateVol = (id, vol) => {
-    setMusicState(prev => prev.map(m => m.id === id ? { ...m, vol } : m));
-  };
+  const updateVol = useCallback((id, vol) => {
+    const clampedVol = Math.max(0, Math.min(1, vol));
+    const audio = audioRefs.current[id];
+    if (audio) audio.volume = clampedVol;
+    setMusicState(prev => prev.map(m => m.id === id ? { ...m, vol: clampedVol } : m));
+  }, []);
+
+  /* ── MASTER VOLUME ────────────────────────── */
+  const [masterVol, setMasterVol] = useState(1.0);
+  const onMasterVol = useCallback((val) => {
+    const clamped = Math.max(0, Math.min(1, val));
+    setMasterVol(clamped);
+    // Apply master * per-track volume to all Audio elements
+    setMusicState(prev => {
+      prev.forEach(m => {
+        const audio = audioRefs.current[m.id];
+        if (audio) audio.volume = Math.max(0, Math.min(1, m.vol * clamped));
+      });
+      return prev; // state unchanged, only audio.volume mutated
+    });
+  }, []);
 
   useEffect(() => {
     localStorage.setItem('med_stats', JSON.stringify(stats));
@@ -85,12 +153,14 @@ const MeditationView = ({ result, currentView, onNavigate }) => {
         musicState={musicState}
         toggleMusic={toggleMusic}
         updateVol={updateVol}
+        masterVol={masterVol}
+        onMasterVol={onMasterVol}
         stats={stats}
         wisdomIdx={wisdomIdx}
       />
     );
     return () => setSidebarSlot(null);
-  }, [musicState, stats, wisdomIdx, setSidebarSlot]);
+  }, [musicState, masterVol, stats, wisdomIdx, setSidebarSlot]);
 
 
   useEffect(() => {
