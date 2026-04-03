@@ -91,7 +91,6 @@ export default function SSVEPView({ isConnected, wsEvent, onBackToMenu }) {
 
     // --- UI & Logging State ---
     const [openDropdownId, setOpenDropdownId] = useState(null);
-    const [showSidebar, setShowSidebar] = useState(true);
     const [logs, setLogs] = useState([]);
     const [realTimeFreq, setRealTimeFreq] = useState(0);
 
@@ -112,36 +111,48 @@ export default function SSVEPView({ isConnected, wsEvent, onBackToMenu }) {
     const [protocolMode, setProtocolMode] = useState(false);
     const [protocolState, setProtocolState] = useState('IDLE');
 
+    // ── Use refs to hold latest values so sidebar callbacks are never stale ──
+    const globalRunningRef = useRef(globalRunning);
+    const configsRef = useRef(configs);
+    const useMLRef = useRef(useML);
+    const logsRef = useRef(logs);
+
+    useEffect(() => { globalRunningRef.current = globalRunning; }, [globalRunning]);
+    useEffect(() => { configsRef.current = configs; }, [configs]);
+    useEffect(() => { useMLRef.current = useML; }, [useML]);
+    useEffect(() => { logsRef.current = logs; }, [logs]);
+
     const addLog = useCallback((message, type = 'INFO') => {
         const time = new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
         setLogs(prev => [...prev, { id: Date.now() + Math.random(), time, message, type }].slice(-100));
     }, []);
 
-    const updateConfig = (id, newValues) => {
+    const updateConfig = useCallback((id, newValues) => {
         setLastModifiedTargetId(id);
         setConfigs(prev => prev.map(cfg => cfg.id === id ? { ...cfg, ...newValues } : cfg));
-    };
+    }, []);
 
-    // --- Controls ---
-    const startFlicker = () => {
+    // ── Stable callbacks using refs so sidebar never gets stale closures ──
+    const startFlicker = useCallback(() => {
         setProtocolMode(false);
         setGlobalRunning(true);
         CalibrationApi.togglePrediction('EEG', true).catch(err => console.error('EEG prediction start failed:', err));
         addLog('Manual simulation started');
-    };
+    }, [addLog]);
 
-    const stopFlicker = () => {
+    const stopFlicker = useCallback(() => {
         setGlobalRunning(false);
         setProtocolMode(false);
         CalibrationApi.togglePrediction('EEG', false).catch(err => console.error('EEG prediction stop failed:', err));
         addLog('Simulation stopped');
-    };
+    }, [addLog]);
 
-    const runProtocol = () => {
+    const runProtocol = useCallback(() => {
+        const currentConfigs = configsRef.current;
         const newTrials = [];
         const rounds = 3;
         for (let r = 0; r < rounds; r++) {
-            const roundTargets = configs.filter(c => c.enabled).sort(() => Math.random() - 0.5);
+            const roundTargets = currentConfigs.filter(c => c.enabled).sort(() => Math.random() - 0.5);
             roundTargets.forEach(t => newTrials.push(t.id));
         }
 
@@ -156,8 +167,15 @@ export default function SSVEPView({ isConnected, wsEvent, onBackToMenu }) {
         setGlobalRunning(true);
         CalibrationApi.togglePrediction('EEG', true).catch(err => console.error('EEG prediction start failed:', err));
         addLog(`Protocol started (${newTrials.length} trials)`);
-    };
+    }, [addLog]);
 
+    // Mount-only: set sidebar mode and clear slot on unmount
+    useEffect(() => {
+        setSidebarMode('page');
+        return () => setSidebarSlot(null);
+    }, [setSidebarMode, setSidebarSlot]);
+
+    // Update the sidebar slot whenever any relevant state changes
     useEffect(() => {
         setSidebarSlot(
             <SSVEPSidebar
@@ -193,14 +211,12 @@ export default function SSVEPView({ isConnected, wsEvent, onBackToMenu }) {
                 isConnected={isConnected}
             />
         );
-        return () => setSidebarSlot(null);
     }, [
-        onBackToMenu, useML, setUseML, availableModels, selectedModel, setSelectedModel,
+        onBackToMenu, useML, availableModels, selectedModel,
         addLog, realTimeFreq, predictedFreq, scoreVector, configs, updateConfig,
         isSyncing, lastModifiedTargetId, globalRunning, protocolMode, startFlicker,
-        stopFlicker, runProtocol, brightness, setBrightness, refreshRate, setRefreshRate,
-        logs, setLogs, showTargets, setShowTargets, openDropdownId, setOpenDropdownId,
-        isConnected, setSidebarSlot
+        stopFlicker, runProtocol, brightness, refreshRate,
+        logs, showTargets, openDropdownId, isConnected, setSidebarSlot
     ]);
 
 
@@ -368,8 +384,6 @@ export default function SSVEPView({ isConnected, wsEvent, onBackToMenu }) {
             CalibrationApi.togglePrediction('EEG', false).catch(() => { });
         };
     }, []);
-
-    // Layout is now full-width as parent handles sidebar
 
     return (
         <div className="w-full flex bg-[var(--bg)] overflow-hidden relative h-full">

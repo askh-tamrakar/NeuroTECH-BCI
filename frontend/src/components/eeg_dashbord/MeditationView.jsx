@@ -146,6 +146,7 @@ const MeditationView = ({ result, currentView, onNavigate }) => {
 
   const { setSidebarSlot } = useSidebar();
 
+  // Update the sidebar slot whenever state affecting the sidebar changes
   useEffect(() => {
     setSidebarSlot(
       <MeditationSidebar
@@ -159,8 +160,12 @@ const MeditationView = ({ result, currentView, onNavigate }) => {
         wisdomIdx={wisdomIdx}
       />
     );
+  }, [musicState, masterVol, stats, wisdomIdx, toggleMusic, updateVol, onMasterVol, setSidebarSlot]);
+
+  // Separate cleanup-only effect: clear slot on unmount
+  useEffect(() => {
     return () => setSidebarSlot(null);
-  }, [musicState, masterVol, stats, wisdomIdx, setSidebarSlot]);
+  }, [setSidebarSlot]);
 
 
   useEffect(() => {

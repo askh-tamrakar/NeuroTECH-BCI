@@ -12,40 +12,38 @@ const BubbleGameView = ({ result, isConnected, onBackToMenu }) => {
   const { currentTheme } = useTheme();
   const themeRef = useRef(currentTheme);
 
-  const [showSidebar, setShowSidebar] = useState(true);
   const [globalRunning, setGlobalRunning] = useState(false);
   const [mouseMode, setMouseMode] = useState(false);
   const [difficulty, setDifficulty] = useState(1);
   const isConnectedRef = useRef(isConnected);
+
+  // Refs so the imperative game loop always reads latest values
+  const mouseModeRef = useRef(mouseMode);
+  const difficultyRef = useRef(difficulty);
+  useEffect(() => { mouseModeRef.current = mouseMode; }, [mouseMode]);
+  useEffect(() => { difficultyRef.current = difficulty; }, [difficulty]);
 
   const [realTimeFreq, setRealTimeFreq] = useState(0);
   const [focusScore, setFocusScore] = useState(0);
 
   const { setSidebarSlot, setSidebarMode } = useSidebar();
 
-  const sidebarContent = useMemo(() => (
-    <BubbleSidebar
-      onBackToMenu={onBackToMenu}
-      mouseMode={mouseMode}
-      setMouseMode={setMouseMode}
-      realTimeFreq={realTimeFreq}
-      focusScore={focusScore}
-      globalRunning={globalRunning}
-      containerRef={containerRef}
-      difficulty={difficulty}
-      setDifficulty={setDifficulty}
-    />
-  ), [onBackToMenu, mouseMode, realTimeFreq, focusScore, globalRunning, difficulty]);
-
-  const lastSidebarUpdateRef = useRef(0);
-
+  // Update sidebar slot whenever any relevant state changes — no throttle
   useEffect(() => {
-    const now = Date.now();
-    if (now - lastSidebarUpdateRef.current > 200) {
-      setSidebarSlot(sidebarContent);
-      lastSidebarUpdateRef.current = now;
-    }
-  }, [sidebarContent, setSidebarSlot]);
+    setSidebarSlot(
+      <BubbleSidebar
+        onBackToMenu={onBackToMenu}
+        mouseMode={mouseMode}
+        setMouseMode={setMouseMode}
+        realTimeFreq={realTimeFreq}
+        focusScore={focusScore}
+        globalRunning={globalRunning}
+        containerRef={containerRef}
+        difficulty={difficulty}
+        setDifficulty={setDifficulty}
+      />
+    );
+  }, [onBackToMenu, mouseMode, realTimeFreq, focusScore, globalRunning, difficulty, setSidebarSlot]);
 
   useEffect(() => { themeRef.current = currentTheme; }, [currentTheme]);
   useEffect(() => { resultRef.current = result; }, [result]);
@@ -281,8 +279,7 @@ const BubbleGameView = ({ result, isConnected, onBackToMenu }) => {
       const col = cols[Math.floor(Math.random() * cols.length)];
       const type = SPECIAL_TYPES[Math.floor(Math.random() * SPECIAL_TYPES.length)];
 
-      let diff = 1;
-      try { const df = container.querySelector('#game-difficulty'); if (df) diff = parseInt(df.dataset.val) || 1; } catch (e) { }
+      let diff = difficultyRef.current || 1;
 
       const radius = 18 + Math.random() * 22 + (type === 'bomb' ? 10 : 0);
       bubbles.push({
@@ -316,11 +313,7 @@ const BubbleGameView = ({ result, isConnected, onBackToMenu }) => {
     }
 
     function getCursorRadius() {
-      let isManualMode = false;
-      try {
-        const btn = container.querySelector('#mode-indicator-switch');
-        if (btn && btn.textContent.includes('MANUAL')) isManualMode = true;
-      } catch (e) { }
+      const isManualMode = mouseModeRef.current;
 
       const base = isManualMode ? 48 : 30, extra = isManualMode ? 60 : 100;
       const r = base + eegSignal * extra;
@@ -382,8 +375,7 @@ const BubbleGameView = ({ result, isConnected, onBackToMenu }) => {
 
     let spawnTimer = 0;
     function spawnRate() {
-      let diff = 1;
-      try { const df = container.querySelector('#game-difficulty'); if (df) diff = parseInt(df.dataset.val) || 1; } catch (e) { }
+      const diff = difficultyRef.current || 1;
       return Math.max(15, 80 - level * 5 - (diff - 1) * 20);
     }
 
@@ -540,12 +532,7 @@ const BubbleGameView = ({ result, isConnected, onBackToMenu }) => {
       const goScreen = $('gameOverScreen');
       if (goScreen) goScreen.classList.remove('hidden');
 
-      let isManualMode = false;
-      try {
-        const btn = container.querySelector('#mode-indicator-switch');
-        if (btn && btn.textContent.includes('MANUAL')) isManualMode = true;
-      } catch (e) { }
-
+      const isManualMode = mouseModeRef.current;
       saveSession({ score, level, accuracy: acc, time: elapsed, mode: isManualMode ? 'MANUAL' : 'SENSOR' });
       renderSessionHistory();
     }
@@ -574,7 +561,6 @@ const BubbleGameView = ({ result, isConnected, onBackToMenu }) => {
 
   return (
     <div className="w-full h-full flex bg-[var(--bg)] overflow-hidden relative select-none" ref={containerRef}>
-      <div id="game-difficulty" data-val={difficulty} className="hidden"></div>
 
       {/* ── GAME CANVAS MAIN AREA ── */}
       <div className="flex-grow flex flex-col items-center justify-center relative transition-all duration-300">

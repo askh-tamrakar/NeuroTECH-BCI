@@ -87,9 +87,9 @@ const EEGDashboardContent = ({ wsEvent, isConnected, wsUrl }) => {
       {/* ── DUAL SIDEBAR SYSTEM ── */}
       <div className="w-[18rem] bg-[var(--surface)] border-r border-[var(--border)] shrink-0 flex flex-col h-full z-20 relative transition-all duration-500">
 
-        {/* LabVIEW-style Toggle Button (Only visible in app views) */}
-        {isFullContainer && (
-          <div className="absolute top-4 right-4 z-50">
+        {/* LabVIEW-style Toggle Button — always a fixed header row */}
+        <div className="shrink-0 flex items-center justify-end px-4 pt-3 pb-2 border-b border-[var(--border)]/30">
+          {isFullContainer ? (
             <button
               onClick={() => setSidebarMode(sidebarMode === 'main' ? 'page' : 'main')}
               className="nav-controls-toggle"
@@ -98,10 +98,13 @@ const EEGDashboardContent = ({ wsEvent, isConnected, wsUrl }) => {
               <Layers size={14} />
               {sidebarMode === 'main' ? 'NAV' : 'CTRL'}
             </button>
-          </div>
-        )}
+          ) : (
+            <span className="text-[9px] font-black tracking-[3px] uppercase text-[var(--muted)]/40 pr-1">EEG Suite</span>
+          )}
+        </div>
 
-        <div className="sidebar-wrapper mt-12">
+        {/* Sidebar content — flex-1 allows it to grow and inner panel handles scroll */}
+        <div className="sidebar-wrapper flex-1 min-h-0">
           {/* Global Navigation Panel */}
           <div className={`sidebar-panel ${sidebarMode === 'main' ? 'sidebar-active' : 'sidebar-hidden'}`}>
             <MainSidebar currentView={currentView} onSelect={handleSelectView} />
