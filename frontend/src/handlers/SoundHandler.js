@@ -11,6 +11,12 @@ class SoundHandler {
         this.bgmEnabled = false;
         this.bgmVolume = 0.1;
         this.bgmBuffer = null;
+
+        // --- ROCKY TRAINING SOUND ---
+        this.rockySource = null;
+        this.rockyGain = null;
+        this.rockyFilter = null;
+        this.rockyBuffer = null;
     }
 
     init() {
@@ -225,6 +231,90 @@ class SoundHandler {
     playSliderTick() {
         // Very short, subtle technical tick
         this.playTone(800, 'sine', 0.015, 0.03);
+    }
+
+    // --- ROCKY TRAINING SOUND ---
+    async loadRockyBuffer() {
+        if (!this.initialized) this.init();
+        if (!this.ctx) return null;
+        if (this.rockyBuffer) return this.rockyBuffer;
+
+        try {
+            console.log('Fetching Rocky Sound from /Resources/Sliding Rock.mp3');
+            const response = await fetch('/Resources/Sliding Rock.mp3');
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+
+            const arrayBuffer = await response.arrayBuffer();
+            this.rockyBuffer = await this.ctx.decodeAudioData(arrayBuffer);
+            console.log('Rocky buffer decoded successfully');
+            return this.rockyBuffer;
+        } catch (e) {
+            console.warn('Failed to load rocky audio file. Falling back to procedural noise.', e);
+            return null;
+        }
+    }
+
+    async startRockySliding(volume = 0.4) {
+        if (!this.enabled || !this.initialized) return;
+        await this.resume();
+        if (this.rockySource) return;
+
+        // Ensure file-based buffer is loaded
+        let buffer = this.rockyBuffer;
+        if (!buffer) {
+            buffer = await this.loadRockyBuffer();
+        }
+
+        if (!buffer) {
+            console.warn('Rocky training sound not available (file missing/failed to load)');
+            return;
+        }
+
+        this.rockySource = this.ctx.createBufferSource();
+        this.rockySource.buffer = buffer;
+        this.rockySource.loop = true;
+
+        // Use the 3-4s segment requested by the user
+        this.rockySource.loopStart = 3.0;
+        this.rockySource.loopEnd = 4.0;
+
+        this.rockyFilter = this.ctx.createBiquadFilter();
+        this.rockyFilter.type = 'lowpass';
+        this.rockyFilter.frequency.setValueAtTime(600, this.ctx.currentTime);
+        this.rockyFilter.Q.setValueAtTime(1.5, this.ctx.currentTime);
+
+        this.rockyGain = this.ctx.createGain();
+        this.rockyGain.gain.setValueAtTime(0, this.ctx.currentTime);
+        this.rockyGain.gain.linearRampToValueAtTime(volume, this.ctx.currentTime + 0.4);
+
+        this.rockySource.connect(this.rockyFilter);
+        this.rockyFilter.connect(this.rockyGain);
+        this.rockyGain.connect(this.masterGain);
+
+        // Start with the correct 3s offset
+        this.rockySource.start(0, 3.0);
+
+        // Subtle modulation for extra "visceral" grit
+        this._rockyModulator = setInterval(() => {
+            if (this.rockyFilter && this.ctx) {
+                const freq = 500 + Math.random() * 300;
+                this.rockyFilter.frequency.setTargetAtTime(freq, this.ctx.currentTime, 0.1);
+            }
+        }, 150);
+    }
+
+    stopRockySliding() {
+        if (this._rockyModulator) clearInterval(this._rockyModulator);
+        if (this.rockyGain && this.ctx) {
+            this.rockyGain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.3);
+            const source = this.rockySource;
+            setTimeout(() => {
+                try { if (source) source.stop(); } catch (e) { }
+            }, 400);
+        }
+        this.rockySource = null;
+        this.rockyGain = null;
+        this.rockyFilter = null;
     }
 
     playConnectionZap() {

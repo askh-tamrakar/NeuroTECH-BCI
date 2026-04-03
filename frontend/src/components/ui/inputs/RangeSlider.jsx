@@ -19,23 +19,57 @@ const RangeSlider = ({
     leftColor,
     middleColor,
     rightColor,
-    hideLabels = false
+    hideLabels = false,
+    className = '',
+    compact = false,
+    minLimit,
+    maxLimit
 }) => {
     const trackRef = useRef(null);
     const containerRef = useRef(null);
     const [activeHandle, setActiveHandle] = useState(null); // 'min' or 'max'
 
-    // Compute left/middle/right for output
-    const left = minValue - min;
-    const middle = maxValue - minValue;
-    const right = max - maxValue;
-
-    // Clean up handle on global mouse release
+    // Global interactions cleanup
     useEffect(() => {
-        const handleGlobalUp = () => setActiveHandle(null);
-        window.addEventListener('mouseup', handleGlobalUp);
-        return () => window.removeEventListener('mouseup', handleGlobalUp);
-    }, []);
+        const handleGlobalUp = (e) => {
+            if (activeHandle) {
+                if (containerRef.current && e.pointerId !== undefined) {
+                    try {
+                        containerRef.current.releasePointerCapture(e.pointerId);
+                    } catch (err) { /* ignore */ }
+                }
+
+                if (onFinalChange) {
+                    onFinalChange({
+                        min: minValue,
+                        max: maxValue,
+                        left: minValue - min,
+                        middle: maxValue - minValue,
+                        right: max - maxValue
+                    });
+                }
+                setActiveHandle(null);
+            }
+        };
+
+        const handleGlobalMove = (e) => {
+            if (activeHandle) {
+                handlePointerUpdate(e.clientX);
+            }
+        };
+
+        if (activeHandle) {
+            window.addEventListener('pointerup', handleGlobalUp);
+            window.addEventListener('pointermove', handleGlobalMove);
+            window.addEventListener('pointercancel', handleGlobalUp);
+        }
+
+        return () => {
+            window.removeEventListener('pointerup', handleGlobalUp);
+            window.removeEventListener('pointermove', handleGlobalMove);
+            window.removeEventListener('pointercancel', handleGlobalUp);
+        };
+    }, [activeHandle, minValue, maxValue, min, max, onFinalChange]);
 
     const getPercentage = useCallback((value) => {
         return ((value - min) / (max - min)) * 100;
@@ -45,7 +79,9 @@ const RangeSlider = ({
         if (!trackRef.current) return 0;
         const rect = trackRef.current.getBoundingClientRect();
         const x = clientX - rect.left;
-        const percentage = Math.max(0, Math.min(1, x / rect.width));
+        const rawPercentage = x / rect.width;
+        // Strict boundary clamping
+        const percentage = Math.max(0, Math.min(1, rawPercentage));
         const rawValue = min + percentage * (max - min);
         // Add safety check for divide by zero or NaN
         if (isNaN(rawValue)) return min;
@@ -56,75 +92,125 @@ const RangeSlider = ({
     }, [min, max, step]);
 
     const startDragging = (e, handle) => {
-        e.preventDefault();
+        // e.preventDefault(); // Removed to allow interaction while dragging if needed
         e.stopPropagation();
-        if (containerRef.current) {
-            containerRef.current.setPointerCapture(e.pointerId);
+        if (containerRef.current && e.pointerId !== undefined) {
+            try {
+                containerRef.current.setPointerCapture(e.pointerId);
+            } catch (err) {
+                console.warn("[RangeSlider] Pointer capture failed:", err);
+            }
         }
         setActiveHandle(handle);
+    };
+
+    const handlePointerUpdate = (clientX) => {
+        if (!activeHandle) return;
+
+        const newValue = getValueFromPosition(clientX);
+        const minGap = step * 2; // Robust gap to prevent handles from getting stuck together
+
+        if (activeHandle === 'min') {
+            const lowerBound = minLimit !== undefined ? Math.max(min, minLimit) : min;
+            const upperBound = maxLimit !== undefined ? Math.min(max, maxLimit) : max;
+            const val = Math.max(lowerBound, Math.min(upperBound, newValue));
+            const effectiveValue = Math.min(val, maxValue - minGap);
+            
+            if (effectiveValue !== minValue) {
+                onChange({
+                    min: effectiveValue,
+                    max: maxValue,
+                    left: Math.max(0, effectiveValue - min),
+                    middle: Math.max(0, maxValue - effectiveValue),
+                    right: Math.max(0, max - maxValue)
+                });
+            }
+        } else {
+            const lowerBound = minLimit !== undefined ? Math.max(min, minLimit) : min;
+            const upperBound = maxLimit !== undefined ? Math.min(max, maxLimit) : max;
+            const val = Math.max(lowerBound, Math.min(upperBound, newValue));
+            const effectiveValue = Math.max(val, minValue + minGap);
+            
+            if (effectiveValue !== maxValue) {
+                onChange({
+                    min: minValue,
+                    max: effectiveValue,
+                    left: Math.max(0, minValue - min),
+                    middle: Math.max(0, effectiveValue - minValue),
+                    right: Math.max(0, max - effectiveValue)
+                });
+            }
+        }
     };
 
     const handlePointerMove = (e) => {
         if (!activeHandle) return;
         e.stopPropagation();
-
-        const newValue = getValueFromPosition(e.clientX);
-
-        if (activeHandle === 'min') {
-            const minGap = step; // Use step instead of hardcoded 2
-            const effectiveValue = Math.min(newValue, maxValue - minGap);
-            if (effectiveValue !== minValue) {
-                onChange({ 
-                    min: effectiveValue, 
-                    max: maxValue,
-                    left: effectiveValue - min,
-                    middle: maxValue - effectiveValue,
-                    right: max - maxValue
-                });
-            }
-        } else {
-            const minGap = step;
-            const effectiveValue = Math.max(newValue, minValue + minGap);
-            if (effectiveValue !== maxValue) {
-                onChange({ 
-                    min: minValue, 
-                    max: effectiveValue,
-                    left: minValue - min,
-                    middle: effectiveValue - minValue,
-                    right: max - effectiveValue
-                });
-            }
-        }
+        handlePointerUpdate(e.clientX);
     };
 
     const handlePointerUp = (e) => {
         if (!activeHandle) return;
         e.stopPropagation();
-        if (containerRef.current) {
-            containerRef.current.releasePointerCapture(e.pointerId);
+
+        if (containerRef.current && e.pointerId !== undefined) {
+            try {
+                containerRef.current.releasePointerCapture(e.pointerId);
+            } catch (err) { /* ignore */ }
         }
+
         if (onFinalChange) {
-            onFinalChange({ 
-                min: minValue, 
+            onFinalChange({
+                min: minValue,
                 max: maxValue,
-                left,
-                middle,
-                right
+                left: minValue - min,
+                middle: maxValue - minValue,
+                right: max - maxValue
             });
         }
+
         setActiveHandle(null);
     };
 
-    const minPos = getPercentage(minValue);
-    const maxPos = getPercentage(maxValue);
+    // Essential positioning variables with robust clamping for visual boundaries
+    const clampVal = (v) => Math.max(min, Math.min(max, v));
+    const minPos = getPercentage(clampVal(minValue));
+    const maxPos = getPercentage(clampVal(maxValue));
+
+    // Global cursor and selection management
+    useEffect(() => {
+        if (activeHandle) {
+            document.body.classList.add('grabbing-active');
+            return () => document.body.classList.remove('grabbing-active');
+        }
+    }, [activeHandle]);
 
     return (
         <div
             ref={containerRef}
-            className="range-slider-container w-full px-4 pt-10 pb-4 select-none touch-none"
+            className={`range-slider-container w-full ${compact ? 'px-1 pt-1 pb-1' : 'px-4 pt-10 pb-4'} select-none touch-none ${className || ''}`}
+            style={{ 
+                zIndex: activeHandle ? 1000 : 1, // Elevate during active interaction
+                pointerEvents: 'auto' 
+            }}
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
             onPointerCancel={handlePointerUp}
+            onLostPointerCapture={(e) => {
+                // Critical safety reset if focus is lost (e.g. system gesture or UI lag)
+                if (activeHandle) {
+                    if (onFinalChange) {
+                        onFinalChange({
+                            min: minValue,
+                            max: maxValue,
+                            left: minValue - min,
+                            middle: maxValue - minValue,
+                            right: max - maxValue
+                        });
+                    }
+                    setActiveHandle(null);
+                }
+            }}
         >
             {/* The Track */}
             <div
@@ -140,7 +226,7 @@ const RangeSlider = ({
             >
                 {/* Full Track Fill - Handled below via segments if leftColor/middleColor/rightColor are provided */}
                 {(!leftColor && !middleColor && !rightColor) && (
-                    <div 
+                    <div
                         className="absolute inset-0 rounded-full opacity-20"
                         style={{ backgroundColor: color }}
                     />
@@ -158,7 +244,7 @@ const RangeSlider = ({
                         }}
                     />
                 )}
-                
+
                 {/* Middle 'Active Range' Highlight - Exactly between handles */}
                 <div
                     className="absolute h-full rounded-full pointer-events-none"
@@ -183,7 +269,7 @@ const RangeSlider = ({
                 )}
 
                 {/* Left Handle */}
-                <div 
+                <div
                     className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-5 h-5 bg-white rounded-full shadow-xl cursor-grab active:cursor-grabbing border-2 transition-transform hover:scale-110 flex items-center justify-center"
                     style={{ left: `${minPos}%`, borderColor: color, zIndex: activeHandle === 'min' ? 40 : 30 }}
                     onPointerDown={(e) => startDragging(e, 'min')}
@@ -199,7 +285,7 @@ const RangeSlider = ({
                 </div>
 
                 {/* Right Handle */}
-                <div 
+                <div
                     className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-5 h-5 bg-white rounded-full shadow-xl cursor-grab active:cursor-grabbing border-2 transition-transform hover:scale-110 flex items-center justify-center"
                     style={{ left: `${maxPos}%`, borderColor: color, zIndex: activeHandle === 'max' ? 40 : 30 }}
                     onPointerDown={(e) => startDragging(e, 'max')}

@@ -306,6 +306,9 @@ def train_eeg_lda_model(
         }
         if best_result is None or result["validation_accuracy"] > best_result["validation_accuracy"]:
             best_result = result
+            best_result["model_id"] = id_str
+            best_result["candidate_index"] = candidate_index
+            best_result["fold_index"] = fold_index
 
     if best_result is None:
         return {"error": "No valid EEG LDA candidate could be fit with the current dataset."}
@@ -331,6 +334,9 @@ def train_eeg_lda_model(
     metadata = {
         "sensor": "EEG",
         "classifier": "LDA",
+        "model_id": best_result.get("model_id"),
+        "best_candidate_index": best_result.get("candidate_index"),
+        "best_fold_index": best_result.get("fold_index"),
         "feature_order": feature_order,
         "table_name": table_name,
         "label_col": split_bundle.label_col,

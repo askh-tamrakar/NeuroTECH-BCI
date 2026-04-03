@@ -43,6 +43,8 @@ function Slider({ defaultValue, startingValue, maxValue, isStepped, stepSize, le
     const overflow = useMotionValue(0);
     const scale = useMotionValue(1);
 
+    // Only sync external defaultValue changes when the user is NOT dragging.
+    // This breaks the onChange → prop change → useEffect → snap-back feedback loop.
     useEffect(() => {
         if (!isDragging.current) {
             setValue(defaultValue);
@@ -101,6 +103,7 @@ function Slider({ defaultValue, startingValue, maxValue, isStepped, stepSize, le
         isDragging.current = false;
         animate(overflow, 0, { type: 'spring', bounce: 0.5 });
     };
+
 
     const getRangePercentage = () => {
         const totalRange = maxValue - startingValue;

@@ -12,6 +12,66 @@ import CustomNumberInput from '../ui/inputs/CustomNumberInput';
 import RangeSlider from '../ui/inputs/RangeSlider';
 import { soundHandler } from '../../handlers/SoundHandler';
 
+/**
+ * A specialized sub-component for the Sidebar filters to avoid heavy re-renders during drag.
+ * This maintains its own local state for the slider handles for 60fps performance.
+ */
+const BandpassFilterSlider = ({ 
+    sensorType, 
+    filterConfig, 
+    range, 
+    accentColor, 
+    onSave, 
+    config, 
+    handleSensorFilterChange 
+}) => {
+    const [localMin, setLocalMin] = useState(filterConfig.bandpass_low || range.min);
+    const [localMax, setLocalMax] = useState(filterConfig.bandpass_high || range.max);
+
+    // Sync local state if props change externally (e.g. sensor switch)
+    useEffect(() => {
+        setLocalMin(filterConfig.bandpass_low || range.min);
+        setLocalMax(filterConfig.bandpass_high || range.max);
+    }, [filterConfig.bandpass_low, filterConfig.bandpass_high, range.min, range.max]);
+
+    return (
+        <RangeSlider
+            min={range.min}
+            max={range.max}
+            step={range.step}
+            minValue={localMin}
+            maxValue={localMax}
+            color={
+                accentColor === 'primary' ? '#3b82f6' :
+                accentColor === 'emerald' ? '#10b981' :
+                accentColor === 'orange' ? '#f97316' : '#3b82f6'
+            }
+            labelSuffix="Hz"
+            onChange={({ min, max }) => {
+                setLocalMin(min);
+                setLocalMax(max);
+                // Background update for live feedback without full re-render if possible
+                handleSensorFilterChange(sensorType, 'bandpass_low', min);
+                handleSensorFilterChange(sensorType, 'bandpass_high', max);
+            }}
+            onFinalChange={({ min, max }) => {
+                const updatedConfig = {
+                    ...config,
+                    filters: {
+                        ...config.filters,
+                        [sensorType]: {
+                            ...config.filters?.[sensorType],
+                            bandpass_low: min,
+                            bandpass_high: max
+                        }
+                    }
+                };
+                if (onSave) onSave(updatedConfig);
+            }}
+        />
+    );
+};
+
 export default function Sidebar({
     config,
     setConfig,
@@ -395,6 +455,7 @@ export default function Sidebar({
                                 .concat(getSensorTypeForChannel('ch1') === 'EMG' ? ['ch1'] : [])
                         }
                         onSave={onSave}
+                        config={config}
                     />
 
                     {/* EOG FILTER */}
@@ -409,6 +470,7 @@ export default function Sidebar({
                                 .concat(getSensorTypeForChannel('ch1') === 'EOG' ? ['ch1'] : [])
                         }
                         onSave={onSave}
+                        config={config}
                     />
 
                     {/* EEG FILTER */}
@@ -423,6 +485,7 @@ export default function Sidebar({
                                 .concat(getSensorTypeForChannel('ch1') === 'EEG' ? ['ch1'] : [])
                         }
                         onSave={onSave}
+                        config={config}
                     />
                 </section>
             </div>
@@ -477,7 +540,8 @@ function FilterSection({
     colorClass,
     accentColor,
     channelsUsingThis,
-    onSave
+    onSave,
+    config
 }) {
     if (channelsUsingThis.length === 0) {
         return (
@@ -588,48 +652,22 @@ function FilterSection({
                 </label>
                 {filterConfig.bandpass_enabled && (
                     <div className="flex gap-2 items-center pl-6 pr-2 h-12">
-                        {(() => {
-                            const ranges = {
-                                EMG: { min: 1, max: 300, step: 2 },
-                                EEG: { min: 1, max: 50, step: 1 },
-                                EOG: { min: 0.1, max: 20, step: 0.1 }
-                            };
-                            const range = ranges[sensorType] || { min: 1, max: 300, step: 1 };
-
-                            return (
-                                <RangeSlider
-                                    min={range.min}
-                                    max={range.max}
-                                    step={range.step}
-                                    minValue={filterConfig.bandpass_low || range.min}
-                                    maxValue={filterConfig.bandpass_high || range.max}
-                                    color={
-                                        accentColor === 'primary' ? '#3b82f6' :
-                                            accentColor === 'emerald' ? '#10b981' :
-                                                accentColor === 'orange' ? '#f97316' : '#3b82f6'
-                                    }
-                                    labelSuffix="Hz"
-                                    onChange={({ min, max }) => {
-                                        handleSensorFilterChange(sensorType, 'bandpass_low', min);
-                                        handleSensorFilterChange(sensorType, 'bandpass_high', max);
-                                    }}
-                                    onFinalChange={({ min, max }) => {
-                                        const updatedConfig = {
-                                            ...config,
-                                            filters: {
-                                                ...config.filters,
-                                                [sensorType]: {
-                                                    ...config.filters?.[sensorType],
-                                                    bandpass_low: min,
-                                                    bandpass_high: max
-                                                }
-                                            }
-                                        };
-                                        if (onSave) onSave(updatedConfig);
-                                    }}
-                                />
-                            );
-                        })()}
+                        <BandpassFilterSlider
+                            sensorType={sensorType}
+                            filterConfig={filterConfig}
+                            range={(() => {
+                                const ranges = {
+                                    EMG: { min: 1, max: 300, step: 2 },
+                                    EEG: { min: 1, max: 50, step: 1 },
+                                    EOG: { min: 0.1, max: 20, step: 0.1 }
+                                };
+                                return ranges[sensorType] || { min: 1, max: 300, step: 1 };
+                            })()}
+                            accentColor={accentColor}
+                            onSave={onSave}
+                            config={config}
+                            handleSensorFilterChange={onFilterChange}
+                        />
                     </div>
                 )}
             </div>

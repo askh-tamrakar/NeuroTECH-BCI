@@ -3,7 +3,7 @@
   "channel_mapping": {
     "ch0": {
       "enabled": true,
-      "sensor": "EMG"
+      "sensor": "EEG"
     },
     "ch1": {
       "enabled": true,
@@ -17,8 +17,8 @@
   },
   "num_channels": 2,
   "active_models": {
-    "EMG": "10k",
-    "EOG": "10k",
-    "EEG": "test_synthetic_lda"
+    "EMG": "TesT",
+    "EOG": "New",
+    "EEG": "KaraoKe"
   }
 }

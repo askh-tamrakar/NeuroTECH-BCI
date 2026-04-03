@@ -12,20 +12,20 @@ const DinoView = lazy(() => import('./components/views/DinoView'));
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
-  
+
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center bg-bg">
       <LoadingIndicator size="lg" label="Authenticating..." />
     </div>
   );
-  
+
   if (!user) return <Navigate to="/auth" replace />;
-  
+
   return children;
 }
 
 function AppContent() {
-  const { user, loading } = useAuth()
+  const { user } = useAuth()
 
   // Global sound listener
   useEffect(() => {
@@ -37,14 +37,6 @@ function AppContent() {
     return () => window.removeEventListener('click', handleGlobalClick);
   }, []);
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-bg">
-        <LoadingIndicator size="lg" label="Neural Link Initializing..." />
-      </div>
-    )
-  }
-
   return (
     <Suspense fallback={
       <div className="min-h-screen flex items-center justify-center bg-bg">
@@ -53,7 +45,7 @@ function AppContent() {
     }>
       <Routes>
         <Route path="/auth" element={!user ? <LoginPage /> : <Navigate to="/dashboard/terminal" replace />} />
-        
+
         <Route path="/dashboard/*" element={
           <ProtectedRoute>
             <Dashboard />
@@ -64,7 +56,7 @@ function AppContent() {
 
         {/* Redirect directly to dashboard if logged in, else auth */}
         <Route path="/" element={<Navigate to={user ? "/dashboard/terminal" : "/auth"} replace />} />
-        
+
         {/* Fallback */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

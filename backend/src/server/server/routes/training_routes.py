@@ -329,6 +329,9 @@ def api_list_models():
                     "total_candidates": meta.get("total_candidates"),
                     "total_models": meta.get("total_models"),
                     "k_folds": meta.get("k_folds"),
+                    "candidate_index": meta.get("best_candidate_index"),
+                    "fold_index": meta.get("best_fold_index"),
+                    "model_id": meta.get("model_id") or (meta.get("training_history")[-1].get("model_id") if (meta.get("training_history") and len(meta.get("training_history")) > 0) else None),
                     "active": (name == active_name)
                 })
             models.sort(key=lambda x: x.get("created_at") or "", reverse=True)

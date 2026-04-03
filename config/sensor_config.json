@@ -17,8 +17,8 @@
   },
   "num_channels": 2,
   "active_models": {
-    "EMG": "Neuro",
+    "EMG": "10k",
     "EOG": "dino ml",
-    "EEG": "Neuro"
+    "EEG": "test_synthetic_lda"
   }
 }

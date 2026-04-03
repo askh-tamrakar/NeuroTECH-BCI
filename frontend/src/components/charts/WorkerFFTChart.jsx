@@ -11,6 +11,47 @@ const DEFAULT_PALETTE = [
     '#06b6d4', '#f97316', '#06d6a0'
 ];
 
+/**
+ * A stable sub-component for the Frequency Slider to avoid re-render disruption
+ * caused by the main chart's data/stats updates.
+ */
+const FFTFreqSlider = ({ 
+    initialFreqFrom, 
+    initialFreqTo, 
+    color, 
+    onApplyFilters 
+}) => {
+    const [localMin, setLocalMin] = useState(initialFreqFrom || 1);
+    const [localMax, setLocalMax] = useState(initialFreqTo || 50);
+
+    // Sync local state if props change externally
+    useEffect(() => {
+        setLocalMin(initialFreqFrom || 1);
+        setLocalMax(initialFreqTo || 50);
+    }, [initialFreqFrom, initialFreqTo]);
+
+    return (
+        <RangeSlider
+            min={0}
+            max={50}
+            step={1}
+            minValue={Number(localMin)}
+            maxValue={Number(localMax)}
+            color={color || '#3b82f6'}
+            labelSuffix="Hz"
+            onChange={({ min: fMin, max: fMax }) => {
+                setLocalMin(fMin);
+                setLocalMax(fMax);
+            }}
+            onFinalChange={({ min: fMin, max: fMax }) => {
+                if (onApplyFilters) {
+                    onApplyFilters({ frequencyFrom: fMin, frequencyTo: fMax });
+                }
+            }}
+        />
+    );
+};
+
 const getPrevGoodRange = (val) => {
     if (val <= 1) return 1;
     const target = val * 0.98;
@@ -60,8 +101,8 @@ const WorkerFFTChart = forwardRef(({
     color,
     onColorChange,
     titleAddon,
-    frequencyFrom: initialFreqFrom,
-    frequencyTo: initialFreqTo,
+    frequencyFrom,
+    frequencyTo,
     onApplyFilters,
     onZoomChange,
     onRangeChange,
@@ -79,17 +120,8 @@ const WorkerFFTChart = forwardRef(({
     const pendingRequests = useRef(new Map());
 
     const [stats, setStats] = useState({ min: 0, max: 0, mean: 0 });
-    const [frequencyFrom, setFrequencyFrom] = useState(initialFreqFrom || "");
-    const [frequencyTo, setFrequencyTo] = useState(initialFreqTo || "");
     const { currentTheme } = useTheme() || {};
 
-    useEffect(() => {
-        setFrequencyFrom(initialFreqFrom ?? "");
-    }, [initialFreqFrom]);
-
-    useEffect(() => {
-        setFrequencyTo(initialFreqTo ?? "");
-    }, [initialFreqTo]);
 
     const handleApplyFilters = () => {
         if (onApplyFilters) {
@@ -254,7 +286,16 @@ const WorkerFFTChart = forwardRef(({
                 overflow: 'hidden',
                 ...(noBorder ? { border: 'none', borderRadius: 0, boxShadow: 'none' } : {})
             }}>
-            <div className="chart-header" style={{ height: 'var(--chart-header-height, 48px)', flex: 'none' }}>
+            <div 
+                className="chart-header" 
+                style={{ 
+                    height: 'var(--chart-header-height, 48px)', 
+                    flex: 'none', 
+                    position: 'relative', 
+                    zIndex: 10,
+                    pointerEvents: 'auto'
+                }}
+            >
                 {/* Left: Title and Color */}
                 <div className="flex items-center gap-4 min-w-0">
                     <h3 className="chart-title" style={{ position: 'relative' }}>
@@ -293,23 +334,11 @@ const WorkerFFTChart = forwardRef(({
                             <span className="text-xs font-bold uppercase tracking-wider text-muted/80">Freq</span>
                         </div>
                         <div className="w-60 h-10 flex items-center px-2">
-                            <RangeSlider
-                                min={0}
-                                max={50}
-                                step={1}
-                                minValue={Number(frequencyFrom)}
-                                maxValue={Number(frequencyTo)}
-                                color={color || '#3b82f6'}
-                                labelSuffix="Hz"
-                                onChange={({ min: fMin, max: fMax }) => {
-                                    setFrequencyFrom(fMin);
-                                    setFrequencyTo(fMax);
-                                }}
-                                onFinalChange={({ min: fMin, max: fMax }) => {
-                                    if (onApplyFilters) {
-                                        onApplyFilters({ frequencyFrom: fMin, frequencyTo: fMax });
-                                    }
-                                }}
+                            <FFTFreqSlider
+                                initialFreqFrom={frequencyFrom}
+                                initialFreqTo={frequencyTo}
+                                color={color}
+                                onApplyFilters={onApplyFilters}
                             />
                         </div>
                     </div>
