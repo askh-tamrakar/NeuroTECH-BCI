@@ -3,11 +3,13 @@
   "channel_mapping": {
     "ch0": {
       "enabled": true,
-      "sensor": "EMG"
+      "sensor": "EEG",
+      "label": "Fp1 / Oz (Ref: A1, A2)"
     },
     "ch1": {
-      "enabled": true,
-      "sensor": "EEG"
+      "enabled": false,
+      "sensor": "EEG",
+      "label": "UNUSED"
     }
   },
   "display": {

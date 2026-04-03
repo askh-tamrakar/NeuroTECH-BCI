@@ -21,7 +21,7 @@
   "baud": 230400,
   "serial_port": "",
   "connection_mode": "WiFi",
-  "target_ip": "172.29.111.237",
+  "target_ip": "10.232.218.237",
   "target_port": 6000,
   "binary": true
 }

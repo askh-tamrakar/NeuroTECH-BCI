@@ -55,8 +55,9 @@ class StreamManagerApp:
                 for i in range(num_channels):
                     ch_info = mapping.get(f"ch{i}", {})
                     sensor = ch_info.get("sensor", "UNKNOWN")
+                    label = ch_info.get("label", f"{sensor}_{i}")
                     channel_types.append(sensor)
-                    channel_labels.append(f"{sensor}_{i}")
+                    channel_labels.append(label)
                 
                 self.lsl_stream = LSLStreamer(
                     "BioSignals-Raw-uV",

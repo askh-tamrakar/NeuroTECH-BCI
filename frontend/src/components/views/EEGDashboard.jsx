@@ -58,22 +58,37 @@ const EEGDashboardContent = ({ wsEvent, isConnected, wsUrl }) => {
   }, [currentView, setSidebarMode]);
 
   useEffect(() => {
-    if (wsEvent && wsEvent.event === 'eeg_mode_result') {
-      setEegResult(wsEvent.output || wsEvent);
+    if (wsEvent) {
+      // Priority 1: Direct mode manager output
+      if (wsEvent.event === 'eeg_mode_result') {
+        setEegResult(wsEvent.output || wsEvent);
+      } 
+      // Priority 2: Feature Router predictions (F1/F2)
+      else if (wsEvent.event === 'eeg_prediction' || wsEvent.output?.event === 'eeg_prediction') {
+        setEegResult(wsEvent.output || wsEvent);
+      }
+      // Priority 3: Catch-all for any object containing relevant EEG fields
+      else if (wsEvent.features || wsEvent.band_powers) {
+        setEegResult(wsEvent);
+      }
     }
   }, [wsEvent]);
 
-  const handleSelectView = (view) => {
+  const handleSelectView = React.useCallback((view) => {
     setCurrentView(view);
-  };
+  }, []);
+
+  const handleBackToMenu = React.useCallback(() => {
+    setCurrentView('overview');
+  }, []);
 
   const renderView = () => {
     switch (currentView) {
       case "overview": return <OverviewGrid onSelect={handleSelectView} />;
-      case "music": return <MusicView result={eegResult} onNavigate={handleSelectView} />;
-      case "meditation": return <MeditationView result={eegResult} currentView={currentView} onNavigate={handleSelectView} />;
-      case "bubble": return <BubbleGameView result={eegResult} isConnected={isConnected} onBackToMenu={() => setCurrentView('overview')} onNavigate={handleSelectView} />;
-      case "ssvep": return <SSVEPView isConnected={isConnected} wsEvent={wsEvent} onBackToMenu={() => setCurrentView('overview')} onNavigate={handleSelectView} />;
+      case "music": return <MusicView result={eegResult} onNavigate={handleSelectView} onBackToMenu={handleBackToMenu} />;
+      case "meditation": return <MeditationView result={eegResult} currentView={currentView} onNavigate={handleSelectView} onBackToMenu={handleBackToMenu} />;
+      case "bubble": return <BubbleGameView result={eegResult} isConnected={isConnected} onBackToMenu={handleBackToMenu} onNavigate={handleSelectView} />;
+      case "ssvep": return <SSVEPView isConnected={isConnected} wsEvent={wsEvent} onBackToMenu={handleBackToMenu} onNavigate={handleSelectView} />;
       default: return <OverviewGrid onSelect={handleSelectView} />;
     }
   };

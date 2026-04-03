@@ -23,7 +23,8 @@
       "notch_enabled": true,
       "bandpass_high": 30,
       "notch": "50Hz",
-      "bandpass_low": 1
+      "bandpass_low": 1,
+      "notch_freq": 50
     }
   }
 }

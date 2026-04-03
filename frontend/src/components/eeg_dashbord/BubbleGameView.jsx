@@ -25,25 +25,26 @@ const BubbleGameView = ({ result, isConnected, onBackToMenu }) => {
 
   const [realTimeFreq, setRealTimeFreq] = useState(0);
   const [focusScore, setFocusScore] = useState(0);
+  const [activeChannel, setActiveChannel] = useState('attention');
+  const activeChannelRef = useRef(activeChannel);
+
+  useEffect(() => { activeChannelRef.current = activeChannel; }, [activeChannel]);
 
   const { setSidebarSlot, setSidebarMode } = useSidebar();
 
-  // Update sidebar slot whenever any relevant state changes — no throttle
+  // Break the loop: SidebarSlot should only be set once or on static dependency changes.
+  // We use a separate state/ref for the sidebar if needed, but for now, we'll just stabilize the call.
+  // Break the loop: SidebarSlot should only be set once during initialization.
   useEffect(() => {
     setSidebarSlot(
       <BubbleSidebar
         onBackToMenu={onBackToMenu}
-        mouseMode={mouseMode}
         setMouseMode={setMouseMode}
-        realTimeFreq={realTimeFreq}
-        focusScore={focusScore}
-        globalRunning={globalRunning}
-        containerRef={containerRef}
-        difficulty={difficulty}
         setDifficulty={setDifficulty}
       />
     );
-  }, [onBackToMenu, mouseMode, realTimeFreq, focusScore, globalRunning, difficulty, setSidebarSlot]);
+    setSidebarMode('page');
+  }, []); // Run once on mount
 
   useEffect(() => { themeRef.current = currentTheme; }, [currentTheme]);
   useEffect(() => { resultRef.current = result; }, [result]);
@@ -62,10 +63,7 @@ const BubbleGameView = ({ result, isConnected, onBackToMenu }) => {
     const $$ = (sel) => container.querySelectorAll(sel);
 
     const canvas = $('gameCanvas');
-    if (!canvas) return; // Wait for mount
-    const ctx = canvas.getContext('2d');
-    const waveCanvas = $('waveCanvas');
-    const waveCtx = waveCanvas ? waveCanvas.getContext('2d') : null;
+    if (!canvas) return;
 
     let W, H;
     let score = 0, level = 1, lives = 3, combo = 0, maxCombo = 0;
@@ -81,8 +79,13 @@ const BubbleGameView = ({ result, isConnected, onBackToMenu }) => {
     let animId = null;
     let bubblesPopped = 0, bubblesMissed = 0;
     let sessionStart = 0;
-    let activeChannel = 'attention';
     let peakBands = [0, 0, 0, 0, 0];
+    
+    // Ensure we are in 'ws' mode if connected
+    if (isConnectedRef.current) eegMode = 'ws';
+    const ctx = canvas.getContext('2d');
+    const waveCanvas = $('waveCanvas');
+    const waveCtx = waveCanvas ? waveCanvas.getContext('2d') : null;
 
     const channels = {
       attention: v => Math.max(0, Math.min(1, v / 100)),
@@ -143,25 +146,61 @@ const BubbleGameView = ({ result, isConnected, onBackToMenu }) => {
       const indicator = $('conn-indicator');
       if (indicator) indicator.className = 'w-2 h-2 rounded-full bg-green-500 shadow-[0_0_8px_#22c55e]';
       const label = $('conn-label'); if (label) label.textContent = 'CONNECTED';
+      
+      if (simInterval) clearInterval(simInterval);
       if (fetchInterval) clearInterval(fetchInterval);
+
       fetchInterval = setInterval(() => {
-        const res = resultRef.current;
-        if (res && res.band_powers && res.band_powers.length >= 5) {
-          const bp = res.band_powers;
-          const sum = bp.reduce((a, b) => a + b, 0);
-          const relAlpha = sum > 0 ? bp[2] / sum : 0;
-          const relTheta = sum > 0 ? bp[1] / sum : 0;
-          const relBeta = sum > 0 ? bp[3] / sum : 0;
-          let val = 0;
-          if (activeChannel === 'alpha') val = relAlpha * 100;
-          else if (activeChannel === 'theta') val = relTheta * 100;
-          else if (activeChannel === 'beta') val = relBeta * 100;
-          else if (typeof res.focus_score === 'number') val = res.focus_score;
-          else val = (relBeta / (relTheta + relAlpha + 0.01)) * 50;
-          rawSignal = val;
-          eegSignal = Math.max(0, Math.min(1, channels[activeChannel] ? channels[activeChannel](rawSignal) : rawSignal / 100));
-          updateEEGUI();
+        const event = resultRef.current;
+        if (!event) return;
+
+        // DEBUG: See what we are getting
+        if (window._debugEEG) console.log('BubbleGame EEG Event:', event);
+
+        // Extract features from multiple potential formats (ModeManager result vs Prediction event)
+        const features = event.features || event.output?.features || event.band_powers ? {
+             alpha_rel: event.features?.alpha_rel || (event.band_powers ? event.band_powers[2]/100 : 0),
+             theta_rel: event.features?.theta_rel || (event.band_powers ? event.band_powers[1]/100 : 0),
+             beta_rel: event.features?.beta_rel || (event.band_powers ? event.band_powers[3]/100 : 0),
+        } : {};
+        const ch = event.source_channel !== undefined ? `ch${event.source_channel}` : (event.channel || 'ch0');
+        const currentCh = activeChannelRef.current;
+
+        // Skip if targeting a specific channel that doesn't match
+        // For 1-channel setup, both Fp1 and Oz map to ch0
+        if ((currentCh === 'Fp1' || currentCh === 'Oz' || currentCh === 'F1') && ch !== 'ch0') return;
+        if (currentCh === 'F2' && ch !== 'ch1') return;
+
+        let val = 0;
+        const alpha = features.alpha_rel ?? 0;
+        const theta = features.theta_rel ?? 0;
+        const beta = features.beta_rel ?? 0;
+
+        if (currentCh === 'alpha') val = alpha * 100;
+        else if (currentCh === 'theta') val = theta * 100;
+        else if (currentCh === 'beta') val = beta * 100;
+        else {
+          // Default Attention/Focus logic: Beta / (Theta + Alpha)
+          // Normalizes to 0-100 roughly, focus starts around 0.4 ratio (20%)
+          const ratio = beta / (theta + alpha + 0.01);
+          val = ratio * 50; 
         }
+
+        // Fallback to legacy band_powers if features are missing
+        if (val === 0 && event.band_powers && event.band_powers.length >= 4) {
+          const bp = event.band_powers;
+          const sum = bp.reduce((a, b) => a + b, 0);
+          if (sum > 0) {
+            if (currentCh === 'alpha') val = (bp[2] / sum) * 100;
+            else if (currentCh === 'theta') val = (bp[1] / sum) * 100;
+            else if (currentCh === 'beta') val = (bp[3] / sum) * 100;
+            else val = (bp[3] / (bp[1] + bp[2] + 0.01)) * 50;
+          }
+        }
+
+        rawSignal = val;
+        eegSignal = Math.max(0, Math.min(1, val / 100));
+        updateEEGUI();
       }, 60);
     }
 
@@ -190,18 +229,22 @@ const BubbleGameView = ({ result, isConnected, onBackToMenu }) => {
       const bvIds = ['bv-delta', 'bv-theta', 'bv-alpha', 'bv-beta', 'bv-gamma'];
       const pkIds = ['pk-delta', 'pk-theta', 'pk-alpha', 'pk-beta', 'pk-gamma'];
       let bands = [];
-      if (res && res.band_powers && res.band_powers.length >= 5) {
+      if (res && res.features) {
+        const f = res.features;
+        bands = [
+          Math.round((f.delta_rel || 0) * 100),
+          Math.round((f.theta_rel || 0) * 100),
+          Math.round((f.alpha_rel || 0) * 100),
+          Math.round((f.beta_rel || 0) * 100),
+          Math.round((f.gamma_rel || 0) * 100),
+        ];
+      } else if (res && res.band_powers && res.band_powers.length >= 5) {
         const bp = res.band_powers;
         const sum = bp.reduce((a, b) => a + b, 0);
         bands = bp.map(v => sum > 0 ? Math.round((v / sum) * 100) : 0);
       } else {
-        bands = [
-          Math.round(15 + eegSignal * 10),
-          Math.round(20 - eegSignal * 10),
-          Math.round(25 - eegSignal * 5),
-          Math.round(eegSignal * 50),
-          Math.round(5 + eegSignal * 10),
-        ];
+        // No real data - show zero activity rather than fake oscillations
+        bands = [0, 0, 0, 0, 0];
       }
       for (let i = 0; i < 5; i++) {
         const fill = $(bfIds[i]); if (fill) fill.style.width = bands[i] + '%';
@@ -537,13 +580,7 @@ const BubbleGameView = ({ result, isConnected, onBackToMenu }) => {
       renderSessionHistory();
     }
 
-    $$('.ch-tag').forEach(tag => {
-      tag.onclick = (e) => {
-        $$('.ch-tag').forEach(t => t.classList.remove('active'));
-        e.target.classList.add('active');
-        activeChannel = e.target.dataset.ch;
-      };
-    });
+    // Removed manual DOM tag handlers
 
     initStars(); renderSessionHistory();
     if (isConnectedRef.current) startLiveStream(); else stopStream();
@@ -599,7 +636,7 @@ const BubbleGameView = ({ result, isConnected, onBackToMenu }) => {
           {/* Bottom HUD - Floating Panel */}
           <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-50 pointer-events-auto rounded-xl bg-[var(--surface)]/80 border border-[var(--primary)]/20 p-3 shadow-2xl backdrop-blur-md w-[min(560px,94%)]">
             <div className="flex justify-between items-center mb-2">
-              <span className="font-display text-[9px] tracking-[3px] text-[var(--primary)] opacity-90 uppercase">Frontal EEG Signal</span>
+              <span className="font-display text-[9px] tracking-[3px] text-[var(--primary)] opacity-90 uppercase">EEG F1/F2 Signals (Ear Ref)</span>
               <div className="flex items-center gap-1.5 px-3 py-1 rounded-full border border-[var(--primary)]/30 text-[9px] font-bold tracking-widest cursor-pointer hover:bg-[var(--primary)]/10 transition-colors">
                 <span id="conn-indicator" className="w-2 h-2 rounded-full bg-gray-500"></span>
                 <span id="conn-label" className="text-[var(--text)] uppercase">Waiting</span>
@@ -615,8 +652,12 @@ const BubbleGameView = ({ result, isConnected, onBackToMenu }) => {
               <span>Focus <span id="focus-val" className="text-[var(--primary)] font-black ml-1">0%</span></span>
             </div>
             <div className="flex gap-2 flex-wrap mt-2">
-              {['attention', 'alpha', 'theta', 'beta'].map(ch => (
-                <span key={ch} className={`ch-tag text-[9px] tracking-widest px-2 py-1 border border-[var(--primary)]/20 rounded cursor-pointer transition-colors select-none ${ch === 'attention' ? 'active bg-[var(--primary)]/15 border-[var(--primary)] text-white' : 'hover:bg-[var(--primary)]/5'}`} data-ch={ch}>
+              {['Fp1', 'Oz', 'attention', 'alpha', 'theta', 'beta'].map(ch => (
+                <span 
+                  key={ch} 
+                  className={`ch-tag text-[9px] tracking-widest px-2 py-1 border border-[var(--primary)]/20 rounded cursor-pointer transition-colors select-none ${ch === activeChannel ? 'active bg-[var(--primary)]/15 border-[var(--primary)] text-white' : 'hover:bg-[var(--primary)]/5'}`} 
+                  onClick={() => setActiveChannel(ch)}
+                >
                   {ch === 'attention' ? 'ATTN' : ch.toUpperCase()}
                 </span>
               ))}

@@ -320,6 +320,11 @@ class FilterRouter:
                                 "processor": sensor_type
                             }
                             
+                            if not enabled:
+                                self.channel_processors[i] = None
+                                print(f"[Router] [{i}] → (DISABLED) | Key: {ch_key}")
+                                continue
+
                             existing_proc = old_processors.get(i)
                             if existing_proc and existing_proc.__class__.__name__.startswith(sensor_type):
                                 self.channel_processors[i] = existing_proc

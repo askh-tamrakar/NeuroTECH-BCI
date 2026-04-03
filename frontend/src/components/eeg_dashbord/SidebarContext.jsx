@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
 
 const SidebarCtx = createContext({
     sidebarMode: 'main',
@@ -11,9 +11,20 @@ export const SidebarProvider = ({ children }) => {
     const [sidebarMode, setSidebarMode] = useState('main'); // 'main' | 'page'
     const [sidebarSlot, setSidebarSlot] = useState(null);
 
-    const value = React.useMemo(() => ({
-        sidebarMode, setSidebarMode, sidebarSlot, setSidebarSlot
-    }), [sidebarMode, sidebarSlot]);
+    const stableSetSidebarMode = useCallback((mode) => {
+        setSidebarMode(mode);
+    }, []);
+
+    const stableSetSidebarSlot = useCallback((slot) => {
+        setSidebarSlot(slot);
+    }, []);
+
+    const value = useMemo(() => ({
+        sidebarMode, 
+        sidebarSlot,
+        setSidebarMode: stableSetSidebarMode, 
+        setSidebarSlot: stableSetSidebarSlot
+    }), [sidebarMode, sidebarSlot, stableSetSidebarMode, stableSetSidebarSlot]);
 
     return (
         <SidebarCtx.Provider value={value}>
