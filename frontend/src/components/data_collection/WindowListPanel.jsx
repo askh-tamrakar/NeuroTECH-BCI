@@ -170,10 +170,14 @@ export default function WindowListPanel({
                                             <span className={`text-xs uppercase ${tone.text}`}>
                                                 {(win.status === 'recording' || win.status === 'pending') ? 'Recording' :
                                                     (win.status === 'collected') ? 'Ready' :
-                                                        (win.status === 'saved') ? 'Saved' :
-                                                            (win.status === 'correct') ? 'Correct' :
-                                                                (win.status === 'incorrect') ? 'Incorrect' :
-                                                                    'Error'}
+                                                        (win.status === 'saved' || win.status === 'correct') ? (
+                                                            <span>
+                                                                {win.status === 'saved' ? 'Saved' : 'Correct'}
+                                                                {win.windows_saved > 1 && ` (x${win.windows_saved})`}
+                                                            </span>
+                                                        ) :
+                                                            (win.status === 'incorrect') ? 'Incorrect' :
+                                                                'Error'}
                                             </span>
                                         </div>
                                     </div>

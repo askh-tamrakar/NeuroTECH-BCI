@@ -2,343 +2,166 @@ import pandas as pd
 import numpy as np
 import joblib
 import json
+import os
+import random
+from datetime import datetime
 from pathlib import Path
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import GroupKFold, train_test_split
 from sklearn.metrics import accuracy_score, confusion_matrix
 import sys
-import os
 
-# Standard Labels for EOG (Must match frontend / saved DB rows)
-# 0=Rest, 1=SingleBlink, 2=DoubleBlink
+# Standard Labels for EOG (0=Rest, 1=SingleBlink, 2=DoubleBlink)
 STANDARD_LABELS = [0, 1, 2]
 
-# Add project root to sys.path to allow imports from src
+# Project root for imports
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.append(str(PROJECT_ROOT))
 
-# Now we can import from src
 from src.learning.tree_utils import tree_to_json
 from src.database.db_manager import db_manager
-
-# Paths
-from src.utils.paths import get_base_data_dir
-MODELS_DIR = get_base_data_dir() / "EOG" / "models"
-MODELS_DIR.mkdir(parents=True, exist_ok=True)
-
-# Global State for Active Model
-ACTIVE_MODEL = None
-ACTIVE_SCALER = None
-ACTIVE_MODEL_NAME = None
-
-def get_model_paths(model_name=None):
-    """Returns dict of paths for a given model name (or default)."""
-    # Use default if no name provided (legacy support)
-    if not model_name: 
-        return {
-            "model": MODELS_DIR / "eog_rf.joblib",
-            "scaler": MODELS_DIR / "eog_scaler.joblib",
-            "meta": MODELS_DIR / "eog_rf_meta.json"
-        }
-        
-    clean_name = "".join([c for c in model_name if c.isalnum() or c in ('_', '-')])
-    base = MODELS_DIR / clean_name
-    return {
-        "model": base.with_suffix(".joblib"),
-        "scaler": MODELS_DIR / f"{clean_name}_scaler.joblib",
-        "meta": MODELS_DIR / f"{clean_name}_meta.json"
-    }
+from src.learning.emg_trainer import DISPLAY_LABELS, LABELS_MAP, get_model_paths, get_rejected_model_paths, generate_hex_id
+from src.utils.config import config_manager
 
 EOG_FEATURES = [
     'amplitude', 'duration_ms', 'rise_time_ms', 'fall_time_ms',
     'asymmetry', 'peak_count', 'kurtosis', 'skewness'
 ]
 
-def train_eog_model(n_estimators=100, max_depth=None, min_impurity_decrease=0.0, test_size=0.2, table_name="eog_windows", model_name="eog_rf"):
-    """
-    Trains a Random Forest classifier on EOG data from the database.
-    """
-    conn = db_manager.connect('EOG') # Fixed: Explicit sensor type
-    
-    # Load data from DB
+def train_eog_model(n_estimators=100, max_depth=None, min_impurity_decrease=0.0, 
+                   train_split=0.7, val_split=0.15, test_split=0.15, n_folds=1,
+                   table_name="eog_windows", model_name=None):
+    conn = db_manager.connect('EOG')
     try:
-        if not table_name: table_name = "eog_windows"
-        if table_name == "undefined" or table_name == "null" or table_name == "ALL": table_name = "eog_windows"
-
-        # Check if table exists first
-        cursor = conn.cursor()
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table_name,))
-        if not cursor.fetchone():
-             conn.close()
-             return {"error": f"Table {table_name} does not exist. Collect data first."}
-
         df = pd.read_sql_query(f"SELECT * FROM {table_name}", conn)
     except Exception as e:
         conn.close()
-        return {"error": f"Database read error: {str(e)}"}
-    
+        return {"error": str(e)}
     conn.close()
 
-    if df.empty:
-        return {"error": "EOG Database is empty. Collect data first."}
-
-    # Prepare Features and Labels
-    # Check completeness
-    missing = [c for c in EOG_FEATURES if c not in df.columns]
-    if missing:
-        return {"error": f"Missing columns in DB: {missing}"}
-
+    if df.empty: return {"error": "EOG Database is empty."}
+    
+    # Check features
+    for col in EOG_FEATURES:
+        if col not in df.columns: df[col] = 0.0
+    
     X = df[EOG_FEATURES]
     y = df['label']
+    groups = df['serial_id'] if 'serial_id' in df.columns else pd.Series(range(len(df)))
 
-    # Test/Train Split
-    try:
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, stratify=y, random_state=42)
-    except ValueError as e:
-         return {"error": f"Split error (not enough data per class?): {str(e)}"}
+    # 1. Split Serial IDs into [Train+Val] and [Test]
+    unique_ids = groups.unique()
+    if len(unique_ids) < 3:
+        train_val_idx, test_idx = train_test_split(np.arange(len(y)), test_size=test_split, stratify=y, random_state=42)
+    else:
+        tv_ids, test_ids = train_test_split(unique_ids, test_size=test_split, random_state=42)
+        train_val_idx = df[groups.isin(tv_ids)].index
+        test_idx = df[groups.isin(test_ids)].index
 
-    # Scale Features
-    scaler = StandardScaler()
-    X_train_scaled = scaler.fit_transform(X_train)
-    X_test_scaled = scaler.transform(X_test)
+    X_tv, y_tv, grp_tv = X.iloc[train_val_idx], y.iloc[train_val_idx], groups.iloc[train_val_idx]
+    X_test, y_test = X.iloc[test_idx], y.iloc[test_idx]
 
-    # Train Random Forest
-    rf = RandomForestClassifier(
-        n_estimators=n_estimators, 
-        max_depth=max_depth, 
-        min_impurity_decrease=min_impurity_decrease,
-        random_state=42
-    )
-    rf.fit(X_train_scaled, y_train)
+    candidate_base = random.randint(0x100, 0xFFF)
+    fold_results = []
 
-    # Evaluate
-    y_pred = rf.predict(X_test_scaled)
-    acc = accuracy_score(y_test, y_pred)
-    # Use standard labels to ensure matrix is aligned with frontend
-    cm = confusion_matrix(y_test, y_pred, labels=STANDARD_LABELS).tolist()
-    
-    # Feature Importance
-    importances = dict(zip(EOG_FEATURES, rf.feature_importances_.tolist()))
+    if n_folds > 1 and len(grp_tv.unique()) >= n_folds:
+        gkf = GroupKFold(n_splits=n_folds)
+        folds = list(gkf.split(X_tv, y_tv, groups=grp_tv))
+    else:
+        # Single fold (Trial-Aware)
+        n_folds = 1
+        unique_trials_tv = grp_tv.unique()
+        if len(unique_trials_tv) >= 2:
+            tr_t, val_t = train_test_split(unique_trials_tv, test_size=val_split/(train_split+val_split), random_state=42)
+            tr_idx = grp_tv[grp_tv.isin(tr_t)].index
+            val_idx = grp_tv[grp_tv.isin(val_t)].index
+            folds = [(tr_idx, val_idx)]
+        else:
+            # Row-wise fallback
+            tr_idx, val_idx = train_test_split(np.arange(len(y_tv)), test_size=val_split/(train_split+val_split), random_state=42)
+            folds = [(tr_idx, val_idx)]
+        
 
-    # Save Model
-    paths = get_model_paths(model_name)
-    joblib.dump(rf, paths["model"])
-    joblib.dump(scaler, paths["scaler"])
-    
-    # Save Metadata
-    with open(paths["meta"], 'w') as f:
-        json.dump({
-            "n_estimators": n_estimators,
-            "max_depth": max_depth,
-            "min_impurity_decrease": min_impurity_decrease,
-            "test_size": test_size,
-            "table_name": table_name,
-            "created_at": pd.Timestamp.now().isoformat(),
-            "accuracy": acc
-        }, f)
+    best_acc, best_data = -1, None
+    for f_idx, (t_idx, v_idx) in enumerate(folds):
+        X_f_t, X_f_v = X_tv.iloc[t_idx], X_tv.iloc[v_idx]
+        y_f_t, y_f_v = y_tv.iloc[t_idx], y_tv.iloc[v_idx]
 
-    print(f"EOG Model saved to {paths['model']}")
+        scaler = StandardScaler()
+        X_f_t_s = scaler.fit_transform(X_f_t)
+        X_f_v_s = scaler.transform(X_f_v)
 
-    # Automatically load
-    load_model(model_name)
+        rf = RandomForestClassifier(n_estimators=n_estimators, max_depth=max_depth, min_impurity_decrease=min_impurity_decrease, random_state=42)
+        rf.fit(X_f_t_s, y_f_t)
 
-    # Tree Visualization (First Estimator)
-    tree_struct = tree_to_json(rf.estimators_[0], EOG_FEATURES)
+        acc = accuracy_score(y_f_v, rf.predict(X_f_v_s))
+        model_id = generate_hex_id(candidate_base, f_idx + 1)
+        
+        r_paths = get_rejected_model_paths("EOG", model_id)
+        joblib.dump(rf, r_paths["model"])
+        joblib.dump(scaler, r_paths["scaler"])
+        with open(r_paths["meta"], 'w') as f_m: json.dump({"accuracy": acc, "fold": f_idx+1, "candidate": f"{candidate_base:X}"}, f_m)
+        
+        fold_results.append({"fold": f_idx+1, "accuracy": acc, "model_id": model_id})
+        if acc > best_acc: best_acc, best_data = acc, (rf, scaler, model_id)
+
+    best_rf, best_s, best_id = best_data
+    X_test_s = best_s.transform(X_test)
+    y_test_pred = best_rf.predict(X_test_s)
+    test_acc = accuracy_score(y_test, y_test_pred)
+
+    final_id = model_name or generate_hex_id(candidate_base, 0)
+    final_paths = get_model_paths("EOG", final_id)
+    joblib.dump(best_rf, final_paths["model"])
+    joblib.dump(best_s, final_paths["scaler"])
+    with open(final_paths["meta"], 'w') as f_m: 
+        json.dump({"accuracy": test_acc, "val_accuracy": best_acc, "folds": fold_results, "id": final_id, "created_at": datetime.now().isoformat()}, f_m)
+
+    config_manager.set_active_model("EOG", final_id)
+    std_labels = LABELS_MAP["EOG"]
+    cm = confusion_matrix(y_test, y_test_pred, labels=std_labels).tolist()
 
     return {
-        "status": "success",
-        "accuracy": acc,
-        "confusion_matrix": cm,
-        "labels": STANDARD_LABELS,
-        "feature_importances": importances,
-        "tree_structure": tree_struct,
-        "n_samples": len(y_test),
-        "model_path": str(paths["model"]),
-        "model_name": model_name
+        "status": "success", "sensor": "EOG", "accuracy": test_acc, "val_accuracy": best_acc,
+        "confusion_matrix": cm, "labels": [DISPLAY_LABELS["EOG"].get(i, str(i)) for i in std_labels],
+        "model_id": final_id, "best_fold_id": best_id, "folds": fold_results,
+        "feature_importances": dict(zip(EOG_FEATURES, best_rf.feature_importances_.tolist())),
+        "tree_structure": tree_to_json(best_rf.estimators_[0], EOG_FEATURES)
     }
 
 def evaluate_saved_eog_model(table_name="eog_windows", model_name=None):
-    """
-    Evaluates the currently saved EOG model against the specified database table.
-    """
-    # Logic to resolve model similar to EMG
-    display_model = None
-    display_scaler = None
-    paths = None
-    
-    if model_name and model_name == ACTIVE_MODEL_NAME and ACTIVE_MODEL:
-        display_model = ACTIVE_MODEL
-        display_scaler = ACTIVE_SCALER
-        paths = get_model_paths(model_name)
-    elif model_name:
-         paths = get_model_paths(model_name)
-         if not paths["model"].exists(): return {"error": f"Model {model_name} not found"}
-         try:
-             display_model = joblib.load(paths["model"])
-             display_scaler = joblib.load(paths["scaler"])
-         except Exception as e: return {"error": f"Load failed: {e}"}
-    elif ACTIVE_MODEL:
-        display_model = ACTIVE_MODEL
-        display_scaler = ACTIVE_SCALER
-        paths = get_model_paths(ACTIVE_MODEL_NAME)
-    else:
-        # Default
-        paths = get_model_paths("eog_rf")
-        if paths["model"].exists():
-             try:
-                 display_model = joblib.load(paths["model"])
-                 display_scaler = joblib.load(paths["scaler"])
-             except: return {"error": "Default model load failed"}
-        else:
-             return {"error": "No EOG model found"}
-
-    # Load Metadata if available
-    hyperparameters = {}
-    if paths and paths["meta"].exists():
-        try:
-            with open(paths["meta"], 'r') as f:
-                hyperparameters = json.load(f)
-        except Exception:
-            pass
-
-    # Prepare base response
-    base_response = {
-        "status": "success",
-        "model_path": str(paths["model"]),
-        "model_name": model_name or ACTIVE_MODEL_NAME or "eog_rf",
-        "feature_importances": dict(zip(EOG_FEATURES, display_model.feature_importances_.tolist())),
-        "tree_structure": tree_to_json(display_model.estimators_[0], EOG_FEATURES),
-        "hyperparameters": hyperparameters
+    model_name = model_name or config_manager.get_active_model("EOG")
+    if not model_name: return {"error": "No EOG model active."}
+    paths = get_model_paths("EOG", model_name)
+    model = joblib.load(paths["model"])
+    scaler = joblib.load(paths["scaler"])
+    conn = db_manager.connect("EOG")
+    try: df = pd.read_sql_query(f"SELECT * FROM {table_name}", conn)
+    finally: conn.close()
+    X = df[EOG_FEATURES].fillna(0.0)
+    y = df["label"].astype(int)
+    X_eval = scaler.transform(X)
+    y_pred = model.predict(X_eval)
+    acc = accuracy_score(y, y_pred)
+    std_labels = LABELS_MAP["EOG"]
+    cm = confusion_matrix(y, y_pred, labels=std_labels).tolist()
+    return {
+        "status": "success", "accuracy": acc, "confusion_matrix": cm,
+        "labels": [str(DISPLAY_LABELS["EOG"].get(i, i)) for i in std_labels]
     }
 
-    if not table_name or table_name == "ALL":
-        table_name = "eog_windows"
-
-    conn = db_manager.connect('EOG')
-    try:
-        cursor = conn.cursor()
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table_name,))
-        if not cursor.fetchone():
-             conn.close()
-             return {
-                 **base_response,
-                 "accuracy": None,
-                 "confusion_matrix": None,
-                 "n_samples": 0,
-                 "warning": f"Table {table_name} not found."
-             }
-
-        df = pd.read_sql_query(f"SELECT * FROM {table_name}", conn)
-    except Exception as e:
-        conn.close()
-        return {
-             **base_response,
-             "accuracy": None,
-             "confusion_matrix": None,
-             "n_samples": 0,
-             "warning": f"Database read error: {str(e)}"
-        }
-    conn.close()
-
-    if df.empty:
-         return {
-             **base_response,
-             "accuracy": None,
-             "confusion_matrix": None,
-             "n_samples": 0,
-             "warning": f"Table {table_name} is empty."
-         }
-
-    X = df[EOG_FEATURES]
-    y = df['label']
-
-    # Inference on FULL dataset
-    try:
-        X_scaled = display_scaler.transform(X)
-        y_pred = display_model.predict(X_scaled)
-        
-        acc = accuracy_score(y, y_pred)
-        # Use standard labels
-        cm = confusion_matrix(y, y_pred, labels=STANDARD_LABELS).tolist()
-        
-        return {
-            **base_response,
-            "accuracy": acc,
-            "confusion_matrix": cm,
-            "labels": STANDARD_LABELS,
-            "n_samples": len(df)
-        }
-    except Exception as e:
-        return {"error": f"Inference error: {str(e)}"}
-
 def list_saved_models():
-    """Returns a list of available EOG models."""
-    models = []
-    # Glob for .joblib files
-    all_files = list(MODELS_DIR.glob("*.joblib"))
-    
-    for p in all_files:
-        if p.name.endswith("_scaler.joblib"):
-            continue
-            
-        name = p.stem 
-        meta_path = MODELS_DIR / f"{name}_meta.json"
-        
-        meta = {}
-        if meta_path.exists():
-            try:
-                with open(meta_path, 'r') as f: meta = json.load(f)
-            except: pass
-            
-        models.append({
-            "name": name,
-            "path": str(p),
-            "created_at": meta.get("created_at"),
-            "accuracy": meta.get("accuracy"),
-            "hyperparameters": {k:v for k,v in meta.items() if k not in ["created_at", "accuracy"]}
-        })
-        
-    models.sort(key=lambda x: x.get("created_at") or "", reverse=True)
-    return models
+    """Alias for emg_trainer.list_saved_models('EOG')"""
+    from src.learning.emg_trainer import list_saved_models as lsm
+    return lsm('EOG')
 
 def delete_model(model_name):
-    """Deletes the specified EOG model and associated files."""
-    paths = get_model_paths(model_name)
-    deleted = []
-    errors = []
-    
-    for key, p in paths.items():
-        if p.exists():
-            try:
-                os.remove(p)
-                deleted.append(str(p))
-            except Exception as e:
-                errors.append(f"Failed to delete {p}: {e}")
-    
-    if errors:
-        return {"status": "partial_success", "deleted": deleted, "errors": errors}
-    return {"status": "success", "deleted": deleted}
+    """Alias for emg_trainer.delete_model('EOG', model_name)"""
+    from src.learning.emg_trainer import delete_model as dm
+    return dm('EOG', model_name)
 
 def load_model(model_name):
-    """Loads the specified EOG model into global state."""
-    global ACTIVE_MODEL, ACTIVE_SCALER, ACTIVE_MODEL_NAME
-    
-    paths = get_model_paths(model_name)
-    if not paths["model"].exists() or not paths["scaler"].exists():
-        return {"error": f"Model {model_name} not found"}
-        
-    try:
-        ACTIVE_MODEL = joblib.load(paths["model"])
-        ACTIVE_SCALER = joblib.load(paths["scaler"])
-        ACTIVE_MODEL_NAME = model_name
-        print(f"Loaded model: {model_name}")
-        return {"status": "success", "model_name": model_name}
-    except Exception as e:
-        print(f"Failed to load model {model_name}: {e}")
-        return {"error": str(e)}
-
-if __name__ == "__main__":
-    # Test run
-    # print(train_eog_model())
-    pass
+    """Alias for emg_trainer.load_model('EOG', model_name)"""
+    from src.learning.emg_trainer import load_model as lm
+    return lm('EOG', model_name)

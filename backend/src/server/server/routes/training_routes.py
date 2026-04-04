@@ -15,12 +15,16 @@ from src.server.server.lsl_service import extract_eog_features, extract_eeg_feat
 from scipy import stats as scipy_stats
 
 # Imports for ML logic
-from src.learning.model_trainer import (
-    train_model, train_emg_model, train_eog_model,
-    evaluate_saved_model, list_saved_models, delete_model, load_model, get_model_tree_structure
+from src.learning.emg_trainer import (
+    train_emg_model,
+    evaluate_saved_model, list_saved_models as list_saved_emg_models, 
+    delete_model as delete_emg_model, 
+    load_model as load_emg_model, 
+    get_model_tree_structure
 )
 from src.learning.eog_trainer import (
-    train_eog_model, evaluate_saved_eog_model, 
+    train_eog_model, 
+    evaluate_saved_eog_model, 
     list_saved_models as list_saved_eog_models, 
     delete_model as delete_eog_model, 
     load_model as load_eog_model
@@ -52,44 +56,34 @@ def api_train_emg():
         if target_table == 'ALL':
             target_table = 'emg_windows'
 
-        try:
-            conn = db_manager.connect('EMG')
-            cursor = conn.cursor()
-            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (target_table,))
-            if not cursor.fetchone():
-                 return jsonify({"error": f"Table {target_table} not found"}), 404
-                 
-            n = conn.execute(f"SELECT COUNT(*) FROM {target_table}").fetchone()[0]
-            conn.close()
-            
-            print(f"Train Request on {target_table}. Contains {n} samples.")
-            if n == 0:
-                return jsonify({"error": "Database is empty (0 samples). Please Record Data and hit Stop."}), 400
-        except Exception as e:
-            print(f"DB Check failed: {e}")
-
         n_est = int(params.get('n_estimators', 200))
         max_d = params.get('max_depth')
         if max_d == 'None' or max_d is None: max_d = 15
         else: max_d = int(max_d)
         
-        test_size = float(params.get('test_size', 0.2))
-        min_impurity_decrease = float(params.get('min_impurity_decrease', 0.0))
+        # New parameters for splitting and folds
+        train_split = float(params.get('train_split', 0.7))
+        val_split = float(params.get('val_split', 0.15))
+        test_split = float(params.get('test_split', 0.15))
+        n_folds = int(params.get('n_folds', 1))
         
+        min_impurity_decrease = float(params.get('min_impurity_decrease', 0.0))
         model_name = params.get('model_name', 'emg_rf_model')
         
         result = train_emg_model(
             n_estimators=n_est, 
             max_depth=max_d, 
             min_impurity_decrease=min_impurity_decrease,
-            test_size=test_size, 
+            train_split=train_split,
+            val_split=val_split,
+            test_split=test_split,
+            n_folds=n_folds,
             table_name=target_table, 
             model_name=model_name
         )
         if "error" in result:
              return jsonify(result), 400
              
-        # Update Web Server's RPSDetector explicitly since train_model doesn't have access to state
         if state.rps_detector:
              state.rps_detector.load_model(model_name, verbose=False)
              
@@ -103,27 +97,34 @@ def api_train_eog():
         params = request.get_json() or {}
         n_est = int(params.get('n_estimators', 100))
         max_d = params.get('max_depth')
-        table_name = params.get('table_name') # Extract session table name
+        table_name = params.get('table_name') 
         if table_name == 'ALL': table_name = 'eog_windows'
         model_name = params.get('model_name', 'eog_rf')
 
         if max_d == 'None' or max_d is None: max_d = None
         else: max_d = int(max_d)
         
-        test_size = float(params.get('test_size', 0.2))
+        train_split = float(params.get('train_split', 0.7))
+        val_split = float(params.get('val_split', 0.15))
+        test_split = float(params.get('test_split', 0.15))
+        n_folds = int(params.get('n_folds', 1))
+        
         min_impurity_decrease = float(params.get('min_impurity_decrease', 0.0))
         
         result = train_eog_model(
             n_estimators=n_est, 
             max_depth=max_d, 
             min_impurity_decrease=min_impurity_decrease,
-            test_size=test_size, 
-            table_name=table_name, 
+            train_split=train_split,
+            val_split=val_split,
+            test_split=test_split,
+            n_folds=n_folds,
+            table_name=table_name or "eog_windows", 
             model_name=model_name
         )
         if "error" in result:
              return jsonify(result), 400
-        return result, 200
+        return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -135,14 +136,22 @@ def api_train_eeg_lda():
         table_name = params.get('table_name', 'eeg_windows')
         if table_name == 'ALL':
             table_name = 'eeg_windows'
-        test_size = float(params.get('test_size', 0.2))
+        
+        train_split = float(params.get('train_split', 0.7))
+        val_split = float(params.get('val_split', 0.15))
+        test_split = float(params.get('test_split', 0.15))
+        n_folds = int(params.get('n_folds', 1))
+
         model_name = params.get('model_name', 'eeg_lda')
         solver = params.get('solver', 'eigen')
         shrinkage = params.get('shrinkage', 'auto')
 
         result = train_eeg_lda_model(
             table_name=table_name,
-            test_size=test_size,
+            train_split=train_split,
+            val_split=val_split,
+            test_split=test_split,
+            n_folds=n_folds,
             model_name=model_name,
             solver=solver,
             shrinkage=shrinkage,
@@ -157,20 +166,17 @@ def api_train_eeg_lda():
 @training_bp.route('/api/model/evaluate', methods=['POST'])
 def api_eval_emg():
     params = request.get_json() or {}
-    table_name = params.get('table_name') 
+    table_name = params.get('table_name') or 'emg_windows'
     model_name = params.get('model_name')
-    # Default to EMG for backward compat on this endpoint if not specified
     res = evaluate_saved_model(sensor='EMG', table_name=table_name, model_name=model_name)
     if "error" in res:
-        # Return 200 for evaluation errors (like "no model") to avoid console spam.
-        # The frontend handles the 'error' key in the JSON payload.
         return jsonify(res), 200
     return jsonify(res)
 
 @training_bp.route('/api/model/evaluate/eog', methods=['POST'])
 def api_eval_eog():
     params = request.get_json() or {}
-    table_name = params.get('table_name')
+    table_name = params.get('table_name') or 'eog_windows'
     model_name = params.get('model_name')
     res = evaluate_saved_eog_model(table_name=table_name, model_name=model_name)
     if "error" in res:
@@ -188,50 +194,13 @@ def api_eval_eeg():
     return jsonify(res)
 
 @training_bp.route('/api/models/emg', methods=['GET'])
-def api_list_models():
-    """List all saved EMG models (Inlined logic for stability)."""
+def api_list_emg_models():
+    """List all saved EMG models."""
     try:
-        # models = list_saved_models()
-        # Inline Listing Logic
-        import json
-        from src.utils.paths import get_models_dir
-        
-        MODELS_DIR = get_models_dir('EMG')
-        
-        # Get active model to mark it
-        from src.utils.config import config_manager
-        active_name = config_manager.get_active_model('EMG')
-        
-        models = []
-        if MODELS_DIR.exists():
-            all_files = list(MODELS_DIR.glob("*.joblib"))
-            for p in all_files:
-                if p.name.endswith("_scaler.joblib"): continue
-                
-                name = p.stem
-                meta_path = MODELS_DIR / f"{name}_meta.json"
-                meta = {}
-                if meta_path.exists():
-                    try:
-                        with open(meta_path, 'r') as f: meta = json.load(f)
-                    except: pass
-                
-                models.append({
-                    "name": name,
-                    "path": str(p),
-                    "created_at": meta.get("created_at"),
-                    "accuracy": meta.get("accuracy"),
-                    "hyperparameters": {k:v for k,v in meta.items() if k not in ["created_at", "accuracy"]},
-                    "active": (name == active_name)
-                })
-            models.sort(key=lambda x: x.get("created_at") or "", reverse=True)
-            
+        models = list_saved_emg_models()
         return jsonify(models)
     except Exception as e:
-        import traceback
-        tb = traceback.format_exc()
-        print(f"❌ Error listing EMG models: {tb}")
-        return jsonify({"error": str(e), "traceback": tb}), 500
+        return jsonify({"error": str(e)}), 500
 
 @training_bp.route('/api/models/eog', methods=['GET'])
 def api_list_eog_models():
@@ -250,12 +219,15 @@ def api_list_eog_models():
 def api_list_models_generic(sensor):
     """List all saved models for a sensor (Generic Route)."""
     try:
-        if sensor.upper() == 'EMG':
-            return api_list_models()
-        elif sensor.upper() == 'EOG':
+        sensor_upper = sensor.upper()
+        if sensor_upper == 'EMG':
+            return api_list_emg_models()
+        elif sensor_upper == 'EOG':
             return api_list_eog_models()
-        elif sensor.upper() == 'EEG':
-            return jsonify(list_saved_models('EEG'))
+        elif sensor_upper == 'EEG':
+            # EEG models are managed via emg_trainer.list_saved_models('EEG') or similar
+            # Actually, emg_trainer.py has a generic list_saved_models(sensor)
+            return jsonify(list_saved_emg_models('EEG'))
         else:
             return jsonify({"error": f"Unknown sensor type {sensor}"}), 400
     except Exception as e:
@@ -264,12 +236,12 @@ def api_list_models_generic(sensor):
 
 
 @training_bp.route('/api/models/emg/<model_name>', methods=['DELETE'])
-def api_delete_model(model_name):
+def api_delete_emg_model_endpoint(model_name):
     """Delete a specific EMG model."""
     try:
-        result = delete_model('EMG', model_name)
+        result = delete_emg_model('EMG', model_name)
         if "errors" in result and result["errors"]:
-             return jsonify(result), 400 # Partial success or fail
+             return jsonify(result), 400 
         return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -363,8 +335,13 @@ def api_delete_model_generic(sensor, model_name):
         sensor_upper = sensor.upper()
         if sensor_upper == 'EOG':
             result = delete_eog_model(model_name)
+        elif sensor_upper == 'EMG':
+            result = delete_emg_model('EMG', model_name)
+        elif sensor_upper == 'EEG':
+            result = delete_emg_model('EEG', model_name)
         else:
-            result = delete_model(sensor_upper, model_name)
+            return jsonify({"error": f"Unsupported sensor {sensor}"}), 400
+
         if "errors" in result and result["errors"]:
             return jsonify(result), 400
         return jsonify(result)
@@ -372,7 +349,7 @@ def api_delete_model_generic(sensor, model_name):
         return jsonify({"error": str(e)}), 500
 
 @training_bp.route('/api/models/emg/load', methods=['POST'])
-def api_load_model():
+def api_load_emg_model_endpoint():
     """Load a specific EMG model to be active."""
     try:
         params = request.get_json() or {}
@@ -380,7 +357,7 @@ def api_load_model():
         if not model_name:
             return jsonify({"error": "model_name required"}), 400
             
-        result = load_model('EMG', model_name)
+        result = load_emg_model('EMG', model_name)
         if "error" in result:
              return jsonify(result), 400
         
@@ -427,12 +404,17 @@ def api_load_model_generic(sensor):
         if not model_name:
             return jsonify({"error": "model_name required"}), 400
 
-        result = load_model(sensor, model_name)
+        sensor_upper = sensor.upper()
+        if sensor_upper == 'EOG':
+            result = load_eog_model(model_name)
+        else:
+            result = load_emg_model(sensor_upper, model_name)
+
         if "error" in result:
              return jsonify(result), 400
         
         # Update Real-time Detector
-        if sensor.upper() == 'EMG' and state.rps_detector:
+        if sensor_upper == 'EMG' and state.rps_detector:
              state.rps_detector.load_model(model_name, verbose=False)
 
         return jsonify(result)
@@ -468,7 +450,6 @@ def _save_window_payload(payload):
         sensor = payload.get('sensor')
         action = payload.get('action')
         samples = payload.get('samples')
-        timestamps = payload.get('timestamps', None)
         metadata = payload.get('metadata', {}) or {}
 
         if sensor is None or action is None or samples is None:
@@ -476,201 +457,86 @@ def _save_window_payload(payload):
 
         sr = state.config.get('sampling_rate', 1000) if state.config else 1000
         sensor_upper = str(sensor).upper()
-        collection_context = state.session.get_collection_context(sensor_upper) if hasattr(state.session, 'get_collection_context') else None
-        effective_metadata = dict(collection_context or {})
-        effective_metadata.update(metadata)
-        collection_mode = str(
-            effective_metadata.get('collectionMode')
-            or effective_metadata.get('mode')
-            or 'collection'
-        ).lower()
-
-        # Compute features
-        if sensor_upper == 'EMG':
-            prev_features = None
-            if hasattr(state.session, 'get_collection_runtime_value') and collection_mode == 'collection':
-                prev_features = state.session.get_collection_runtime_value('EMG', 'prev_features')
-            features = extract_emg_features(samples, sr, prev_features=prev_features)
-            if features and hasattr(state.session, 'set_collection_runtime_value') and collection_mode == 'collection':
-                state.session.set_collection_runtime_value(
-                    'EMG',
-                    'prev_features',
-                    {key: features.get(key, 0.0) for key in EMG_BASE_FEATURES}
-                )
-        else:
-            features = extract_features_wrapper(sensor, samples, sr)
-
-        if not features:
-            return {"error": "Feature extraction failed"}, 400
-
-        if sensor_upper == 'EMG':
-            window_ms = float(effective_metadata.get('windowMs', effective_metadata.get('window_duration_ms', SESSION_CONFIG["window_ms"])) or SESSION_CONFIG["window_ms"])
-            overlap = float(effective_metadata.get('sessionOverlap', effective_metadata.get('overlap', 0.0)) or 0.0)
-            stride_ms = float(
-                effective_metadata.get('strideMs', effective_metadata.get('session_stride_ms', 0)) or 0
-            )
-            gap_ms = float(effective_metadata.get('gapMs', effective_metadata.get('gap_ms', 500.0)) or 500.0)
-            if stride_ms <= 0:
-                stride_ms = window_ms * (1.0 - overlap) if overlap > 0 else window_ms + gap_ms
-
-            features['channel_index'] = int(effective_metadata.get('channelIndex', effective_metadata.get('channel_index', payload.get('channel', 0))) or 0)
-            features['sample_count'] = int(effective_metadata.get('sampleCount', len(samples)) or len(samples))
-            features['window_ms'] = float(window_ms)
-            features['sampling_rate'] = float(effective_metadata.get('samplingRate', effective_metadata.get('sampling_rate', sr)) or sr)
-            features['session_window_ms'] = float(effective_metadata.get('sessionWindowMs', effective_metadata.get('window_duration_ms', window_ms)) or window_ms)
-            features['session_overlap'] = float(overlap)
-            features['session_stride_ms'] = float(stride_ms)
-            features['gap_ms'] = float(gap_ms)
-            features['metadata_json'] = json.dumps(effective_metadata)
-            features['source'] = str(effective_metadata.get('source', 'manual_window'))
-        elif sensor_upper == 'EEG':
-            features['target_frequency'] = float(effective_metadata.get('targetFrequency', effective_metadata.get('frequency', 0)) or 0)
-            features['channel_index'] = int(effective_metadata.get('channelIndex', payload.get('channel', 0)) or 0)
-            features['sample_count'] = int(effective_metadata.get('sampleCount', len(samples)) or len(samples))
-            features['window_ms'] = float(effective_metadata.get('windowMs', (len(samples) / sr) * 1000.0) or 0)
-            features['metadata_json'] = json.dumps(effective_metadata)
-
-        ts = time.time()
-        features['timestamp'] = ts
-
-        # Load config and update thresholds
-        cfg = state.config or load_config()
-        cfg_features = cfg.setdefault('features', {})
-        sensor_features = cfg_features.setdefault(sensor, {})
         
-        # Session handling
-        session_name = payload.get('session_name', 'Manual_Windows')
-        if not session_name: session_name = 'Manual_Windows'
+        # Trial ID management
+        trial_id = metadata.get('trial') or f"trial_{int(time.time() * 1000)}"
         
-        table_name = db_manager.create_session_table(sensor, session_name)
-        if sensor_upper == 'EMG':
-            db_manager.save_session_metadata('EMG', table_name, {
-                "sensor": "EMG",
-                "table_name": table_name,
-                "session_name": session_name,
-                "storage_format": "compact_emg_v1",
-                "feature_columns": EMG_FEATURE_COLUMNS,
-                "training_window_ms": float(features.get('session_window_ms', SESSION_CONFIG["window_ms"])),
-                "capture_window_ms": float(features.get('window_ms', SESSION_CONFIG["window_ms"])),
-                "sampling_rate": float(features.get('sampling_rate', sr)),
-                "overlap": float(features.get('session_overlap', 0.0)),
-                "stride_ms": float(features.get('session_stride_ms', 0.0)),
-                "gap_ms": float(features.get('gap_ms', 0.0)),
-                "channel_index": int(features.get('channel_index', 0) or 0),
-                "source": str(effective_metadata.get('source', 'frontend_auto_window')),
-            })
-        
-        label_map = {
-            'Rest': 0, 'Rock': 1, 'Paper': 2, 'Scissors': 3, 
-            'SingleBlink': 1, 'DoubleBlink': 2, 
-            'Concentration': 1, 'Relaxation': 2,
-            'Target 1': 1, 'Target 2': 2, 'Target 3': 3,
-            'Target 4': 4, 'Target 5': 5, 'Target 6': 6
-        }
-        label_int = label_map.get(action, -1)
-        if label_int == -1 and action.isdigit():
-             label_int = int(action)
-        if label_int == -1: label_int = 0
-        
-        if sensor_upper == 'EMG':
-            db_manager.insert_window(features, label_int, session_id=str(int(ts)), table_name=table_name)
-            # Also insert into the global evaluation table (skip if merged session)
-            if "merge" not in table_name.lower():
-                db_manager.insert_window(features, label_int, session_id=str(int(ts)), table_name="emg_windows")
-        elif sensor_upper == 'EOG':
-            db_manager.insert_eog_window(features, label_int, session_id=str(int(ts)), table_name=table_name)
-            # Also insert into the global evaluation table (skip if merged session)
-            if "merge" not in table_name.lower():
-                db_manager.insert_eog_window(features, label_int, session_id=str(int(ts)), table_name="eog_windows")
-        elif sensor_upper == 'EEG':
-            db_manager.insert_eeg_window(features, label_int, session_id=str(int(ts)), table_name=table_name)
-            if "merge" not in table_name.lower():
-                db_manager.insert_eeg_window(features, label_int, session_id=str(int(ts)), table_name="eeg_windows")
-
-        # Update Config Logic (Auto-Calibration on fly)
-        if sensor_upper != 'EEG':
-            action_entry = sensor_features.setdefault(action, {})
-            updated = {}
-
-            for k, val in features.items():
-                if not isinstance(val, (int, float)):
-                    continue
-                old_range = action_entry.get(k)
-                if isinstance(old_range, list) and len(old_range) == 2:
-                    lo, hi = float(old_range[0]), float(old_range[1])
-                    new_lo = min(lo, val)
-                    new_hi = max(hi, val)
-                    action_entry[k] = [new_lo, new_hi]
-                    updated[k] = [new_lo, new_hi]
-                else:
-                    if val == 0:
-                        new_lo, new_hi = 0.0, 0.0
-                    else:
-                        new_lo = val * 0.9
-                        new_hi = val * 1.1
-                    action_entry[k] = [new_lo, new_hi]
-                    updated[k] = [new_lo, new_hi]
-
-        # Disable saving config to disk on EVERY window to prevent Continuous Reload loops
-        # save_success = save_config(cfg)
-        save_success = True
-        
-        # --- PREDICTION / DETECTION LOGIC ---
-        detected = False
-        predicted_label = "Unknown"
-        
-        # 1. Try ML Model first (Priority for EMG)
-        if sensor_upper == 'EMG' and state.rps_detector:
-            try:
-                # Use stateless prediction for test windows
-                pred_label, pred_conf = state.rps_detector.predict_instant(features)
-                
-                # If confidence is reasonable, use it
-                if pred_label != "Unknown" and pred_conf > 0.4:
-                    predicted_label = pred_label
-                    # Match if label matches action
-                    detected = (predicted_label == action)
-                else:
-                    predicted_label = "Rest" if pred_label == "Rest" else "Unknown"
-                    detected = False
-                    
-            except Exception as e:
-                print(f"ML params prediction failed: {e}")
-                
-        # 2. Try Threshold Detection (Fallback or for EOG/EEG)
-        # If we didn't get a confident ML prediction (or simpler sensor)
+        # EEG Label Mapping (T1-T6)
         if sensor_upper == 'EEG':
-            detected = True
-            predicted_label = action
-        elif predicted_label == "Unknown" or sensor_upper != 'EMG':
-             from src.calibration.calibration_manager import calibration_manager
-             is_det = calibration_manager.detect_signal(sensor, action, features, cfg)
-             detected = is_det
-             if detected:
-                 predicted_label = action
-             else:
-                 # If we already have a prediction (e.g. from EMG low conf), keep it or overwrite?
-                 # ideally for EOG/EEG if validation fails, it's "Rest" or "Miss"
-                 if predicted_label == "Unknown": saved_pred = "Rest"
-                 else: saved_pred = predicted_label
-                 predicted_label = saved_pred
+            # Map labels like "Target 1" or "Concentration" to "T1", "T2" etc.
+            # Frontend should ideally send T1-T6, but we'll try to map common names.
+            if action in ["Target 1", "Concentration"]: action = "T1"
+            elif action in ["Target 2", "Relaxation"]: action = "T2"
+            elif action in ["Target 3"]: action = "T3"
+            elif action in ["Target 4"]: action = "T4"
+            elif action in ["Target 5"]: action = "T5"
+            elif action in ["Target 6"]: action = "T6"
+            # If it's already T1-T6, it stays same.
 
-        result = {
+        # Special logic for EMG 1500ms burst (5 overlapping windows)
+        sub_windows = []
+        if sensor_upper == 'EMG' and len(samples) >= 1500:
+            window_len = 900
+            stride = 150
+            for i in range(5):
+                start_idx = i * stride
+                end_idx = start_idx + window_len
+                sub_samples = samples[start_idx:end_idx]
+                sub_windows.append(sub_samples)
+        else:
+            sub_windows.append(samples)
+
+        session_name = payload.get('session_name', 'Manual_Windows')
+        table_name = db_manager.create_session_table(sensor, session_name)
+        
+        last_result = None
+        for i, current_samples in enumerate(sub_windows):
+            # Compute features for each sub-window
+            if sensor_upper == 'EMG':
+                # Use incremental logic for stride? Or just fresh?
+                features = extract_emg_features(current_samples, sr)
+                features['trial'] = trial_id
+                features['window_ms'] = 900.0
+                features['session_window_ms'] = 900.0
+                features['session_stride_ms'] = 150.0
+            elif sensor_upper == 'EEG':
+                features = extract_eeg_features(current_samples, sr)
+                features['trial'] = trial_id
+                features['target_frequency'] = float(metadata.get('targetFrequency', metadata.get('frequency', 0)) or 0)
+            else:
+                features = extract_features_wrapper(sensor, current_samples, sr)
+                if sensor_upper == 'EOG':
+                    features['serial_id'] = int(metadata.get('serial_id', 0))
+
+            ts = time.time()
+            features['timestamp'] = ts
+            features['metadata_json'] = json.dumps(metadata)
+
+            # Insert into DB
+            if sensor_upper == 'EMG':
+                db_manager.insert_emg_window(features, action, session_id=str(int(ts)), table_name=table_name)
+                if "merge" not in table_name.lower():
+                    db_manager.insert_emg_window(features, action, session_id=str(int(ts)), table_name="emg_windows")
+            elif sensor_upper == 'EOG':
+                db_manager.insert_eog_window(features, action, session_id=str(int(ts)), table_name=table_name)
+                if "merge" not in table_name.lower():
+                    db_manager.insert_eog_window(features, action, session_id=str(int(ts)), table_name="eog_windows")
+            elif sensor_upper == 'EEG':
+                db_manager.insert_eeg_window(features, action, session_id=str(int(ts)), table_name=table_name)
+                if "merge" not in table_name.lower():
+                    db_manager.insert_eeg_window(features, action, session_id=str(int(ts)), table_name="eeg_windows")
+
+        final_response = {
             "status": "saved",
-            "features": features,
-            "config_updated": save_success,
-            "db_table": table_name,
-            "detected": detected,
-            "predicted_label": predicted_label
+            "sensor": sensor_upper,
+            "table": table_name,
+            "windows_saved": len(sub_windows),
+            "trial": trial_id,
         }
-
-        try:
-            socketio.emit('window_saved', {"sensor": sensor, "action": action, "features": features})
-        except Exception:
-            pass
-
-        print(f"💾 Window saved to DB: {table_name}. Prediction: {predicted_label} (Match: {detected})")
-        return jsonify(result)
+        if last_result:
+            final_response["features"] = last_result["features"]
+            
+        return jsonify(final_response)
 
     except Exception as e:
         import traceback

@@ -3,12 +3,12 @@
   "channel_mapping": {
     "ch0": {
       "enabled": true,
-      "sensor": "EEG",
+      "sensor": "EMG",
       "label": "Fp1 / Oz (Ref: A1, A2)"
     },
     "ch1": {
-      "enabled": false,
-      "sensor": "EEG",
+      "enabled": true,
+      "sensor": "EOG",
       "label": "UNUSED"
     }
   },
@@ -19,8 +19,8 @@
   },
   "num_channels": 2,
   "active_models": {
-    "EMG": "Neuro",
-    "EOG": "dino-ml",
-    "EEG": "Neuro"
+    "EMG": "Nerp",
+    "EOG": "train",
+    "EEG": "test"
   }
 }

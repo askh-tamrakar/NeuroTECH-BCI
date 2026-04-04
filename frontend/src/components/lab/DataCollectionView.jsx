@@ -1008,6 +1008,7 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                             status: isError ? 'error' : 'saved',
                             features: saveResult?.features,
                             predictedLabel: saveResult?.predicted_label,
+                            windows_saved: saveResult?.windows_saved // NEW: feedback for EMG bursts
                         }
                     });
                 });
@@ -1131,6 +1132,7 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                                 predictedLabel: resp.predicted_label,
                                 status: 'saved',
                                 features: resp.features,
+                                windows_saved: resp.windows_saved, // NEW: feedback for EMG bursts
                                 startTime: shiftedStart,
                                 endTime: shiftedEnd,
                                 samples: downsampleSamples(samples)

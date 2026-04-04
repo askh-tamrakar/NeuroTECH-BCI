@@ -1,7 +1,7 @@
 import json
 import sqlite3
 import re
-from typing import Dict, Optional, List
+from typing import Dict, Optional, List, Any
 from src.utils.paths import get_base_data_dir, get_db_path
 
 
@@ -102,6 +102,7 @@ class DatabaseManager:
         conn = self.connect('EEG')
         self._create_eeg_table(conn.cursor(), "eeg_windows")
         self._ensure_eeg_columns(conn, "eeg_windows")
+        self._migrate_eeg_session_tables(conn)
         conn.commit()
         conn.close()
 
@@ -109,6 +110,8 @@ class DatabaseManager:
         cursor.execute(f'''
             CREATE TABLE IF NOT EXISTS {table_name} (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                label INTEGER NOT NULL,
+                trial TEXT DEFAULT '',
                 rms REAL NOT NULL,
                 mav REAL NOT NULL,
                 var REAL NOT NULL,
@@ -148,7 +151,6 @@ class DatabaseManager:
                 confidence REAL DEFAULT 0,
                 source TEXT DEFAULT 'manual',
                 corrected_label INTEGER,
-                label INTEGER NOT NULL,
                 session_id TEXT,
                 timestamp REAL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -171,6 +173,8 @@ class DatabaseManager:
         cursor.execute(f'''
             CREATE TABLE IF NOT EXISTS {table_name} (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                label INTEGER NOT NULL,
+                serial_id INTEGER DEFAULT 0,
                 amplitude REAL NOT NULL,
                 duration_ms REAL NOT NULL,
                 rise_time_ms REAL NOT NULL,
@@ -182,7 +186,6 @@ class DatabaseManager:
                 confidence REAL DEFAULT 0,
                 source TEXT DEFAULT 'manual',
                 corrected_label INTEGER,
-                label INTEGER NOT NULL,
                 session_id TEXT,
                 timestamp REAL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -194,6 +197,9 @@ class DatabaseManager:
         cursor.execute(f'''
             CREATE TABLE IF NOT EXISTS {table_name} (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                label TEXT NOT NULL,
+                trial TEXT DEFAULT '',
+                target_frequency REAL DEFAULT 0,
                 bp_delta REAL NOT NULL,
                 bp_theta REAL NOT NULL,
                 bp_alpha REAL NOT NULL,
@@ -221,18 +227,32 @@ class DatabaseManager:
                 score_std REAL NOT NULL DEFAULT 0,
                 dominant_freq REAL NOT NULL DEFAULT 0,
                 peak_freq REAL NOT NULL DEFAULT 0,
-                target_frequency REAL DEFAULT 0,
                 channel_index INTEGER DEFAULT 0,
                 sample_count INTEGER DEFAULT 0,
                 window_ms REAL DEFAULT 0,
                 metadata_json TEXT DEFAULT '',
-                label INTEGER NOT NULL,
                 session_id TEXT,
                 timestamp REAL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
         cursor.execute(f'CREATE INDEX IF NOT EXISTS idx_{table_name}_label ON {table_name}(label)')
+
+    def _migrate_emg_session_tables(self, conn):
+        """Find all session-specific EMG labels and ensure they have the latest schema."""
+        cursor = conn.cursor()
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'emg_session_%'")
+        tables = [row[0] for row in cursor.fetchall()]
+        for table in tables:
+            self._ensure_emg_columns(conn, table)
+
+    def _migrate_eeg_session_tables(self, conn):
+        """Find all session-specific EEG labels and ensure they have the latest schema."""
+        cursor = conn.cursor()
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'eeg_session_%'")
+        tables = [row[0] for row in cursor.fetchall()]
+        for table in tables:
+            self._ensure_eeg_columns(conn, table)
 
     def _ensure_columns(self, conn, table_name: str, columns: Dict[str, str]):
         cursor = conn.cursor()
@@ -244,6 +264,7 @@ class DatabaseManager:
 
     def _ensure_emg_columns(self, conn, table_name: str):
         self._ensure_columns(conn, table_name, {
+            "trial": "TEXT DEFAULT ''",
             "zc": "REAL NOT NULL DEFAULT 0",
             "mean_freq": "REAL NOT NULL DEFAULT 0",
             "median_freq": "REAL NOT NULL DEFAULT 0",
@@ -271,9 +292,14 @@ class DatabaseManager:
             "source": "TEXT DEFAULT 'manual'",
             "corrected_label": "INTEGER",
         })
+        # Create index after ensuring column exists
+        cursor = conn.cursor()
+        cursor.execute(f'CREATE INDEX IF NOT EXISTS idx_{table_name}_label ON {table_name}(label)')
+        cursor.execute(f'CREATE INDEX IF NOT EXISTS idx_{table_name}_trial ON {table_name}(trial)')
 
     def _ensure_emg_session_columns(self, conn, table_name: str):
         self._ensure_columns(conn, table_name, {
+            "trial": "TEXT DEFAULT ''",
             "mav": "REAL NOT NULL DEFAULT 0",
             "rms": "REAL NOT NULL DEFAULT 0",
             "iemg": "REAL NOT NULL DEFAULT 0",
@@ -296,114 +322,9 @@ class DatabaseManager:
             "d_spectral_entropy": "REAL NOT NULL DEFAULT 0",
         })
 
-    def _migrate_emg_session_tables(self, conn):
-        cursor = conn.cursor()
-        session_tables = [
-            row[0]
-            for row in cursor.execute(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'emg_session_%' ORDER BY name"
-            ).fetchall()
-        ]
-
-        desired_columns = list(COMPACT_EMG_SESSION_COLUMN_DEFS.keys())
-
-        for table_name in session_tables:
-            cursor.execute(f"PRAGMA table_info({table_name})")
-            existing_columns = [row[1] for row in cursor.fetchall()]
-            extras = {'confidence', 'source', 'corrected_label'} & set(existing_columns)
-            if not extras:
-                continue
-
-            temp_table = f"{table_name}__compact_tmp"
-            cursor.execute(f"DROP TABLE IF EXISTS {temp_table}")
-            self._create_emg_session_table(cursor, temp_table)
-
-            select_exprs = []
-            insert_columns = []
-            existing_set = set(existing_columns)
-            default_by_column = {
-                "id": "NULL",
-                "label": "0",
-                "session_id": "''",
-                "timestamp": "0",
-                "created_at": "CURRENT_TIMESTAMP",
-            }
-            default_by_column.update({column: "0" for column in COMPACT_EMG_FEATURE_COLUMNS})
-
-            for column in desired_columns:
-                insert_columns.append(column)
-                if column in existing_set:
-                    select_exprs.append(column)
-                else:
-                    select_exprs.append(f"{default_by_column.get(column, '0')} AS {column}")
-
-            cursor.execute(
-                f'''
-                    INSERT INTO {temp_table} ({", ".join(insert_columns)})
-                    SELECT {", ".join(select_exprs)}
-                    FROM {table_name}
-                '''
-            )
-            cursor.execute(f"DROP TABLE {table_name}")
-            cursor.execute(f"ALTER TABLE {temp_table} RENAME TO {table_name}")
-            cursor.execute(f'CREATE INDEX IF NOT EXISTS idx_{table_name}_label ON {table_name}(label)')
-            self.save_session_metadata('EMG', table_name, {
-                "sensor": "EMG",
-                "table_name": table_name,
-                "storage_format": "compact_emg_v2",
-                "feature_columns": COMPACT_EMG_FEATURE_COLUMNS,
-            })
-
-            self._backfill_emg_session_deltas(conn, table_name)
-
-        for table_name in session_tables:
-            self._backfill_emg_session_deltas(conn, table_name)
-
-    def _backfill_emg_session_deltas(self, conn, table_name: str):
-        cursor = conn.cursor()
-        delta_columns = [f"d_{column}" for column in COMPACT_EMG_FEATURE_COLUMNS[:10]]
-        cursor.execute(
-            f'''
-                SELECT COUNT(*)
-                FROM {table_name}
-                WHERE {" OR ".join(f"ABS({column}) > 1e-12" for column in delta_columns)}
-            '''
-        )
-        if cursor.fetchone()[0] > 0:
-            return
-
-        base_columns = COMPACT_EMG_FEATURE_COLUMNS[:10]
-        select_columns = ["id"] + base_columns
-        rows = cursor.execute(
-            f"SELECT {', '.join(select_columns)} FROM {table_name} ORDER BY id"
-        ).fetchall()
-        if not rows:
-            return
-
-        updates = []
-        previous = None
-        for row in rows:
-            row_id = row[0]
-            current = {column: float(value or 0.0) for column, value in zip(base_columns, row[1:])}
-            if previous is None:
-                deltas = [0.0] * len(base_columns)
-            else:
-                deltas = [current[column] - previous[column] for column in base_columns]
-            updates.append((*deltas, row_id))
-            previous = current
-
-        cursor.executemany(
-            f'''
-                UPDATE {table_name}
-                SET d_mav = ?, d_rms = ?, d_iemg = ?, d_var = ?, d_wl = ?,
-                    d_zc = ?, d_ssc = ?, d_mean_freq = ?, d_median_freq = ?, d_spectral_entropy = ?
-                WHERE id = ?
-            ''',
-            updates
-        )
-
     def _ensure_eeg_columns(self, conn, table_name: str):
         self._ensure_columns(conn, table_name, {
+            "trial": "TEXT DEFAULT ''",
             "score_1": "REAL NOT NULL DEFAULT 0",
             "score_2": "REAL NOT NULL DEFAULT 0",
             "score_3": "REAL NOT NULL DEFAULT 0",
@@ -423,13 +344,20 @@ class DatabaseManager:
             "window_ms": "REAL DEFAULT 0",
             "metadata_json": "TEXT DEFAULT ''",
         })
+        cursor = conn.cursor()
+        cursor.execute(f'CREATE INDEX IF NOT EXISTS idx_{table_name}_label ON {table_name}(label)')
+        cursor.execute(f'CREATE INDEX IF NOT EXISTS idx_{table_name}_trial ON {table_name}(trial)')
 
     def _ensure_eog_columns(self, conn, table_name: str):
         self._ensure_columns(conn, table_name, {
+            "serial_id": "INTEGER DEFAULT 0",
             "confidence": "REAL DEFAULT 0",
             "source": "TEXT DEFAULT 'manual'",
             "corrected_label": "INTEGER",
         })
+        cursor = conn.cursor()
+        cursor.execute(f'CREATE INDEX IF NOT EXISTS idx_{table_name}_label ON {table_name}(label)')
+        cursor.execute(f'CREATE INDEX IF NOT EXISTS idx_{table_name}_serial ON {table_name}(serial_id)')
 
     def sanitize_table_name(self, name: str) -> str:
         safe = re.sub(r'[^a-zA-Z0-9]', '_', name)
@@ -778,26 +706,95 @@ class DatabaseManager:
             return {"rows": [], "total": 0, "absolute_total": 0}
 
     def delete_session_row(self, sensor_type: str, session_name: str, row_id: int) -> bool:
-        """Delete a specific row from a session table."""
+        """Delete a specific row from a session table and shift subsequent IDs."""
         try:
             sensor = sensor_type.upper()
-            
-            # Validate table name similar to get_session_data
             prefix = f"{sensor.lower()}_session_"
             if not session_name.startswith(prefix):
-                 # Try sanitize/lookup if needed, but stick to strict matching for safety like get_session_data
-                 # Or allow if it's in the known table list (expensive?)
-                 # For now, strict prefix check as frontend sends full name
                  if session_name not in self.get_session_tables(sensor):
                      return False
 
             conn = self.connect(sensor)
             cursor = conn.cursor()
             
-            # Use parameterized query for ID, but table name must be injected (safe due to check above)
+            # Start transaction
+            cursor.execute("BEGIN TRANSACTION")
+            
+            # Delete the row
             cursor.execute(f"DELETE FROM {session_name} WHERE id = ?", (row_id,))
             
-            rows_affected = cursor.rowcount
+            # Shift IDs to fill the gap (only if a row was actually deleted)
+            if cursor.rowcount > 0:
+                cursor.execute(f"UPDATE {session_name} SET id = id - 1 WHERE id > ?", (row_id,))
+                # Reset AUTOINCREMENT sequence if needed
+                cursor.execute(f"UPDATE sqlite_sequence SET seq = (SELECT MAX(id) FROM {session_name}) WHERE name = ?", (session_name,))
+            
+            conn.commit()
+            conn.close()
+            return True
+        except Exception as e:
+            print(f"Error deleting row {row_id} from {session_name}: {e}")
+            return False
+
+    def delete_session_trial(self, sensor_type: str, session_name: str, trial_id: str) -> bool:
+        """Delete all rows for a trial and re-index IDs later (outside of active recording)."""
+        try:
+            sensor = sensor_type.upper()
+            prefix = f"{sensor.lower()}_session_"
+            if not session_name.startswith(prefix):
+                 if session_name not in self.get_session_tables(sensor):
+                     return False
+
+            conn = self.connect(sensor)
+            cursor = conn.cursor()
+            
+            cursor.execute(f"DELETE FROM {session_name} WHERE trial = ?", (trial_id,))
+            
+            conn.commit()
+            conn.close()
+            return True
+        except Exception as e:
+            print(f"Error deleting trial {trial_id} from {session_name}: {e}")
+            return False
+
+    def id_reindex(self, sensor_type: str, session_name: str) -> bool:
+        """Fully re-index the id column to be contiguous 1, 2, 3... N."""
+        try:
+            sensor = sensor_type.upper()
+            prefix = f"{sensor.lower()}_session_"
+            if not session_name.startswith(prefix):
+                 if session_name not in self.get_session_tables(sensor):
+                     return False
+
+            conn = self.connect(sensor)
+            cursor = conn.cursor()
+            
+            cursor.execute("BEGIN TRANSACTION")
+            
+            # Create a temporary table with the correct order
+            cursor.execute(f"CREATE TEMPORARY TABLE {session_name}_temp AS SELECT * FROM {session_name} ORDER BY id")
+            cursor.execute(f"DELETE FROM {session_name}")
+            
+            # Get columns except 'id'
+            cursor.execute(f"PRAGMA table_info({session_name}_temp)")
+            cols = [row[1] for row in cursor.fetchall() if row[1] != 'id']
+            cols_str = ", ".join(cols)
+            
+            # Insert back into original table (id will be regenerated contiguous 1..N)
+            cursor.execute(f"INSERT INTO {session_name} ({cols_str}) SELECT {cols_str} FROM {session_name}_temp ORDER BY rowid")
+            
+            cursor.execute(f"DROP TABLE {session_name}_temp")
+            
+            # Reset sequence
+            cursor.execute(f"UPDATE sqlite_sequence SET seq = (SELECT COUNT(*) FROM {session_name}) WHERE name = ?", (session_name,))
+            
+            conn.commit()
+            conn.close()
+            print(f"Re-indexed IDs for {session_name}")
+            return True
+        except Exception as e:
+            print(f"Error re-indexing {session_name}: {e}")
+            return False
             conn.commit()
             conn.close()
             
@@ -808,28 +805,27 @@ class DatabaseManager:
                 print(f"Row {row_id} not found in {session_name}")
                 return False
                 
-        except Exception as e:
-            print(f"Error deleting row {row_id} from {session_name}: {e}")
-            return False
 
     # --- EMG Methods ---
-    def insert_window(self, features: Dict[str, float], label: int, session_id: str = None, table_name: str = "emg_windows") -> bool:
+    def insert_emg_window(self, features: Dict[str, float], label: int, session_id: str = None, table_name: str = "emg_windows") -> bool:
         try:
             conn = self.connect('EMG')
-            is_session_table = str(table_name).startswith("emg_session_")
-            if is_session_table:
-                self._ensure_emg_session_columns(conn, table_name)
-            else:
-                self._ensure_emg_columns(conn, table_name)
+            self._ensure_emg_columns(conn, table_name)
             cursor = conn.cursor()
-            if is_session_table:
+            
+            trial = features.get('trial', '')
+            
+            # Session storage uses different column set
+            if table_name.startswith("emg_session_"):
                 cursor.execute(f'''
                     INSERT INTO {table_name} (
+                        trial,
                         mav, rms, iemg, var, wl, zc, ssc, mean_freq, median_freq, spectral_entropy,
                         d_mav, d_rms, d_iemg, d_var, d_wl, d_zc, d_ssc, d_mean_freq, d_median_freq, d_spectral_entropy,
                         label, session_id, timestamp
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
+                    trial,
                     features.get('mav', 0), features.get('rms', 0), features.get('iemg', 0),
                     features.get('var', 0), features.get('wl', 0), features.get('zc', 0),
                     features.get('ssc', 0), features.get('mean_freq', 0),
@@ -843,14 +839,16 @@ class DatabaseManager:
             else:
                 cursor.execute(f'''
                     INSERT INTO {table_name} (
+                        label, trial,
                         rms, mav, var, wl, peak, range, iemg, entropy, energy, kurtosis, skewness, ssc, wamp,
                         zc, mean_freq, median_freq, spectral_entropy,
                         d_mav, d_rms, d_iemg, d_var, d_wl, d_zc, d_ssc, d_mean_freq, d_median_freq, d_spectral_entropy,
                         channel_index, sample_count, window_ms, sampling_rate, session_window_ms, session_overlap, session_stride_ms, gap_ms, metadata_json,
                         confidence, source, corrected_label,
-                        label, session_id, timestamp
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        session_id, timestamp
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
+                    label, trial,
                     features.get('rms', 0), features.get('mav', 0),
                     features.get('var', 0), features.get('wl', 0), features.get('peak', 0),
                     features.get('range', 0), features.get('iemg', 0), features.get('entropy', 0),
@@ -873,7 +871,7 @@ class DatabaseManager:
                     self._serialize_metadata(features.get('metadata_json', features.get('metadata', {}))),
                     features.get('confidence', 0), features.get('source', 'manual'),
                     features.get('corrected_label'),
-                    label, session_id, features.get('timestamp', 0)
+                    session_id, features.get('timestamp', 0)
                 ))
             conn.commit()
             conn.close()
@@ -921,20 +919,25 @@ class DatabaseManager:
             conn = self.connect('EOG')
             self._ensure_eog_columns(conn, table_name)
             cursor = conn.cursor()
+            
+            serial_id = features.get('serial_id', 0)
+            
             cursor.execute(f'''
                 INSERT INTO {table_name} (
+                    label, serial_id,
                     amplitude, duration_ms, rise_time_ms, fall_time_ms, 
                     asymmetry, peak_count, kurtosis, skewness,
                     confidence, source, corrected_label,
-                    label, session_id, timestamp
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    session_id, timestamp
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
+                label, serial_id,
                 features.get('amplitude', 0), features.get('duration_ms', 0), features.get('rise_time_ms', 0),
                 features.get('fall_time_ms', 0), features.get('asymmetry', 0), int(features.get('peak_count', 0)),
                 features.get('kurtosis', 0), features.get('skewness', 0),
                 features.get('confidence', 0), features.get('source', 'manual'),
                 features.get('corrected_label'),
-                label, session_id, features.get('timestamp', 0)
+                session_id, features.get('timestamp', 0)
             ))
             conn.commit()
             conn.close()
@@ -956,22 +959,31 @@ class DatabaseManager:
         except: return {"0": 0, "1": 0, "2": 0}
 
     # --- EEG Methods ---
-    def insert_eeg_window(self, features: Dict[str, float], label: int, session_id: str = None, table_name: str = "eeg_windows") -> bool:
+    def insert_eeg_window(self, features: Dict[str, float], label: Any, session_id: str = None, table_name: str = "eeg_windows") -> bool:
         try:
             conn = self.connect('EEG')
             self._ensure_eeg_columns(conn, table_name)
             cursor = conn.cursor()
+            
+            trial = features.get('trial', '')
+            target_freq = features.get('target_frequency', 0)
+            
+            # Ensure label is string (T1-T6 or other)
+            label_str = str(label)
+            
             cursor.execute(f'''
                 INSERT INTO {table_name} (
+                    label, trial, target_frequency,
                     bp_delta, bp_theta, bp_alpha, bp_beta, bp_gamma,
                     rel_delta, rel_theta, rel_alpha, rel_beta, rel_gamma,
                     mean, std, max, min,
                     score_1, score_2, score_3, score_4, score_5, score_6,
                     max_score, second_max_score, score_ratio, score_mean, score_std, dominant_freq, peak_freq,
-                    target_frequency, channel_index, sample_count, window_ms, metadata_json,
-                    label, session_id, timestamp
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    channel_index, sample_count, window_ms, metadata_json,
+                    session_id, timestamp
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
+                label_str, trial, target_freq,
                 features.get('bp_delta', 0), features.get('bp_theta', 0),
                 features.get('bp_alpha', 0), features.get('bp_beta', 0),
                 features.get('bp_gamma', 0), features.get('rel_delta', 0),
@@ -986,10 +998,10 @@ class DatabaseManager:
                 features.get('score_ratio', 0), features.get('score_mean', 0),
                 features.get('score_std', 0), features.get('dominant_freq', 0),
                 features.get('peak_freq', 0),
-                features.get('target_frequency', 0), features.get('channel_index', 0),
+                features.get('channel_index', 0),
                 features.get('sample_count', 0), features.get('window_ms', 0),
-                features.get('metadata_json', ''),
-                label, session_id, features.get('timestamp', 0)
+                self._serialize_metadata(features.get('metadata_json', features.get('metadata', {}))),
+                session_id, features.get('timestamp', 0)
             ))
             conn.commit()
             conn.close()

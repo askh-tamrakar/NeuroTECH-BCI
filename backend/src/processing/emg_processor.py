@@ -105,36 +105,42 @@ class EMGFilterProcessor:
                 if self.bp_enabled: self.zi_bp = np.zeros(max(len(self.a_bp), len(self.b_bp)) - 1)
                 if self.envelope_enabled: self.zi_env = np.zeros(max(len(self.a_env), len(self.b_env)) - 1)
 
-    def process_sample_components(self, val: float) -> tuple[float, float]:
-        """Return both the filtered EMG sample and its envelope estimate."""
-        out = float(val)
+    def process_batch_components(self, values: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """Process a batch of EMG samples through the pipeline (BP -> Notch -> Envelope)."""
+        if not isinstance(values, np.ndarray):
+            values = np.array(values, dtype=float)
+            
+        out = values.copy()
 
         # 1. Bandpass
         if self.bp_enabled and self.zi_bp is not None:
-            filtered, self.zi_bp = lfilter(self.b_bp, self.a_bp, [out], zi=self.zi_bp)
-            out = filtered[0]
+            out, self.zi_bp = lfilter(self.b_bp, self.a_bp, out, zi=self.zi_bp)
 
         # 2. Notch
         if self.notch_enabled and self.zi_notch is not None:
-            filtered, self.zi_notch = lfilter(self.b_notch, self.a_notch, [out], zi=self.zi_notch)
-            out = filtered[0]
+            out, self.zi_notch = lfilter(self.b_notch, self.a_notch, out, zi=self.zi_notch)
 
-        raw_filtered = float(out)
-        rectified = abs(raw_filtered)
+        raw_filtered = out.copy()
+        rectified = np.abs(raw_filtered)
 
-        envelope = rectified
+        envelope = rectified.copy()
         if self.envelope_enabled and self.zi_env is not None:
-            enveloped, self.zi_env = lfilter(self.b_env, self.a_env, [rectified], zi=self.zi_env)
-            envelope = enveloped[0]
+            envelope, self.zi_env = lfilter(self.b_env, self.a_env, rectified, zi=self.zi_env)
 
-        return raw_filtered, float(envelope)
+        return raw_filtered.astype(float), envelope.astype(float)
+
+    def process_batch(self, values: np.ndarray) -> np.ndarray:
+        """Vectorized batch processing for the real-time stream."""
+        raw_filtered, _ = self.process_batch_components(values)
+        return raw_filtered
+
+    def process_sample_components(self, val: float) -> tuple[float, float]:
+        """Process a single sample (backward compatibility)."""
+        raw, env = self.process_batch_components(np.array([val]))
+        return float(raw[0]), float(env[0])
 
     def process_sample(self, val: float) -> float:
-        """
-        Preserve the existing single-value interface used by filter_router.
-        The streamed real-time signal is the bandpassed/notched EMG so downstream
-        feature extraction can derive both raw and envelope features per window.
-        """
+        """Process a single sample (backward compatibility)."""
         raw_filtered, _ = self.process_sample_components(val)
         return raw_filtered
 

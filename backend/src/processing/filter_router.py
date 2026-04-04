@@ -386,51 +386,53 @@ class FilterRouter:
         
         try:
             while self.running:
-                # Pull raw sample
-                raw_sample, ts = self.inlet.pull_sample(timeout=1.0)
+                # Optimized: Pull a chunk of samples (max 20ms of data)
+                samples, timestamps = self.inlet.pull_chunk(timeout=0.1, max_samples=25)
                 
-                if raw_sample is not None and len(raw_sample) == self.num_channels:
-                    try:
-                        with self._config_lock:
-                            # Process each channel through its processor
-                            processed_sample = []
-                            
-                            for ch_idx in range(self.num_channels):
-                                raw_val = raw_sample[ch_idx]
-                                processor = self.channel_processors.get(ch_idx)
-                                
-                                if processor:
-                                    # ✅ Channel has processor - apply it
-                                    filtered_val = processor.process_sample(raw_val)
-                                else:
-                                    # ✅ Channel disabled or unmapped - pass through
-                                    # print(f"[Router] [WARNING] Channel {ch_idx} disabled or unmapped - passing through")
-                                    filtered_val = raw_val
-                                
-                                processed_sample.append(filtered_val)
-                            
-                            # ✅ Push ALL channels to Stream Manager
-                            if self.stream_connected and self.stream_socket:
-                                try:
-                                    # Protocol: [0xAA] [Count] [Floats...]
-                                    count = len(processed_sample)
-                                    header = struct.pack('<BB', 0xAA, count)
-                                    payload = struct.pack(f'<{count}f', *processed_sample)
-                                    self.stream_socket.sendall(header + payload)
-                                except Exception as e:
-                                    print(f"[Router] Stream push error: {e}")
-                                    self.stream_connected = False
-
-                            sample_count += 1
-                            
-                            # Log progress every 5 seconds based on the active sampling rate.
-                            if sample_count % max(self.sr * 5, 1) == 0:
-                                log.debug(f"[Router] ✅ {sample_count} samples processed")
+                if not samples:
+                    continue
+                
+                with self._config_lock:
+                    num_samples = len(samples)
+                    # Convert to numpy array for efficient slicing (Samples x Channels)
+                    data_arr = np.array(samples, dtype=float)
+                    processed_arr = np.zeros_like(data_arr)
                     
-                    except Exception as e:
-                        error_count += 1
-                        # Always log errors as requested
-                        print(f"[Router] [WARNING] Error processing sample: {e}")
+                    for ch_idx in range(self.num_channels):
+                        ch_data = data_arr[:, ch_idx]
+                        processor = self.channel_processors.get(ch_idx)
+                        
+                        if processor and hasattr(processor, 'process_batch'):
+                            processed_arr[:, ch_idx] = processor.process_batch(ch_data)
+                        elif processor:
+                            # Fallback for processors without process_batch
+                            for s_idx in range(num_samples):
+                                processed_arr[s_idx, ch_idx] = processor.process_sample(ch_data[s_idx])
+                        else:
+                            processed_arr[:, ch_idx] = ch_data
+                    
+                    # Prepare batch payload
+                    # Each sample: [0xAA, count, ch0, ch1, ...]
+                    batch_payload = bytearray()
+                    for s_idx in range(num_samples):
+                        sample_data = processed_arr[s_idx]
+                        header = struct.pack('<BB', 0xAA, self.num_channels)
+                        payload = struct.pack(f'<{self.num_channels}f', *sample_data)
+                        batch_payload.extend(header + payload)
+                    
+                    sample_count += num_samples
+
+                    # ✅ Push entire BATCH to Stream Manager in one operation
+                    if self.stream_connected and self.stream_socket and batch_payload:
+                        try:
+                            self.stream_socket.sendall(batch_payload)
+                        except Exception as e:
+                            print(f"[Router] Stream push error: {e}")
+                            self.stream_connected = False
+
+                    # Log progress occasionally
+                    if sample_count % max(self.sr * 5, 1) < len(samples):
+                        log.debug(f"[Router] ✅ {sample_count} samples processed (Batched)")
         
         except KeyboardInterrupt:
             print("\n[Router] [STOP] Stopping...")

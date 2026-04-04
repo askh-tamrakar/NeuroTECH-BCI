@@ -1,26 +1,21 @@
 import Tree from 'react-d3-tree';
-import { useState, useEffect, Fragment } from 'react';
+import { useState, useEffect, Fragment, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-    Trash2, Rocket, ArrowRight, Save, Target, ListOrdered, Database, Hand, Eye, Network, Grid3X3, Brain, PieChart, RefreshCw, Sliders, ChevronLeft, ChevronRight, Circle,
-    ArrowRightFromLine, Info, BookOpen
+    Trash2, Rocket, ArrowRight, Save, Target, ListOrdered,
+    Database, Hand, Eye, Network, Grid3X3, Brain, PieChart,
+    RefreshCw, Sliders, ChevronLeft, ChevronRight, Circle,
+    ArrowRightFromLine, Info, BookOpen, BrainCircuit,
+    Clock, Activity, Fingerprint, Layers, Timer, Cpu, GitMerge, Search, Zap, GitBranch, MousePointer2
 } from 'lucide-react';
 import { soundHandler } from '../../handlers/SoundHandler';
 import { useTheme } from '../../contexts/ThemeContext';
 import CustomSelect from '../ui/inputs/CustomSelect';
 import CustomSlider from '../ui/inputs/CustomSlider';
+import RangeSlider from '../ui/inputs/RangeSlider';
+import { AccuracyRadialChart } from '../ui/display/AccuracyRadialChart';
+import HalfCircleProgress from '../ui/display/HalfCircleProgress';
 
-const TabButton = ({ active, onClick, children }) => (
-    <button
-        onClick={onClick}
-        className={`px-6 py-2 font-medium rounded-t-lg transition-colors ${active
-            ? 'bg-[var(--surface)] text-[var(--accent)] border-t border-x border-[var(--border)]'
-            : 'text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--surface)]/50'
-            }`}
-    >
-        {children}
-    </button>
-);
 
 // Helper for tree
 const renderCustomNodeElement = ({ nodeDatum, toggleNode }) => (
@@ -37,14 +32,53 @@ const renderCustomNodeElement = ({ nodeDatum, toggleNode }) => (
 
 // --- NEW/UPDATED COMPONENTS ---
 
+const ModelIdBadge = ({ model, size = 'sm', isActive = false }) => {
+    const candidateIdx = model.candidate_index || model.candidate_idx || 0;
+    const foldIdx = model.fold_index || model.fold_idx || 0;
+    const hasIndices = (model.candidate_index !== undefined || model.candidate_idx !== undefined);
+
+    const mutedColor = 'text-[var(--text)]';
+    const primaryColor = 'text-[var(--graph-line-1)]';
+
+    if (!hasIndices && !model.model_id && !model.id) {
+        return <span className={`opacity-40 italic ${size === 'sm' ? 'text-[10px]' : 'text-[12px]'}`}>ID UNKNOWN</span>;
+    }
+
+    // If we have a formatted model_id but no indices, try to parse it or just show it
+    if (!hasIndices && (model.model_id || model.id)) {
+        const id = model.model_id || model.id;
+        const match = String(id).match(/C(\d+)F(\d+)/i);
+        if (match) {
+            return (
+                <span className={`font-mono font-black ${size === 'sm' ? 'text-[10px]' : 'text-[14px]'}`}>
+                    <span className={mutedColor}>C</span>
+                    <span className={primaryColor}>{match[1]}</span>
+                    <span className={`${mutedColor} ml-0.5`}>F</span>
+                    <span className={primaryColor}>{match[2]}</span>
+                </span>
+            );
+        }
+        return <span className={`font-mono font-black ${size === 'sm' ? 'text-[10px]' : 'text-[14px]'}`}>{id}</span>;
+    }
+
+    return (
+        <span className={`font-mono font-black ${size === 'sm' ? 'text-[10px]' : 'text-[14px]'}`}>
+            <span className={mutedColor}>C</span>
+            <span className={primaryColor}>{(candidateIdx).toString().padStart(2, '0')}</span>
+            <span className={`${mutedColor} ml-0.5`}>F</span>
+            <span className={primaryColor}>{foldIdx}</span>
+        </span>
+    );
+};
+
 const SavedModelsList = ({ models, selectedModelName, onSelect, onDelete }) => (
     <div className="flex flex-col h-full overflow-hidden">
-        <div className="text-lg flex justify-around items-center font-bold text-[var(--muted)] uppercase tracking-widest mb-2 border-b border-[var(--border)] pb-2 px-1">
+        <div className="text-lg flex justify-around items-center font-bold text-[var(--muted)] uppercase tracking-widest mb-2 border-b border-[var(--border)] pb-1 px-1">
             <span className=' flex flex-row items-center'>
-                <Save color='var(--text)' className="mr-2 w-5 h-5" /> Saved Models
+                <Save color='var(--text)' className="mr-2 w-5 h-5" /> Models
             </span>
         </div>
-        <div className="flex-1 overflow-y-auto pr-1 space-y-1 [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+        <div className="flex-1 overflow-y-auto space-y-1 [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
             {models.length === 0 ? (
                 <div className="text-xs text-[var(--muted)] text-center py-4 italic opacity-50">No saved models</div>
             ) : (
@@ -52,25 +86,30 @@ const SavedModelsList = ({ models, selectedModelName, onSelect, onDelete }) => (
                     <div
                         key={m.name}
                         onClick={() => onSelect(m.name)}
-                        className={`group flex items-center justify-between p-2 rounded cursor-pointer transition-colors ${selectedModelName === m.name
-                            ? 'bg-[var(--primary)]/10 border border-[var(--primary)]'
+                        className={`group flex items-center justify-between p-1 rounded cursor-pointer transition-colors ${selectedModelName === m.name
+                            ? 'bg-text/5 border border-text/60'
                             : 'bg-[var(--bg)] border border-transparent hover:border-[var(--border)]'
                             }`}
                     >
                         <div className="min-w-0">
-                            <div className={`text-sm font-medium truncate ${selectedModelName === m.name ? 'text-[var(--primary)]' : 'text-[var(--text)]'}`}>
-                                {m.name}
-                            </div>
-                            <div className="text-[10px] text-[var(--muted)] truncate">
-                                {new Date(m.created_at).toLocaleDateString()}
-                            </div>
+                            <span className='flex flex-row items-center'>
+                                <BrainCircuit size={24} className={`mr-2 ${selectedModelName === m.name ? 'text-primary/90' : 'text-text/50'}`} />
+                                <div className='flex flex-col items-start'>
+                                    <div className={`text-[16px] font-medium truncate ${selectedModelName === m.name ? 'text-primary' : 'text-[var(--text)]'}`}>
+                                        {m.name}
+                                    </div>
+                                    <div className="text-[12px] text-[var(--muted)] font-mono uppercase tracking-wider truncate opacity-70">
+                                        <ModelIdBadge model={m} size='lg' />
+                                    </div>
+                                </div>
+                            </span>
                         </div>
                         <button
                             onClick={(e) => { e.stopPropagation(); onDelete(m.name); }}
                             className="p-1 text-[var(--muted)] hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
                             title="Delete Model"
                         >
-                            <Trash2 className="w-4 h-4" />
+                            <Trash2 size={22} />
                         </button>
                     </div>
                 ))
@@ -79,47 +118,93 @@ const SavedModelsList = ({ models, selectedModelName, onSelect, onDelete }) => (
     </div>
 );
 
-const SplitAccuracyCard = ({ accuracy, n_samples, source, models, selectedModelName, onSelectModel, onDeleteModel }) => (
-    <div className="card h-full flex flex-col p-4 bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-sm hover:shadow-md transition-shadow">
+const SplitAccuracyCard = ({ result, models, selectedModelName, onSelectModel, onDeleteModel, params, onParamsChange, totalSamples }) => {
+    const accuracy = result?.accuracy;
+    const n_samples = result?.n_samples;
+    const source = result?.source;
+    const verdict = getVerdict(result?.train_accuracy, result?.validation_accuracy, result?.test_accuracy || result?.accuracy);
 
-        <div className="flex-1 flex flex-row gap-2 min-h-0 w-full">
-            {/* LEFT: List */}
-            <div className="w-1/2 border-r border-[var(--border)] pr-2">
-                <SavedModelsList
-                    models={models}
-                    selectedModelName={selectedModelName}
-                    onSelect={onSelectModel}
-                    onDelete={onDeleteModel}
-                />
-            </div>
+    const tSamples = Math.round((n_samples || result?.split_summary?.total_samples || totalSamples || 0) * (params?.train_ratio || 0.7));
+    const vSamples = Math.round((n_samples || result?.split_summary?.total_samples || totalSamples || 0) * (params?.val_ratio || 0.15));
+    const teSamples = Math.round((n_samples || result?.split_summary?.total_samples || totalSamples || 0) * (params?.test_ratio || 0.15));
 
-            {/* RIGHT: Accuracy Display */}
-            <div className="w-1/2 border-[var(--border)]">
-                <div className="flex flex-col h-full overflow-hidden">
-                    <h3 className="text-lg flex justify-around items-center font-bold text-[var(--muted)] uppercase tracking-widest border-b border-[var(--border)] pb-2">
-                        <span className=' flex flex-row items-center'>
-                            <Target color='var(--text)' className="mr-2 w-5 h-5" /> Accuracy
-                        </span>
-                    </h3>
-                    <div className="flex flex-col justify-center items-center text-center h-full w-full">
-                        {accuracy !== null && accuracy !== undefined ? (
-                            <>
-                                <div className="text-4xl lg:text-5xl font-black text-[var(--primary)] mb-2">{(accuracy * 100).toFixed(1)}%</div>
-                                <p className="text-sm text-[var(--text)] opacity-70">on {n_samples} test samples</p>
-                                {source && <p className="text-xs text-[var(--muted)] mt-2 font-mono bg-[var(--bg)] px-2 py-1 rounded border border-[var(--border)] max-w-full truncate" title={source}>{source}</p>}
-                            </>
-                        ) : (
-                            <div className="text-center opacity-50">
-                                <div className="text-2xl text-[var(--muted)] mb-1">--</div>
-                                <p className="text-xs text-[var(--muted)]">Select or Train a Model</p>
-                            </div>
-                        )}
+    let descStr = '';
+    if (tSamples > 0) {
+        descStr = `${tSamples} Trn|${vSamples} Val|${teSamples} Tst`;
+    }
+
+    return (
+        <div className="card h-full flex flex-col bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-sm hover:shadow-md transition-shadow">
+            <div className="flex-1 flex flex-row gap-2 min-h-0 w-full">
+                <div className="w-2/5 border-r border-[var(--border)] pr-2">
+                    <SavedModelsList
+                        models={models}
+                        selectedModelName={selectedModelName}
+                        onSelect={onSelectModel}
+                        onDelete={onDeleteModel}
+                    />
+                </div>
+
+                <div className="w-3/5 border-[var(--border)]">
+                    <div className="flex flex-col h-full overflow-hidden">
+                        <h3 className="text-lg flex justify-around items-center font-bold text-[var(--muted)] uppercase tracking-widest border-b border-[var(--border)] pb-1 px-1">
+                            <span className=' flex flex-row items-center'>
+                                <Target color='var(--text)' className="mr-2 w-5 h-5" /> {!selectedModelName ? 'Data Partition' : 'Performance'}
+                            </span>
+                        </h3>
+                        <div className="flex-1 flex items-center justify-center min-h-0">
+                            {!selectedModelName ? (
+                                <AccuracyRadialChart
+                                    mode="split"
+                                    trainAcc={params?.train_ratio || 0.7}
+                                    valAcc={params?.val_ratio || 0.15}
+                                    testAcc={params?.test_ratio || 0.15}
+                                    trainSamples={tSamples}
+                                    valSamples={vSamples}
+                                    testSamples={teSamples}
+                                    kFolds={params?.k_folds === '' ? '' : (params?.k_folds || 5)}
+                                    onFoldChange={(k) => {
+                                        const validK = Math.max(1, k);
+                                        const testRatio = params?.test_ratio || 0.15;
+                                        const remaining = Math.max(0, 1.0 - testRatio);
+                                        const valRatio = parseFloat((remaining / validK).toFixed(3));
+                                        const trainRatio = parseFloat((remaining - valRatio).toFixed(3));
+                                        onParamsChange({
+                                            k_folds: validK,
+                                            val_ratio: valRatio,
+                                            train_ratio: trainRatio
+                                        });
+                                    }}
+                                    verdict={{
+                                        text: params?.k_folds ? `${params.k_folds} FOLDS` : (params?.k_folds === '' ? '' : '5 FOLDS'),
+                                        color: 'text-[var(--primary)]',
+                                        bg: 'bg-transparent'
+                                    }}
+                                />
+                            ) : accuracy !== null && accuracy !== undefined ? (
+                                <AccuracyRadialChart
+                                    mode="accuracy"
+                                    trainAcc={result.train_accuracy}
+                                    valAcc={result.validation_accuracy}
+                                    testAcc={result.test_accuracy || result.accuracy}
+                                    trainSamples={result.split_summary?.train_samples || null}
+                                    valSamples={result.split_summary?.val_samples || null}
+                                    testSamples={result.split_summary?.test_samples || null}
+                                    verdict={verdict}
+                                />
+                            ) : (
+                                <div className="text-center opacity-50">
+                                    <div className="text-2xl text-[var(--muted)] mb-1">--</div>
+                                    <p className="text-xs text-[var(--muted)]">Select or Train</p>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
-    </div>
-);
+    );
+};
 
 const FEATURE_METADATA = {
     'EEG': {
@@ -223,15 +308,14 @@ const FeatureInsightCard = ({ importances, featureOrder, sensor }) => {
     const activeDetail = fullMetadata[selectedFeature] || { full: selectedFeature, short: selectedFeature, detail: 'No detailed metadata available for this feature.' };
 
     return (
-        <div className="card h-full flex flex-col p-4 bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-sm relative group/card overflow-hidden">
-            <div className="flex justify-between items-center mb-4 border-b border-[var(--border)] pb-2">
+        <div className="h-full flex flex-col px-2 pt-2 bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-sm relative group/card overflow-hidden">
+            <div className="flex justify-between items-center border-b border-[var(--border)] pb-2">
                 <h3 className="text-[18px] flex items-center font-bold text-[var(--muted)] uppercase tracking-widest">
                     <ListOrdered size={32} className='mr-4 border border-text bg-bg rounded-[4px]' color='var(--text)' />
                     <span className="flex items-center gap-2">
                         {view === 'importance' ? 'Top Features' : 'Feature Set'}
                         <span className="text-[12px] bg-[var(--bg)] border border-[var(--border)] px-2 py-0.5 rounded-full text-[var(--text)] font-mono">{view === 'importance' ? sortedImportances.length : features.length}</span>
                     </span>
-                    <span className="ml-3 text-[10px] bg-[var(--primary)]/20 text-[var(--primary)] px-2 py-0.5 rounded-full">{sensor}</span>
                 </h3>
 
                 <button
@@ -254,9 +338,16 @@ const FeatureInsightCard = ({ importances, featureOrder, sensor }) => {
                         className="h-full"
                     >
                         {view === 'importance' ? (
-                            <ul className="h-full overflow-y-auto pr-2 space-y-1.5 [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                            <ul className="h-full overflow-y-auto pt-1 pr-2 space-y-1.5 [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
                                 {sortedImportances.length > 0 ? sortedImportances.map(([name, imp]) => (
-                                    <li key={name} className="flex items-center text-[var(--text)] group hover:bg-[var(--bg)]/30 rounded-lg px-2 py-1 transition-all border border-transparent hover:border-[var(--border)]">
+                                    <li
+                                        key={name}
+                                        onClick={() => {
+                                            setSelectedFeature(name);
+                                            setView('list');
+                                        }}
+                                        className="flex items-center text-[var(--text)] group hover:bg-[var(--bg)]/30 rounded-lg px-2 py-1 transition-all border border-transparent hover:border-[var(--border)] cursor-pointer"
+                                    >
                                         <span className="w-24 font-mono text-[14px] text-[var(--muted)] truncate font-bold" title={name}>{fullMetadata[name]?.short || name}</span>
                                         <div className="flex-1 h-2 bg-[var(--bg)] rounded-full mx-2 overflow-hidden border border-[var(--border)]/50">
                                             <div className="h-full bg-[var(--primary)] group-hover:bg-[var(--accent)] transition-all shadow-[0_0_8px_var(--primary)]" style={{ width: `${Math.min(100, Math.max(0, imp * 100))}%` }}></div>
@@ -268,10 +359,10 @@ const FeatureInsightCard = ({ importances, featureOrder, sensor }) => {
                                 )}
                             </ul>
                         ) : (
-                            <div className="h-full flex gap-3">
+                            <div className="h-full flex flex-row gap-4">
                                 {/* Left Side: Master List */}
-                                <div className="w-[45%] flex flex-col min-h-0">
-                                    <div className="flex-1 overflow-y-auto pr-2 space-y-2 [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                                <div className="w-1/3 flex flex-col min-h-0">
+                                    <div className="flex-1 overflow-y-auto py-2 space-y-2 [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
                                         {features.map((feature) => (
                                             <button
                                                 key={feature}
@@ -281,10 +372,10 @@ const FeatureInsightCard = ({ importances, featureOrder, sensor }) => {
                                                     : 'bg-[var(--bg)]/30 border-[var(--border)] hover:border-[var(--muted)]'
                                                     }`}
                                             >
-                                                <div className={`text-[12px] font-black tracking-widest ${selectedFeature === feature ? 'text-[var(--primary)]' : 'text-[var(--muted)]'}`}>
+                                                <div className={`text-[16px] font-black tracking-widest ${selectedFeature === feature ? 'text-[var(--primary)]' : 'text-[var(--muted)]'}`}>
                                                     {fullMetadata[feature]?.short || feature}
                                                 </div>
-                                                <div className="text-[10px] text-[var(--text)] opacity-60 truncate group-hover/btn:opacity-100 transition-opacity">
+                                                <div className="text-[12px] text-[var(--text)] opacity-60 truncate group-hover/btn:opacity-100 transition-opacity">
                                                     {fullMetadata[feature]?.full || feature}
                                                 </div>
                                             </button>
@@ -293,7 +384,7 @@ const FeatureInsightCard = ({ importances, featureOrder, sensor }) => {
                                 </div>
 
                                 {/* Right Side: Detail Card */}
-                                <div className="flex-1 flex flex-col min-h-0 bg-[var(--bg)]/40 rounded-xl border border-[var(--border)] p-4 relative shadow-2xl">
+                                <div className="flex-1 flex flex-col min-h-0 bg-[var(--bg)]/40 py-2 ">
                                     <AnimatePresence mode="wait">
                                         <motion.div
                                             key={selectedFeature}
@@ -303,15 +394,15 @@ const FeatureInsightCard = ({ importances, featureOrder, sensor }) => {
                                             transition={{ duration: 0.2 }}
                                             className="h-full flex flex-col"
                                         >
-                                            <div className="text-[10px] uppercase font-bold text-[var(--primary)] tracking-[0.2em] mb-1">Feature Detail</div>
-                                            <h4 className="text-[18px] font-black text-[var(--text)] leading-tight mb-3 border-b border-[var(--border)] pb-2">
+                                            <div className="text-[14px] uppercase font-bold text-[var(--primary)] tracking-[0.2em] mb-1">Feature Detail</div>
+                                            <h4 className="text-[20px] font-black text-[var(--text)] leading-tight border-b border-[var(--border)] pb-1">
                                                 {activeDetail.full}
                                             </h4>
-                                            <p className="text-[14px] leading-relaxed text-[var(--muted)] font-medium">
+                                            <p className="text-[18px] leading-relaxed text-[var(--muted)] font-medium pt-1">
                                                 {activeDetail.detail}
                                             </p>
 
-                                            <div className="mt-auto pt-4 flex justify-between items-center text-[10px] font-bold text-[var(--muted)] border-t border-[var(--border)]/50">
+                                            <div className="mt-auto pt-1 flex justify-between items-center text-[12px] font-bold text-[var(--muted)] border-t border-[var(--border)]/50">
                                                 <span className="uppercase tracking-widest">Type: Signal Feature</span>
                                                 <span className="font-mono bg-[var(--bg)] px-2 py-0.5 rounded border border-[var(--border)]">{selectedFeature}</span>
                                             </div>
@@ -327,201 +418,619 @@ const FeatureInsightCard = ({ importances, featureOrder, sensor }) => {
     );
 };
 
-const HyperparametersCard = ({ params, onChange }) => (
-    <div className="card h-full flex flex-col p-4 bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-sm">
-        <div className="text-[18px] flex items-center font-bold text-[var(--muted)] uppercase tracking-widest border-b border-[var(--border)] pb-2">
-            <Sliders size={32} className='mr-4 border border-text bg-bg rounded-[4px]' color='var(--text)' /> Hyperparameters
-        </div>
-        <div className="pt-2 px-2 space-y-1 flex-1 overflow-hidden">
-            <div>
-                <div className="flex justify-between">
-                    <span className="text-xs font-bold text-[var(--text)] uppercase tracking-tight">Trees</span>
-                    <span className="text-sm font-black font-mono text-[var(--primary)]">{params.n_estimators}</span>
-                </div>
-                <CustomSlider
-                    min={5}
-                    max={500}
-                    step={5}
-                    value={params.n_estimators}
-                    onChange={(v) => onChange({ target: { name: 'n_estimators', value: v } })}
-                />
-            </div>
-            <div>
-                <div className="flex justify-between">
-                    <span className="text-xs font-bold text-[var(--text)] uppercase tracking-tight">Max Depth</span>
-                    <span className="text-sm font-black font-mono text-[var(--primary)]">{params.max_depth}</span>
-                </div>
-                <CustomSlider
-                    min={2}
-                    max={50}
-                    step={1}
-                    value={params.max_depth}
-                    onChange={(v) => onChange({ target: { name: 'max_depth', value: v } })}
-                />
-            </div>
-            <div>
-                <div className="flex justify-between">
-                    <span className="text-xs font-bold text-[var(--text)] uppercase tracking-tight">Test Size</span>
-                    <span className="text-sm font-black font-mono text-[var(--primary)]">{params.test_size}</span>
-                </div>
-                <CustomSlider
-                    min={0.1}
-                    max={0.9}
-                    step={0.05}
-                    value={params.test_size}
-                    onChange={(v) => onChange({ target: { name: 'test_size', value: v } })}
-                />
-            </div>
-            <div>
-                <div className="flex justify-between">
-                    <span className="text-xs font-bold text-[var(--text)] uppercase tracking-tight">Pruning</span>
-                    <span className="text-sm font-black font-mono text-[var(--primary)]">{params.min_impurity_decrease}</span>
-                </div>
-                <CustomSlider
-                    min={0}
-                    max={0.1}
-                    step={0.001}
-                    value={params.min_impurity_decrease}
-                    onChange={(v) => onChange({ target: { name: 'min_impurity_decrease', value: v } })}
-                />
-            </div>
-        </div>
-    </div>
-);
+const pct = (val) => val === undefined || val === null || isNaN(val) ? '--' : `${(val * 100).toFixed(1)}%`;
+const card = "bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-sm";
 
-const EEGModelInsightCard = ({ result, selectedSessionName, params }) => {
-    // Calculate split from test_size (e.g. 0.2 -> 80/20)
-    const testSize = params?.test_size || 0.2;
-    const trainPct = Math.round((1 - testSize) * 100);
-    const testPct = Math.round(testSize * 100);
+const getVerdict = (trainAcc, valAcc) => {
+    if (!trainAcc || !valAcc) return { text: '--', color: 'text-[var(--muted)]', bg: 'bg-[var(--bg)]/10', desc: 'No data' };
+    const gap = trainAcc - valAcc;
+
+    if (trainAcc < 0.65) return { text: 'UNDERFIT', color: 'text-orange-400', bg: 'bg-orange-500/10 border-orange-500/30', desc: 'Model lacks capacity or features' };
+    if (trainAcc > 0.98 && valAcc < 0.85) return { text: 'SEVERE OVERFIT', color: 'text-red-400', bg: 'bg-red-500/10 border-red-500/30', desc: 'Memorized training data' };
+    if (gap > 0.12) return { text: 'OVERFIT', color: 'text-yellow-400', bg: 'bg-yellow-500/10 border-yellow-500/30', desc: 'Poor generalization / wide gap' };
+    if (valAcc > 0.80) return { text: 'OPTIMAL FIT', color: 'text-green-400', bg: 'bg-green-500/10 border-green-500/30', desc: 'Model generalized well' };
+
+    return { text: 'MODERATE FIT', color: 'text-[var(--primary)]', bg: 'bg-[var(--primary)]/10 border-[var(--primary)]/30', desc: 'Acceptable performance' };
+};
+
+const historyId = (item) => item?.model_id || item?.id || '--';
+const historyCandidate = (item) => item?.candidate_index || item?.candidate_idx || 0;
+const historyFold = (item) => item?.fold_index || item?.fold_idx || 0;
+const historyParams = (item) => item?.hyperparameters || item?.params || {};
+
+const HistoryList = ({ history = [], selectedId, onSelect, emptyText = 'No training history available.' }) => {
+    const grouped = useMemo(() => {
+        const groups = {};
+        history.forEach((item) => {
+            const key = historyCandidate(item);
+            if (!groups[key]) groups[key] = { idx: key, params: historyParams(item), folds: [] };
+            groups[key].folds.push(item);
+        });
+        return Object.values(groups)
+            .sort((a, b) => a.idx - b.idx)
+            .map(group => ({ ...group, folds: group.folds.sort((a, b) => historyFold(a) - historyFold(b)) }));
+    }, [history]);
+
+    if (!grouped.length) {
+        return <div className="flex h-full items-center justify-center text-sm italic text-[var(--muted)] opacity-60">{emptyText}</div>;
+    }
 
     return (
-        <div className="card h-full flex flex-col p-4 bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-sm relative group/insight">
-            <h3 className="text-[18px] flex items-center font-bold text-[var(--muted)] uppercase tracking-widest border-b border-[var(--border)] pb-2">
-                <Brain size={32} className='mr-4 border border-text bg-bg rounded-[4px]' color='var(--text)' /> EEG Model Insight
-            </h3>
-
-            <div className="flex-1 grid grid-cols-3 gap-6 py-4 min-h-0">
-                {/* Left: Identity - Highly Legible */}
-                <div className="flex flex-col justify-between border-r border-[var(--border)] pr-6">
-                    <div>
-                        <div className="text-[11px] uppercase tracking-[0.2em] text-[var(--muted)] mb-0.5 font-bold">Model Name</div>
-                        <div className="text-3xl font-black text-[var(--primary)] truncate" title={result?.model_name || 'Neuro'}>
-                            {result?.model_name || 'Neuro'}
-                        </div>
-                    </div>
-                    <div className="space-y-2.5 mt-4">
-                        <div className="flex justify-between items-center">
-                            <span className="text-xs font-bold text-[var(--muted)] uppercase tracking-wider">Classifier</span>
-                            <span className="font-mono text-sm font-bold text-[var(--primary)] px-2 py-1 bg-[var(--bg)] rounded-lg border border-[var(--border)] shadow-sm">{result?.classifier || 'LDA'}</span>
-                        </div>
-                        <div className="flex flex-col gap-0.5">
-                            <span className="text-[10px] uppercase tracking-wider text-[var(--muted)] font-bold">Session</span>
-                            <span className="text-sm font-black text-[var(--text)] truncate opacity-90" title={selectedSessionName}>{selectedSessionName}</span>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Middle: Pipeline Detail - ENLARGED & COMPACT */}
-                <div className="flex flex-col justify-between border-r border-[var(--border)] px-4 text-center">
-                    <div className="space-y-3.5">
+        <div className="space-y-2">
+            {grouped.map((cand) => (
+                <div key={cand.idx} className="p-3 rounded-xl bg-[var(--bg)]/50 border border-[var(--border)]">
+                    <div className="flex items-center justify-between mb-2">
                         <div>
-                            <div className="text-[11px] uppercase tracking-[0.2em] text-[var(--muted)] mb-1 font-bold">Data Split</div>
-                            <div className="text-4xl font-black text-[var(--text)] tracking-tighter">
-                                <span className="text-[var(--primary)]">{trainPct}</span>
-                                <span className="mx-1 text-[var(--muted)] opacity-50">/</span>
-                                <span className="text-[var(--accent)]">{testPct}</span>
+                            <div className="text-[10px] font-black text-[var(--muted)] uppercase tracking-[0.18em]">Candidate {cand.idx}</div>
+                            <div className="text-[10px] text-[var(--text)] font-mono truncate">
+                                {Object.entries(cand.params).map(([k, v]) => `${k}: ${v}`).join(' | ') || 'No hyperparameters recorded'}
                             </div>
-                            <div className="text-[10px] uppercase text-[var(--muted)] mt-0.5 font-mono font-bold tracking-tight">Train/Test %</div>
                         </div>
-
-                        <div className="pt-3 border-t border-[var(--border)]/50">
-                            <div className="text-[11px] uppercase tracking-[0.2em] text-[var(--muted)] mb-1 font-bold">Optimization</div>
-                            <div className="text-xl font-black text-[var(--text)] uppercase tracking-tight">{result?.solver ? result.solver.toUpperCase() : 'LSQR + AUTO'}</div>
-                            <div className="text-[10px] uppercase text-[var(--muted)] font-mono font-bold">Shrinkage: Lead-Led</div>
+                        <div className="text-xs font-black text-[var(--primary)]">
+                            {Math.round((cand.folds.reduce((acc, fold) => acc + (fold.accuracy || 0), 0) / cand.folds.length) * 100)}%
                         </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                        {cand.folds.map((item) => {
+                            const id = historyId(item);
+                            const isActive = selectedId === id;
+                            return (
+                                <button
+                                    key={id}
+                                    onClick={() => onSelect?.(item)}
+                                    className={`px-2 py-1 rounded-md border transition-all ${isActive ? 'bg-[var(--primary)] border-[var(--primary)] shadow-sm' : 'bg-[var(--surface)] border-[var(--border)] hover:border-[var(--primary)]/50'}`}
+                                >
+                                    <ModelIdBadge model={item} isActive={isActive} />
+                                </button>
+                            );
+                        })}
                     </div>
                 </div>
+            ))}
+        </div>
+    );
+};
 
-                {/* Right: Model Specifics - High Density */}
-                <div className="flex flex-col justify-between pl-6 font-bold">
-                    <div>
-                        <div className="flex justify-between items-end mb-1">
-                            <div className="text-[11px] uppercase tracking-[0.2em] text-[var(--muted)]">Components</div>
-                            <div className="text-3xl font-black text-[var(--primary)]">{result?.visualization?.component_count ?? '6'}</div>
-                        </div>
-                        <div className="w-full h-2 bg-[var(--bg)] rounded-full overflow-hidden border border-[var(--border)] shadow-inner">
-                            <div className="h-full bg-[var(--primary)] shadow-[0_0_8px_var(--primary)]" style={{ width: `${(result?.visualization?.component_count || 6) * 10}%` }} />
-                        </div>
-                    </div>
+const HistoryDetailCard = ({ item }) => {
+    if (!item) {
+        return <div className="flex h-full items-center justify-center text-sm italic text-[var(--muted)] opacity-60">Click a model ID like C01F1 to inspect it.</div>;
+    }
 
-                    <div className="space-y-2.5 mt-4">
-                        <div className="flex justify-between items-center">
-                            <span className="text-[10px] uppercase tracking-wider text-[var(--muted)]">Validation</span>
-                            <span className="text-xs font-mono font-black text-[var(--text)] bg-[var(--bg)] px-2 py-0.25 rounded border border-[var(--border)]">K-Fold: 5</span>
-                        </div>
-                        <div className="flex flex-col gap-1 pt-2.5 border-t border-[var(--border)]">
-                            <span className="text-[10px] uppercase tracking-widest text-[var(--muted)]">File Path</span>
-                            <span className="text-[10px] font-mono font-bold text-[var(--primary)] truncate py-1 px-2 bg-[var(--bg)] rounded-lg border border-[var(--border)]" title={result?.model_path}>
-                                {result?.model_path ? result.model_path.split(/[\\/]/).pop() : 'Neuro.joblib'}
-                            </span>
-                        </div>
+    const params = historyParams(item);
+    return (
+        <div className="h-full p-4 rounded-xl bg-[var(--bg)]/40 border border-[var(--border)] space-y-3 overflow-y-auto [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+            <div className="flex items-center justify-between">
+                <div>
+                    <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--muted)] font-black">Model ID</div>
+                    <div className="text-2xl mt-1">
+                        <ModelIdBadge model={item} size="lg" />
                     </div>
                 </div>
+                <div className="text-right">
+                    <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--muted)] font-black">Validation</div>
+                    <div className="text-xl font-black text-[var(--text)]">{pct(item.validation_accuracy ?? item.accuracy)}</div>
+                </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+                <div className="p-3 rounded-lg border border-[var(--border)] bg-[var(--surface)]">
+                    <div className="text-[10px] uppercase text-[var(--muted)] font-black mb-1">Candidate / Fold</div>
+                    <div className="text-sm font-mono text-[var(--text)]">{historyCandidate(item)} / {historyFold(item)}</div>
+                </div>
+                <div className="p-3 rounded-lg border border-[var(--border)] bg-[var(--surface)]">
+                    <div className="text-[10px] uppercase text-[var(--muted)] font-black mb-1">Train Accuracy</div>
+                    <div className="text-sm font-mono text-[var(--text)]">{pct(item.train_accuracy)}</div>
+                </div>
+                <div className="p-3 rounded-lg border border-[var(--border)] bg-[var(--surface)]">
+                    <div className="text-[10px] uppercase text-[var(--muted)] font-black mb-1">Train Samples</div>
+                    <div className="text-sm font-mono text-[var(--text)]">{item.n_train_samples ?? '--'}</div>
+                </div>
+                <div className="p-3 rounded-lg border border-[var(--border)] bg-[var(--surface)]">
+                    <div className="text-[10px] uppercase text-[var(--muted)] font-black mb-1">Validation Samples</div>
+                    <div className="text-sm font-mono text-[var(--text)]">{item.n_validation_samples ?? '--'}</div>
+                </div>
+            </div>
+            <div className="p-3 rounded-lg border border-[var(--border)] bg-[var(--surface)]">
+                <div className="text-[10px] uppercase text-[var(--muted)] font-black mb-2">Hyperparameters</div>
+                <div className="grid grid-cols-2 gap-2">
+                    {Object.entries(params).map(([key, value]) => (
+                        <div key={key} className="rounded-md bg-[var(--bg)] px-2 py-1 border border-[var(--border)]">
+                            <div className="text-[9px] uppercase text-[var(--muted)] font-black">{key}</div>
+                            <div className="text-[11px] font-mono text-[var(--text)] truncate">{String(value)}</div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+            <div className="p-3 rounded-lg border border-[var(--border)] bg-[var(--surface)]">
+                <div className="text-[10px] uppercase text-[var(--muted)] font-black mb-1">Saved Artifact</div>
+                <div className="text-[11px] font-mono text-[var(--primary)] break-all">{item.artifact_path || '--'}</div>
             </div>
         </div>
     );
 };
 
-const EEGHyperparametersCard = ({ params, onChange }) => (
-    <div className="card h-full flex flex-col p-4 bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-sm">
-        <h3 className="text-[18px] flex items-center font-bold text-[var(--muted)] uppercase tracking-widest border-b border-[var(--border)] pb-2">
-            <Sliders size={32} className='mr-4 border border-text bg-bg rounded-[4px]' color='var(--text)' /> EEG Parameters
-        </h3>
-        <div className="py-2 px-2 space-y-3 flex-1 overflow-visible">
-            <div>
-                <div className="text-base font-bold text-[var(--text)] uppercase tracking-tight mb-1">Solver</div>
-                <CustomSelect
-                    value={params.solver || 'eigen'}
-                    onChange={(value) => onChange({ target: { name: 'solver', value } })}
-                    options={[
-                        { value: 'svd', label: 'SVD' },
-                        { value: 'lsqr', label: 'LSQR' },
-                        { value: 'eigen', label: 'Eigen' }
-                    ]}
-                />
+const TrainingHistoryCard = ({ title = 'Training History', history = [], selectedItem, onSelectItem, detailLabel = 'Model Detail' }) => (
+    <div className={`${card} h-full flex flex-col overflow-hidden`}>
+        <div className="p-3 border-b border-[var(--border)] flex items-center justify-between shrink-0">
+            <div className="flex items-center gap-2">
+                <ListOrdered className="w-4 h-4 text-[var(--primary)]" />
+                <span className="text-xs font-black text-[var(--muted)] uppercase tracking-[0.2em]">{title}</span>
             </div>
-            <div>
-                <div className="text-base font-bold text-[var(--text)] uppercase tracking-tight mb-1">Shrinkage</div>
-                <CustomSelect
-                    value={params.shrinkage || 'auto'}
-                    onChange={(value) => onChange({ target: { name: 'shrinkage', value } })}
-                    options={[
-                        { value: 'auto', label: 'Auto' },
-                        { value: 'none', label: 'Manual' }
-                    ]}
-                />
+            <span className="text-[10px] text-[var(--muted)] font-bold">{history.length} Models</span>
+        </div>
+        <div className="flex-1 min-h-0 grid grid-cols-12 gap-3 p-3">
+            <div className="col-span-12 lg:col-span-7 overflow-y-auto pr-1 [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                <HistoryList history={history} selectedId={historyId(selectedItem)} onSelect={onSelectItem} />
             </div>
-            <div>
-                <div className="flex justify-between mb-0.5">
-                    <span className="text-base font-bold text-[var(--text)] uppercase tracking-tight">Test Size</span>
-                    <span className="text-sm font-black font-mono text-[var(--primary)]">{params.test_size}</span>
-                </div>
-                <CustomSlider
-                    min={0.1}
-                    max={0.5}
-                    step={0.05}
-                    value={params.test_size}
-                    onChange={(v) => onChange({ target: { name: 'test_size', value: v } })}
-                />
+            <div className="col-span-12 lg:col-span-5 min-h-0">
+                <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--muted)] font-black mb-2">{detailLabel}</div>
+                <HistoryDetailCard item={selectedItem} />
             </div>
         </div>
     </div>
 );
 
+const formatDuration = (seconds) => {
+    if (seconds === undefined || seconds === null || Number.isNaN(Number(seconds))) return '--';
+    const total = Math.max(0, Math.round(Number(seconds)));
+    const mins = Math.floor(total / 60);
+    const secs = total % 60;
+    return mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+};
 
-const EEGLDAVisualizationCard = ({ result }) => {
-    const [view, setView] = useState('data'); // 'data' or 'guide'
+
+const HyperparametersCard = ({ params, setParamsTab, job, activeTab, models = [], activeModelName, onSelectRun }) => {
+    const [view] = useState('params'); // 'params' or 'runs'
+    const minVal = Math.round((params.train_ratio || 0.7) * 100);
+    const maxVal = Math.round(((params.train_ratio || 0.7) + (params.val_ratio || 0.15)) * 100);
+
+    return (
+        <div className=" h-full flex flex-col px-2 pt-2 bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-sm relative group/card overflow-hidden">
+            <div className="flex justify-between items-center border-b border-[var(--border)] pb-2">
+                <h3 className="text-[18px] flex items-center font-bold text-[var(--muted)] uppercase tracking-widest">
+                    <Sliders size={32} className='mr-4 border border-text bg-bg rounded-[4px] p-1' color='var(--text)' />
+                    <span className="flex items-center text-[var(--graph-text)]  gap-2">
+                        Hyperparameters
+                        <span className="text-[12px] bg-[var(--bg)] border border-[var(--border)] px-2 py-0.5 rounded-full text-[var(--text)] font-mono">
+                            {view === 'params' ? (activeTab === 'EEG' ? 5 : 7) : models.length}
+                        </span>
+                    </span>
+                </h3>
+            </div>
+
+            <div className="flex-1 min-h-0 relative">
+                <div className="h-full overflow-y-auto [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                    {/* Global Parameters: Split & Search Resolution */}
+                    <div className="space-y-1">
+                        <div className="p-0 border-0 bg-transparent">
+                            <div className="flex justify-between items-center mb-1 px-1">
+                                <span className="text-[12px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em]"> Data Partition </span>
+                                <div className="flex items-center gap-2 font-mono font-black text-[18px]">
+                                    <span className="text-[var(--text)]">{Math.round(params.train_ratio * 100)}%</span>
+                                    <span className="text-[var(--muted)] opacity-30">/</span>
+                                    <span className="text-[var(--muted)]">{Math.round(params.val_ratio * 100)}%</span>
+                                    <span className="text-[var(--muted)] opacity-30">/</span>
+                                    <span className="text-[var(--accent)]">{Math.round(params.test_ratio * 100)}%</span>
+                                </div>
+                            </div>
+                            <RangeSlider
+                                min={0} max={100} step={1}
+                                minValue={minVal} maxValue={maxVal}
+                                leftColor="var(--text)"
+                                middleColor="var(--muted)"
+                                rightColor="var(--accent)"
+                                hideLabels={true}
+                                compact={true}
+                                minLimit={1}
+                                maxLimit={99}
+                                onChange={(vals) => {
+                                    const totalNonTest = vals.left + vals.middle;
+                                    const rawK = Math.round(totalNonTest / (vals.middle || 0.1));
+                                    const k = Math.max(2, Math.min(20, rawK));
+
+                                    setParamsTab({
+                                        train_ratio: parseFloat(vals.left.toFixed(3)),
+                                        val_ratio: parseFloat(vals.middle.toFixed(3)),
+                                        test_ratio: parseFloat(vals.right.toFixed(3)),
+                                        k_folds: k
+                                    });
+                                }}
+                            />
+                        </div>
+
+                        <div className="p-0 border-0 bg-transparent">
+                            <div className="flex justify-between items-center mb-2 px-1">
+                                <span className="text-[12px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em]">Search Resolution</span>
+                                <span className="text-[18px] text-[var(--header-text)] font-black font-mono leading-none">{params.search_resolution}</span>
+                            </div>
+                            <CustomSlider min={2} max={10} step={1}
+                                backgroundColor="var(--bg)"
+                                value={params.search_resolution} onChange={(value) => setParamsTab({ search_resolution: value })} />
+                        </div>
+
+                        {activeTab !== 'EEG' ? (
+                            <div className="space-y-1 pb-2">
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="col-span-2 p-0 border-0 bg-transparent">
+                                        <div className="flex justify-between items-end mb-4 px-1">
+                                            <span className="text-[12px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em]">Estimators Range</span>
+                                            <div className="flex items-center gap-2 text-[18px] font-black font-mono text-[var(--header-text)]">
+                                                <span >{params.n_estimators_min || 50}</span>
+                                                <span className="text-[var(--muted)]">-</span>
+                                                <span >{params.n_estimators_max || 200}</span></div>
+                                        </div>
+
+                                        <RangeSlider min={5} max={500} step={15}
+                                            leftColor="var(--muted)" rightColor="var(--muted)"
+                                            minValue={params.n_estimators_min || 50} maxValue={params.n_estimators_max || 200} hideLabels={true} compact={true} color="var(--primary)" onChange={(vals) => setParamsTab({ n_estimators_min: vals.min, n_estimators_max: vals.max })} />
+                                    </div>
+
+                                    <div className="p-0 border-0 bg-transparent">
+                                        <div className="flex justify-between items-end mb-2 px-1">
+                                            <span className="text-[12px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em]">Max Depth</span>
+                                            <div className="flex items-center gap-1 font-mono text-[16px] text-[var(--header-text)] font-black">{params.max_depth_min || 5} - {params.max_depth_max || 15}</div>
+                                        </div>
+
+                                        <RangeSlider min={2} max={30} step={1}
+                                            leftColor="var(--muted)" rightColor="var(--muted)" minValue={params.max_depth_min || 5} maxValue={params.max_depth_max || 15} hideLabels={true} compact={true} color="var(--primary)" onChange={(vals) => setParamsTab({ max_depth_min: vals.min, max_depth_max: vals.max })} />
+                                    </div>
+
+                                    <div className="p-0 border-0 bg-transparent">
+                                        <div className="flex justify-between items-end mb-2 px-1">
+                                            <span className="text-[12px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em]">Impurity</span>
+                                            <div className="text-[16px] font-mono text-[var(--header-text)] font-black truncate">{params.min_impurity_decrease_min || 0} - {params.min_impurity_decrease_max || 0.05}</div>
+                                        </div>
+                                        <RangeSlider min={0} max={0.1} step={0.005}
+                                            leftColor="var(--muted)" rightColor="var(--muted)" minValue={params.min_impurity_decrease_min || 0} maxValue={params.min_impurity_decrease_max || 0.05} hideLabels={true} compact={true} color="var(--primary)" onChange={(vals) => setParamsTab({ min_impurity_decrease_min: vals.min, min_impurity_decrease_max: vals.max })} />
+                                    </div>
+
+                                    <div className="p-0 border-0 bg-transparent">
+                                        <div className="text-[12px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em] mb-1.5 px-1">Criterion</div>
+                                        <CustomSelect className='font-bold text-[var(--header-text)]' direction="up" value={params.criterion || 'gini'} onChange={(value) => setParamsTab({ criterion: value })} options={[{ value: 'gini', label: 'Gini' }, { value: 'entropy', label: 'Entropy' }, { value: 'gini,entropy', label: 'Both' }]} />
+                                    </div>
+
+                                    <div className="p-0 border-0 bg-transparent">
+                                        <div className="text-[12px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em] mb-1.5 px-1">Features</div>
+                                        <CustomSelect className='font-bold text-[var(--header-text)]' direction="up" value={params.max_features || 'sqrt'} onChange={(value) => setParamsTab({ max_features: value })} options={[{ value: 'sqrt', label: 'Sqrt' }, { value: 'log2', label: 'Log2' }, { value: 'None', label: 'None' }, { value: 'sqrt,log2', label: 'Both' }]} />
+                                    </div>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="space-y-[10px]">
+                                <div className="p-0 border-0 bg-transparent">
+                                    <div className="flex justify-between items-end px-1 mb-4">
+                                        <span className="text-[12px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em]">LDA Tolerance Range</span>
+                                        <div className="flex items-center gap-1 text-[18px] font-black font-mono text-[var(--header-text)]">
+                                            {params.tol_min || 0.0001} - {params.tol_max || 0.01}
+                                        </div>
+                                    </div>
+                                    <RangeSlider min={0.0001} max={0.1} step={0.001}
+                                        leftColor="var(--muted)" rightColor="var(--muted)" minValue={params.tol_min || 0.0001} maxValue={params.tol_max || 0.01} hideLabels={true} compact={true} color="var(--primary)" onChange={(vals) => setParamsTab({ tol_min: vals.min, tol_max: vals.max })} />
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="p-0 border-0 bg-transparent">
+                                        <div className="text-[12px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em] mb-1.5 px-1">Solver</div>
+                                        <CustomSelect className='font-bold text-[var(--header-text)]' direction="up" value={params.solver || 'svd'} onChange={(value) => setParamsTab({ solver: value })} options={[{ value: 'svd', label: 'SVD' }, { value: 'lsqr', label: 'LSQR' }, { value: 'eigen', label: 'Eigen' }, { value: 'svd,lsqr,eigen', label: 'All' }]} />
+                                    </div>
+                                    <div className="p-0 border-0 bg-transparent">
+                                        <div className="text-[12px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em] mb-1.5 px-1">Shrinkage</div>
+                                        <CustomSelect className='font-bold text-[var(--header-text)]' direction="up" value={params.shrinkage || 'auto'} onChange={(value) => setParamsTab({ shrinkage: value })} options={[{ value: 'auto', label: 'Auto' }, { value: 'none', label: 'None' }, { value: 'auto,none', label: 'Both' }]} />
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+        </div >
+    );
+};
+
+const TrainingStatusDashboard = ({ job, countdown, params, selectedHistoryItem, onSelectHistory }) => {
+    const latestFold = job?.history?.[job.history.length - 1];
+
+    // Map parameters to icons
+    const getParamIcon = (key) => {
+        const iconClass = "w-3.5 h-3.5 opacity-60";
+        if (key.includes('estimators')) return <Cpu className={iconClass} />;
+        if (key.includes('depth')) return <GitMerge className={iconClass} />;
+        if (key.includes('impurity')) return <Zap className={iconClass} />;
+        if (key.includes('criterion')) return <GitBranch className={iconClass} />;
+        if (key.includes('features')) return <MousePointer2 className={iconClass} />;
+        if (key.includes('resolution')) return <Search className={iconClass} />;
+        if (key.includes('tol')) return <Activity className={iconClass} />;
+        if (key.includes('solver') || key.includes('shrinkage')) return <Cpu className={iconClass} />;
+        return <Info className={iconClass} />;
+    };
+
+    return (
+        <div className="flex flex-col h-full gap-4 overflow-hidden animate-in fade-in duration-500">
+            {/* Top Row: Progress Arc (8) and Active Parameters (4) */}
+            <div className="grid grid-cols-12 gap-4 h-1/2">
+                {/* Progress Arc Panel (8) */}
+                <div className={`col-span-12 lg:col-span-8 ${card} flex flex-col items-center justify-center relative overflow-hidden group`}>
+                    {/* Background Detail */}
+                    <div className="absolute inset-0 bg-gradient-to-br from-[var(--primary)]/5 via-transparent to-[var(--primary)]/5 opacity-50" />
+
+                    {/* Corner Stats: Top Left - Time Consumed */}
+                    <div className="absolute top-4 left-6 flex flex-col">
+                        <div className="text-[16px] uppercase font-black text-[var(--muted)] tracking-[0.2em] mb-1.5 opacity-80">
+                            Time Consumed
+                        </div>
+                        <div className="flex items-center gap-3">
+                            <Clock size={24} className="text-[var(--primary)]" />
+                            <div className="text-3xl font-black text-[var(--text)] font-mono leading-none">
+                                {formatDuration(job?.elapsed_seconds)}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Corner Stats: Top Right - Current Accuracy */}
+                    <div className="absolute top-4 right-6 flex flex-col items-end">
+                        <div className="text-[16px] uppercase font-black text-[var(--muted)] tracking-[0.2em] mb-1.5 opacity-80">
+                            Current Accuracy
+                        </div>
+                        <div className="flex items-center gap-3">
+                            <div className="text-[24px] font-black text-[var(--text-success)] font-mono leading-none">
+                                {latestFold ? pct(latestFold.accuracy) : '--'}
+                            </div>
+                            <Target size={24} className=" text-[var(--primary)]" />
+                        </div>
+                    </div>
+
+                    {/* Main Progress Visualization */}
+                    <div className="relative z-10 flex flex-col items-center">
+                        <div className="scale-90 lg:scale-105">
+                            <HalfCircleProgress
+                                progress={job?.progress || 0}
+                                size={720}
+                                strokeWidth={24}
+                                hideLabels={true}
+                                primaryColor="var(--text)"
+                                secondaryColor='var(--text-error)'
+                            />
+                        </div>
+
+                        {/* Central Stats: Progress Percentage and Model Details */}
+                        <div className="absolute bottom-[36px] flex flex-col items-center justify-center">
+                            {/* Big Progress Percentage */}
+                            <div className="relative flex items-center justify-center mb-20">
+                                <Activity size={32} className="absolute left-[-40px] text-[var(--primary)] animate-pulse" />
+                                <span className="text-[90px] font-black text-[var(--graph-line-1)] font-mono leading-none tracking-tighter">
+                                    {job?.progress ? (
+                                        (job.progress * 100 < 1 && job.progress > 0)
+                                            ? (job.progress * 100).toFixed(1)
+                                            : Math.round(job.progress * 100)
+                                    ) : '--'}
+                                    <span className="text-3xl opacity-80 ml-[10px] text-[var(--label)]">
+                                        {job?.progress ? '%' : ''}
+                                    </span>
+                                </span>
+                            </div>
+
+                            {/* Small Detail Row - No status bar, just integrated arrangement */}
+                            <div className="flex items-center gap-12">
+                                <div className="flex flex-col items-center">
+                                    <div className="flex items-center gap-1.5 text-[14px] uppercase font-bold text-[var(--muted)] tracking-widest mb-2">
+                                        <Fingerprint size={18} color='var(--text)' /> <span>Model ID</span>
+                                    </div>
+                                    <span className='text-[24px] font-black font-mono leading-none'>
+                                        {latestFold ? (
+                                            <span className='text-[24px] font-black font-mono leading-none'>
+                                                <span className="text-[var(--muted)]">C</span>
+                                                <span className="text-[var(--primary)]">{(latestFold.candidate_index || latestFold.candidate_idx || 0).toString().padStart(2, '0')}</span>
+                                                <span className="text-[var(--muted)]">F</span>
+                                                <span className="text-[var(--primary)]">{latestFold.fold_index || latestFold.fold_idx || 0}</span>
+                                            </span>
+                                        ) : '--'}
+                                    </span>
+                                </div>
+                                <div className="flex flex-col items-center px-10 border-x-2 border-[var(--border)]/80">
+                                    <div className="flex items-center gap-1.5 text-[14px] uppercase font-bold text-[var(--muted)] tracking-widest mb-2">
+                                        <Layers size={18} color='var(--text)' /> <span>Candidates</span>
+                                    </div>
+                                    <span className="text-[24px] font-black font-mono leading-none">
+                                        <span className="text-[var(--primary)]">{(job?.candidate_index || 0).toString().padStart(2, '0')}</span>
+                                        <span className="opacity-30 mx-1.5 text-[var(--muted)]">/</span>
+                                        <span className="text-[var(--muted)]">{(job?.total_candidates || 0).toString().padStart(2, '0')}</span>
+                                    </span>
+                                </div>
+                                <div className="flex flex-col items-center">
+                                    <div className="flex items-center gap-1.5 text-[14px] uppercase font-bold text-[var(--muted)] tracking-widest mb-2">
+                                        <Timer size={18} color='var(--text)' /> <span>Time LEFT</span>
+                                    </div>
+                                    <span className="text-[24px] font-black font-mono text-[var(--primary)] leading-none">{formatDuration(job?.eta_seconds)}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {/* Cooldown Timer */}
+                    {countdown !== null && (
+                        <div className="absolute bottom-2 -translate-y-1/2 flex items-center gap-3 px-6 py-3 rounded-2xl bg-[var(--primary)]/20 border border-[var(--primary)] text-[var(--primary)] font-bold animate-bounce shadow-[0_0_30px_rgba(var(--primary-rgb),0.4)] backdrop-blur-md">
+                            <RefreshCw className="w-5 h-5 animate-spin" />
+                            <span className="text-sm uppercase tracking-widest">Finalizing... {countdown}s</span>
+                        </div>
+                    )}
+                </div>
+
+                {/* Active Parameters Panel (4) */}
+                <div className={`col-span-12 lg:col-span-4 ${card} flex flex-col overflow-hidden group/params`}>
+                    <div className="p-4 border-b border-[var(--border)] flex items-center gap-2 bg-[var(--surface)]/50 shrink-0">
+                        <Sliders className="w-4 h-4 text-[var(--primary)]" />
+                        <span className="text-xs font-black text-[var(--muted)] uppercase tracking-[0.2em]">Active Configuration</span>
+                    </div>
+                    <div className="flex-1 p-4 grid grid-cols-2 gap-2.5 overflow-y-auto [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                        {Object.entries(params)
+                            .filter(([k]) => !['table_name', 'model_name', 'train_ratio', 'val_ratio', 'test_ratio', 'random_state', 'n_estimators_min', 'n_estimators_max', 'max_depth_min', 'max_depth_max', 'min_impurity_decrease_min', 'min_impurity_decrease_max', 'tol_min', 'tol_max'].includes(k))
+                            .map(([key, val]) => (
+                                <div key={key} className="p-3 rounded-xl bg-[var(--bg)] border border-[var(--border)] group-hover/params:border-[var(--primary)]/30 transition-colors flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                        <div className="p-2 rounded-lg bg-[var(--surface)] border border-[var(--border)] flex items-center justify-center text-[var(--muted)]">
+                                            {getParamIcon(key)}
+                                        </div>
+                                        <span className="text-[10px] font-black text-[var(--muted)] uppercase tracking-wider">{key.replace(/_/g, ' ')}</span>
+                                    </div>
+                                    <span className="text-sm font-black text-[var(--text)] font-mono">{val?.toString() || '--'}</span>
+                                </div>
+                            ))}
+                    </div>
+                </div>
+            </div>
+
+            {/* Bottom Row: Full Width History */}
+            <div className="flex-1 min-h-0">
+                <TrainingHistoryCard
+                    title="Grid Search Activity Log"
+                    history={job?.history || []}
+                    selectedItem={selectedHistoryItem}
+                    onSelectItem={onSelectHistory}
+                    detailLabel="Model Performance Analysis"
+                />
+            </div>
+        </div >
+    );
+};
+
+const DataInsightCard = ({ result, sensor, params, selectedSessionName, onMatrixToggle }) => {
+    if (!result) return <div className={`p-4 ${card} h-full text-[var(--muted)] flex items-center justify-center italic relative`}>No insight data available yet.</div>;
+
+    const v = getVerdict(result.train_accuracy, result.validation_accuracy, result.test_accuracy || result.accuracy);
+    const mRow = (label, val, perc = false, mono = false) => (
+        <div className="flex justify-between items-center py-1 border-b border-[var(--border)]/30 last:border-0 hover:bg-white/5 px-1 rounded transition-colors">
+            <span className="text-[12px] font-bold text-[var(--muted)] uppercase tracking-wider">{label}</span>
+            <span className={`text-[14px] font-black ${mono ? 'font-mono' : ''} text-[var(--text)]`}>{val === '--' ? val : (perc ? pct(val) : val)}</span>
+        </div>
+    );
+
+    const getSensorIcon = () => {
+        const iconSize = 32;
+        const iconClass = "mr-4 border border-text bg-bg rounded-lg";
+        if (sensor === 'EEG') return <Brain size={iconSize} className={iconClass} color='var(--text)' />;
+        if (sensor === 'EMG') return <Hand size={iconSize} className={iconClass} color='var(--text)' />;
+        if (sensor === 'EOG') return <Eye size={iconSize} className={iconClass} color='var(--text)' />;
+        return <Info size={iconSize} className={iconClass} color='var(--text)' />;
+    };
+
+    // Calculate split ratios
+    const trainPct = Math.round((params?.train_ratio || 0.7) * 100);
+    const valPct = Math.round((params?.val_ratio || 0.15) * 100);
+    const testPct = Math.round((params?.test_ratio || 0.15) * 100);
+
+    return (
+        <div className={`pt-2 px-2 pb-0 card h-full overflow-hidden flex flex-col relative group/insight`}>
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-[var(--border)] pb-2 shrink-0">
+                <div className="flex items-center text-[18px] font-bold text-[var(--muted)] uppercase tracking-widest">
+                    {getSensorIcon()}
+                    <span className="flex items-center gap-2">
+                        {sensor} Data Insight
+                        <button
+                            onClick={onMatrixToggle}
+                            className="transition-all group flex items-center ml-4 gap-3"
+                            title="Switch to Confusion Matrix"
+                        >
+                            < ArrowRightFromLine size={18} className="text-muted group-hover:text-primary transition-all group-hover:translate-x-0.5" />
+                            <Grid3X3 size={24} className="text-muted group-hover:text-primary transition-colors" />
+                        </button>
+                    </span>
+                </div>
+            </div>
+
+            {/* Content: 3-Column Layout */}
+            <div className="flex-1 grid grid-cols-3 min-h-0 overflow-hidden">
+
+                {/* Column 1: Identity & Suitability */}
+                <div className="flex flex-col justify-between pb-2">
+                    <div className="space-y-4">
+                        <div className='flex flex-col items-start justify-between mt-0.5'>
+                            <div className='flex flex-row justify-between w-full'>
+                                <div className="text-[14px] uppercase tracking-[0.2em] text-[var(--muted)] mb-0.5 font-black">
+                                    Model Identity</div>
+                                <div className="text-[12px] uppercase tracking-[0.2em] text-[var(--muted)] mb-0.5 font-black">
+                                    Classifier</div>
+
+                            </div>
+
+                            <div className="flex flex-row justify-between w-full">
+                                <div className="text-[24px] font-black text-[var(--primary)] truncate leading-tight" title={result?.model_name || 'Neuro'}>
+                                    {result?.model_name || 'Neuro'}
+                                </div>
+                                <div className="font-mono text-xs font-bold truncate leading-tight text-[var(--primary)] px-2 py-1.5 bg-[var(--bg)] rounded border border-[var(--border)] shadow-sm">{result?.classifier || (sensor === 'EEG' ? 'LDA' : 'Random Forest')}</div>
+                            </div>
+                        </div>
+
+                        <div className="space-y-2 pt-2">
+
+                            <div className="flex flex-col gap-0.5">
+                                <span className="text-[12px] uppercase tracking-wider text-[var(--muted)] font-bold">Training Session</span>
+                                <span className="text-[14px] font-black text-[var(--text)] truncate opacity-90" title={selectedSessionName}>{selectedSessionName}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Verdict Box */}
+                    <div className={`mt-auto border-t ${v.bg} rounded-xl p-3 shadow-inner relative overflow-hidden group`}>
+                        <div className="absolute top-2 right-6 opacity-5 blur-[1px] group-hover:opacity-10 transition-opacity">
+                            <Target size={80} color='var(--primary)' />
+                        </div>
+                        <div className="absolute bottom-[-18px] left-[-14px] opacity-5 blur-[1px] group-hover:opacity-15 transition-opacity">
+                            <Target size={90} color='var(--primary)' />
+                        </div>
+                        <div className="text-[12px] text-[var(--muted)] uppercase font-black tracking-widest mb-1">Model Suitability</div>
+                        <div className={`text-[24px] font-black tracking-tight ${v.color}`}>{v.text}</div>
+                        {v.desc && <div className="text-[12px] text-[var(--text)] opacity-80 mt-1 font-medium leading-tight">{v.desc}</div>}
+                    </div>
+                </div>
+
+                {/* Column 2: Performance Analyzer */}
+                <div className='border-x border-[var(--border)] px-4'>
+                    <div className="flex-1 space-y-0.5 [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                        <div className="text-[14px] uppercase text-[var(--primary)] font-black tracking-widest border-b border-[var(--border)] pb-2">Performance Metrics</div>
+                        {mRow('Mean CV Score', result.mean_accuracy || result.cv_mean, true, true)}
+                        {mRow('Validation Acc', result.validation_accuracy, true, true)}
+                        {mRow('Training Acc', result.train_accuracy, true, true)}
+                        {mRow('Fold Variance', result.fold_std || result.cv_std, false, true)}
+                        {mRow('Accuracy Gap', (result.train_accuracy && result.validation_accuracy) ? (result.train_accuracy - result.validation_accuracy).toFixed(3) : '--', false, true)}
+                        {mRow('Worst Fold', result.fold_min || result.cv_min, true, true)}
+                    </div>
+                </div>
+
+                {/* Column 3: Data Pipeline & Configuration */}
+                <div className="flex flex-col min-h-0">
+                    <div className="space-y-0.5 ">
+                        <div className="text-[14px] uppercase text-[var(--text)] font-black border-b border-[var(--border)] pb-2">Data Split Ratio</div>
+                        <div className="text-[20px] font-black text-[var(--text)] tracking-tighter border-b border-[var(--border)] pb-2 border-dashed">
+                            <span className="text-[var(--primary)]">{trainPct}</span>
+                            <span className="mx-1 text-[var(--muted)] opacity-30">/</span>
+                            <span className="text-[var(--accent)]">{valPct}</span>
+                            <span className="mx-1 text-[var(--muted)] opacity-30">/</span>
+                            <span className="text-[var(--text)]">{testPct}</span>
+                        </div>
+
+                        <div className="text-[14px] uppercase tracking-[0.2em] text-[var(--text)] mb-1 font-black border-b border-[var(--border)] pb-2">Split Distribution</div>
+                        {mRow('Train Samples', result.split_summary?.train_samples || '--', false, true)}
+                        {mRow('Val Samples', result.split_summary?.val_samples || '--', false, true)}
+                        {mRow('Test Samples', result.split_summary?.test_samples ?? '--', false, true)}
+                        {mRow('Class Groups', result.group_counts ? Object.keys(result.group_counts).length : (result.labels?.length || '--'), false, true)}
+                    </div>
+                </div>
+            </div>
+        </div >
+    );
+};
+
+
+const EEGLDAVisualizationCard = ({ result, history = [], selectedItem, onSelectItem, showHistory = false }) => {
+    const [view, setView] = useState(showHistory ? 'history' : 'data'); // 'data' or 'guide' or 'history'
+
+    useEffect(() => {
+        if (showHistory) {
+            setView('history');
+        } else if (view === 'history') {
+            setView('data');
+        }
+    }, [showHistory]);
+
     const centroids = result?.visualization?.class_centroids || [];
     const signatures = result?.visualization?.class_signatures || [];
 
@@ -529,18 +1038,34 @@ const EEGLDAVisualizationCard = ({ result }) => {
         <div className="card h-full flex flex-col px-4 pb-4 pt-2 bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-sm relative group/lda">
             <div className="flex justify-between items-center border-b border-[var(--border)] pb-2">
                 <h3 className="text-[18px] flex items-center font-bold text-[var(--muted)] uppercase tracking-widest">
-                    <PieChart size={32} className='mr-2 border border-text bg-bg rounded-[4px]' color='var(--text)' /> LDA Signature View
+                    {view === 'history'
+                        ? <BookOpen size={32} className='mr-2 border border-text bg-bg rounded-[4px]' color='var(--text)' />
+                        : <PieChart size={32} className='mr-2 border border-text bg-bg rounded-[4px]' color='var(--text)' />}
+                    {view === 'history' ? 'Training History' : 'LDA Signature View'}
+                    <button
+                        onClick={() => setView(view === 'history' ? 'data' : 'history')}
+                        className="transition-all group flex items-center ml-4 gap-3"
+                        title={view === 'history' ? "Back to Signature View" : "View Training History"}
+                    >
+                        < ArrowRightFromLine size={18} className="text-muted group-hover:text-primary transition-all group-hover:translate-x-0.5" />
+                        {view === 'history'
+                            ? <PieChart size={32} className="text-muted group-hover:text-primary transition-colors" />
+                            : <BookOpen size={32} className="text-muted group-hover:text-primary transition-colors" />}
+                    </button>
                 </h3>
 
-                {/* View Toggle */}
-                <button
-                    onClick={() => setView(view === 'data' ? 'guide' : 'data')}
-                    className="p-1.5 rounded-lg bg-[var(--bg)] border border-[var(--border)] text-[var(--muted)] hover:text-[var(--primary)] hover:border-[var(--primary)] transition-all flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider"
-                    title={view === 'data' ? "View Technical Details / Guide" : "Return to Data View"}
-                >
-                    {view === 'data' ? <Info size={14} /> : <BookOpen size={14} />}
-                    {view === 'data' ? 'Details' : 'Data'}
-                </button>
+                <div className="flex items-center gap-2">
+                    {view !== 'history' && (
+                        <button
+                            onClick={() => setView(view === 'data' ? 'guide' : 'data')}
+                            className="p-1.5 rounded-lg bg-[var(--bg)] border border-[var(--border)] text-[var(--muted)] hover:text-[var(--primary)] hover:border-[var(--primary)] transition-all flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider"
+                            title={view === 'data' ? "View Technical Details / Guide" : "Return to Data View"}
+                        >
+                            {view === 'data' ? <Info size={14} /> : <BookOpen size={14} />}
+                            {view === 'data' ? 'Details' : 'Data'}
+                        </button>
+                    )}
+                </div>
             </div>
 
             <div className="flex-1 min-h-0 relative">
@@ -553,7 +1078,17 @@ const EEGLDAVisualizationCard = ({ result }) => {
                         transition={{ duration: 0.3 }}
                         className="h-full"
                     >
-                        {view === 'data' ? (
+                        {view === 'history' ? (
+                            <div className="h-full grid grid-cols-12 gap-3 p-2 pt-4">
+                                <div className="col-span-12 lg:col-span-7 overflow-y-auto pr-1 [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                                    <HistoryList history={history} selectedId={historyId(selectedItem)} onSelect={onSelectItem} />
+                                </div>
+                                <div className="col-span-12 lg:col-span-5 min-h-0">
+                                    <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--muted)] font-black mb-2">Saved Fold Detail</div>
+                                    <HistoryDetailCard item={selectedItem} />
+                                </div>
+                            </div>
+                        ) : view === 'data' ? (
                             <div className="pt-2 border-b border-border flex-1 grid gap-4 lg:grid-cols-2 h-full min-h-0">
                                 <div className="space-y-4 overflow-y-auto h-full pr-1 [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
                                     <div className="text-xs uppercase tracking-widest text-[var(--muted)] sticky top-0 bg-[var(--surface)] py-1 z-10">Class Centroids</div>
@@ -649,25 +1184,11 @@ const RenderClassLabel = ({ label, sensor }) => {
 
     // EEG / SSVEP frequency labels
     if (sensor === 'EEG') {
-        const freqMap = {
-            'Target 1': '8Hz',
-            'Target 2': '9Hz',
-            'Target 3': '12Hz',
-            'Target 4': '14.4Hz',
-            'Target 5': '16Hz',
-            'Target 6': '18Hz',
-            '1': '8Hz',
-            '2': '9Hz',
-            '3': '12Hz',
-            '4': '14.4Hz',
-            '5': '16Hz',
-            '6': '18Hz'
-        };
-
+        // If the label is T1-T6, just show it
+        if (/^T[1-6]$/i.test(val)) return <span>{val.toUpperCase()}</span>;
         // If the label is already a frequency (e.g. "8Hz"), just show it
         if (val.includes('Hz')) return <span>{val}</span>;
-        // If it's a known generic target name or index, map it
-        if (freqMap[val]) return <span>{freqMap[val]}</span>;
+        if (!Number.isNaN(Number(val)) && Number(val) > 0) return <span>{`${Number(val)}Hz`}</span>;
         // Rest handling
         if (val === '0' || val.toLowerCase() === 'rest') return <span>Rest</span>;
     }
@@ -687,7 +1208,7 @@ const RenderClassLabel = ({ label, sensor }) => {
     return <span>{label}</span>;
 }
 
-const ConfusionMatrixCard = ({ matrix, labels, n_samples, sensor }) => {
+const ConfusionMatrixCard = ({ matrix, labels, n_samples, sensor, onMatrixToggle }) => {
     // ADJUST THIS SCALE TO CHANGE SIZE (e.g. 0.8 to shrink, 1.2 to enlarge)
     const scale = 1.125;
     const cellSize = Math.floor(64 * scale);
@@ -707,6 +1228,14 @@ const ConfusionMatrixCard = ({ matrix, labels, n_samples, sensor }) => {
                     <Grid3X3 size={28} className='mr-2 border border-text bg-bg rounded-[4px] shrink-0' color='var(--bg)' fill='var(--text)' />
                     <span className="truncate">Confusion Matrix</span>
                     {n_samples !== undefined && <span className="ml-1 text-[12px] normal-case opacity-70 shrink-0">({n_samples}) Samples</span>}
+                    <button
+                        onClick={() => setInsightView('insight')}
+                        className="transition-all group flex items-center ml-4 gap-3"
+                        title="Switch to Data Insight"
+                    >
+                        < ArrowRightFromLine size={18} className="text-muted group-hover:text-primary transition-all group-hover:translate-x-0.5" />
+                        <Info size={24} className="text-muted group-hover:text-primary transition-colors" />
+                    </button>
                 </h3>
                 <div className="flex items-center gap-1.5 text-[13px] bg-[var(--bg)] px-[6px] py-[2px] shrink-0">
                     <span className="font-bold text-[var(--text)]">Actual</span>
@@ -738,7 +1267,7 @@ const ConfusionMatrixCard = ({ matrix, labels, n_samples, sensor }) => {
                                             ? 'bg-[var(--primary)]/20 font-black text-[var(--primary)]'
                                             : cell > 0 ? 'bg-red-500/10 text-red-400 font-medium' : 'text-[var(--muted)] opacity-20'
                                             }`}
-                                            style={sensor === 'EEG' ? { width: cellSize, height: cellSize, p: 0, fontSize: 15 * scale } : { p: 2 }}>
+                                            style={sensor === 'EEG' ? { width: cellSize, height: cellSize, padding: 0, fontSize: 20 * scale } : (sensor === 'EMG' ? { fontSize: 20 * scale, padding: 2 } : { fontSize: 24 * scale, padding: 2 })}>
                                             {cell}
                                         </td>
                                     ))}
@@ -763,19 +1292,39 @@ const getDepth = (node) => {
     return 1 + Math.max(...node.children.map(getDepth));
 };
 
-const DecisionTreeCard = ({ structure, treeIndex, totalTrees, onTreeChange, loading }) => {
+const DecisionTreeCard = ({ structure, treeIndex, totalTrees, onTreeChange, loading, history = [], selectedItem, onSelectItem, showHistory: showHistoryProp = false }) => {
+    const [localShowHistory, setLocalShowHistory] = useState(showHistoryProp);
     const depth = getDepth(structure);
+
+    useEffect(() => {
+        setLocalShowHistory(showHistoryProp);
+    }, [showHistoryProp]);
+
+    const showHistory = localShowHistory;
+    const setShowHistory = setLocalShowHistory;
     return (
         <div className="card h-full flex flex-col p-0 bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-sm overflow-hidden relative group">
             <div className="absolute top-4 left-4 z-10 bg-[var(--bg)]/90 backdrop-blur px-3 py-2 rounded border border-[var(--border)] shadow-sm flex flex-col gap-2">
                 <div className="flex justify-between items-center gap-4">
                     <h3 className="text-sm flex items-center font-bold text-[var(--text)]">
-                        <Network size={28} className='mr-2 border border-text bg-bg rounded-[4px]' color='var(--text)' /> Decision Tree Visualization
+                        <Network size={28} className='mr-2 border border-text bg-bg rounded-[4px]' color='var(--text)' />
+                        {showHistory ? 'Training History' : 'Decision Tree Visualization'}
                     </h3>
-                    <span className="text-xs font-mono text-[var(--primary)]">Tree {treeIndex + 1} / {totalTrees}</span>
+
+                    <div className="flex items-center gap-2">
+                        {!showHistory && <span className="text-xs font-mono text-[var(--primary)] mr-2">Tree {treeIndex + 1} / {totalTrees}</span>}
+                        <button
+                            onClick={() => setShowHistory(!showHistory)}
+                            className="p-1.5 rounded-lg bg-[var(--bg)] border border-[var(--border)] text-[var(--muted)] hover:text-[var(--primary)] hover:border-[var(--primary)] transition-all flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider shadow-sm"
+                            title={showHistory ? "Back to Tree View" : "View Training History"}
+                        >
+                            {showHistory ? <Network size={14} /> : <BookOpen size={14} />}
+                            {showHistory ? 'Tree' : 'History'}
+                        </button>
+                    </div>
                 </div>
 
-                {totalTrees > 1 && (
+                {!showHistory && totalTrees > 1 && (
                     <div className="flex items-center gap-2">
                         <button
                             disabled={treeIndex <= 0}
@@ -803,22 +1352,51 @@ const DecisionTreeCard = ({ structure, treeIndex, totalTrees, onTreeChange, load
                 )}
             </div>
 
-            <div className={`w-full h-full bg-[var(--bg)] transition-opacity ${loading ? 'opacity-50' : 'opacity-100'}`} style={{ minHeight: '400px' }}>
-                {structure ? (
-                    <Tree
-                        /* key={treeIndex} Force re-render removed to keep zoom */
-                        data={structure}
-                        orientation="vertical"
-                        translate={{ x: 400, y: 50 }}
-                        pathFunc="step"
-                        depthFactor={depth < 10 ? 100 : undefined}
-                        separation={{ siblings: 1.5, nonSiblings: 2 }}
-                        zoomable={true}
-                        renderCustomNodeElement={renderCustomNodeElement}
-                    />
-                ) : (
-                    <div className="flex items-center justify-center h-full text-[var(--muted)]">Loading Tree...</div>
-                )}
+            <div className={`w-full h-full bg-[var(--bg)] relative overflow-hidden`} style={{ minHeight: '400px' }}>
+                <AnimatePresence mode="wait">
+                    {showHistory ? (
+                        <motion.div
+                            key="history"
+                            initial={{ opacity: 0, filter: 'blur(10px)' }}
+                            animate={{ opacity: 1, filter: 'blur(0px)' }}
+                            exit={{ opacity: 0, filter: 'blur(10px)' }}
+                            transition={{ duration: 0.3 }}
+                            className="h-full grid grid-cols-12 gap-3 p-4 pt-16"
+                        >
+                            <div className="col-span-12 lg:col-span-7 overflow-y-auto pr-1 [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                                <HistoryList history={history} selectedId={historyId(selectedItem)} onSelect={onSelectItem} />
+                            </div>
+                            <div className="col-span-12 lg:col-span-5 min-h-0">
+                                <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--muted)] font-black mb-2">Model Detail</div>
+                                <HistoryDetailCard item={selectedItem} />
+                            </div>
+                        </motion.div>
+                    ) : (
+                        <motion.div
+                            key="tree"
+                            initial={{ opacity: 0, filter: 'blur(10px)' }}
+                            animate={{ opacity: 1, filter: 'blur(0px)' }}
+                            exit={{ opacity: 0, filter: 'blur(10px)' }}
+                            transition={{ duration: 0.3 }}
+                            className={`w-full h-full transition-opacity ${loading ? 'opacity-50' : 'opacity-100'}`}
+                        >
+                            {structure ? (
+                                <Tree
+                                    data={structure}
+                                    orientation="vertical"
+                                    translate={{ x: 400, y: 50 }}
+                                    pathFunc="step"
+                                    depthFactor={depth < 10 ? 100 : undefined}
+                                    separation={{ siblings: 1.5, nonSiblings: 2 }}
+                                    zoomable={true}
+                                    renderCustomNodeElement={renderCustomNodeElement}
+                                />
+                            ) : (
+                                <div className="flex items-center justify-center h-full text-[var(--muted)]">Loading Tree...</div>
+                            )}
+                        </motion.div>
+                    )}
+                </AnimatePresence>
             </div>
         </div>
     );
@@ -889,7 +1467,7 @@ const ControlPanel = ({
                     placeholder={`Name for new ${activeTab} model...`}
                     className="w-full bg-bg text-text border-[2px] border-border rounded-[6px] px-4 py-2 text-[16px] focus:border-primary focus:ring-1 focus:ring-primary/30 transition-all outline-none"
                 />
-                <div className="absolute right-3 top-1/2 -translate-y-1/2 text-[16px] font-mono text-muted group-focus-within:text-primary">.model</div>
+                <div className="absolute right-3 top-1/2 -translate-y-1/2 text-[16px] font-mono text-muted group-focus-within:text-primary">.joblib</div>
             </div>
 
             <div className="flex gap-2">
@@ -948,6 +1526,40 @@ export default function MLTrainingView({ onSwitchLab }) {
     // --- SESSIONS ---
     const [availableSessions, setAvailableSessions] = useState([]);
     const [selectedSession, setSelectedSession] = useState(null);
+    const [sessionTotalSamples, setSessionTotalSamples] = useState(0);
+
+    // Fetch total samples for selected session to display in Split UI
+    useEffect(() => {
+        if (!selectedSession) {
+            fetch(`${API_BASE_URL}/api/dataset-size/${activeTab}`)
+                .then(res => res.json())
+                .then(data => {
+                    if (data && typeof data.total !== 'undefined') {
+                        setSessionTotalSamples(data.total);
+                    } else {
+                        setSessionTotalSamples(0);
+                    }
+                })
+                .catch(e => {
+                    console.error("Base dataset fetch error:", e);
+                    setSessionTotalSamples(0);
+                });
+            return;
+        }
+        fetch(`${API_BASE_URL}/api/sessions/${activeTab}/${selectedSession}?limit=1`)
+            .then(res => res.json())
+            .then(data => {
+                if (data && typeof data.total !== 'undefined') {
+                    setSessionTotalSamples(data.total);
+                } else {
+                    setSessionTotalSamples(0);
+                }
+            })
+            .catch(e => {
+                console.error("Session fetch error:", e);
+                setSessionTotalSamples(0);
+            });
+    }, [selectedSession, activeTab]);
 
     // Fetch sessions
     const fetchSessions = async () => {
@@ -983,17 +1595,24 @@ export default function MLTrainingView({ onSwitchLab }) {
     // Let's use a ref or object to cache if we wanted, but state is fine.
     const [results, setResults] = useState({ EMG: null, EOG: null, EEG: null });
     const [evalResults, setEvalResults] = useState({ EMG: null, EOG: null, EEG: null });
+    const [trainingJob, setTrainingJob] = useState(null);
+    const [countdown, setCountdown] = useState(null);
+    const [lastHistory, setLastHistory] = useState({ EMG: [], EOG: [], EEG: [] });
+    const [selectedHistoryItems, setSelectedHistoryItems] = useState({ EMG: null, EOG: null, EEG: null });
+    const [insightView, setInsightView] = useState('matrix'); // 'matrix' or 'insight' or 'history'
 
     // Params per sensor
     const [params, setParams] = useState({
-        EMG: { n_estimators: 100, max_depth: 8, test_size: 0.2, min_impurity_decrease: 0.0 },
-        EOG: { n_estimators: 50, max_depth: 5, test_size: 0.2, min_impurity_decrease: 0.0 },
-        EEG: { test_size: 0.2, solver: 'eigen', shrinkage: 'auto' }
+        EMG: { n_estimators_min: 50, n_estimators_max: 200, max_depth_min: 5, max_depth_max: 15, test_ratio: 0.15, val_ratio: 0.17, train_ratio: 0.68, k_folds: 5, search_resolution: 3, min_impurity_decrease_min: 0.001, min_impurity_decrease_max: 0.005 },
+        EOG: { n_estimators_min: 50, n_estimators_max: 200, max_depth_min: 5, max_depth_max: 15, test_ratio: 0.15, val_ratio: 0.17, train_ratio: 0.68, k_folds: 5, search_resolution: 3, min_impurity_decrease_min: 0.001, min_impurity_decrease_max: 0.005 },
+        EEG: { tol_min: 0.0001, tol_max: 0.01, solver: 'svd', shrinkage: 'auto', test_ratio: 0.15, val_ratio: 0.17, train_ratio: 0.68, k_folds: 5, search_resolution: 3 }
     });
 
     const activeResult = results[activeTab];
     const activeEvalResult = evalResults[activeTab];
     const activeParams = params[activeTab];
+    const activeHistory = trainingJob?.history?.length ? trainingJob.history : ((activeResult || activeEvalResult)?.training_history || lastHistory[activeTab] || []);
+    const selectedHistoryItem = selectedHistoryItems[activeTab] || activeHistory[activeHistory.length - 1] || null;
     const selectedSessionName = selectedSession
         ? (availableSessions.find(s => s.table === selectedSession)?.name || selectedSession)
         : 'All Available Data';
@@ -1007,19 +1626,13 @@ export default function MLTrainingView({ onSwitchLab }) {
 
                 // Smarter Auto-load: Only if nothing is selected or current selection is invalid
                 if (data.length > 0) {
-                    const activeModel = data.find(m => m.active);
                     const currentName = forcedName || selectedModelName;
                     const currentModelExists = data.find(m => m.name === currentName);
 
                     if (!currentName || !currentModelExists) {
-                        if (activeModel) {
-                            setSelectedModels(prev => ({ ...prev, [activeTab]: activeModel.name }));
-                        } else if (!currentName) {
-                            // Only force-load the first model if we have NO selection at all (Initial Page Load)
-                            const firstModel = data[0].name;
-                            setSelectedModels(prev => ({ ...prev, [activeTab]: firstModel }));
-                            handleLoadModel(firstModel);
-                        }
+                        // We NO LONGER auto-load the active or first model.
+                        // The user must explicitly select a model to fill the workspace.
+                        setSelectedModels(prev => ({ ...prev, [activeTab]: null }));
                     }
                     // If we have a currentName and it exists in the list, we DON'T override 
                     // it with the 'active' flag from the backend yet to avoid race conditions.
@@ -1044,6 +1657,14 @@ export default function MLTrainingView({ onSwitchLab }) {
     };
 
     const handleLoadModel = async (name) => {
+        if (name === selectedModelName) {
+            // Unselect if already selected
+            setSelectedModels(prev => ({ ...prev, [activeTab]: null }));
+            setResults(prev => ({ ...prev, [activeTab]: null }));
+            setEvalResults(prev => ({ ...prev, [activeTab]: null }));
+            return;
+        }
+
         setSelectedModels(prev => ({ ...prev, [activeTab]: name }));
         // Clear previous training result so evaluation shows instead
         setResults(prev => ({ ...prev, [activeTab]: null }));
@@ -1072,14 +1693,29 @@ export default function MLTrainingView({ onSwitchLab }) {
     useEffect(() => {
         fetchSessions();
         fetchModels();
-        // Initial eval info for active Tab default model
-        handleEval();
+        // Initial eval info only if a model is already selected
+        if (selectedModelName) {
+            handleEval();
+        }
     }, [activeTab]); // When tab changes
+
+    // --- ROCKY TRAINING SOUND ---
+    useEffect(() => {
+        // Play sound while training job is active and NOT in the finalizing countdown
+        if (trainingJob && countdown === null) {
+            soundHandler.startRockySliding();
+        } else {
+            soundHandler.stopRockySliding();
+        }
+        return () => soundHandler.stopRockySliding();
+    }, [trainingJob, countdown]);
 
     // Also re-fetch if session changes? Maybe useful for context, but not critical for model list.
     useEffect(() => {
-        // Reload evaluation if a model is "active" or just generally for the current view
-        handleEval();
+        // Reload evaluation only if a model is already selected
+        if (selectedModelName) {
+            handleEval(selectedModelName);
+        }
     }, [selectedSession]);
 
 
@@ -1153,14 +1789,31 @@ export default function MLTrainingView({ onSwitchLab }) {
 
     // --- GENERIC TRAIN/EVAL ---
 
+    const pollJob = async (jobId) => {
+        try {
+            const res = await fetch(`${API_BASE_URL}/api/train-jobs/${jobId}`);
+            const data = await res.json();
+            setTrainingJob(data);
+            if (data.status === 'completed' || data.status === 'failed' || data.status === 'error') {
+                return data; // Done
+            }
+            // Poll again very quickly (150ms ping)
+            await new Promise(r => setTimeout(r, 150));
+            return pollJob(jobId);
+        } catch (e) {
+            console.error("Polling error", e);
+            setTrainingJob(prev => ({ ...prev, status: 'failed' }));
+            throw e;
+        }
+    };
+
     const handleTrain = async () => {
+        soundHandler.playMLTrain();
         if (!trainModelNameInput.trim()) {
             setError("Please name your model");
             return;
         }
         setLoading(true); setError(null);
-        // Clear result for this tab
-        // setResults(prev => ({ ...prev, [activeTab]: null }));
 
         try {
             const endpointMap = {
@@ -1171,10 +1824,24 @@ export default function MLTrainingView({ onSwitchLab }) {
 
             const modelNameFinal = trainModelNameInput.trim();
 
+            const validKForBackend = parseInt(activeParams.k_folds);
+            const enforcedKForBackend = isNaN(validKForBackend) ? 2 : Math.max(2, Math.min(20, validKForBackend));
+
+            // Force the UI state to snap to the valid k_folds so the input field updates correctly
+            setParams(prev => ({ ...prev, [activeTab]: { ...prev[activeTab], k_folds: enforcedKForBackend } }));
+
             const res = await fetch(endpointMap[activeTab], {
                 method: 'POST',
                 body: JSON.stringify({
+                    // Hyperparameters
                     ...activeParams,
+                    
+                    // Rename for backend compatibility
+                    n_folds: enforcedKForBackend,
+                    train_split: activeParams.train_ratio,
+                    val_split: activeParams.val_ratio,
+                    test_split: activeParams.test_ratio,
+
                     table_name: selectedSession || 'ALL',
                     model_name: modelNameFinal,
                     sensor: activeTab
@@ -1184,20 +1851,62 @@ export default function MLTrainingView({ onSwitchLab }) {
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Training failed');
 
-            setResults(prev => ({ ...prev, [activeTab]: { ...data, source: getSourceName(true) } }));
-            // Clear previous evaluation result so training result shows instead
-            setEvalResults(prev => ({ ...prev, [activeTab]: null }));
-            setSelectedModels(prev => ({ ...prev, [activeTab]: modelNameFinal }));
-            setTreeIndex(0);
-
-            // Refresh list but without triggering it to override our selection
-            await fetchModels(modelNameFinal);
-        } catch (e) { setError(e.message); } finally { setLoading(false); }
+            if (data.job_id) {
+                const finalJobResult = await pollJob(data.job_id);
+                if (finalJobResult && (finalJobResult.status === 'completed' || finalJobResult.status === 'success')) {
+                    // Start 5-second countdown
+                    setCountdown(5);
+                    const timer = setInterval(() => {
+                        setCountdown(c => {
+                            if (c <= 1) {
+                                clearInterval(timer);
+                                // Finalize
+                                const resObj = finalJobResult.result || finalJobResult;
+                                setResults(prev => ({ ...prev, [activeTab]: { ...resObj, source: getSourceName(true) } }));
+                                setEvalResults(prev => ({ ...prev, [activeTab]: null }));
+                                setSelectedModels(prev => ({ ...prev, [activeTab]: modelNameFinal }));
+                                const history = finalJobResult.history || resObj.training_history || [];
+                                setLastHistory(prev => ({ ...prev, [activeTab]: history }));
+                                setSelectedHistoryItems(prev => ({ ...prev, [activeTab]: history[history.length - 1] || null }));
+                                setTreeIndex(0);
+                                fetchModels(modelNameFinal);
+                                setTrainingJob(null);
+                                setCountdown(null);
+                                setLoading(false);
+                                soundHandler.playSuccess();
+                                return 0;
+                            }
+                            return c - 1;
+                        });
+                    }, 1000);
+                } else {
+                    const errorMsg = finalJobResult?.error || "Job failed or returned no result.";
+                    throw new Error(errorMsg);
+                }
+            } else {
+                setResults(prev => ({ ...prev, [activeTab]: { ...data, source: getSourceName(true) } }));
+                setEvalResults(prev => ({ ...prev, [activeTab]: null }));
+                setSelectedModels(prev => ({ ...prev, [activeTab]: modelNameFinal }));
+                setTreeIndex(0);
+                await fetchModels(modelNameFinal);
+                setLoading(false);
+                setTrainingJob(null);
+            }
+        } catch (e) {
+            setError(e.message);
+            setLoading(false);
+            setTrainingJob(null);
+            setCountdown(null);
+        }
     };
 
     const handleEval = async (forceModelName = null) => {
+        // Early return if no model provided and nothing selected
+        if (!forceModelName && !selectedModelName) {
+            setEvalResults(prev => ({ ...prev, [activeTab]: null }));
+            return;
+        }
         setEvalLoading(true); setError(null);
-        // setEvalResults(prev => ({ ...prev, [activeTab]: null }));
 
         try {
             const endpointMap = {
@@ -1221,16 +1930,31 @@ export default function MLTrainingView({ onSwitchLab }) {
             }
 
             setEvalResults(prev => ({ ...prev, [activeTab]: { ...data, source: getSourceName(false) } }));
+            if (data.training_history?.length) {
+                setLastHistory(prev => ({ ...prev, [activeTab]: data.training_history }));
+                setSelectedHistoryItems(prev => ({ ...prev, [activeTab]: data.training_history[data.training_history.length - 1] || null }));
+            }
 
             if (data.hyperparameters) {
+                const meta = data.hyperparameters || {};
+                const selectedHyperparameters = meta.selected_hyperparameters || {};
                 setParams(prev => ({
                     ...prev,
-                    [activeTab]: { ...prev[activeTab], ...data.hyperparameters }
+                    [activeTab]: {
+                        ...prev[activeTab],
+                        ...selectedHyperparameters,
+                        train_ratio: meta.train_ratio ?? prev[activeTab]?.train_ratio,
+                        val_ratio: meta.val_ratio ?? prev[activeTab]?.val_ratio,
+                        test_ratio: meta.test_ratio ?? prev[activeTab]?.test_ratio,
+                        k_folds: meta.k_folds ?? prev[activeTab]?.k_folds,
+                        random_state: meta.random_state ?? prev[activeTab]?.random_state,
+                    }
                 }));
             }
 
-            // Only update selection if it was null (e.g. initial load) or if we explicitly requested a model
-            if (data.model_name && (!selectedModelName || forceModelName)) {
+            // We NO LONGER auto-select a model if it was null.
+            // Only update selection if explicitly requested via forceModelName
+            if (data.model_name && forceModelName) {
                 setSelectedModels(prev => ({ ...prev, [activeTab]: data.model_name }));
             }
         } catch (e) {
@@ -1252,7 +1976,7 @@ export default function MLTrainingView({ onSwitchLab }) {
             <div className="flex-1 overflow-hidden">
                 <div className="h-full grid grid-cols-12 grid-rows-6 gap-4 overflow-visible">
                     {/* LEFT SIDEBAR CONTROLS (Span 3) - NOW CONTAINS ACCURACY & FEATURES TOO */}
-                    <div className="col-span-12 lg:col-span-3 row-span-6 flex flex-col gap-4 min-h-0">
+                    <div className="col-span-12 lg:col-span-3 row-span-6 flex flex-col gap-5 min-h-0">
                         {/* 1. CONTROLS */}
                         <div className="shrink-0">
                             <ControlPanel
@@ -1267,34 +1991,64 @@ export default function MLTrainingView({ onSwitchLab }) {
                                 activeTab={activeTab}
                                 setActiveTab={setActiveTab}
                                 modelName={trainModelNameInput}
-                                setModelName={setTrainModelNameInput}
+                                setModelName={(name) => {
+                                    setTrainModelNameInput(name);
+                                    if (name && name !== '') {
+                                        setSelectedModels(prev => ({ ...prev, [activeTab]: null }));
+                                        setResults(prev => ({ ...prev, [activeTab]: null }));
+                                        setEvalResults(prev => ({ ...prev, [activeTab]: null }));
+                                    }
+                                }}
                             />
                         </div>
 
                         {/* 2. ACCURACY - SPLIT PANEL */}
-                        <div className="shrink-0 h-64">
+                        <div className="shrink-0 h-[339px]">
                             <SplitAccuracyCard
-                                accuracy={(activeResult || activeEvalResult)?.accuracy}
-                                n_samples={(activeResult || activeEvalResult)?.n_samples}
-                                source={(activeResult || activeEvalResult)?.source}
+                                result={activeResult || activeEvalResult}
                                 models={models}
                                 selectedModelName={selectedModelName}
                                 onSelectModel={handleLoadModel}
                                 onDeleteModel={handleDeleteModel}
+                                params={activeParams}
+                                onParamsChange={(updates) => setParams(prev => ({ ...prev, [activeTab]: { ...prev[activeTab], ...updates } }))}
+                                totalSamples={sessionTotalSamples}
                             />
                         </div>
 
                         <div className="flex-1 flex-grow-4 min-h-0">
-                            <FeatureInsightCard
-                                importances={(activeResult || activeEvalResult)?.feature_importances}
-                                featureOrder={(activeResult || activeEvalResult)?.feature_order}
-                                sensor={activeTab}
+                            <HyperparametersCard
+                                params={activeParams}
+                                setParamsTab={(updates) => setParams(prev => ({ ...prev, [activeTab]: { ...prev[activeTab], ...updates } }))}
+                                job={trainingJob}
+                                activeTab={activeTab}
+                                models={models}
+                                activeModelName={selectedModelName}
+                                onSelectRun={(name) => {
+                                    setInsightView('history');
+                                    if (name === selectedModelName) {
+                                        handleEval(name);
+                                        return;
+                                    }
+                                    handleLoadModel(name);
+                                }}
                             />
                         </div>
                     </div>
 
                     {/* MAIN BENTO GRID (Span 9) */}
-                    {(activeResult || activeEvalResult) ? (
+                    {trainingJob ? (
+                        <div className="col-span-12 md:col-span-9 row-span-6 min-h-0 flex flex-col overflow-hidden">
+                            <TrainingStatusDashboard
+                                job={trainingJob}
+                                countdown={countdown}
+                                params={activeParams}
+                                activeTab={activeTab}
+                                selectedHistoryItem={selectedHistoryItem}
+                                onSelectHistory={(item) => setSelectedHistoryItems(prev => ({ ...prev, [activeTab]: item }))}
+                            />
+                        </div>
+                    ) : (activeResult || (selectedModelName && activeEvalResult)) ? (
                         <>
                             {activeTab !== 'EEG' ? (
                                 <>
@@ -1305,23 +2059,41 @@ export default function MLTrainingView({ onSwitchLab }) {
                                             totalTrees={activeParams.n_estimators}
                                             onTreeChange={fetchTree}
                                             loading={loading || treeLoading}
+                                            history={activeHistory}
+                                            selectedItem={selectedHistoryItem}
+                                            onSelectItem={(item) => setSelectedHistoryItems(prev => ({ ...prev, [activeTab]: item }))}
+                                            showHistory={insightView === 'history'}
                                         />
                                     </div>
 
                                     <div className="col-span-12 md:col-span-3 row-span-2 min-h-0 flex flex-col overflow-hidden">
-                                        <HyperparametersCard
-                                            params={activeParams}
-                                            onChange={handleParamChange}
+                                        <FeatureInsightCard
+                                            importances={(activeResult || activeEvalResult)?.feature_importances}
+                                            featureOrder={(activeResult || activeEvalResult)?.feature_order}
+                                            sensor={activeTab}
                                         />
                                     </div>
 
-                                    <div className="col-span-12 md:col-span-6 row-span-2 min-h-0 flex flex-col overflow-hidden">
-                                        <ConfusionMatrixCard
-                                            matrix={(activeResult || activeEvalResult).confusion_matrix}
-                                            labels={(activeResult || activeEvalResult).labels || []}
-                                            n_samples={(activeResult || activeEvalResult).n_samples}
-                                            sensor={activeTab}
-                                        />
+                                    <div className="col-span-12 md:col-span-6 row-span-2 min-h-0 flex flex-col overflow-hidden relative group">
+                                        {insightView === 'matrix' ? (
+                                            <div className="h-full flex flex-col relative">
+                                                <ConfusionMatrixCard
+                                                    matrix={(activeResult || activeEvalResult).confusion_matrix}
+                                                    labels={(activeResult || activeEvalResult).labels || []}
+                                                    n_samples={(activeResult || activeEvalResult).n_samples}
+                                                    sensor={activeTab}
+                                                />
+                                            </div>
+                                        ) : (
+                                            <DataInsightCard
+                                                result={activeResult || activeEvalResult}
+                                                sensor={activeTab}
+                                                params={activeParams}
+                                                selectedSessionName={selectedSessionName}
+                                                onMatrixToggle={() => setInsightView('matrix')}
+                                            />
+                                        )}
+
                                     </div>
                                 </>
                             ) : (
@@ -1335,25 +2107,36 @@ export default function MLTrainingView({ onSwitchLab }) {
                                                     labels={(activeResult || activeEvalResult).labels || []}
                                                     n_samples={(activeResult || activeEvalResult).n_samples}
                                                     sensor={activeTab}
+                                                    isFit={true}
                                                 />
                                                 <div className="flex-grow min-h-0 flex flex-col overflow-hidden">
-                                                    <EEGLDAVisualizationCard result={activeResult || activeEvalResult} />
+                                                    <EEGLDAVisualizationCard
+                                                        result={activeResult || activeEvalResult}
+                                                        history={activeHistory}
+                                                        selectedItem={selectedHistoryItem}
+                                                        onSelectItem={(item) => setSelectedHistoryItems(prev => ({ ...prev, [activeTab]: item }))}
+                                                        onSwitchLab={onSwitchLab}
+                                                        showHistory={insightView === 'history'}
+                                                    />
                                                 </div>
                                             </div>
 
                                             <div className="col-span-12 lg:col-span-4 row-span-2 min-h-0 flex flex-col overflow-hidden">
-                                                <EEGHyperparametersCard
-                                                    params={activeParams}
-                                                    onChange={handleParamChange}
+                                                <FeatureInsightCard
+                                                    importances={(activeResult || activeEvalResult)?.feature_importances}
+                                                    featureOrder={(activeResult || activeEvalResult)?.feature_order}
+                                                    sensor={activeTab}
                                                 />
                                             </div>
                                             <div className="col-span-12 lg:col-span-8 row-span-2 min-h-0 flex flex-col overflow-hidden">
-                                                <EEGModelInsightCard
+                                                <DataInsightCard
                                                     result={activeResult || activeEvalResult}
-                                                    selectedSessionName={selectedSessionName}
+                                                    sensor={activeTab}
                                                     params={activeParams}
+                                                    selectedSessionName={selectedSessionName}
                                                 />
                                             </div>
+
                                         </div>
                                     </div>
                                 </>
@@ -1361,7 +2144,6 @@ export default function MLTrainingView({ onSwitchLab }) {
                         </>
                     ) : (
                         <div className="col-span-12 lg:col-span-9 row-span-6 card border-2 border-dashed border-[var(--border)] rounded-xl flex flex-col items-center justify-center text-[var(--muted)] bg-[var(--surface)]/50">
-                            {/* Empty state showing Hyperparams Card as preview/setup if desired, or just empty */}
                             <div className="text-center">
                                 <div className="text-6xl mb-6 opacity-20 flex justify-center"><PieChart className="w-24 h-24" /></div>
                                 <p className="text-lg font-medium">Model workspace empty</p>

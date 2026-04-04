@@ -1,0 +1,1 @@
+{"sensor": "EMG", "model_id": "Nerp", "best_fold_id": "C4CB1", "n_folds": 1, "train_samples": 68, "test_samples": 12, "accuracy": 1.0, "val_accuracy": 1.0, "folds": [{"fold": 1, "accuracy": 1.0, "model_id": "C4CB1"}], "created_at": "2026-04-05T04:06:23.646975"}
