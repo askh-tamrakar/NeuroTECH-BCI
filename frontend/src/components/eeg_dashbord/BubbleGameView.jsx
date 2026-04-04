@@ -15,6 +15,7 @@ const BubbleGameView = ({ result, isConnected, onBackToMenu }) => {
   const [globalRunning, setGlobalRunning] = useState(false);
   const [mouseMode, setMouseMode] = useState(false);
   const [difficulty, setDifficulty] = useState(1);
+  const [showGameOver, setShowGameOver] = useState(false);
   const isConnectedRef = useRef(isConnected);
 
   // Refs so the imperative game loop always reads latest values
@@ -535,8 +536,7 @@ const BubbleGameView = ({ result, isConnected, onBackToMenu }) => {
       ['pk-delta', 'pk-theta', 'pk-alpha', 'pk-beta', 'pk-gamma'].forEach(id => { const el = $(id); if (el) el.textContent = '0%'; });
       buildLivesUI();
 
-      const go = $('gameOverScreen');
-      if (go) go.classList.add('hidden');
+      setShowGameOver(false);
 
       initStars(); gameRunning = true;
       if (!fetchInterval && isConnectedRef.current) {
@@ -572,8 +572,7 @@ const BubbleGameView = ({ result, isConnected, onBackToMenu }) => {
             <div class="bg-[var(--primary)]/5 border border-[var(--primary)]/20 rounded-lg p-3 text-center"><div class="text-[9px] tracking-[3px] text-[var(--teal)] opacity-70 mb-1">TIME</div><div class="font-display text-xl font-bold text-white">${elapsed}s</div></div>
           `;
       }
-      const goScreen = $('gameOverScreen');
-      if (goScreen) goScreen.classList.remove('hidden');
+      setShowGameOver(true);
 
       const isManualMode = mouseModeRef.current;
       saveSession({ score, level, accuracy: acc, time: elapsed, mode: isManualMode ? 'MANUAL' : 'SENSOR' });
@@ -665,7 +664,7 @@ const BubbleGameView = ({ result, isConnected, onBackToMenu }) => {
           </div>
 
           {/* Game Over Screen */}
-          <div id="gameOverScreen" className="hidden absolute inset-0 z-[200] flex flex-col items-center justify-center bg-[var(--bg)]/90 backdrop-blur-xl pointer-events-auto">
+          <div id="gameOverScreen" className={`${showGameOver ? 'flex' : 'hidden'} absolute inset-0 z-[200] flex-col items-center justify-center bg-[var(--bg)]/90 backdrop-blur-xl pointer-events-auto`}>
             <h1 className="font-display text-5xl md:text-6xl font-black tracking-widest text-white drop-shadow-[0_0_30px_var(--primary)] mb-8 text-center leading-tight">SESSION<br />ENDED</h1>
             <div id="stat-grid" className="grid grid-cols-3 gap-3 mb-8 w-[min(460px,94%)]"></div>
             <button onClick={() => containerRef.current?.startGameHandler()} className="font-display text-xs tracking-widest px-10 py-3 rounded-full border border-[var(--primary)] bg-[var(--primary)]/10 text-white hover:bg-[var(--primary)]/20 shadow-[0_0_15px_rgba(var(--primary-rgb),0.2)] transition-all">
