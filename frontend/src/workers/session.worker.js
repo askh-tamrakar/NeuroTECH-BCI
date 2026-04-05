@@ -1,11 +1,11 @@
 /* eslint-disable no-restricted-globals */
+import { buildApiUrl } from '../utils/runtimeConnection';
 
 // State
 let activeSensor = 'EMG';
 let isTestMode = false;
 let sessions = [];
 let loading = false;
-let apiBaseUrl = '';
 
 // --- Message Handler ---
 self.onmessage = async function (e) {
@@ -56,8 +56,8 @@ async function fetchSessions(silent = false) {
     }
     try {
         const url = isTestMode
-            ? `${apiBaseUrl}/api/prediction/sessions`
-            : `${apiBaseUrl}/api/sessions/${activeSensor}`;
+            ? buildApiUrl('/api/prediction/sessions')
+            : buildApiUrl(`/api/sessions/${activeSensor}`);
 
         const res = await fetch(url);
         const data = await res.json();
@@ -101,7 +101,7 @@ async function handleRename(oldName, newName) {
     const cleanNew = newName.trim().replace(/[^a-zA-Z0-9]/g, '_');
 
     try {
-        const res = await fetch(`${apiBaseUrl}/api/sessions/${activeSensor}/${encodeURIComponent(oldName)}/rename`, {
+        const res = await fetch(buildApiUrl(`/api/sessions/${activeSensor}/${encodeURIComponent(oldName)}/rename`), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ new_name: cleanNew })
@@ -121,8 +121,8 @@ async function handleRename(oldName, newName) {
 async function handleDeleteSession(name) {
     try {
         const url = isTestMode
-            ? `${apiBaseUrl}/api/prediction/sessions/${name}`
-            : `${apiBaseUrl}/api/sessions/${activeSensor}/${name}`;
+            ? buildApiUrl(`/api/prediction/sessions/${name}`)
+            : buildApiUrl(`/api/sessions/${activeSensor}/${name}`);
 
         const res = await fetch(url, { method: 'DELETE' });
 
@@ -142,8 +142,8 @@ async function handleDeleteSession(name) {
 async function handleClearSession(name) {
     try {
         const url = isTestMode
-            ? `${apiBaseUrl}/api/prediction/sessions/${name}/clear`
-            : `${apiBaseUrl}/api/sessions/${activeSensor}/${name}/clear`;
+            ? buildApiUrl(`/api/prediction/sessions/${name}/clear`)
+            : buildApiUrl(`/api/sessions/${activeSensor}/${name}/clear`);
 
         const res = await fetch(url, { method: 'DELETE' });
 
@@ -162,7 +162,7 @@ async function handleMultiMerge(sourceSessions, targetName) {
     const targetClean = targetName.trim().replace(/[^a-zA-Z0-9]/g, '_');
 
     try {
-        const res = await fetch(`${apiBaseUrl}/api/sessions/${activeSensor}/merge_multiple`, {
+        const res = await fetch(buildApiUrl(`/api/sessions/${activeSensor}/merge_multiple`), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -187,10 +187,10 @@ async function fetchSessionDetails({ fullName, limit = 20, offset = 0, isReset =
     try {
         let url;
         if (isTestMode) {
-            url = `${apiBaseUrl}/api/prediction/sessions/${fullName}`;
+            url = buildApiUrl(`/api/prediction/sessions/${fullName}`);
         } else {
             const sensor = fullName.split('_')[0].toUpperCase(); // Extract sensor from fullName
-            url = `${apiBaseUrl}/api/sessions/${sensor}/${fullName}?limit=${limit}&offset=${offset}`;
+            url = buildApiUrl(`/api/sessions/${sensor}/${fullName}?limit=${limit}&offset=${offset}`);
             if (sortBy) url += `&sortBy=${sortBy}`;
             if (order) url += `&order=${order}`;
             if (label !== null && label !== undefined) url += `&label=${label}`;
@@ -222,8 +222,8 @@ async function fetchSessionDetails({ fullName, limit = 20, offset = 0, isReset =
 async function handleDeleteRow({ fullName, rowId }) {
     try {
         const url = isTestMode
-            ? `${apiBaseUrl}/api/prediction/sessions/${fullName}/rows/${rowId}`
-            : `${apiBaseUrl}/api/sessions/${activeSensor}/${fullName}/rows/${rowId}`;
+            ? buildApiUrl(`/api/prediction/sessions/${fullName}/rows/${rowId}`)
+            : buildApiUrl(`/api/sessions/${activeSensor}/${fullName}/rows/${rowId}`);
 
         const res = await fetch(url, { method: 'DELETE' });
 

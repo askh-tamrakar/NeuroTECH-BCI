@@ -61,6 +61,11 @@ let animationFrameId = null;
 let envelopeState = 0;
 const ENVELOPE_ALPHA = 0.05;
 
+// Monotonicity Head to prevent "jitter" overlaps
+let lastTsHead = 0;
+
+const SCANNER_WIDTH_PX = 28; // Standardized "Brush" width for erasure
+
 self.onmessage = function (e) {
     const { type, payload } = e.data;
 
@@ -119,9 +124,21 @@ function init(payload) {
 
 function addData(newPoints) {
     if (!newPoints || newPoints.length === 0) return;
-    const latestDataTime = newPoints[newPoints.length - 1].time;
+
+    // 1. Sort incoming batch just in case it's unordered
+    newPoints.sort((a, b) => a.time - b.time);
+
+    // 2. Filter out samples that overlap previously processed time (JITTER FIX)
+    const filteredPoints = newPoints.filter(p => p.time > lastTsHead);
+    if (filteredPoints.length === 0) return;
+
+    // 3. Update the global timestamp head
+    const newestSampleTime = filteredPoints[filteredPoints.length - 1].time;
+    lastTsHead = newestSampleTime;
+
+    // 4. Auto-Sync Clock: Estimate lag
     const sysTime = Date.now();
-    const currentLag = sysTime - latestDataTime;
+    const currentLag = sysTime - newestSampleTime;
 
     if (!isOffsetInitialized) {
         timeOffset = currentLag;
@@ -130,7 +147,7 @@ function addData(newPoints) {
         timeOffset = timeOffset * 0.98 + currentLag * 0.02;
     }
 
-    const normalizedPoints = newPoints.map((point) => {
+    const normalizedPoints = filteredPoints.map((point) => {
         const rawValue = typeof point?.value === 'number' ? point.value : 0;
         return {
             ...point,
@@ -140,15 +157,19 @@ function addData(newPoints) {
     });
 
     points.push(...normalizedPoints);
-    const cutoff = latestDataTime - (config.timeWindowMs * 1.5);
-    let cutIndex = 0;
+
+    // Cleanup: Keep slightly more than one window for scanner consistency
+    const cutoff = newestSampleTime - (config.timeWindowMs * 1.5);
+    let cutIndex = -1;
     for (let i = 0; i < points.length; i++) {
         if (points[i].time >= cutoff) {
             cutIndex = i;
             break;
         }
     }
-    if (cutIndex > 0) points = points.slice(cutIndex);
+    if (cutIndex > 0) {
+        points = points.slice(cutIndex);
+    }
 }
 
 function extractRawValue(chObj) {
@@ -225,7 +246,8 @@ function draw() {
     }
 
     const timeWindow = config.timeWindowMs;
-    const latestTs = points.length > 0 ? points[points.length - 1].time : nowSys;
+    // JITTER FIX: Render time is derived from the static monotonic head
+    const latestTs = lastTsHead || nowSys;
     const rangeStart = latestTs - timeWindow;
 
     if (points.length > 0) {
@@ -311,17 +333,31 @@ function draw() {
         ctx.shadowBlur = 0;
     };
 
+    const erasureTimeMs = (SCANNER_WIDTH_PX / plW) * timeWindow;
+    const historyEndTs = cycleStartTs - erasureTimeMs;
+
     let splitIndex = 0;
     for (let i = points.length - 1; i >= 0; i--) {
         if (points[i].time < cycleStartTs) { splitIndex = i + 1; break; }
     }
-    let startIndex = 0;
+    
+    // Find point where history actually ends (before erasure gap)
+    let historyEndIndex = splitIndex - 1;
     for (let i = splitIndex - 1; i >= 0; i--) {
+        if (points[i].time < historyEndTs) { historyEndIndex = i; break; }
+    }
+
+    let startIndex = 0;
+    for (let i = historyEndIndex; i >= 0; i--) {
         if (points[i].time < rangeStart) { startIndex = i + 1; break; }
     }
 
-    ctx.globalAlpha = 0.8;
-    drawSegment(startIndex, splitIndex - 1, config.historyColor, 3.0, false);
+    // Modern Scan Line Erasure: Active "L-R Brush"
+    // 1. Draw Older History (faint)
+    ctx.globalAlpha = 0.6;
+    drawSegment(startIndex, historyEndIndex, config.historyColor, 3.0, false);
+    
+    // 2. Draw Current New Signal (Bright + Glow)
     ctx.globalAlpha = 1.0;
     drawSegment(splitIndex, points.length - 1, config.color, 3.0, true);
 
@@ -353,20 +389,30 @@ function draw() {
         });
     }
 
-    ctx.strokeStyle = config.color;
-    ctx.globalAlpha = 0.9;
-    ctx.lineWidth = 2.0;
-    ctx.setLineDash([4, 4]); // Match FFT Hover dash pattern
+    // 3. Scanner Line (Wiper)
+    // Draw a "Wiper Block" instead of just a dashed line to act as a physical eraser
+    const wiperGradient = ctx.createLinearGradient(scannerPx - 2, 0, scannerPx + SCANNER_WIDTH_PX, 0);
+    wiperGradient.addColorStop(0, config.color);
+    wiperGradient.addColorStop(0.1, config.color);
+    wiperGradient.addColorStop(0.3, 'rgba(0, 0, 0, 0)'); // Fades into the blank erasure zone
+
+    ctx.strokeStyle = wiperGradient;
+    ctx.globalAlpha = 1.0;
+    ctx.lineWidth = 3.0;
     ctx.beginPath();
     ctx.moveTo(scannerPx, 0);
     ctx.lineTo(scannerPx, height);
     ctx.stroke();
-    ctx.setLineDash([]); // Reset line dash
 
+    // Pulse at lead
     if (points.length > 0) {
         const py = valToPy(getPointValue(points[points.length - 1]));
-        ctx.fillStyle = config.color; ctx.shadowColor = config.color; ctx.shadowBlur = 8;
-        ctx.beginPath(); ctx.arc(scannerPx, py, 4, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = config.color; 
+        ctx.shadowColor = config.color; 
+        ctx.shadowBlur = 12;
+        ctx.beginPath(); 
+        ctx.arc(scannerPx, py, 5, 0, Math.PI * 2); 
+        ctx.fill();
         ctx.shadowBlur = 0;
     }
     ctx.globalAlpha = 1.0;

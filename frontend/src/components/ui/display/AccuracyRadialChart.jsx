@@ -1,9 +1,8 @@
-import { useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import {
     PolarAngleAxis, RadialBar, RadialBarChart, ResponsiveContainer, Tooltip, Cell
 } from "recharts";
 import { cx } from '../../../utils/cx';
-
 // --- RECHARTS HELPERS ---
 
 
@@ -49,10 +48,31 @@ export const AccuracyRadialChart = ({
     valSamples,
     testSamples,
     verdict,
-    mode = 'accuracy'
+    mode = 'accuracy',
+    kFolds,
+    onFoldChange
 }) => {
     // 1: Inner (Test), 2: Middle (Validation), 3: Outer (Train)
     const [hovered, setHovered] = useState(null); // 'test', 'val', or 'train'
+    const [localK, setLocalK] = useState(kFolds || '');
+    const inputRef = useRef(null);
+
+    // Sync local state when external kFolds changes (e.g. from slider)
+    useEffect(() => {
+        setLocalK(kFolds || '');
+    }, [kFolds]);
+
+    // Global Blur workaround for SVG foreignObject
+    useEffect(() => {
+        const handleClickOutside = (e) => {
+            // Use capture phase (true) to intercept click before SVG chart stops it
+            if (inputRef.current && !inputRef.current.contains(e.target)) {
+                inputRef.current.blur();
+            }
+        };
+        window.addEventListener('mousedown', handleClickOutside, true);
+        return () => window.removeEventListener('mousedown', handleClickOutside, true);
+    }, []);
 
     const data = useMemo(() => [
         {
@@ -84,19 +104,34 @@ export const AccuracyRadialChart = ({
     const activeItem = hovered ? data.find(m => m.id === hovered) : null;
     const activeIndex = hovered ? data.findIndex(m => m.id === hovered) : -1;
 
-    // Split verdict description into lines for the "stacked" effect the user wants
-    const descLines = useMemo(() => {
-        if (!verdict?.desc) return ["Awaiting", "Data"];
-        if (verdict.desc.toLowerCase().includes("generalized well")) {
-            return ["model", "generalized", "well"];
+    // Removed descLines as requested to save space inside the rings
+
+    const domain = useMemo(() => {
+        if (mode === 'split') return [0, 100];
+
+        // Extract accuracy values (0-100 range from data)
+        const values = data.map(d => d.value);
+        const maxVal = Math.max(...values);
+        const minVal = Math.min(...values);
+
+        // Find the 25% segments (0-25, 25-50, 50-75, 75-100)
+        let start = Math.floor(minVal / 25) * 25;
+        let end = Math.ceil(maxVal / 25) * 25;
+
+        // Ensure we always have at least a 25% range
+        if (end - start < 25) {
+            if (end === 100) start = 75;
+            else if (start === 0) end = 25;
+            else end = start + 25;
         }
-        if (verdict.desc.includes('|')) return verdict.desc.split('|');
-        return verdict.desc.split(' ');
-    }, [verdict?.desc]);
+
+        // Clamp to valid ranges
+        return [Math.max(0, start), Math.min(100, end)];
+    }, [data, mode]);
 
     return (
         <div className="flex flex-col items-center justify-center h-full w-full gap-0">
-            <div className="flex-1 w-full relative min-h-0">
+            <div className="flex-1 w-full relative min-h-0 group/radial-chart overflow-hidden">
                 <ResponsiveContainer width="100%" height="100%">
                     <RadialBarChart
                         data={data}
@@ -116,10 +151,11 @@ export const AccuracyRadialChart = ({
                         <PolarAngleAxis
                             tick={false}
                             axisLine={false}
-                            domain={mode === 'split' ? [0, 100] : [75, 100]}
+                            domain={domain}
                             type="number"
                             reversed
                         />
+
                         <RadialBar
                             isAnimationActive={true}
                             dataKey="value"
@@ -141,46 +177,80 @@ export const AccuracyRadialChart = ({
                                 />
                             ))}
                         </RadialBar>
-
-                        <text x="50%" y="50%" textAnchor="middle" dominantBaseline="middle">
-                            {hovered && activeItem ? (
-                                <>
-                                    <tspan
-                                        x="50%"
-                                        dy="0.3em"
-                                        className={cx("text-[32px] font-black")}
-                                        fill={activeItem.fill}
-                                    >
-                                        {activeItem.value.toFixed(1)}%
-                                    </tspan>
-                                </>
-                            ) : (
-                                <>
-                                    {/* Verdict Title on Top */}
-                                    <tspan
-                                        x="50%"
-                                        dy="-1em"
-                                        className={cx("text-[14px] font-black uppercase tracking-widest", verdict?.color || "text-[var(--text)]")}
-                                        fill="currentColor"
-                                    >
-                                        {verdict?.text || "MODEL READY"}
-                                    </tspan>
-                                    {/* Multiline description breakdown */}
-                                    {descLines.map((line, idx) => (
-                                        <tspan
-                                            key={idx}
-                                            x="50%"
-                                            dy={idx === 0 ? "1.5em" : "1.1em"}
-                                            className="text-[10px] fill-[var(--muted)] font-mono uppercase tracking-tighter opacity-70"
-                                        >
-                                            {line}
-                                        </tspan>
-                                    ))}
-                                </>
-                            )}
-                        </text>
                     </RadialBarChart>
                 </ResponsiveContainer>
+
+                {/* --- STABLE HTML OVERLAY (Isolated from SVG Hovers) --- */}
+                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none select-none">
+                    <div className="flex flex-col items-center justify-center pointer-events-auto">
+                        {!hovered && mode === 'split' ? (
+                            <div className="flex flex-col items-center justify-center">
+                                <input
+                                    ref={inputRef}
+                                    type="text"
+                                    value={localK === 0 ? '0' : (localK || '')}
+                                    onChange={(e) => {
+                                        const valStr = e.target.value.replace(/\D/g, '');
+                                        setLocalK(valStr);
+                                        if (onFoldChange) onFoldChange(valStr === '' ? '' : parseInt(valStr));
+                                    }}
+                                    onBlur={() => {
+                                        const val = parseInt(localK);
+                                        if (!localK || isNaN(val) || val < 2) {
+                                            setLocalK(2);
+                                            if (onFoldChange) onFoldChange(2);
+                                        } else if (val > 20) {
+                                            setLocalK(20);
+                                            if (onFoldChange) onFoldChange(20);
+                                        }
+                                    }}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') e.target.blur();
+                                    }}
+                                    className={cx(
+                                        "w-24 text-center bg-transparent border-none outline-none p-0 text-[42px] font-black tracking-tighter transition-all",
+                                        verdict?.color || "text-[var(--text)]"
+                                    )}
+                                    style={{
+                                        caretColor: 'var(--primary)',
+                                        fontVariantNumeric: 'tabular-nums',
+                                        lineHeight: '1',
+                                        height: '52px'
+                                    }}
+                                />
+                                <div className={cx(
+                                    "text-[14px] font-black uppercase tracking-[0.3em] mt-[-4px] opacity-70",
+                                    "text-[var(--test-tertiary)]"
+                                )}>
+                                    Folds
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="flex flex-col items-center justify-center text-center">
+                                {hovered && activeItem ? (
+                                    <div className={cx("text-[42px] font-black tracking-tighter")} style={{ color: activeItem.fill }}>
+                                        {activeItem.value.toFixed(1)}%
+                                    </div>
+                                ) : (
+                                    <div className="flex flex-col items-center justify-center">
+                                        {(verdict?.text || "MODEL READY").split(' ').map((line, idx, arr) => (
+                                            <div
+                                                key={idx}
+                                                className={cx(
+                                                    "font-black uppercase tracking-[0.1em] leading-tight",
+                                                    "text-[20px]",
+                                                    verdict?.color || "text-[var(--text)]"
+                                                )}
+                                            >
+                                                {line}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                </div>
             </div>
 
             <div className="grid grid-cols-3 gap-2 w-full border-y border-[var(--border)] pt-0.5 pb-0.5">

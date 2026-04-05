@@ -6,7 +6,9 @@ import './styles/index.css'
 import ClickSpark from './components/ui/overlays/ClickSpark'
 import { ThemeProvider } from './contexts/ThemeContext'
 import { SettingsProvider } from './contexts/SettingsContext'
-import { installConnectionFetchInterceptor, loadPublicRuntimeConfig } from './utils/runtimeConnection'
+import { installConnectionFetchInterceptor } from './utils/runtimeConnection'
+
+installConnectionFetchInterceptor()
 
 async function bootstrap() {
   await loadPublicRuntimeConfig()

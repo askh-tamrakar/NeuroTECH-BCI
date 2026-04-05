@@ -1,4 +1,4 @@
-import { buildApiUrl } from '../utils/runtimeConnection';
+import { fetchWithBase } from '../utils/runtimeConnection';
 
 /**
  * DataService
@@ -12,9 +12,8 @@ export const DataService = {
      * @returns {Promise<Object>} The server response.
      */
     async saveSession(filename, payload, sensorType = 'recordings') {
-        const API_BASE_URL = buildApiUrl('');
         try {
-            const response = await fetch(`${API_BASE_URL}/api/record`, {
+            const response = await fetchWithBase('/api/record', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ filename, payload, sensor_type: sensorType })

@@ -44,7 +44,6 @@ import { useSettings } from '../../contexts/SettingsContext'
 import { soundHandler } from '../../handlers/SoundHandler'
 import { Music, Volume2, Upload, VolumeX } from 'lucide-react'
 import { audioStorage } from '../../utils/AudioStorage'
-import { Reorder } from 'framer-motion'
 import { buildApiUrl } from '../../utils/runtimeConnection'
 
 // Helper for color inputs

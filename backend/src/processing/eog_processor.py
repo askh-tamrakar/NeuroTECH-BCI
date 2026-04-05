@@ -82,19 +82,24 @@ class EOGFilterProcessor:
             self.zi_notch = lfilter_zi(self.b_notch, self.a_notch) * 0.0 if (self.notch_enabled and self.a_notch is not None and len(self.a_notch) > 1) else None
             self.zi_bp = sosfilt_zi(self.sos_bp) * 0.0 if self.bp_enabled and self.sos_bp is not None else None
 
-    def process_sample(self, val: float) -> float:
-        """Process a single sample value."""
-        out = val
+    def process_batch(self, samples: np.ndarray) -> np.ndarray:
+        """Process a batch of samples."""
+        if not isinstance(samples, np.ndarray):
+            samples = np.array(samples, dtype=float)
+            
+        out = samples.copy()
         
         # 1. Notch
         if self.notch_enabled and self.zi_notch is not None:
-             filtered, self.zi_notch = lfilter(self.b_notch, self.a_notch, [out], zi=self.zi_notch)
-             out = filtered[0]
+             out, self.zi_notch = lfilter(self.b_notch, self.a_notch, out, zi=self.zi_notch)
              
-        # 2. Bandpass
+        # 2. Bandpass (SOS)
         if self.bp_enabled and self.zi_bp is not None:
-             filtered, self.zi_bp = sosfilt(self.sos_bp, [out], zi=self.zi_bp)
-             out = filtered[0]
+             out, self.zi_bp = sosfilt(self.sos_bp, out, zi=self.zi_bp)
 
-        return float(out)
+        return out.astype(float)
+
+    def process_sample(self, val: float) -> float:
+        """Process a single sample value."""
+        return float(self.process_batch(np.array([val]))[0])
 

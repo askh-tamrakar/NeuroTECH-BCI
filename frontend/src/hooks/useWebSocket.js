@@ -4,36 +4,9 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { io } from 'socket.io-client'
-import { deriveApiUrlFromWs, getRuntimeConnection } from '../utils/runtimeConnection'
+import { getSocketIoConnection } from '../utils/runtimeConnection'
 
-const STATUS_POLL_MS = 2000
-const STREAM_FRESHNESS_MS = 2000
-
-function getConnectionState({ isConnecting, transportConnected, apiReachable, streamActive, hasServerStatus }) {
-  if (isConnecting && !transportConnected) {
-    return 'connecting'
-  }
-
-  if (streamActive) {
-    return 'streaming'
-  }
-
-  if (!transportConnected && !apiReachable) {
-    return 'disconnected'
-  }
-
-  if (hasServerStatus) {
-    return 'stream_offline'
-  }
-
-  return 'connected'
-}
-
-export function useWebSocket(url = getRuntimeConnection().wsUrl) {
-  const [transportConnected, setTransportConnected] = useState(false)
-  const [apiReachable, setApiReachable] = useState(false)
-  const [streamActive, setStreamActive] = useState(false)
-  const [isConnecting, setIsConnecting] = useState(false)
+export function useWebSocket(url = '') {
   const [lastMessage, setLastMessage] = useState(null)
   const [lastConfig, setLastConfig] = useState(null)
   const [lastEvent, setLastEvent] = useState(null)
@@ -55,69 +28,9 @@ export function useWebSocket(url = getRuntimeConnection().wsUrl) {
     }
   }, [url])
 
-  const clearTimers = () => {
-    if (pingTimerRef.current) {
-      clearInterval(pingTimerRef.current)
-      pingTimerRef.current = null
-    }
-    if (statusTimerRef.current) {
-      clearInterval(statusTimerRef.current)
-      statusTimerRef.current = null
-    }
-    if (staleStreamTimerRef.current) {
-      clearInterval(staleStreamTimerRef.current)
-      staleStreamTimerRef.current = null
-    }
-  }
-
-  const startStatusPolling = (endpoint) => {
-    if (!endpoint) return
-
-    const apiBaseUrl = deriveApiUrlFromWs(endpoint)
-    if (!apiBaseUrl) return
-
-    const pollStatus = async () => {
-      try {
-        const response = await fetch(`${apiBaseUrl}/api/status`, { cache: 'no-store' })
-        if (!response.ok) {
-          throw new Error(`Status failed: ${response.status}`)
-        }
-
-        const payload = await response.json()
-        setApiReachable(true)
-        setServerStatus(payload)
-
-        const streamIsFresh = payload.stream_active || (Date.now() - lastStreamAtRef.current <= STREAM_FRESHNESS_MS)
-        setStreamActive(Boolean(streamIsFresh))
-      } catch (error) {
-        setApiReachable(false)
-        setServerStatus(null)
-        setStreamActive(false)
-      }
-    }
-
-    pollStatus()
-    statusTimerRef.current = setInterval(pollStatus, STATUS_POLL_MS)
-    staleStreamTimerRef.current = setInterval(() => {
-      if (Date.now() - lastStreamAtRef.current > STREAM_FRESHNESS_MS) {
-        setStreamActive(false)
-      }
-    }, 1000)
-  }
-
-  const teardownSocket = () => {
-    clearTimers()
-
-    if (socketRef.current) {
-      socketRef.current.removeAllListeners()
-      socketRef.current.disconnect()
-      socketRef.current = null
-    }
-  }
-
   const connect = (connectUrl) => {
-    const endpoint = connectUrl || currentUrl || url || getRuntimeConnection().wsUrl
-    if (!endpoint) return
+    const { endpoint: defaultEndpoint, options: socketOptions } = getSocketIoConnection()
+    const endpoint = connectUrl || currentUrl || url || defaultEndpoint
 
     if (socketRef.current?.connected && endpoint === currentUrl) {
       return
@@ -130,9 +43,8 @@ export function useWebSocket(url = getRuntimeConnection().wsUrl) {
 
     try {
       socketRef.current = io(endpoint, {
-        reconnection: true,
         timeout: 10000,
-        transports: ['websocket', 'polling']
+        ...socketOptions,
       })
 
       socketRef.current.on('connect', () => {

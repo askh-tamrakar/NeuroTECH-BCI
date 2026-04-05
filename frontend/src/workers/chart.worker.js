@@ -1,4 +1,4 @@
-﻿/* eslint-disable no-restricted-globals */
+/* eslint-disable no-restricted-globals */
 
 // State
 let canvas = null;
@@ -67,6 +67,9 @@ let animationFrameId = null;
 // Latency Compensation
 let timeOffset = 0;
 let isOffsetInitialized = false;
+
+// Monotonicity Head
+let lastTsHead = 0;
 
 // --- Message Handler ---
 self.onmessage = function (e) {
@@ -150,8 +153,8 @@ function handleCalcSelection(payload) {
 }
 
 function getRenderNow() {
-    if (points.length > 0) {
-        return points[points.length - 1].time;
+    if (lastTsHead > 0) {
+        return lastTsHead;
     }
     return Date.now() - (config.offset || 0) - timeOffset;
 }
@@ -171,20 +174,29 @@ function init(payload) {
 function addData(newPoints) {
     if (!newPoints || newPoints.length === 0) return;
 
-    // Auto-Sync Clock: Estimate lag between System Time and Data Time
-    const latestDataTime = newPoints[newPoints.length - 1].time;
+    // 1. Sort incoming batch
+    newPoints.sort((a, b) => a.time - b.time);
+
+    // 2. Filter out samples that overlap previously processed time (JITTER FIX)
+    const filteredPoints = newPoints.filter(p => p.time > lastTsHead);
+    if (filteredPoints.length === 0) return;
+
+    // 3. Update the global timestamp head
+    const newestSampleTime = filteredPoints[filteredPoints.length - 1].time;
+    lastTsHead = newestSampleTime;
+
+    // 4. Auto-Sync Clock: Estimate lag
     const sysTime = Date.now();
-    const currentLag = sysTime - latestDataTime;
+    const currentLag = sysTime - newestSampleTime;
 
     if (!isOffsetInitialized) {
         timeOffset = currentLag;
         isOffsetInitialized = true;
     } else {
-        // Smooth adaptation (EMA)
         timeOffset = timeOffset * 0.98 + currentLag * 0.02;
     }
 
-    const normalizedPoints = newPoints.map((point) => {
+    const normalizedPoints = filteredPoints.map((point) => {
         const rawValue = typeof point?.value === 'number' ? point.value : 0;
         return {
             ...point,

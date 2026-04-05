@@ -60,8 +60,9 @@ class StreamManagerApp:
                 for i in range(num_channels):
                     ch_info = mapping.get(f"ch{i}", {})
                     sensor = ch_info.get("sensor", "UNKNOWN")
+                    label = ch_info.get("label", f"{sensor}_{i}")
                     channel_types.append(sensor)
-                    channel_labels.append(f"{sensor}_{i}")
+                    channel_labels.append(label)
                 
                 self.lsl_stream = LSLStreamer(
                     "BioSignals-Raw-uV",
@@ -337,6 +338,10 @@ class StreamManagerApp:
         half_vref = vref / 2.0
         scale = vref / (1 << adc_bits)
         
+        # For Batching
+        batch_size = 20
+        sample_buffer = []
+
         try:
             while self.is_running:
                 data = conn.recv(1024)
@@ -364,17 +369,7 @@ class StreamManagerApp:
                     if len(buffer) < req_len:
                         break
                         
-                    # Parse Packet
-                    # >B(Sync1)B(Sync2)B(Counter)H(CH0)H(CH1)B(End)
-                    # We are at index 0 with 0xC7
-                    
                     try:
-                        # 0: C7, 1: 7C, 2: Counter, 3-4: CH0, 5-6: CH1, 7: 01
-                        # Struct format: Big endian unsigned shorts for CH0, CH1
-                        # Skip syncs (2 bytes)
-                        # Read Counter (1 byte)
-                        # Read CH0 (2 bytes)
-                        # Read CH1 (2 bytes)
                         counter = buffer[2]
                         ch0_raw = (buffer[3] << 8) | buffer[4]
                         ch1_raw = (buffer[5] << 8) | buffer[6]
@@ -386,11 +381,17 @@ class StreamManagerApp:
                             ch0_uv = (ch0_raw * scale) - half_vref
                             ch1_uv = (ch1_raw * scale) - half_vref
                             
-                            # Push to LSL
-                            self.lsl_stream.push_sample([ch0_uv, ch1_uv])
-                            # Optional: Log occasionally?
+                            # Add to batch buffer
+                            sample_buffer.append([ch0_uv, ch1_uv])
+                            
+                            # Push if batch is full
+                            if len(sample_buffer) >= batch_size:
+                                self.lsl_stream.push_chunk(sample_buffer)
+                                sample_buffer = []
+                                
+                            # Optional: Log occasionally
                             if self.packet_count % 2560 == 0:
-                                self.log(f"P: {counter} | {ch0_uv:.2f} uV") 
+                                self.log(f"P: {counter} | {ch0_uv:.2f} uV (Batched)") 
                             self.packet_count += 1
                             if self.packet_count % 32 == 0:
                                 self._write_runtime_status()
@@ -401,6 +402,10 @@ class StreamManagerApp:
                     except Exception as e:
                         self.log(f"Parse error: {e}")
                         buffer = buffer[1:] # Skip 1 byte and retry
+            
+            # Push remaining samples on disconnect
+            if sample_buffer:
+                self.lsl_stream.push_chunk(sample_buffer)
                         
         except (ConnectionResetError, BrokenPipeError):
             # Silent on disconnect

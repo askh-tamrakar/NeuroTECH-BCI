@@ -98,20 +98,27 @@ class EEGFilterProcessor:
                 if self.notch_enabled: self.zi_notch = np.zeros(max(len(self.a_notch), len(self.b_notch)) - 1)
                 if self.bp_enabled: self.zi_bp = np.zeros(max(len(self.a_bp), len(self.b_bp)) - 1)
 
-    def process_sample(self, val: float) -> float:
-        """Process a single sample value: High Pass -> Notch -> Bandpass."""
+    def process_batch(self, samples: np.ndarray) -> np.ndarray:
+        """Process a batch of samples: High Pass -> Notch -> Bandpass."""
+        if not isinstance(samples, np.ndarray):
+            samples = np.array(samples, dtype=float)
+            
+        out = samples.copy()
+        
         # 1. High Pass
-        out, self.zi_hp = lfilter(self.b_hp, self.a_hp, [val], zi=self.zi_hp)
-        out = out[0]
+        if self.zi_hp is not None:
+            out, self.zi_hp = lfilter(self.b_hp, self.a_hp, out, zi=self.zi_hp)
 
         # 2. Notch Filter (Remove electrical hum)
         if self.notch_enabled and self.zi_notch is not None:
-            filtered, self.zi_notch = lfilter(self.b_notch, self.a_notch, [out], zi=self.zi_notch)
-            out = filtered[0]
+            out, self.zi_notch = lfilter(self.b_notch, self.a_notch, out, zi=self.zi_notch)
 
         # 3. Bandpass Filter
         if self.bp_enabled and self.zi_bp is not None:
-            filtered, self.zi_bp = lfilter(self.b_bp, self.a_bp, [out], zi=self.zi_bp)
-            out = filtered[0]
+            out, self.zi_bp = lfilter(self.b_bp, self.a_bp, out, zi=self.zi_bp)
 
-        return float(out)
+        return out.astype(float)
+
+    def process_sample(self, val: float) -> float:
+        """Process a single sample value: High Pass -> Notch -> Bandpass."""
+        return float(self.process_batch(np.array([val]))[0])

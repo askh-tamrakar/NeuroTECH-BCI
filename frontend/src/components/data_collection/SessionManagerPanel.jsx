@@ -30,7 +30,7 @@ export default function SessionManagerPanel({
     const SENSOR_LABEL_MAP = {
         'EMG': { 0: 'Rest', 1: 'Rock', 2: 'Paper', 3: 'Scissors' },
         'EOG': { 0: 'Rest', 1: 'SingleBlink', 2: 'DoubleBlink' },
-        'EEG': { 0: 'Rest', 1: 'Target 1', 2: 'Target 2', 3: 'Target 3', 4: 'Target 4', 5: 'Target 5', 6: 'Target 6' }
+        'EEG': { 0: 'Rest', 1: 'T1', 2: 'T2', 3: 'T3', 4: 'T4', 5: 'T5', 6: 'T6' }
     };
 
     const getLabelName = (sensor, val) => {
@@ -587,8 +587,8 @@ export default function SessionManagerPanel({
             </div>
 
             {/* RIGHT PANE: Session List */}
-            <div className="w-1/3 min-w-[180px] max-w-[250px] flex flex-col bg-[var(--panel-bg)] rounded-lg border border-[var(--panel-border)] overflow-hidden">
-                <div className="p-3 border-b border-[var(--panel-border)] bg-[var(--surface)]">
+            <div className="w-1/3 min-w-[180px] max-w-[250px] flex flex-col bg-[var(--panel-bg)] rounded-lg border border-[var(--border)] overflow-hidden">
+                <div className="p-3 border-b border-[var(--border)] bg-[var(--surface)]">
                     <h3 className="font-bold text-base text-[var(--title)] uppercase tracking-wide flex items-center justify-between pr-2 mb-2">
                         <span>Sessions</span>
                         <div className="flex gap-1 items-center">

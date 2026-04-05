@@ -1,16 +1,61 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
+import { Settings, Play, Square, Activity, MousePointer2, Zap, History, Menu, ChevronLeft, ChevronUp, Power, ChevronDown, Gamepad2, Mouse, Trash2 } from 'lucide-react';
 import { useTheme } from '../../contexts/ThemeContext';
 import '../../styles/views/BubbleGameView.css';
+import BubbleSidebar from './sidebar/BubbleSidebar';
+import { useSidebar } from './SidebarContext';
 
-const BubbleGameView = ({ result, isConnected }) => {
+const BubbleGameView = ({ result, isConnected, onBackToMenu }) => {
   const containerRef = useRef(null);
   const canvasWrapRef = useRef(null);
   const resultRef = useRef(null);
   const { currentTheme } = useTheme();
   const themeRef = useRef(currentTheme);
 
+  const [globalRunning, setGlobalRunning] = useState(false);
+  const [mouseMode, setMouseMode] = useState(false);
+  const [difficulty, setDifficulty] = useState(1);
+  const [showGameOver, setShowGameOver] = useState(false);
+  const isConnectedRef = useRef(isConnected);
+
+  // Refs so the imperative game loop always reads latest values
+  const mouseModeRef = useRef(mouseMode);
+  const difficultyRef = useRef(difficulty);
+  useEffect(() => { mouseModeRef.current = mouseMode; }, [mouseMode]);
+  useEffect(() => { difficultyRef.current = difficulty; }, [difficulty]);
+
+  const [realTimeFreq, setRealTimeFreq] = useState(0);
+  const [focusScore, setFocusScore] = useState(0);
+  const [activeChannel, setActiveChannel] = useState('attention');
+  const activeChannelRef = useRef(activeChannel);
+
+  useEffect(() => { activeChannelRef.current = activeChannel; }, [activeChannel]);
+
+  const { setSidebarSlot, setSidebarMode } = useSidebar();
+
+  // Break the loop: SidebarSlot should only be set once or on static dependency changes.
+  // We use a separate state/ref for the sidebar if needed, but for now, we'll just stabilize the call.
+  // Break the loop: SidebarSlot should only be set once during initialization.
+  useEffect(() => {
+    setSidebarSlot(
+      <BubbleSidebar
+        onBackToMenu={onBackToMenu}
+        setMouseMode={setMouseMode}
+        setDifficulty={setDifficulty}
+      />
+    );
+    setSidebarMode('page');
+  }, []); // Run once on mount
+
   useEffect(() => { themeRef.current = currentTheme; }, [currentTheme]);
   useEffect(() => { resultRef.current = result; }, [result]);
+
+  useEffect(() => {
+    isConnectedRef.current = isConnected;
+    if (containerRef.current && containerRef.current.onConnectionChange) {
+      containerRef.current.onConnectionChange(isConnected);
+    }
+  }, [isConnected]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -19,9 +64,7 @@ const BubbleGameView = ({ result, isConnected }) => {
     const $$ = (sel) => container.querySelectorAll(sel);
 
     const canvas = $('gameCanvas');
-    const ctx = canvas.getContext('2d');
-    const waveCanvas = $('waveCanvas');
-    const waveCtx = waveCanvas.getContext('2d');
+    if (!canvas) return;
 
     let W, H;
     let score = 0, level = 1, lives = 3, combo = 0, maxCombo = 0;
@@ -33,33 +76,39 @@ const BubbleGameView = ({ result, isConnected }) => {
     let waveHistory = [];
     const WAVE_LEN = 140;
     let gameRunning = false;
-    let mouseMode = false;
+    let isMouseMode = mouseMode;
     let animId = null;
     let bubblesPopped = 0, bubblesMissed = 0;
     let sessionStart = 0;
-    let activeChannel = 'attention';
-    let peakBands = [0, 0, 0, 0, 0]; // Delta, Theta, Alpha, Beta, Gamma peaks
+    let peakBands = [0, 0, 0, 0, 0];
+    
+    // Ensure we are in 'ws' mode if connected
+    if (isConnectedRef.current) eegMode = 'ws';
+    const ctx = canvas.getContext('2d');
+    const waveCanvas = $('waveCanvas');
+    const waveCtx = waveCanvas ? waveCanvas.getContext('2d') : null;
 
     const channels = {
       attention: v => Math.max(0, Math.min(1, v / 100)),
       alpha: v => Math.max(0, Math.min(1, v / 10)),
       theta: v => Math.max(0, Math.min(1, v / 10)),
-      beta:  v => Math.max(0, Math.min(1, v / 10)),
+      beta: v => Math.max(0, Math.min(1, v / 10)),
     };
 
-    // ── RESIZE ──────────────────────────────────
     function resize() {
       const wrap = canvasWrapRef.current || canvas.parentElement;
       if (!wrap) return;
       const rect = wrap.getBoundingClientRect();
       W = canvas.width = rect.width;
       H = canvas.height = rect.height;
-      if (waveCanvas) waveCanvas.width = waveCanvas.offsetWidth;
+      if (waveCanvas) waveCanvas.width = waveCanvas.offsetWidth || 560;
     }
     window.addEventListener('resize', resize);
-    resize();
+    resize(); // Force instant dimension assignment before drawBackground
+    // Initial delay for tailwind transitions
+    setTimeout(resize, 10);
+    setTimeout(resize, 350);
 
-    // ── MOUSE ────────────────────────────────────
     const mouseMoveHandler = (e) => {
       const wrap = canvasWrapRef.current || canvas.parentElement;
       if (!wrap) return;
@@ -71,90 +120,136 @@ const BubbleGameView = ({ result, isConnected }) => {
     };
     window.addEventListener('mousemove', mouseMoveHandler);
 
-    // ── SIMULATION ───────────────────────────────
-    let simPhase = 0, simTrend = 0;
-    function startSimulation() {
-      eegMode = 'simulate';
-      setConnStatus('simulating', 'SIMULATE');
-      if (simInterval) clearInterval(simInterval);
+    function stopStream() {
+      eegMode = 'idle';
+      const indicator = $('conn-indicator');
+      if (indicator) indicator.className = 'w-2 h-2 rounded-full bg-red-500 shadow-[0_0_8px_#ef4444]';
+      const label = $('conn-label'); if (label) label.textContent = 'DISCONNECTED';
       if (fetchInterval) clearInterval(fetchInterval);
-      simInterval = setInterval(() => {
-        simPhase += 0.07;
-        simTrend += (Math.random() - 0.48) * 0.04;
-        simTrend = Math.max(-0.3, Math.min(0.3, simTrend));
-        const base = 0.5 + simTrend;
-        const noise = Math.sin(simPhase * 1.3) * 0.15 + Math.sin(simPhase * 3.7) * 0.07
-                    + Math.sin(simPhase * 7.1) * 0.04 + (Math.random() - 0.5) * 0.1;
-        eegSignal = Math.max(0, Math.min(1, base + noise));
-        rawSignal = +(eegSignal * 100).toFixed(1);
-        updateEEGUI();
-      }, 60);
+
+      eegSignal = 0; rawSignal = 0;
+      setRealTimeFreq(0); setFocusScore(0);
+
+      waveHistory = new Array(WAVE_LEN).fill(0);
+      drawWave();
+
+      ['delta', 'theta', 'alpha', 'beta', 'gamma'].forEach(id => {
+        const bf = $(`bf-${id}`); if (bf) bf.style.width = '0%';
+        const bv = $(`bv-${id}`); if (bv) bv.textContent = '0%';
+      });
+      const ae = $('bd-attn-val'); if (ae) ae.textContent = '0%';
+      const af = $('bd-attn-fill'); if (af) af.style.strokeDashoffset = 201;
     }
+
 
     function startLiveStream() {
       eegMode = 'ws';
-      setConnStatus('connected', 'LIVE STREAM');
+      const indicator = $('conn-indicator');
+      if (indicator) indicator.className = 'w-2 h-2 rounded-full bg-green-500 shadow-[0_0_8px_#22c55e]';
+      const label = $('conn-label'); if (label) label.textContent = 'CONNECTED';
+      
       if (simInterval) clearInterval(simInterval);
       if (fetchInterval) clearInterval(fetchInterval);
-      fetchInterval = setInterval(() => {
-        const res = resultRef.current;
-        if (res && res.band_powers && res.band_powers.length >= 5) {
-          const bp = res.band_powers;
-          const sum = bp.reduce((a, b) => a + b, 0);
-          const relAlpha = sum > 0 ? bp[2] / sum : 0;
-          const relTheta = sum > 0 ? bp[1] / sum : 0;
-          const relBeta  = sum > 0 ? bp[3] / sum : 0;
-          let val = 0;
-          if (activeChannel === 'alpha') val = relAlpha * 100;
-          else if (activeChannel === 'theta') val = relTheta * 100;
-          else if (activeChannel === 'beta') val = relBeta * 100;
-          else if (typeof res.focus_score === 'number') val = res.focus_score;
-          else val = (relBeta / (relTheta + relAlpha + 0.01)) * 50;
-          rawSignal = val;
-          eegSignal = Math.max(0, Math.min(1, channels[activeChannel] ? channels[activeChannel](rawSignal) : rawSignal / 100));
-          updateEEGUI();
-        }
-      }, 60);
-    }
 
-    function setConnStatus(state, label) {
-      const dot = $('conn-dot'); if (dot) dot.className = 'dot ' + state;
-      const lbl = $('conn-label'); if (lbl) lbl.textContent = label;
+      fetchInterval = setInterval(() => {
+        const event = resultRef.current;
+        if (!event) return;
+
+        // DEBUG: See what we are getting
+        if (window._debugEEG) console.log('BubbleGame EEG Event:', event);
+
+        // Extract features from multiple potential formats (ModeManager result vs Prediction event)
+        const features = event.features || event.output?.features || event.band_powers ? {
+             alpha_rel: event.features?.alpha_rel || (event.band_powers ? event.band_powers[2]/100 : 0),
+             theta_rel: event.features?.theta_rel || (event.band_powers ? event.band_powers[1]/100 : 0),
+             beta_rel: event.features?.beta_rel || (event.band_powers ? event.band_powers[3]/100 : 0),
+        } : {};
+        const ch = event.source_channel !== undefined ? `ch${event.source_channel}` : (event.channel || 'ch0');
+        const currentCh = activeChannelRef.current;
+
+        // Skip if targeting a specific channel that doesn't match
+        // For 1-channel setup, both Fp1 and Oz map to ch0
+        if ((currentCh === 'Fp1' || currentCh === 'Oz' || currentCh === 'F1') && ch !== 'ch0') return;
+        if (currentCh === 'F2' && ch !== 'ch1') return;
+
+        let val = 0;
+        const alpha = features.alpha_rel ?? 0;
+        const theta = features.theta_rel ?? 0;
+        const beta = features.beta_rel ?? 0;
+
+        if (currentCh === 'alpha') val = alpha * 100;
+        else if (currentCh === 'theta') val = theta * 100;
+        else if (currentCh === 'beta') val = beta * 100;
+        else {
+          // Default Attention/Focus logic: Beta / (Theta + Alpha)
+          // Normalizes to 0-100 roughly, focus starts around 0.4 ratio (20%)
+          const ratio = beta / (theta + alpha + 0.01);
+          val = ratio * 50; 
+        }
+
+        // Fallback to legacy band_powers if features are missing
+        if (val === 0 && event.band_powers && event.band_powers.length >= 4) {
+          const bp = event.band_powers;
+          const sum = bp.reduce((a, b) => a + b, 0);
+          if (sum > 0) {
+            if (currentCh === 'alpha') val = (bp[2] / sum) * 100;
+            else if (currentCh === 'theta') val = (bp[1] / sum) * 100;
+            else if (currentCh === 'beta') val = (bp[3] / sum) * 100;
+            else val = (bp[3] / (bp[1] + bp[2] + 0.01)) * 50;
+          }
+        }
+
+        rawSignal = val;
+        eegSignal = Math.max(0, Math.min(1, val / 100));
+        updateEEGUI();
+      }, 60);
     }
 
     function updateEEGUI() {
       waveHistory.push(eegSignal);
       if (waveHistory.length > WAVE_LEN) waveHistory.shift();
       const fill = $('signal-fill');
-      if (fill) { fill.style.width = (eegSignal * 100) + '%'; fill.className = 'signal-fill' + (eegSignal > .65 ? ' high' : eegSignal < .3 ? ' low' : ''); }
-      const sigVal = $('signal-val'); if (sigVal) sigVal.textContent = isNaN(rawSignal) ? '0.00' : rawSignal.toFixed(2);
-      const focVal = $('focus-val'); if (focVal) focVal.textContent = Math.round(eegSignal * 100) + '%';
+      if (fill) { fill.style.width = (eegSignal * 100) + '%'; fill.className = 'signal-fill ' + (eegSignal > .65 ? 'high' : eegSignal < .3 ? 'low' : ''); }
+
+      // Update React state explicitly for sidebar UI
+      // Throttle state updates for the sidebar to 10Hz (once every 6 frames at 60fps)
+      if (typeof window !== 'undefined' && (!window._bubbleThrottle || window._bubbleThrottle > 6)) {
+        setRealTimeFreq(isNaN(rawSignal) ? 0 : rawSignal);
+        setFocusScore(Math.round(eegSignal * 100));
+        window._bubbleThrottle = 0;
+      }
+      window._bubbleThrottle = (window._bubbleThrottle || 0) + 1;
+
       drawWave();
       updateBandPanel();
     }
 
     function updateBandPanel() {
       const res = resultRef.current;
-      const bfIds = ['bf-delta','bf-theta','bf-alpha','bf-beta','bf-gamma'];
-      const bvIds = ['bv-delta','bv-theta','bv-alpha','bv-beta','bv-gamma'];
-      const pkIds = ['pk-delta','pk-theta','pk-alpha','pk-beta','pk-gamma'];
+      const bfIds = ['bf-delta', 'bf-theta', 'bf-alpha', 'bf-beta', 'bf-gamma'];
+      const bvIds = ['bv-delta', 'bv-theta', 'bv-alpha', 'bv-beta', 'bv-gamma'];
+      const pkIds = ['pk-delta', 'pk-theta', 'pk-alpha', 'pk-beta', 'pk-gamma'];
       let bands = [];
-      if (res && res.band_powers && res.band_powers.length >= 5) {
+      if (res && res.features) {
+        const f = res.features;
+        bands = [
+          Math.round((f.delta_rel || 0) * 100),
+          Math.round((f.theta_rel || 0) * 100),
+          Math.round((f.alpha_rel || 0) * 100),
+          Math.round((f.beta_rel || 0) * 100),
+          Math.round((f.gamma_rel || 0) * 100),
+        ];
+      } else if (res && res.band_powers && res.band_powers.length >= 5) {
         const bp = res.band_powers;
         const sum = bp.reduce((a, b) => a + b, 0);
         bands = bp.map(v => sum > 0 ? Math.round((v / sum) * 100) : 0);
       } else {
-        bands = [
-          Math.round(15 + eegSignal * 10),
-          Math.round(20 - eegSignal * 10),
-          Math.round(25 - eegSignal * 5),
-          Math.round(eegSignal * 50),
-          Math.round(5 + eegSignal * 10),
-        ];
+        // No real data - show zero activity rather than fake oscillations
+        bands = [0, 0, 0, 0, 0];
       }
       for (let i = 0; i < 5; i++) {
         const fill = $(bfIds[i]); if (fill) fill.style.width = bands[i] + '%';
-        const val  = $(bvIds[i]); if (val)  val.textContent = bands[i] + '%';
+        const val = $(bvIds[i]); if (val) val.textContent = bands[i] + '%';
         if (bands[i] > peakBands[i]) {
           peakBands[i] = bands[i];
           const pk = $(pkIds[i]); if (pk) pk.textContent = peakBands[i] + '%';
@@ -162,7 +257,7 @@ const BubbleGameView = ({ result, isConnected }) => {
       }
       const relTheta = (bands[1] || 0) / 100;
       const relAlpha = (bands[2] || 0) / 100;
-      const relBeta  = (bands[3] || 0) / 100;
+      const relBeta = (bands[3] || 0) / 100;
       const attn = Math.min(99, Math.round((relBeta / (relTheta + relAlpha + 0.01)) * 50));
       const ae = $('bd-attn-val'); if (ae) ae.textContent = attn + '%';
       const af = $('bd-attn-fill'); if (af) af.style.strokeDashoffset = (201 - (attn / 100) * 201);
@@ -176,13 +271,14 @@ const BubbleGameView = ({ result, isConnected }) => {
       const step = cw / (WAVE_LEN - 1);
       waveCtx.beginPath();
       waveCtx.strokeStyle = '#00f5ff'; waveCtx.lineWidth = 1.5;
-      waveCtx.shadowColor = '#00f5ff'; waveCtx.shadowBlur = 8;
+      waveCtx.shadowColor = '#00f5ff'; waveCtx.shadowBlur = 4;
       for (let i = 0; i < waveHistory.length; i++) {
         const x = (i - (WAVE_LEN - waveHistory.length)) * step;
         const y = ch - waveHistory[i] * (ch * 0.85) - ch * 0.07;
         i === 0 ? waveCtx.moveTo(x, y) : waveCtx.lineTo(x, y);
       }
       waveCtx.stroke();
+
       waveCtx.beginPath();
       for (let i = 0; i < waveHistory.length; i++) {
         const x = (i - (WAVE_LEN - waveHistory.length)) * step;
@@ -191,18 +287,17 @@ const BubbleGameView = ({ result, isConnected }) => {
       }
       waveCtx.lineTo(cw, ch); waveCtx.lineTo(0, ch); waveCtx.closePath();
       const grad = waveCtx.createLinearGradient(0, 0, 0, ch);
-      grad.addColorStop(0, 'rgba(0,245,255,.18)'); grad.addColorStop(1, 'rgba(0,245,255,0)');
+      grad.addColorStop(0, 'rgba(0,245,255,.12)'); grad.addColorStop(1, 'rgba(0,245,255,0)');
       waveCtx.fillStyle = grad; waveCtx.fill();
     }
 
-    // ── BUBBLE COLORS ────────────────────────────
     const hexToRgba = (hex, alpha) => {
       if (!hex) return `rgba(255,255,255,${alpha})`;
       if (hex.startsWith('rgba') || hex.startsWith('rgb')) return hex;
       let c = hex.substring(1).split('');
-      if (c.length === 3) c = [c[0],c[0],c[1],c[1],c[2],c[2]];
+      if (c.length === 3) c = [c[0], c[0], c[1], c[1], c[2], c[2]];
       c = '0x' + c.join('');
-      return 'rgba('+[(c>>16)&255,(c>>8)&255,c&255].join(',')+','+alpha+')';
+      return 'rgba(' + [(c >> 16) & 255, (c >> 8) & 255, c & 255].join(',') + ',' + alpha + ')';
     };
 
     function getBubbleColors() {
@@ -221,16 +316,19 @@ const BubbleGameView = ({ result, isConnected }) => {
       ];
     }
 
-    const SPECIAL_TYPES = ['normal','normal','normal','chain','score','bomb'];
+    const SPECIAL_TYPES = ['normal', 'normal', 'normal', 'chain', 'score', 'bomb'];
 
     function spawnBubble() {
       const cols = getBubbleColors();
       const col = cols[Math.floor(Math.random() * cols.length)];
       const type = SPECIAL_TYPES[Math.floor(Math.random() * SPECIAL_TYPES.length)];
+
+      let diff = difficultyRef.current || 1;
+
       const radius = 18 + Math.random() * 22 + (type === 'bomb' ? 10 : 0);
       bubbles.push({
         x: radius + Math.random() * (W - radius * 2), y: H + radius, r: radius,
-        speed: 0.6 + Math.random() * 0.8 + level * 0.12,
+        speed: 0.6 + Math.random() * 0.8 + level * 0.12 + (diff - 1) * 0.8,
         drift: (Math.random() - 0.5) * 0.4, col, type,
         wobble: Math.random() * Math.PI * 2,
         wobbleSpeed: 0.03 + Math.random() * 0.02,
@@ -242,14 +340,16 @@ const BubbleGameView = ({ result, isConnected }) => {
       for (let i = 0; i < count; i++) {
         const angle = (Math.PI * 2 * i) / count + Math.random() * 0.5;
         const speed = 2 + Math.random() * 4;
-        particles.push({ x, y, vx: Math.cos(angle)*speed, vy: Math.sin(angle)*speed,
-          r: 2 + Math.random() * 3, life: 1, decay: 0.025 + Math.random() * 0.03, color: col.stroke });
+        particles.push({
+          x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
+          r: 2 + Math.random() * 3, life: 1, decay: 0.025 + Math.random() * 0.03, color: col.stroke
+        });
       }
     }
 
     function spawnFloatText(x, y, text, color) {
       const el = document.createElement('div');
-      el.className = 'pop-text';
+      el.className = 'pop-text absolute pointer-events-none font-display font-bold text-lg z-50';
       el.style.cssText = `left:${x}px;top:${y}px;color:${color};text-shadow:0 0 12px ${color}`;
       el.textContent = text;
       const wrap = canvasWrapRef.current;
@@ -257,16 +357,18 @@ const BubbleGameView = ({ result, isConnected }) => {
     }
 
     function getCursorRadius() {
-      const base = mouseMode ? 48 : 30, extra = mouseMode ? 60 : 100;
+      const isManualMode = mouseModeRef.current;
+
+      const base = isManualMode ? 48 : 30, extra = isManualMode ? 60 : 100;
       const r = base + eegSignal * extra;
       const cur = $('cursor');
       if (cur) {
         const s = Math.round(r * 2 + 20);
         cur.setAttribute('width', s); cur.setAttribute('height', s);
-        cur.style.marginLeft = (-s/2) + 'px'; cur.style.marginTop = (-s/2) + 'px';
+        cur.style.marginLeft = (-s / 2) + 'px'; cur.style.marginTop = (-s / 2) + 'px';
         const aura = $('cursorAura');
-        if (aura) { aura.setAttribute('cx',s/2); aura.setAttribute('cy',s/2); aura.setAttribute('r',s/2-4); aura.setAttribute('opacity', 0.3 + eegSignal * 0.55); }
-        $$('#cursor circle').forEach((c,i) => { if(i>0) { c.setAttribute('cx',s/2); c.setAttribute('cy',s/2); } });
+        if (aura) { aura.setAttribute('cx', s / 2); aura.setAttribute('cy', s / 2); aura.setAttribute('r', s / 2 - 4); aura.setAttribute('opacity', 0.3 + eegSignal * 0.55); }
+        $$('#cursor circle').forEach((c, i) => { if (i > 0) { c.setAttribute('cx', s / 2); c.setAttribute('cy', s / 2); } });
       }
       return r;
     }
@@ -277,22 +379,22 @@ const BubbleGameView = ({ result, isConnected }) => {
       bubbles.forEach(b => {
         if (!b.alive) return;
         const dx = b.x - mouseX, dy = b.y - mouseY;
-        if (Math.sqrt(dx*dx+dy*dy) < curR + b.r) { b.alive = false; poppedThisFrame.push(b); }
+        if (Math.sqrt(dx * dx + dy * dy) < curR + b.r) { b.alive = false; poppedThisFrame.push(b); }
       });
       if (poppedThisFrame.length > 0) {
         combo++; maxCombo = Math.max(maxCombo, combo);
         poppedThisFrame.forEach(b => {
           bubblesPopped++;
           const pts = b.type === 'score' ? 50 : b.type === 'chain' ? 20 : 10;
-          const total = pts + Math.floor(combo/3) * 5;
+          const total = pts + Math.floor(combo / 3) * 5;
           score += total;
           spawnParticles(b.x, b.y, b.col, b.type === 'bomb' ? 28 : 14);
           spawnFloatText(b.x, b.y - b.r, `+${total}` + (combo >= 3 ? ` ×${combo}` : ''), b.col.glow);
           if (b.type === 'bomb') {
             bubbles.forEach(o => {
               if (!o.alive) return;
-              const dx2 = o.x-b.x, dy2 = o.y-b.y;
-              if (Math.sqrt(dx2*dx2+dy2*dy2) < 80) { o.alive = false; bubblesPopped++; score += 15; spawnParticles(o.x,o.y,o.col,8); }
+              const dx2 = o.x - b.x, dy2 = o.y - b.y;
+              if (Math.sqrt(dx2 * dx2 + dy2 * dy2) < 80) { o.alive = false; bubblesPopped++; score += 15; spawnParticles(o.x, o.y, o.col, 8); }
             });
           }
         });
@@ -304,7 +406,7 @@ const BubbleGameView = ({ result, isConnected }) => {
     function updateScoreUI() {
       const sc = $('score-val'); if (sc) sc.textContent = score.toLocaleString();
       const newLvl = 1 + Math.floor(score / 500);
-      if (newLvl !== level) { level = newLvl; const lv = $('level-val'); if (lv) lv.textContent = String(level).padStart(2,'0'); }
+      if (newLvl !== level) { level = newLvl; const lv = $('level-val'); if (lv) lv.textContent = String(level).padStart(2, '0'); }
     }
     function updateComboUI() {
       const el = $('combo-display');
@@ -312,54 +414,57 @@ const BubbleGameView = ({ result, isConnected }) => {
     }
     function buildLivesUI() {
       const el = $('hud-lives'); if (!el) return; el.innerHTML = '';
-      for (let i = 0; i < 3; i++) { const d = document.createElement('div'); d.className = 'life-dot' + (i >= lives ? ' dead' : ''); el.appendChild(d); }
+      for (let i = 0; i < 3; i++) { const d = document.createElement('div'); d.className = 'w-2.5 h-2.5 rounded-full bg-pink-500 shadow-[0_0_8px_#ec4899] transition-opacity ' + (i >= lives ? 'opacity-10 shadow-none' : ''); el.appendChild(d); }
     }
 
     let spawnTimer = 0;
-    function spawnRate() { return Math.max(30, 80 - level * 5); }
+    function spawnRate() {
+      const diff = difficultyRef.current || 1;
+      return Math.max(15, 80 - level * 5 - (diff - 1) * 20);
+    }
 
     let bgStars = [];
     function initStars() {
-      bgStars = Array.from({length: 80}, () => ({ x: Math.random()*W, y: Math.random()*H, r: Math.random()*1.5, a: Math.random(), twinkle: Math.random()*Math.PI*2, ts: 0.02+Math.random()*0.03 }));
+      bgStars = Array.from({ length: 80 }, () => ({ x: Math.random() * W, y: Math.random() * H, r: Math.random() * 1.5, a: Math.random(), twinkle: Math.random() * Math.PI * 2, ts: 0.02 + Math.random() * 0.03 }));
     }
 
     function drawBackground() {
       const t = themeRef.current?.colors || {};
-      const bg = ctx.createLinearGradient(0,0,0,H);
+      const bg = ctx.createLinearGradient(0, 0, 0, H);
       bg.addColorStop(0, t['--bg'] || '#010a14');
       bg.addColorStop(1, t['--surface'] || '#021220');
-      ctx.fillStyle = bg; ctx.fillRect(0,0,W,H);
+      ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
       bgStars.forEach(s => {
         s.twinkle += s.ts;
-        ctx.beginPath(); ctx.arc(s.x,s.y,s.r,0,Math.PI*2);
-        ctx.fillStyle = hexToRgba(t['--primary'] || '#00f5ff', s.a*(0.4+0.4*Math.sin(s.twinkle)));
+        ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+        ctx.fillStyle = hexToRgba(t['--primary'] || '#00f5ff', s.a * (0.4 + 0.4 * Math.sin(s.twinkle)));
         ctx.fill();
       });
     }
 
     function drawBubbles() {
       bubbles.forEach(b => {
-        b.wobble += b.wobbleSpeed; b.x += b.drift + Math.sin(b.wobble)*0.4; b.y -= b.speed;
+        b.wobble += b.wobbleSpeed; b.x += b.drift + Math.sin(b.wobble) * 0.4; b.y -= b.speed;
         b.opacity = Math.min(1, b.opacity + 0.04);
-        if (b.y < -b.r*2) { b.alive = false; if (b.type !== 'bomb') { bubblesMissed++; lives = Math.max(0,lives-1); buildLivesUI(); if (lives===0) endGame(); } return; }
+        if (b.y < -b.r * 2) { b.alive = false; if (b.type !== 'bomb') { bubblesMissed++; lives = Math.max(0, lives - 1); buildLivesUI(); if (lives === 0) endGame(); } return; }
         ctx.save(); ctx.globalAlpha = b.opacity;
         if (b.type === 'score') { ctx.shadowBlur = 30; ctx.shadowColor = b.col.glow; }
         else if (b.type === 'bomb') { ctx.shadowBlur = 25; ctx.shadowColor = '#ff3d9a'; }
-        const grad = ctx.createRadialGradient(b.x-b.r*.3,b.y-b.r*.3,1,b.x,b.y,b.r);
-        grad.addColorStop(0,'rgba(255,255,255,.15)'); grad.addColorStop(0.5,b.col.fill); grad.addColorStop(1,'rgba(0,0,0,.05)');
-        ctx.beginPath(); ctx.arc(b.x,b.y,b.r,0,Math.PI*2); ctx.fillStyle=grad; ctx.fill();
-        ctx.strokeStyle=b.col.stroke; ctx.lineWidth=1.5; ctx.shadowBlur=14; ctx.shadowColor=b.col.glow; ctx.stroke();
-        ctx.beginPath(); ctx.arc(b.x-b.r*.28,b.y-b.r*.3,b.r*.22,0,Math.PI*2); ctx.fillStyle='rgba(255,255,255,.35)'; ctx.shadowBlur=0; ctx.fill();
-        ctx.shadowBlur=0; ctx.fillStyle=b.col.stroke; ctx.font=`bold ${b.r*.7}px monospace`; ctx.textAlign='center'; ctx.textBaseline='middle';
-        if (b.type==='score') ctx.fillText('★',b.x,b.y);
-        else if (b.type==='bomb') { ctx.fillStyle='#ff3d9a'; ctx.fillText('⚡',b.x,b.y); }
-        else if (b.type==='chain') ctx.fillText('◈',b.x,b.y);
+        const grad = ctx.createRadialGradient(b.x - b.r * .3, b.y - b.r * .3, 1, b.x, b.y, b.r);
+        grad.addColorStop(0, 'rgba(255,255,255,.15)'); grad.addColorStop(0.5, b.col.fill); grad.addColorStop(1, 'rgba(0,0,0,.05)');
+        ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2); ctx.fillStyle = grad; ctx.fill();
+        ctx.strokeStyle = b.col.stroke; ctx.lineWidth = 1.5; ctx.shadowBlur = 14; ctx.shadowColor = b.col.glow; ctx.stroke();
+        ctx.beginPath(); ctx.arc(b.x - b.r * .28, b.y - b.r * .3, b.r * .22, 0, Math.PI * 2); ctx.fillStyle = 'rgba(255,255,255,.35)'; ctx.shadowBlur = 0; ctx.fill();
+        ctx.shadowBlur = 0; ctx.fillStyle = b.col.stroke; ctx.font = `bold ${b.r * .7}px monospace`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        if (b.type === 'score') ctx.fillText('★', b.x, b.y);
+        else if (b.type === 'bomb') { ctx.fillStyle = '#ff3d9a'; ctx.fillText('⚡', b.x, b.y); }
+        else if (b.type === 'chain') ctx.fillText('◈', b.x, b.y);
         ctx.restore();
       });
     }
 
     function drawParticles() {
-      particles.forEach(p => { p.x+=p.vx; p.y+=p.vy; p.vy+=0.08; p.life-=p.decay; if(p.life<=0) return; ctx.save(); ctx.globalAlpha=p.life; ctx.beginPath(); ctx.arc(p.x,p.y,p.r*p.life,0,Math.PI*2); ctx.fillStyle=p.color; ctx.shadowBlur=8; ctx.shadowColor=p.color; ctx.fill(); ctx.restore(); });
+      particles.forEach(p => { p.x += p.vx; p.y += p.vy; p.vy += 0.08; p.life -= p.decay; if (p.life <= 0) return; ctx.save(); ctx.globalAlpha = p.life; ctx.beginPath(); ctx.arc(p.x, p.y, p.r * p.life, 0, Math.PI * 2); ctx.fillStyle = p.color; ctx.shadowBlur = 8; ctx.shadowColor = p.color; ctx.fill(); ctx.restore(); });
       particles = particles.filter(p => p.life > 0);
     }
 
@@ -367,9 +472,9 @@ const BubbleGameView = ({ result, isConnected }) => {
       const r = getCursorRadius();
       const prim = themeRef.current?.colors?.['--primary'] || '#00f5ff';
       const alpha = 0.04 + eegSignal * 0.09;
-      const grad = ctx.createRadialGradient(mouseX,mouseY,0,mouseX,mouseY,r);
-      grad.addColorStop(0, hexToRgba(prim, alpha*2)); grad.addColorStop(0.5, hexToRgba(prim, alpha)); grad.addColorStop(1, hexToRgba(prim, 0));
-      ctx.beginPath(); ctx.arc(mouseX,mouseY,r,0,Math.PI*2); ctx.fillStyle=grad; ctx.fill();
+      const grad = ctx.createRadialGradient(mouseX, mouseY, 0, mouseX, mouseY, r);
+      grad.addColorStop(0, hexToRgba(prim, alpha * 2)); grad.addColorStop(0.5, hexToRgba(prim, alpha)); grad.addColorStop(1, hexToRgba(prim, 0));
+      ctx.beginPath(); ctx.arc(mouseX, mouseY, r, 0, Math.PI * 2); ctx.fillStyle = grad; ctx.fill();
     }
 
     function loop() {
@@ -378,7 +483,7 @@ const BubbleGameView = ({ result, isConnected }) => {
       drawBackground(); drawCursorGlow();
       spawnTimer++;
       if (spawnTimer >= spawnRate()) { spawnBubble(); spawnTimer = 0; }
-      if (level > 3 && spawnTimer === Math.floor(spawnRate()/2)) spawnBubble();
+      if (level > 3 && spawnTimer === Math.floor(spawnRate() / 2)) spawnBubble();
       drawBubbles(); drawParticles(); checkPops();
     }
 
@@ -386,6 +491,12 @@ const BubbleGameView = ({ result, isConnected }) => {
     function loadSessionData() {
       try { return JSON.parse(localStorage.getItem('nb_sessions') || '[]'); } catch { return []; }
     }
+
+    container.clearHistoryHandler = () => {
+      localStorage.removeItem('nb_sessions');
+      renderSessionHistory();
+    };
+
     function saveSession(sessionData) {
       const sessions = loadSessionData();
       sessions.unshift(sessionData);
@@ -396,88 +507,88 @@ const BubbleGameView = ({ result, isConnected }) => {
       const sessions = loadSessionData();
       const container2 = $('session-history');
       if (!container2) return;
-      if (sessions.length === 0) { container2.innerHTML = '<div class="no-sessions">No sessions yet</div>'; return; }
+      if (sessions.length === 0) { container2.innerHTML = '<div class="text-[10px] text-[var(--muted)]/50 text-center tracking-[2px] py-4">NO SESSIONS YET</div>'; return; }
       container2.innerHTML = sessions.map((s, i) => `
-        <div class="session-entry">
-          <div class="se-top"><span class="se-num">#${i+1}</span><span class="se-score">${s.score.toLocaleString()}</span></div>
-          <div class="se-bottom">
-            <span>Lvl ${s.level}</span>
-            <span>${s.accuracy}%</span>
-            <span>${s.time}s</span>
-            <span class="se-mode">${s.mode}</span>
+        <div class="bg-[var(--primary)]/5 border border-[var(--primary)]/10 rounded-lg p-2.5 mb-2 hover:bg-[var(--primary)]/10 transition-colors">
+          <div class="flex justify-between items-baseline mb-1">
+            <span class="text-[9px] text-[var(--teal)] opacity-60 tracking-wider">#${i + 1}</span>
+            <span class="font-display text-[15px] font-bold text-white shadow-glow">${s.score.toLocaleString()}</span>
+          </div>
+          <div class="flex gap-2 text-[8px] text-[var(--primary)]/60 tracking-widest flex-wrap uppercase font-bold">
+            <span>LVL ${s.level}</span>
+            <span>ACC ${s.accuracy}%</span>
+            <span>${s.time}S</span>
+            <span class="${s.mode === 'MANUAL' ? 'text-amber-500' : 'text-[var(--primary)]'}">${s.mode}</span>
           </div>
         </div>
       `).join('');
     }
 
     // ── GAME CONTROL ──────────────────────────────
-    container.startGameHandler = (mMode = false) => {
-      mouseMode = mMode; peakBands = [0,0,0,0,0];
+    container.startGameHandler = () => {
+      peakBands = [0, 0, 0, 0, 0];
       score = 0; level = 1; lives = 3; combo = 0; maxCombo = 0;
       bubblesPopped = 0; bubblesMissed = 0; bubbles = []; particles = []; waveHistory = [];
       spawnTimer = 0; sessionStart = Date.now();
-      const sc = $('score-val'); if(sc) sc.textContent = '0';
-      const lv = $('level-val'); if(lv) lv.textContent = '01';
-      const cd = $('combo-display'); if(cd) cd.textContent = '';
-      ['pk-delta','pk-theta','pk-alpha','pk-beta','pk-gamma'].forEach(id => { const el = $(id); if(el) el.textContent = '0%'; });
+      const sc = $('score-val'); if (sc) sc.textContent = '0';
+      const lv = $('level-val'); if (lv) lv.textContent = '01';
+      const cd = $('combo-display'); if (cd) cd.textContent = '';
+      ['pk-delta', 'pk-theta', 'pk-alpha', 'pk-beta', 'pk-gamma'].forEach(id => { const el = $(id); if (el) el.textContent = '0%'; });
       buildLivesUI();
-      $('startScreen').classList.add('hidden');
-      $('gameOverScreen').classList.add('hidden');
+
+      setShowGameOver(false);
+
       initStars(); gameRunning = true;
-      if (!simInterval && !fetchInterval) startSimulation();
+      if (!fetchInterval && isConnectedRef.current) {
+        startLiveStream();
+      }
       loop();
-      // Update mode indicator
-      const mi = $('mode-indicator');
-      if (mi) mi.textContent = mMode ? 'MANUAL' : 'SENSOR';
-      const mb = $('mode-badge');
-      if (mb) mb.className = 'mode-badge ' + (mMode ? 'mode-manual' : 'mode-sensor');
+      setGlobalRunning(true);
     };
 
-    container.switchModeHandler = () => {
-      if (gameRunning) {
-        // Switch in-game
-        mouseMode = !mouseMode;
-        const mi = $('mode-indicator'); if (mi) mi.textContent = mouseMode ? 'MANUAL' : 'SENSOR';
-        const mb = $('mode-badge'); if (mb) mb.className = 'mode-badge ' + (mouseMode ? 'mode-manual' : 'mode-sensor');
-      }
+    container.stopGameHandler = () => {
+      endGame();
+    };
+
+    container.onConnectionChange = (connected) => {
+      if (connected) { if (gameRunning && !fetchInterval) startLiveStream(); else if (!gameRunning) startLiveStream(); }
+      else stopStream();
     };
 
     function endGame() {
       gameRunning = false;
+      setGlobalRunning(false);
       if (animId) cancelAnimationFrame(animId);
       const elapsed = Math.round((Date.now() - sessionStart) / 1000);
       const acc = bubblesPopped + bubblesMissed > 0 ? Math.round(bubblesPopped / (bubblesPopped + bubblesMissed) * 100) : 0;
-      const sg = $('stat-grid');
-      if (sg) sg.innerHTML = `
-        <div class="stat-cell"><div class="s-label">SCORE</div><div class="s-val">${score.toLocaleString()}</div></div>
-        <div class="stat-cell"><div class="s-label">LEVEL</div><div class="s-val">${level}</div></div>
-        <div class="stat-cell"><div class="s-label">MAX COMBO</div><div class="s-val">${maxCombo}</div></div>
-        <div class="stat-cell"><div class="s-label">POPPED</div><div class="s-val">${bubblesPopped}</div></div>
-        <div class="stat-cell"><div class="s-label">ACCURACY</div><div class="s-val">${acc}%</div></div>
-        <div class="stat-cell"><div class="s-label">TIME</div><div class="s-val">${elapsed}s</div></div>
-      `;
-      $('gameOverScreen').classList.remove('hidden');
-      saveSession({ score, level, accuracy: acc, time: elapsed, mode: mouseMode ? 'MANUAL' : 'SENSOR' });
+      const statGrid = $('stat-grid');
+      if (statGrid) {
+        statGrid.innerHTML = `
+            <div class="bg-[var(--primary)]/5 border border-[var(--primary)]/20 rounded-lg p-3 text-center"><div class="text-[9px] tracking-[3px] text-[var(--teal)] opacity-70 mb-1">SCORE</div><div class="font-display text-xl font-bold text-white">${score.toLocaleString()}</div></div>
+            <div class="bg-[var(--primary)]/5 border border-[var(--primary)]/20 rounded-lg p-3 text-center"><div class="text-[9px] tracking-[3px] text-[var(--teal)] opacity-70 mb-1">LEVEL</div><div class="font-display text-xl font-bold text-white">${level}</div></div>
+            <div class="bg-[var(--primary)]/5 border border-[var(--primary)]/20 rounded-lg p-3 text-center"><div class="text-[9px] tracking-[3px] text-[var(--teal)] opacity-70 mb-1">COMBO</div><div class="font-display text-xl font-bold text-white">${maxCombo}</div></div>
+            <div class="bg-[var(--primary)]/5 border border-[var(--primary)]/20 rounded-lg p-3 text-center"><div class="text-[9px] tracking-[3px] text-[var(--teal)] opacity-70 mb-1">POPPED</div><div class="font-display text-xl font-bold text-white">${bubblesPopped}</div></div>
+            <div class="bg-[var(--primary)]/5 border border-[var(--primary)]/20 rounded-lg p-3 text-center"><div class="text-[9px] tracking-[3px] text-[var(--teal)] opacity-70 mb-1">ACCURACY</div><div class="font-display text-xl font-bold text-white">${acc}%</div></div>
+            <div class="bg-[var(--primary)]/5 border border-[var(--primary)]/20 rounded-lg p-3 text-center"><div class="text-[9px] tracking-[3px] text-[var(--teal)] opacity-70 mb-1">TIME</div><div class="font-display text-xl font-bold text-white">${elapsed}s</div></div>
+          `;
+      }
+      setShowGameOver(true);
+
+      const isManualMode = mouseModeRef.current;
+      saveSession({ score, level, accuracy: acc, time: elapsed, mode: isManualMode ? 'MANUAL' : 'SENSOR' });
       renderSessionHistory();
     }
 
-    const connBtn = $('conn-btn');
-    if (connBtn) { connBtn.onclick = () => { if (eegMode === 'simulate') startLiveStream(); else startSimulation(); }; }
+    // Removed manual DOM tag handlers
 
-    $$('.ch-tag').forEach(tag => {
-      tag.onclick = (e) => {
-        $$('.ch-tag').forEach(t => t.classList.remove('active'));
-        e.target.classList.add('active');
-        activeChannel = e.target.dataset.ch;
-      };
-    });
-
-    startSimulation(); initStars(); renderSessionHistory();
+    initStars(); renderSessionHistory();
+    if (isConnectedRef.current) startLiveStream(); else stopStream();
+    // initial paint draw
+    drawBackground();
 
     return () => {
       window.removeEventListener('resize', resize);
       window.removeEventListener('mousemove', mouseMoveHandler);
-      if (simInterval) clearInterval(simInterval);
       if (fetchInterval) clearInterval(fetchInterval);
       if (animId) cancelAnimationFrame(animId);
       gameRunning = false;
@@ -485,139 +596,82 @@ const BubbleGameView = ({ result, isConnected }) => {
   }, []);
 
   return (
-    <div className="bubble-layout" ref={containerRef}>
+    <div className="w-full h-full flex bg-[var(--bg)] overflow-hidden relative select-none" ref={containerRef}>
 
-      {/* ── GAME CANVAS AREA ── */}
-      <div className="bubble-canvas-wrap" ref={canvasWrapRef}>
-        <canvas id="gameCanvas"></canvas>
+      {/* ── GAME CANVAS MAIN AREA ── */}
+      <div className="flex-grow flex flex-col items-center justify-center relative transition-all duration-300">
+        <div className="absolute inset-0 bubble-canvas-wrap" ref={canvasWrapRef}>
+          <canvas id="gameCanvas"></canvas>
 
-        {/* Custom cursor */}
-        <svg id="cursor" width="60" height="60" viewBox="0 0 60 60">
-          <defs>
-            <radialGradient id="cg" cx="50%" cy="50%" r="50%">
-              <stop offset="0%" stopColor="#00f5ff" stopOpacity=".9"/>
-              <stop offset="60%" stopColor="#00f5ff" stopOpacity=".15"/>
-              <stop offset="100%" stopColor="#00f5ff" stopOpacity="0"/>
-            </radialGradient>
-          </defs>
-          <circle id="cursorAura" cx="30" cy="30" r="26" fill="url(#cg)" opacity=".6"/>
-          <circle cx="30" cy="30" r="4" fill="#fff" opacity=".9"/>
-          <circle cx="30" cy="30" r="2" fill="#00f5ff"/>
-        </svg>
+          {/* Custom Cursor Aura */}
+          <svg id="cursor" className="absolute pointer-events-none z-[100] transition-[width,height] duration-75" width="60" height="60" viewBox="0 0 60 60">
+            <defs>
+              <radialGradient id="cg" cx="50%" cy="50%" r="50%">
+                <stop offset="0%" stopColor="#00f5ff" stopOpacity=".9" />
+                <stop offset="60%" stopColor="#00f5ff" stopOpacity=".15" />
+                <stop offset="100%" stopColor="#00f5ff" stopOpacity="0" />
+              </radialGradient>
+            </defs>
+            <circle id="cursorAura" cx="30" cy="30" r="26" fill="url(#cg)" opacity=".8" />
+          </svg>
 
-        {/* HUDs over canvas */}
-        <div className="hud" id="hud-score">
-          <div className="label">SCORE</div>
-          <div className="value" id="score-val">0</div>
-        </div>
-        <div className="hud" id="hud-level">
-          <div className="label">LEVEL</div>
-          <div className="value" id="level-val">01</div>
-          <div id="combo-display"></div>
-        </div>
-        <div className="hud" id="hud-lives"></div>
+          {/* Overlays Canvas */}
+          <div className="pointer-events-none absolute inset-0 bg-[repeating-linear-gradient(0deg,transparent,transparent_2px,rgba(0,0,0,0.06)_2px,rgba(0,0,0,0.06)_4px)] z-[300]"></div>
 
-        {/* Bottom EEG panel */}
-        <div className="hud" id="hud-eeg">
-          <div className="eeg-panel">
-            <div className="eeg-header">
-              <span className="eeg-title">EEG · FRONTAL SIGNAL</span>
-              <div className="connection-indicator" id="conn-btn">
-                <div className="dot simulating" id="conn-dot"></div>
-                <span id="conn-label">SIMULATE</span>
+          {/* Floating Top HUDs */}
+          <div className="absolute top-6 left-6 z-50 pointer-events-none flex flex-col items-start">
+            <span className="font-display text-[10px] tracking-widest text-[var(--primary)] opacity-70">SCORE</span>
+            <span id="score-val" className="font-display text-4xl font-black text-white drop-shadow-[0_0_16px_var(--primary)]">0</span>
+          </div>
+
+          <div className="absolute top-6 right-6 z-50 pointer-events-none flex flex-col items-end">
+            <span className="font-display text-[10px] tracking-widest text-[var(--primary)] opacity-70">LEVEL</span>
+            <span id="level-val" className="font-display text-3xl font-bold text-[var(--graph-line-1)] drop-shadow-[0_0_12px_var(--graph-line-1)]">01</span>
+            <span id="combo-display" className="font-display text-[13px] text-amber-500 mt-1 drop-shadow-md min-h-[20px]"></span>
+          </div>
+
+          <div id="hud-lives" className="absolute top-7 left-1/2 -translate-x-1/2 z-50 flex gap-2"></div>
+
+          {/* Bottom HUD - Floating Panel */}
+          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-50 pointer-events-auto rounded-xl bg-[var(--surface)]/80 border border-[var(--primary)]/20 p-3 shadow-2xl backdrop-blur-md w-[min(560px,94%)]">
+            <div className="flex justify-between items-center mb-2">
+              <span className="font-display text-[9px] tracking-[3px] text-[var(--primary)] opacity-90 uppercase">EEG F1/F2 Signals (Ear Ref)</span>
+              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full border border-[var(--primary)]/30 text-[9px] font-bold tracking-widest cursor-pointer hover:bg-[var(--primary)]/10 transition-colors">
+                <span id="conn-indicator" className="w-2 h-2 rounded-full bg-gray-500"></span>
+                <span id="conn-label" className="text-[var(--text)] uppercase">Waiting</span>
               </div>
             </div>
-            <canvas id="waveCanvas" width="560" height="44"></canvas>
-            <div className="signal-track"><div className="signal-fill" id="signal-fill"></div></div>
-            <div className="signal-meta">
-              <span>ACTIVITY MAP</span>
-              <span>SIGNAL <span className="signal-value" id="signal-val">0.00</span></span>
-              <span>FOCUS <span className="signal-value" id="focus-val">0%</span></span>
+            <canvas id="waveCanvas" className="w-full h-10 rounded bg-black/30 mb-2"></canvas>
+            <div className="h-1.5 bg-[var(--primary)]/10 rounded-full overflow-hidden mb-1.5">
+              <div id="signal-fill" className="h-full bg-gradient-to-r from-[var(--teal)] to-[var(--primary)] shadow-[0_0_10px_var(--primary)] w-0 transition-all duration-100"></div>
             </div>
-            <div className="channel-row" style={{marginTop:'10px'}}>
-              <span className="ch-tag active" data-ch="attention">ATTN</span>
-              <span className="ch-tag" data-ch="alpha">ALPHA</span>
-              <span className="ch-tag" data-ch="theta">THETA</span>
-              <span className="ch-tag" data-ch="beta">BETA</span>
+            <div className="flex justify-between text-[9px] text-[var(--primary)]/60 font-bold tracking-widest uppercase">
+              <span>Activity Map</span>
+              <span>Signal <span id="signal-val" className="text-[var(--primary)] font-black ml-1">0.00</span></span>
+              <span>Focus <span id="focus-val" className="text-[var(--primary)] font-black ml-1">0%</span></span>
             </div>
-          </div>
-        </div>
-
-        {/* Overlays */}
-        <div className="overlay" id="startScreen">
-          <div className="overlay-title">NEURO<br/>BUBBLE</div>
-          <div className="overlay-sub">FOCUS YOUR FRONTAL CORTEX · POP THE BUBBLES</div>
-          <div style={{fontSize:'11px',color:'var(--glow-teal)',opacity:'.7',marginBottom:'28px',maxWidth:'360px',textAlign:'center',lineHeight:'1.8'}}>
-            HIGH FOCUS → larger cursor aura → pop more bubbles at once.
-          </div>
-          <button className="big-btn" onClick={() => containerRef.current?.startGameHandler(false)}>SENSOR MODE</button>
-          <button className="big-btn" onClick={() => containerRef.current?.startGameHandler(true)} style={{borderColor:'var(--glow-amber)',color:'var(--glow-amber)'}}>MANUAL (MOUSE) MODE</button>
-        </div>
-
-        <div className="overlay hidden" id="gameOverScreen">
-          <div className="overlay-title">SESSION<br/>ENDED</div>
-          <div className="stat-grid" id="stat-grid"></div>
-          <button className="big-btn" onClick={() => containerRef.current?.startGameHandler(false)}>NEW SESSION</button>
-        </div>
-      </div>
-
-      {/* ── RIGHT SIDEBAR ── */}
-      <div className="bubble-sidebar">
-
-        {/* Mode Panel */}
-        <div className="sb-section">
-          <div className="sb-title">GAME MODE</div>
-          <div className="mode-badge mode-sensor" id="mode-badge">
-            <span id="mode-indicator">SENSOR</span>
-          </div>
-          <div className="mode-buttons">
-            <button className="sb-btn" onClick={() => containerRef.current?.startGameHandler(false)}>⚡ SENSOR</button>
-            <button className="sb-btn sb-btn-alt" onClick={() => containerRef.current?.startGameHandler(true)}>🖱 MANUAL</button>
-          </div>
-          <button className="sb-btn sb-btn-switch" onClick={() => containerRef.current?.switchModeHandler()}>↔ SWITCH IN-GAME</button>
-        </div>
-
-        {/* Live Band Powers */}
-        <div className="sb-section">
-          <div className="sb-title">EEG BANDS  <span style={{fontSize:'8px',opacity:.5}}>(LIVE · PEAK)</span></div>
-          {[
-            { id: 'delta', label: 'δ DELTA',  cls: 'bf-delta' },
-            { id: 'theta', label: 'θ THETA',  cls: 'bf-theta' },
-            { id: 'alpha', label: 'α ALPHA',  cls: 'bf-alpha' },
-            { id: 'beta',  label: 'β BETA',   cls: 'bf-beta'  },
-            { id: 'gamma', label: 'γ GAMMA',  cls: 'bf-gamma' },
-          ].map(b => (
-            <div className="band-row" key={b.id}>
-              <div className="band-label">{b.label}</div>
-              <div className="band-track"><div className={`band-fill ${b.cls}`} id={`bf-${b.id}`}></div></div>
-              <div className="band-val" id={`bv-${b.id}`}>0%</div>
-              <div className="band-peak" id={`pk-${b.id}`}>0%</div>
-            </div>
-          ))}
-
-          {/* Attention ring */}
-          <div className="attn-ring-wrap">
-            <svg viewBox="0 0 80 80" className="attn-svg">
-              <circle cx="40" cy="40" r="32" fill="none" stroke="rgba(0,245,255,0.1)" strokeWidth="7"/>
-              <circle id="bd-attn-fill" cx="40" cy="40" r="32" fill="none" stroke="var(--glow-cyan)" strokeWidth="7"
-                strokeLinecap="round" strokeDasharray="201" strokeDashoffset="201"
-                style={{transform:'rotate(-90deg)',transformOrigin:'40px 40px',transition:'stroke-dashoffset 0.3s'}}/>
-            </svg>
-            <div className="attn-center">
-              <div id="bd-attn-val" className="attn-val">0%</div>
-              <div className="attn-label">FOCUS</div>
+            <div className="flex gap-2 flex-wrap mt-2">
+              {['Fp1', 'Oz', 'attention', 'alpha', 'theta', 'beta'].map(ch => (
+                <span 
+                  key={ch} 
+                  className={`ch-tag text-[9px] tracking-widest px-2 py-1 border border-[var(--primary)]/20 rounded cursor-pointer transition-colors select-none ${ch === activeChannel ? 'active bg-[var(--primary)]/15 border-[var(--primary)] text-white' : 'hover:bg-[var(--primary)]/5'}`} 
+                  onClick={() => setActiveChannel(ch)}
+                >
+                  {ch === 'attention' ? 'ATTN' : ch.toUpperCase()}
+                </span>
+              ))}
             </div>
           </div>
-        </div>
 
-        {/* Session History */}
-        <div className="sb-section sb-section-grow">
-          <div className="sb-title">SESSION HISTORY</div>
-          <div id="session-history" className="session-history">
-            <div className="no-sessions">No sessions yet</div>
+          {/* Game Over Screen */}
+          <div id="gameOverScreen" className={`${showGameOver ? 'flex' : 'hidden'} absolute inset-0 z-[200] flex-col items-center justify-center bg-[var(--bg)]/90 backdrop-blur-xl pointer-events-auto`}>
+            <h1 className="font-display text-5xl md:text-6xl font-black tracking-widest text-white drop-shadow-[0_0_30px_var(--primary)] mb-8 text-center leading-tight">SESSION<br />ENDED</h1>
+            <div id="stat-grid" className="grid grid-cols-3 gap-3 mb-8 w-[min(460px,94%)]"></div>
+            <button onClick={() => containerRef.current?.startGameHandler()} className="font-display text-xs tracking-widest px-10 py-3 rounded-full border border-[var(--primary)] bg-[var(--primary)]/10 text-white hover:bg-[var(--primary)]/20 shadow-[0_0_15px_rgba(var(--primary-rgb),0.2)] transition-all">
+              NEW SESSION
+            </button>
           </div>
         </div>
-
       </div>
     </div>
   );

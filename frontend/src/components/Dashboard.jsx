@@ -48,11 +48,10 @@ export default function Dashboard() {
   const { settings, updateDeepSettings } = useSettings();
 
   // Unified WebSocket state from Context
-  const runtimeConnection = getRuntimeConnection();
-  const wsUrl = settings.general.wsUrl || runtimeConnection.wsUrl;
-  const apiUrl = settings.general.apiUrl || deriveApiUrlFromWs(wsUrl) || runtimeConnection.apiUrl;
+  const wsUrl = settings.general.wsUrl || '';
 
-  const [localWs, setLocalWs] = useState(wsUrl)
+  // These are now just helpers for the Settings View, not the source of truth for the hook
+  const [localWs, setLocalWs] = useState('')
   const [ngrokWs, setNgrokWs] = useState('wss://squelchingly-thriftier-cecile.ngrok-free.dev')
 
   const { status, lastMessage, lastConfig, lastEvent, latency, connect, disconnect, sendMessage, currentUrl, serverStatus } = useWebSocket(wsUrl)

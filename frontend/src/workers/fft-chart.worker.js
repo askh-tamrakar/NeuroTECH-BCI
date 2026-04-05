@@ -145,18 +145,28 @@ let config = {
     themeGridColor: 'rgba(255, 255, 255, 0.1)'
 };
 
+// Optimization State
+let lastTsHead = 0;
+let lastFFTTime = 0;
+const THROTTLE_FFT_MS = 50; // 20Hz update rate
+
 const broadcast = new BroadcastChannel('bci-data-stream');
 broadcast.onmessage = (e) => {
     if (config.disabled || e.data.type !== 'DATA_BATCH' || channelIndex === -1) return;
 
+    const samples = e.data.samples || [];
+    if (samples.length === 0) return;
+
     const newPoints = [];
-    for (const sample of e.data.samples || []) {
+    for (const sample of samples) {
         if (!sample.channels) continue;
         const chObj = sample.channels[channelIndex] || sample.channels[`ch${channelIndex}`] || sample.channels[String(channelIndex)];
         if (chObj === undefined) continue;
+        
         const value = typeof chObj === 'number'
             ? chObj
             : (chObj.filtered ?? chObj.value ?? 0);
+            
         if (Number.isFinite(value)) {
             newPoints.push({ time: sample.timestamp, value });
         }
@@ -230,11 +240,24 @@ function init(payload) {
 
 function addData(newPoints) {
     if (!Array.isArray(newPoints) || newPoints.length === 0) return;
-    points.push(...newPoints);
+    
+    // JITTER FIX: Sort and filter
+    newPoints.sort((a, b) => a.time - b.time);
+    const filtered = newPoints.filter(p => p.time > lastTsHead);
+    if (filtered.length === 0) return;
+    
+    lastTsHead = filtered[filtered.length - 1].time;
+    points.push(...filtered);
+    
     if (points.length > MAX_POINTS) {
         points = points.slice(points.length - MAX_POINTS);
     }
-    needsRecalculate = true;
+    
+    // Trigger recalculate only if enough time has passed (Throttling)
+    const now = performance.now();
+    if (now - lastFFTTime > THROTTLE_FFT_MS) {
+        needsRecalculate = true;
+    }
 }
 
 function handleGetSamples(payload, idPromise) {
@@ -281,6 +304,9 @@ function draw() {
     }
 
     if (needsRecalculate || lastCalculatedSpectrum.length === 0) {
+        const nowFFT = performance.now();
+        lastFFTTime = nowFFT;
+        
         let spectrum = getPowerSpectrum(points.map((point) => point.value), sampleRate)
             .filter((item) => item.freq >= freqMin && item.freq <= freqMax);
 

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Activity, BrainCircuit, Play, Square, Settings, Cpu, Zap, RadioReceiver } from 'lucide-react';
 import { soundHandler } from '../../handlers/SoundHandler';
 import { CalibrationApi } from '../../services/calibrationApi';
+import { buildApiUrl } from '../../utils/runtimeConnection';
 
 export default function ServoClawView({ wsEvent, isConnected }) {
     // -------------------------------------------------------------
@@ -19,16 +20,15 @@ export default function ServoClawView({ wsEvent, isConnected }) {
     // Data for models and config
     const [models, setModels] = useState({ eog: [], emg: [] });
     const [eegConfig, setEegConfig] = useState({ rest_threshold: 0.6, ratio_threshold: 1.2 });
-    const API_BASE_URL = buildApiUrl('');
 
     // Fetch initial models and config
     React.useEffect(() => {
         const fetchData = async () => {
             try {
                 const [eogRes, emgRes, configRes] = await Promise.all([
-                    fetch(`${API_BASE_URL}/api/models/eog`),
-                    fetch(`${API_BASE_URL}/api/models/emg`),
-                    fetch(`${API_BASE_URL}/api/config`)
+                    fetch(buildApiUrl('/api/models/eog')),
+                    fetch(buildApiUrl('/api/models/emg')),
+                    fetch(buildApiUrl('/api/config'))
                 ]);
 
                 const eogModels = await eogRes.json();
@@ -51,12 +51,12 @@ export default function ServoClawView({ wsEvent, isConnected }) {
             }
         };
         fetchData();
-    }, [API_BASE_URL]);
+    }, []);
 
     // Push Config to Backend for Servo.enabled and optionally thresholds/models
     const updateBackendConfig = React.useCallback(async (updates) => {
         try {
-            const res = await fetch(`${API_BASE_URL}/api/config`);
+            const res = await fetch(buildApiUrl('/api/config'));
             if (!res.ok) return;
             const config = await res.json();
 
@@ -93,7 +93,7 @@ export default function ServoClawView({ wsEvent, isConnected }) {
             }
 
             if (changed) {
-                await fetch(`${API_BASE_URL}/api/config`, {
+                await fetch(buildApiUrl('/api/config'), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(config)
@@ -102,7 +102,7 @@ export default function ServoClawView({ wsEvent, isConnected }) {
         } catch (err) {
             console.error("Failed to update backend config:", err);
         }
-    }, [API_BASE_URL]);
+    }, []);
 
     // Ensure physical servo is disabled when navigating away from this view
     React.useEffect(() => {
