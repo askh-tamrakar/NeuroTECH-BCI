@@ -58,16 +58,15 @@ const MeditationSidebar = ({
             <div className="shrink-0 mb-6">
                 <button 
                     onClick={onToggleSession}
-                    disabled={isSessionRunning}
                     className={`w-full py-3.5 rounded-2xl text-sm font-black uppercase tracking-widest transition-all flex items-center justify-center gap-3 border-2 ${
                         isSessionRunning 
-                        ? 'bg-[var(--primary)]/20 border-[var(--primary)]/50 text-[var(--primary)] cursor-default' 
+                        ? 'bg-red-500/10 border-red-500/50 text-red-500 hover:bg-red-500/20 shadow-[0_0_15px_rgba(239,68,68,0.2)]' 
                         : 'bg-[var(--primary)]/10 border-[var(--primary)]/30 text-[var(--primary)] hover:bg-[var(--primary)]/20 shadow-glow'
                     } ${isCollapsed ? 'p-0 px-0' : ''}`}
-                    title={isCollapsed ? (isSessionRunning ? "Session Active" : "Start Session") : ""}
+                    title={isCollapsed ? (isSessionRunning ? "Stop Session" : "Start Session") : ""}
                 >
-                    {isSessionRunning ? <CheckSquare size={20} /> : <Play size={20} />}
-                    {!isCollapsed && (isSessionRunning ? "SESSION STARTED" : "NEW SESSION")}
+                    {isSessionRunning ? <Square size={20} /> : <Play size={20} />}
+                    {!isCollapsed && (isSessionRunning ? "STOP SESSION" : "NEW SESSION")}
                 </button>
             </div>
 
@@ -218,6 +217,38 @@ const MeditationSidebar = ({
                     )}
                 </div>
             </div>
+
+            {/* Session History Rail */}
+            {!isCollapsed && stats?.sessions?.length > 0 && (
+                <div className="mt-8 flex flex-col">
+                    <div className="flex items-center gap-2 px-2 mb-4">
+                        <History size={14} className="text-[var(--muted)]" />
+                        <h4 className="text-[10px] font-black text-[var(--muted)] uppercase tracking-[3px]">
+                            Session History
+                        </h4>
+                    </div>
+                    <div className="flex flex-col gap-2 max-h-[220px] overflow-y-auto no-scrollbar px-1">
+                        {stats.sessions.map((s, i) => (
+                            <div key={i} className="bg-[var(--primary)]/5 border border-[var(--primary)]/10 rounded-xl p-3 flex flex-col gap-1 hover:bg-[var(--primary)]/10 transition-colors">
+                                <div className="flex justify-between items-center mb-1">
+                                    <span className="text-[9px] text-[var(--teal)] opacity-60 font-black tracking-widest">SESSION #{stats.sessions.length - i}</span>
+                                    <span className={`text-[8px] font-black px-2 py-0.5 rounded-full border tracking-widest ${s.mode === 'LIVE' ? 'text-[var(--primary)] border-[var(--primary)]/30 bg-[var(--primary)]/10' : 'text-amber-500 border-amber-500/30 bg-amber-500/10'}`}>{s.mode}</span>
+                                </div>
+                                <div className="flex justify-between items-center font-mono py-1">
+                                    <div className="flex flex-col">
+                                        <span className="text-[8px] text-[var(--muted)] uppercase font-bold tracking-widest mb-0.5">Time</span>
+                                        <span className="text-sm font-black text-white">{s.duration}</span>
+                                    </div>
+                                    <div className="flex flex-col items-end">
+                                        <span className="text-[8px] text-[var(--muted)] uppercase font-bold tracking-widest mb-0.5">Calm</span>
+                                        <span className="text-sm font-black text-[var(--glow-green)]">{s.avgCalm}%</span>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
 
             {/* Wisdom Rail - Hidden in collapsed */}
             {!isCollapsed && (

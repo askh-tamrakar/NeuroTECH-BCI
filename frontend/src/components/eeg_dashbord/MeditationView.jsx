@@ -341,13 +341,18 @@ const MeditationView = ({ result, currentView, onNavigate }) => {
 
       const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, R);
       grad.addColorStop(0, hex2rgba(line1, 0.40));
-      grad.addColorStop(1, hex2rgba(line1, 0.06));
+      grad.addColorStop(1, hex2rgba(line1, 0.05));
       ctx.fillStyle = grad;
       ctx.fill();
 
-      ctx.strokeStyle = line1;
-      ctx.lineWidth = 1.5;
-      ctx.shadowBlur = 10; ctx.shadowColor = line1;
+      // Create a nice gradient stroke for the radar polygon based on theme
+      const gradStroke = ctx.createLinearGradient(cx - R, cy - R, cx + R, cy + R);
+      gradStroke.addColorStop(0, line1);
+      gradStroke.addColorStop(1, tc('--accent', tc('--primary')));
+
+      ctx.strokeStyle = gradStroke;
+      ctx.lineWidth = 2.0;
+      ctx.shadowBlur = 12; ctx.shadowColor = line1;
       ctx.stroke();
       ctx.shadowBlur = 0;
 
@@ -371,12 +376,14 @@ const MeditationView = ({ result, currentView, onNavigate }) => {
     }
 
     /* ── WAVE DRAW ─────────────────────────────── */
-    function drawWave(ctx, hist, color) {
+    function drawWave(ctx, hist, color1, color2) {
       if (!ctx || !ctx.canvas) return;
       const W = ctx.canvas.width, H = ctx.canvas.height;
       if (!W || !H || hist.length < 2) { ctx.clearRect(0, 0, W, H); return; }
       ctx.clearRect(0, 0, W, H);
       const step = W / (WAVE_LEN - 1);
+      
+      const c2 = color2 || color1;
 
       // Grid lines (horizontal)
       const gridCol = tc('--graph-grid', 'rgba(255,255,255,0.05)');
@@ -387,9 +394,15 @@ const MeditationView = ({ result, currentView, onNavigate }) => {
         ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
       }
 
+      // Beautiful horizontal gradient sweeping across the wave based on theme
+      const waveGrad = ctx.createLinearGradient(0, 0, W, 0);
+      waveGrad.addColorStop(0, hex2rgba(color1, 0.3));
+      waveGrad.addColorStop(0.4, color1);
+      waveGrad.addColorStop(1, c2);
+
       ctx.beginPath();
-      ctx.strokeStyle = color; ctx.lineWidth = 1.5;
-      ctx.shadowColor = color; ctx.shadowBlur = 6;
+      ctx.strokeStyle = waveGrad; ctx.lineWidth = 2.0;
+      ctx.shadowColor = c2; ctx.shadowBlur = 10;
       for (let i = 0; i < hist.length; i++) {
         const x = (i - (WAVE_LEN - hist.length)) * step;
         const y = H * 0.92 - hist[i] * H * 0.8;
@@ -406,8 +419,8 @@ const MeditationView = ({ result, currentView, onNavigate }) => {
       }
       ctx.lineTo(W, H); ctx.lineTo(0, H); ctx.closePath();
       const grad = ctx.createLinearGradient(0, 0, 0, H);
-      grad.addColorStop(0, hex2rgba(color, 0.18));
-      grad.addColorStop(1, hex2rgba(color, 0));
+      grad.addColorStop(0, hex2rgba(color1, 0.18));
+      grad.addColorStop(1, hex2rgba(color1, 0));
       ctx.fillStyle = grad; ctx.fill();
       ctx.shadowBlur = 0;
     }
@@ -459,26 +472,72 @@ const MeditationView = ({ result, currentView, onNavigate }) => {
       if (fetchInterval) clearInterval(fetchInterval);
       fetchInterval = setInterval(() => {
         const res = resultRef.current;
-        if (res?.band_powers?.length >= 5) {
-          // Strictly target ch0 if multi-channel, or use provided powers
+        
+        let newBands = null;
+
+        // Support multiple backend output formats
+        // Sometimes `res` has a `features` object, sometimes `res` IS the features object
+        const features = res?.features || res?.output?.features || (res?.alpha_rel !== undefined ? res : null);
+        
+        if (features) {
+          // Attempt to map from "_rel" properties, fallback to capitalized names, fallback to 0
+          const fD = features.delta_rel ?? features.Delta ?? 0;
+          const fT = features.theta_rel ?? features.Theta ?? 0;
+          const fA = features.alpha_rel ?? features.Alpha ?? 0;
+          const fB = features.beta_rel ?? features.Beta ?? 0;
+          const fG = features.gamma_rel ?? features.Gamma ?? 0;
+          
+          // Some LSL setups send integer percentages instead of 0-1 floats, handle both
+          const multiplier = (fA > 1 || fB > 1) ? 1 : 100;
+
+          newBands = [
+            Math.round(fD * multiplier),
+            Math.round(fT * multiplier),
+            Math.round(fA * multiplier),
+            Math.round(fB * multiplier),
+            Math.round(fG * multiplier),
+          ];
+        } else if (res?.band_powers?.length >= 5) {
           const bp = res.band_powers;
           const sum = bp.reduce((a, b) => a + b, 0) || 1;
-          rawBands = bp.map(v => Math.round((v / sum) * 100));
-          
+          newBands = bp.map(v => Math.round((v / sum) * 100));
+        } else if (Array.isArray(res) && res.length >= 5) {
+          // Absolute fallback if backend streams array directly
+          const sum = res.reduce((a, b) => a + b, 0) || 1;
+          newBands = res.map(v => Math.round((v / sum) * 100));
+        }
+
+        let stressBase = 10;
+        if (newBands) {
+          rawBands = newBands;
           // Logic for Fp1 Focused Calm
           const relA = rawBands[2] / 100, relT = rawBands[1] / 100, relB = rawBands[3] / 100;
           const calculatedCalm = Math.max(0, Math.min(1, (relA + relT * 0.5) / (relB + 0.1) * 0.4));
           calmSignal = calculatedCalm;
+
+          // Biologically grounded Stress Logic (Beta vs Alpha ratio)
+          // Default rests around 15-20%, spikes only when Beta dominates Alpha/Theta
+          stressBase = Math.min(85, Math.max(5, (relB * 1.2) / (relA + 0.15) * 25));
         }
         
-        if (res?.meditation_score !== undefined) {
+        if (typeof res?.meditation_score === 'number' && res.meditation_score > 0) {
           calmSignal = Math.max(0, Math.min(1, res.meditation_score / 100));
         }
 
+        const focusScore = Math.round(calmSignal * 100);
+        const stressLevel = Math.round(stressBase + (Math.random() - 0.5) * 4);
+
         setLiveMetrics({ 
-          calm: Math.round(calmSignal * 100), 
-          focus: Math.round(calmSignal * 100) 
+          calm: focusScore, 
+          focus: focusScore 
         });
+
+        // Update DOM instantly for highly responsive visuals
+        const container = containerRef.current;
+        if (container) {
+          const fv = container.querySelector('#med-focus-val'); if (fv) fv.textContent = focusScore;
+          const sv = container.querySelector('#med-stress-val'); if (sv) sv.textContent = stressLevel;
+        }
 
         // Apply Audio Clarity Filter Frequency
         // Range: 500Hz (Muffled) to 20000Hz (Crystal Clear)
@@ -576,6 +635,21 @@ const MeditationView = ({ result, currentView, onNavigate }) => {
       if (expCalm) expCalm.textContent = (calmSignal * 100).toFixed(0) + '%';
       const expCalmPip = $('med-exp-calm-pip');
       if (expCalmPip) expCalmPip.style.width = (calmSignal * 100).toFixed(0) + '%';
+
+      // Dominant brainwave logic
+      const domEl = $('med-dominant-wave');
+      if (domEl) {
+        const waveLabels = ['Delta', 'Theta', 'Alpha', 'Beta', 'Gamma'];
+        const maxVal = Math.max(...rawBands);
+        const maxIdx = rawBands.indexOf(maxVal);
+        domEl.textContent = waveLabels[maxIdx] || '--';
+      }
+
+      const bandsDisplay = $('med-bands-display');
+      if (bandsDisplay) {
+        const symbols = ['Δ', 'θ', 'α', 'β', 'γ'];
+        bandsDisplay.textContent = rawBands.map((v, i) => `${symbols[i]} ${v}%`).join('   |   ');
+      }
     }
 
     /* ── MAIN LOOP ─────────────────────────────── */
@@ -599,8 +673,9 @@ const MeditationView = ({ result, currentView, onNavigate }) => {
       wave1Hist.push(fp1Sig + (Math.random() - 0.5) * 0.04);
       if (wave1Hist.length > WAVE_LEN) wave1Hist.shift();
 
+      // Mix up the waves visually using distinct theme variables
       drawRadar(ctxRadar, rawBands, true);
-      drawWave(wCtx1, wave1Hist, tc('--primary'));
+      drawWave(wCtx1, wave1Hist, tc('--graph-line-1', tc('--primary')), tc('--accent', tc('--teal', '#00ff9d')));
       updateDOM(phaseInfo);
     }
 
@@ -757,7 +832,7 @@ const MeditationView = ({ result, currentView, onNavigate }) => {
       }
     };
 
-    startSimulation();
+    startLiveStream();
     animId = requestAnimationFrame(loop);
 
     return () => {
@@ -785,7 +860,14 @@ const MeditationView = ({ result, currentView, onNavigate }) => {
                 <span className="med-section-title">Brain Activity</span>
                 <span className="med-section-sub"> · Electroencephalogram (EEG)</span>
               </div>
-              <div className="med-chart-label">Global EEG Power</div>
+              <div className="w-full flex justify-between items-center px-6 py-2 border-b border-[var(--border)] bg-black/10">
+                <span id="med-bands-display" className="text-[9px] font-mono font-bold tracking-widest text-[var(--primary)] uppercase drop-shadow-md" style={{ textShadow: '0 0 4px var(--primary)' }}>
+                  WAITING FOR DATA...
+                </span>
+                <span className="text-[9px] font-bold text-[var(--muted)] tracking-widest uppercase">
+                  Dominant: <strong id="med-dominant-wave" className="text-[var(--primary)] ml-1" style={{ textShadow: '0 0 5px var(--primary)' }}>--</strong>
+                </span>
+              </div>
               <canvas id="med-radar" className="med-radar-canvas" />
             </div>
 
@@ -829,7 +911,7 @@ const MeditationView = ({ result, currentView, onNavigate }) => {
           {/* Bottom EEG wave rows */}
           <div className="med-waves-col" style={{ height: '38%' }}>
             <div className="med-wave-row">
-              <div className="med-wave-label">SIGNAL · Fp1 SENSOR (1-CH)</div>
+              <div className="med-wave-label">LIVE EEG DATA · Fp1 (Ref: A1, A2)</div>
               <div className="med-calm-bar-wrap">
                 <div className="med-calm-track">
                   <div className="med-calm-fill" id="med-calm-fill" />
