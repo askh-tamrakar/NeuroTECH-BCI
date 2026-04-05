@@ -49,25 +49,49 @@ const MeditationView = ({ result, currentView, onNavigate }) => {
   const [wisdomIdx] = useState(() => Math.floor(Math.random() * WISDOM.length));
   const [showSidebar, setShowSidebar] = useState(true);
   const [sidebarTab, setSidebarTab] = useState('controls');
+  const [isSessionRunning, setIsSessionRunning] = useState(false);
+  const [selectedMin, setSelectedMin] = useState(5);
 
   /* ── MUSIC MIXER STATE ─────────────────────── */
   const [musicState, setMusicState] = useState(
     TRACKS.map(t => ({ id: t.id, label: t.label, active: false, vol: 0.8, category: t.category }))
   );
 
-  /* ── AUDIO REFS (one Audio object per track) ── */
+  /* ── AUDIO CONTEXT & FILTERS (Web Audio API) ── */
+  const audioCtxRef = useRef(null);
+  const filterRef = useRef(null);
   const audioRefs = useRef({});
+
   useEffect(() => {
-    // Create Audio objects once on mount — high initial volume
+    // 1. Initialize AudioContext and Filter
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    const ctx = new AudioContext();
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = 20000; // Start fully clear
+    filter.Q.value = 1;
+    filter.connect(ctx.destination);
+    
+    audioCtxRef.current = ctx;
+    filterRef.current = filter;
+
+    // 2. Create Audio objects and connect to Filter
     TRACKS.forEach(t => {
       const audio = new Audio(t.file);
       audio.loop = true;
       audio.volume = 0.8;
       audio.preload = 'auto';
+      audio.crossOrigin = 'anonymous';
+      
+      const source = ctx.createMediaElementSource(audio);
+      source.connect(filter);
+      
       audioRefs.current[t.id] = audio;
     });
+
     return () => {
       Object.values(audioRefs.current).forEach(a => { a.pause(); a.src = ''; });
+      if (ctx.state !== 'closed') ctx.close();
     };
   }, []);
 
@@ -100,9 +124,10 @@ const MeditationView = ({ result, currentView, onNavigate }) => {
   });
 
   const toggleMusic = useCallback((id) => {
-    // Play/pause synchronously HERE — this is the direct user-gesture context.
-    // Browsers block audio.play() inside useEffect (not a user gesture).
     const audio = audioRefs.current[id];
+    const ctx = audioCtxRef.current;
+    if (ctx && ctx.state === 'suspended') ctx.resume();
+
     setMusicState(prev => {
       const next = prev.map(m => m.id === id ? { ...m, active: !m.active } : m);
       const track = next.find(m => m.id === id);
@@ -116,6 +141,25 @@ const MeditationView = ({ result, currentView, onNavigate }) => {
       }
       return next;
     });
+  }, []);
+
+  /* ── SESSION HANDLERS (Fixing the unresponsive button) ── */
+  const onToggleSession = useCallback(() => {
+    if (containerRef.current?.sessionBtnHandler) {
+      containerRef.current.sessionBtnHandler();
+    }
+  }, []);
+
+  const onPresetChange = useCallback((min) => {
+    if (containerRef.current?.presetHandler) {
+      containerRef.current.presetHandler(min);
+    }
+  }, []);
+
+  const onToggleConn = useCallback(() => {
+    if (containerRef.current?.toggleConnHandler) {
+      containerRef.current.toggleConnHandler();
+    }
   }, []);
 
   const updateVol = useCallback((id, vol) => {
@@ -150,7 +194,6 @@ const MeditationView = ({ result, currentView, onNavigate }) => {
   useEffect(() => {
     setSidebarSlot(
       <MeditationSidebar
-        containerRef={containerRef}
         musicState={musicState}
         toggleMusic={toggleMusic}
         updateVol={updateVol}
@@ -158,9 +201,14 @@ const MeditationView = ({ result, currentView, onNavigate }) => {
         onMasterVol={onMasterVol}
         stats={stats}
         wisdomIdx={wisdomIdx}
+        isSessionRunning={isSessionRunning}
+        selectedMin={selectedMin}
+        onToggleSession={onToggleSession}
+        onPresetChange={onPresetChange}
+        onToggleConn={onToggleConn}
       />
     );
-  }, [musicState, masterVol, stats, wisdomIdx, toggleMusic, updateVol, onMasterVol, setSidebarSlot]);
+  }, [musicState, masterVol, stats, wisdomIdx, isSessionRunning, selectedMin, toggleMusic, updateVol, onMasterVol, onToggleSession, onPresetChange, onToggleConn, setSidebarSlot]);
 
   // Separate cleanup-only effect: clear slot on unmount
   useEffect(() => {
@@ -391,6 +439,13 @@ const MeditationView = ({ result, currentView, onNavigate }) => {
 
         const fv = $('med-focus-val'); if (fv) fv.textContent = focusScore;
         const sv = $('med-stress-val'); if (sv) sv.textContent = stressLevel;
+
+        // Apply Audio Clarity filter frequency also in Simulation
+        const filter = filterRef.current;
+        if (filter) {
+          const targetFreq = 500 + (calmSignal * 19500);
+          filter.frequency.setTargetAtTime(targetFreq, audioCtxRef.current.currentTime, 0.1);
+        }
       }, 60);
     }
 
@@ -401,14 +456,27 @@ const MeditationView = ({ result, currentView, onNavigate }) => {
       fetchInterval = setInterval(() => {
         const res = resultRef.current;
         if (res?.band_powers?.length >= 5) {
+          // Strictly target ch0 if multi-channel, or use provided powers
           const bp = res.band_powers;
           const sum = bp.reduce((a, b) => a + b, 0) || 1;
           rawBands = bp.map(v => Math.round((v / sum) * 100));
+          
+          // Logic for Fp1 Focused Calm
           const relA = rawBands[2] / 100, relT = rawBands[1] / 100, relB = rawBands[3] / 100;
-          calmSignal = Math.max(0, Math.min(1, (relA + relT * 0.5) / (relB + 0.1) * 0.4));
+          const calculatedCalm = Math.max(0, Math.min(1, (relA + relT * 0.5) / (relB + 0.1) * 0.4));
+          calmSignal = calculatedCalm;
         }
+        
         if (res?.meditation_score !== undefined) {
           calmSignal = Math.max(0, Math.min(1, res.meditation_score / 100));
+        }
+
+        // Apply Audio Clarity Filter Frequency
+        // Range: 500Hz (Muffled) to 20000Hz (Crystal Clear)
+        const filter = filterRef.current;
+        if (filter) {
+          const targetFreq = 500 + (calmSignal * 19500);
+          filter.frequency.setTargetAtTime(targetFreq, audioCtxRef.current.currentTime, 0.1);
         }
       }, 60);
     }
@@ -517,21 +585,13 @@ const MeditationView = ({ result, currentView, onNavigate }) => {
 
       const phaseInfo = getPhase();
 
-      // Push wave histories — use left=alpha, right=theta as channel proxies
-      const leftSig = rawBands[2] / 100; // alpha
-      const rightSig = rawBands[1] / 100; // theta
-      wave1Hist.push(leftSig + (Math.random() - 0.5) * 0.04);
-      wave2Hist.push(rightSig + (Math.random() - 0.5) * 0.03);
+      // Push wave history — Fp1 is the single signal
+      const fp1Sig = rawBands[2] / 100; // alpha as proxy for the signal
+      wave1Hist.push(fp1Sig + (Math.random() - 0.5) * 0.04);
       if (wave1Hist.length > WAVE_LEN) wave1Hist.shift();
-      if (wave2Hist.length > WAVE_LEN) wave2Hist.shift();
-
-      const p = tc('--primary');
-      const gl1 = tc('--graph-line-1');
-      const gl2 = tc('--graph-line-2');
 
       drawRadar(ctxRadar, rawBands, true);
-      drawWave(wCtx1, wave1Hist, gl1);
-      drawWave(wCtx2, wave2Hist, p);
+      drawWave(wCtx1, wave1Hist, tc('--primary'));
       updateDOM(phaseInfo);
     }
 
@@ -569,6 +629,7 @@ const MeditationView = ({ result, currentView, onNavigate }) => {
       wave1Hist = []; wave2Hist = [];
       sessionStart = Date.now();
       sessionRunning = true; lastTS = null;
+      setIsSessionRunning(true);
 
       // Update Expanded Button
       const btn = $('med-session-btn');
@@ -598,6 +659,7 @@ const MeditationView = ({ result, currentView, onNavigate }) => {
     container.stopSessionHandler = () => {
       if (!sessionRunning) return;
       sessionRunning = false;
+      setIsSessionRunning(false);
       const elapsed = Math.round((Date.now() - sessionStart) / 1000);
       const mm = String(Math.floor(elapsed / 60)).padStart(2, '0');
       const ss = String(elapsed % 60).padStart(2, '0');
@@ -677,19 +739,13 @@ const MeditationView = ({ result, currentView, onNavigate }) => {
     };
 
     container.presetHandler = (min) => {
+      setSelectedMin(min);
       presetSecs = min * 60;
       const td = $('med-timer-big');
-      if (td) { const mm = String(min).padStart(2, '0'); td.textContent = `${mm}:00`; }
-      // highlight active preset
-      container.querySelectorAll('.med-preset-btn').forEach(b => {
-        if (parseInt(b.dataset.min) === min) {
-          b.classList.add('bg-primary', 'text-bg', 'border-primary', 'shadow-glow');
-          b.classList.remove('bg-bg/50', 'text-muted', 'border-border');
-        } else {
-          b.classList.remove('bg-primary', 'text-bg', 'border-primary', 'shadow-glow');
-          b.classList.add('bg-bg/50', 'text-muted', 'border-border');
-        }
-      });
+      if (td) { 
+        const mm = String(min).padStart(2, '0'); 
+        td.textContent = `${mm}:00`; 
+      }
     };
 
     startSimulation();
@@ -764,20 +820,14 @@ const MeditationView = ({ result, currentView, onNavigate }) => {
           {/* Bottom EEG wave rows */}
           <div className="med-waves-col" style={{ height: '38%' }}>
             <div className="med-wave-row">
-              <div className="med-wave-label">CH1 · ALPHA BAND (α)</div>
+              <div className="med-wave-label">SIGNAL · Fp1 SENSOR (1-CH)</div>
               <div className="med-calm-bar-wrap">
-                <span>CALM</span>
                 <div className="med-calm-track">
                   <div className="med-calm-fill" id="med-calm-fill" />
                 </div>
                 <span className="med-calm-pct" id="med-calm-pct">0%</span>
               </div>
-              <canvas id="med-wave-1" className="med-wave-canvas" />
-            </div>
-
-            <div className="med-wave-row">
-              <div className="med-wave-label">CH2 · THETA BAND (θ)</div>
-              <canvas id="med-wave-2" className="med-wave-canvas" />
+              <canvas id="med-wave-1" className="med-wave-canvas" style={{ height: '100%' }} />
             </div>
           </div>
         </div>
