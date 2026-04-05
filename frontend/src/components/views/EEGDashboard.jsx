@@ -101,7 +101,7 @@ const EEGDashboardContent = ({ wsEvent, isConnected, wsUrl }) => {
     <div className="flex flex-row h-full w-full bg-[var(--bg)] overflow-hidden">
 
       {/* ── DUAL SIDEBAR SYSTEM ── */}
-      <div className={`w-[18rem] bg-[var(--surface)] border-r border-[var(--border)] shrink-0 flex flex-col h-full z-20 relative sidebar-container ${isCollapsed ? 'sidebar-collapsed' : ''}`}>
+      <div className={`bg-[var(--surface)] border-r border-[var(--border)] flex flex-col h-full relative sidebar-container ${isCollapsed ? 'sidebar-collapsed' : ''}`}>
 
         {/* Sidebar Toggle Handle (Center of vertical border) */}
         <button
@@ -122,6 +122,7 @@ const EEGDashboardContent = ({ wsEvent, isConnected, wsUrl }) => {
                 sidebarMode={sidebarMode} 
                 setSidebarMode={setSidebarMode} 
                 isFullContainer={isFullContainer} 
+                isCollapsed={isCollapsed}
             />
           </div>
 
@@ -131,7 +132,8 @@ const EEGDashboardContent = ({ wsEvent, isConnected, wsUrl }) => {
               {sidebarSlot ? React.cloneElement(sidebarSlot, { 
                 sidebarMode, 
                 setSidebarMode, 
-                isFullContainer 
+                isFullContainer,
+                isCollapsed 
               }) : (
                 <div className="flex flex-col items-center justify-center h-full opacity-40 text-center px-6">
                   <MonitorPlay size={40} className="mb-4 text-[var(--primary)]" />

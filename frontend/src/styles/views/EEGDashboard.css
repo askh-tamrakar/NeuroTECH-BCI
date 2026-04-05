@@ -1,3 +1,8 @@
+:root {
+  --sidebar-w: 288px;
+  --sidebar-collapsed-w: 64px;
+}
+
 .eeg-dashboard-wrapper {
   display: flex;
   height: 100%;
@@ -307,20 +312,32 @@
   width: 100%;
   height: 100%;
   transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: none;
+  visibility: hidden;
+  opacity: 0;
+  z-index: 1;
 }
 
 .sidebar-active {
   opacity: 1;
+  visibility: visible;
   filter: blur(0);
-  transform: scale(1);
+  transform: scale(1) translateX(0);
   pointer-events: auto;
   z-index: 2;
-  /* Allow the active panel to scroll its content */
   overflow-y: auto;
   overflow-x: hidden;
-  /* Hide scrollbar while keeping functionality */
-  scrollbar-width: none; /* Firefox */
-  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.sidebar-hidden {
+  opacity: 0;
+  visibility: hidden;
+  filter: blur(10px);
+  transform: scale(0.95) translateX(-30px);
+  pointer-events: none;
+  z-index: 1;
 }
 
 .sidebar-active::-webkit-scrollbar {
@@ -355,27 +372,38 @@
   box-shadow: 0 0 15px rgba(var(--primary-rgb), 0.2);
 }
 
+
 .sidebar-container {
-  transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  width: var(--sidebar-w);
+  flex-shrink: 0;
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow-x: hidden;
+  z-index: 40; /* Ensure it stays above main content but below header if needed */
 }
 
 .sidebar-collapsed {
-  width: 0 !important;
-  border-right-width: 0 !important;
+  width: var(--sidebar-collapsed-w) !important;
 }
 
-.sidebar-collapsed .sidebar-wrapper,
-.sidebar-collapsed > div:not(.sidebar-toggle-handle) {
-  display: none;
+.sidebar-collapsed .hide-collapsed {
+  display: none !important;
 }
 
-.sidebar-hidden {
-  opacity: 0;
-  filter: blur(12px);
-  transform: scale(0.96);
-  pointer-events: none;
-  z-index: 1;
-  overflow: hidden;
+.sidebar-collapsed .center-collapsed {
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+  width: 100% !important;
+  padding: 8px 0 !important;
+}
+
+.sidebar-collapsed .p-4 {
+  padding: 16px 8px !important;
+}
+
+.sidebar-collapsed .gap-6,
+.sidebar-collapsed .gap-4 {
+  gap: 12px !important;
 }
 
 .nav-controls-toggle {
