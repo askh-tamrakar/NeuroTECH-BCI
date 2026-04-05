@@ -15,6 +15,43 @@ from src.server.server.lsl_service import extract_emg_features, extract_eog_feat
 session_bp = Blueprint('session', __name__)
 
 EMG_COLLECTION_GAP_MS = 500.0
+EMG_BURST_WINDOWS = 5
+EMG_BURST_STRIDE_MS = 150.0
+
+
+def _normalize_eeg_label(label):
+    raw = str(label).strip()
+    lowered = raw.lower()
+    mapping = {
+        'rest': 0,
+        '0': 0,
+        't1': 1,
+        'target 1': 1,
+        '1': 1,
+        't2': 2,
+        'target 2': 2,
+        '2': 2,
+        't3': 3,
+        'target 3': 3,
+        '3': 3,
+        't4': 4,
+        'target 4': 4,
+        '4': 4,
+        't5': 5,
+        'target 5': 5,
+        '5': 5,
+        't6': 6,
+        'target 6': 6,
+        '6': 6,
+    }
+    return mapping.get(lowered, 0)
+
+
+def _emg_burst_sizes(sr: float, window_ms: float) -> tuple[int, int, int]:
+    window_size = max(1, int((window_ms / 1000.0) * sr))
+    stride_size = max(1, int((EMG_BURST_STRIDE_MS / 1000.0) * sr))
+    capture_size = window_size + stride_size * (EMG_BURST_WINDOWS - 1)
+    return window_size, stride_size, capture_size
 
 
 def _resolve_sampling_rate():
@@ -64,6 +101,7 @@ def _normalize_collection_context(sensor_type, payload=None):
         "gap_ms": gap_ms,
         "time_window_ms": float(payload.get('time_window_ms') or payload.get('time_window') or 0),
         "channel_index": int(payload.get('channel_index', payload.get('channel', 0)) or 0),
+        "target_frequency": float(payload.get('target_frequency') or payload.get('targetFrequency') or 0),
     }
 
 @session_bp.route('/api/sessions/<sensor_type>', methods=['GET'])
@@ -250,14 +288,9 @@ def api_emg_stop():
         collection_context = state.session.get_collection_context('EMG') or {}
         sr = state.sr or SESSION_CONFIG["sampling_rate"]
         window_ms = float(collection_context.get('window_duration_ms') or SESSION_CONFIG["window_ms"])
-        requested_stride_ms = float(collection_context.get('stride_ms') or 0)
         overlap = float(collection_context.get('overlap') or SESSION_CONFIG["overlap"])
         gap_ms = float(collection_context.get('gap_ms') or 0)
-        window_size = max(1, int((window_ms / 1000.0) * sr))
-        if requested_stride_ms > 0:
-            step_size = max(1, int((requested_stride_ms / 1000.0) * sr))
-        else:
-            _, step_size = get_window_samples({"sampling_rate": sr, "window_ms": window_ms, "overlap": overlap})
+        window_size, step_size, capture_size = _emg_burst_sizes(sr, window_ms)
 
         db_manager.save_session_metadata('EMG', target_table, {
             "sensor": "EMG",
@@ -266,7 +299,7 @@ def api_emg_stop():
             "storage_format": "compact_emg_v2",
             "feature_columns": EMG_FEATURE_COLUMNS,
             "training_window_ms": float(window_ms),
-            "capture_window_ms": float(window_ms),
+            "capture_window_ms": float((capture_size / sr) * 1000.0),
             "sampling_rate": float(sr),
             "overlap": float(overlap),
             "stride_ms": float((step_size / sr) * 1000.0),
@@ -304,41 +337,43 @@ def api_emg_stop():
             if raw_data.ndim > 1 and raw_data.shape[1] == 1:
                 raw_data = raw_data.flatten()
             
-            # Slice and dice
             num_samples = len(raw_data)
-            if num_samples < window_size:
+            if num_samples < capture_size:
                 continue
                 
-            prev_features = None
-            for i in range(0, num_samples - window_size + 1, step_size):
-                window = raw_data[i : i + window_size]
-                
-                # Extract features
-                feats = extract_emg_features(window, sr, prev_features=prev_features)
-                feats['timestamp'] = time.time()
-                feats['channel_index'] = int(collection_context.get('channel_index', 0) or 0)
-                feats['sample_count'] = int(len(window))
-                feats['window_ms'] = float((len(window) / sr) * 1000.0)
-                feats['sampling_rate'] = float(sr)
-                feats['session_window_ms'] = float(window_ms)
-                feats['session_overlap'] = float(overlap)
-                feats['session_stride_ms'] = float((step_size / sr) * 1000.0)
-                feats['gap_ms'] = float(gap_ms)
-                feats['metadata_json'] = json.dumps({
-                    "source": "backend_session_buffer",
-                    "mode": collection_context.get('mode', 'buffer_recording'),
-                    "label": label_str,
-                    "session_name": state.session.current_session_name,
-                    "collection_context": collection_context,
-                })
-                prev_features = feats.copy()
-                
-                # Save to DB (Specific Table)
-                if db_manager.insert_window(feats, label_int, session_id, table_name=target_table):
-                    saved_count += 1
-                    # Also append to global table if not a merged session
-                    if "merge" not in target_table.lower():
-                        db_manager.insert_window(feats, label_int, session_id, table_name="emg_windows")
+            for burst_start in range(0, num_samples - capture_size + 1, capture_size):
+                burst = raw_data[burst_start: burst_start + capture_size]
+                trial_id = db_manager.next_trial_id('EMG', target_table)
+                prev_features = None
+                for offset in range(0, capture_size - window_size + 1, step_size):
+                    window = burst[offset: offset + window_size]
+                    feats = extract_emg_features(window, sr, prev_features=prev_features)
+                    feats['trial'] = trial_id
+                    feats['timestamp'] = time.time()
+                    feats['channel_index'] = int(collection_context.get('channel_index', 0) or 0)
+                    feats['sample_count'] = int(len(window))
+                    feats['window_ms'] = float((len(window) / sr) * 1000.0)
+                    feats['capture_window_ms'] = float((capture_size / sr) * 1000.0)
+                    feats['sampling_rate'] = float(sr)
+                    feats['session_window_ms'] = float(window_ms)
+                    feats['session_overlap'] = float(overlap)
+                    feats['session_stride_ms'] = float((step_size / sr) * 1000.0)
+                    feats['gap_ms'] = float(gap_ms)
+                    feats['source'] = "backend_session_buffer"
+                    feats['metadata_json'] = json.dumps({
+                        "source": "backend_session_buffer",
+                        "mode": collection_context.get('mode', 'buffer_recording'),
+                        "label": label_str,
+                        "session_name": state.session.current_session_name,
+                        "collection_context": collection_context,
+                        "trial": trial_id,
+                    })
+                    prev_features = feats.copy()
+
+                    if db_manager.insert_emg_window(feats, label_int, session_id, table_name=target_table):
+                        saved_count += 1
+                        if "merge" not in target_table.lower():
+                            db_manager.insert_emg_window(feats, label_int, session_id, table_name="emg_windows")
                     
         print(f"💾 Saved {saved_count} EMG windows to {target_table}")
         
@@ -445,6 +480,7 @@ def api_eog_stop():
             sr = state.sr or 1000
             window_size = int(sr * 0.6) # 600ms to capture full blink
             step_size = int(window_size * 0.5)
+            serial_id = db_manager.next_serial_id(target_table)
             
             for i in range(0, len(raw_data) - window_size + 1, step_size):
                 window = raw_data[i : i + window_size]
@@ -452,6 +488,7 @@ def api_eog_stop():
                 # Extract
                 feats = extract_eog_features(window, sr)
                 feats['timestamp'] = time.time()
+                feats['serial_id'] = serial_id
                 
                 if db_manager.insert_eog_window(feats, label_int, session_id, table_name=target_table):
                     saved_count += 1
@@ -514,8 +551,9 @@ def api_eeg_stop():
         data_store = state.session.data_store['EEG']
         saved_count = 0
         eeg_cfg = (state.config or {}).get('features', {}).get('EEG', {})
-        target_freqs = [float(freq) for freq in eeg_cfg.get('target_freqs', [8, 9, 12, 14.4, 16, 18])]
         channel_mapping = (state.config or {}).get('channel_mapping', {})
+        collection_context = state.session.get_collection_context('EEG') or {}
+        session_target_frequency = float(collection_context.get('target_frequency') or 0)
         eeg_channel_index = 0
         for channel_key, channel_info in channel_mapping.items():
             if str(channel_info.get('sensor', '')).upper() == 'EEG':
@@ -529,27 +567,38 @@ def api_eeg_stop():
             if len(samples) < 50:
                 continue
 
-            try:
-                label_int = int(label_str)
-            except:
-                continue
+            label_int = _normalize_eeg_label(label_str)
                 
             raw_data = np.array(samples)
             
             sr = state.sr or 1000
             window_size = max(1, int(sr * float(eeg_cfg.get('window_len_sec', 1.5))))
             step_size = max(1, int(sr * float(eeg_cfg.get('step_sec', 0.25))))
+            trial_id = db_manager.next_trial_id('EEG', target_table)
+            db_manager.save_session_metadata('EEG', target_table, {
+                "sensor": "EEG",
+                "table_name": target_table,
+                "session_name": target_table,
+                "storage_format": "compact_eeg_v1",
+                "channel_index": eeg_channel_index,
+                "sample_count": window_size,
+                "sampling_rate": float(sr),
+                "window_ms": float((window_size / sr) * 1000.0),
+                "target_frequency": session_target_frequency,
+                "source": "session_stop",
+            })
             
             for i in range(0, len(raw_data) - window_size + 1, step_size):
                 window = raw_data[i : i + window_size]
                 
                 # Extract
                 feats = extract_eeg_features(window, sr)
+                feats['trial'] = trial_id
                 feats['timestamp'] = time.time()
                 feats['sample_count'] = int(len(window))
                 feats['window_ms'] = float((len(window) / sr) * 1000.0)
                 feats['channel_index'] = eeg_channel_index
-                feats['target_frequency'] = float(target_freqs[label_int - 1]) if 0 < label_int <= len(target_freqs) else 0.0
+                feats['target_frequency'] = session_target_frequency
                 
                 if db_manager.insert_eeg_window(feats, label_int, session_id, table_name=target_table):
                     saved_count += 1

@@ -1,6 +1,7 @@
 import Tree from 'react-d3-tree';
-import { useState, useEffect, Fragment, useMemo } from 'react';
+import { useState, useEffect, Fragment, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { io } from 'socket.io-client';
 import {
     Trash2, Rocket, ArrowRight, Save, Target, ListOrdered,
     Database, Hand, Eye, Network, Grid3X3, Brain, PieChart,
@@ -33,28 +34,30 @@ const renderCustomNodeElement = ({ nodeDatum, toggleNode }) => (
 // --- NEW/UPDATED COMPONENTS ---
 
 const ModelIdBadge = ({ model, size = 'sm', isActive = false }) => {
-    const candidateIdx = model.candidate_index || model.candidate_idx || 0;
-    const foldIdx = model.fold_index || model.fold_idx || 0;
+    const candidateIdx = model.candidate_index ?? model.candidate_idx ?? 0;
+    const foldIdx = model.fold_index ?? model.fold_idx ?? 0;
+    const displayCandidateIdx = candidateIdx + 1;
     const hasIndices = (model.candidate_index !== undefined || model.candidate_idx !== undefined);
+    const preferredId = model.best_fold_id || model.model_id || model.id;
 
     const mutedColor = 'text-[var(--text)]';
     const primaryColor = 'text-[var(--graph-line-1)]';
 
-    if (!hasIndices && !model.model_id && !model.id) {
+    if (!hasIndices && !preferredId) {
         return <span className={`opacity-40 italic ${size === 'sm' ? 'text-[10px]' : 'text-[12px]'}`}>ID UNKNOWN</span>;
     }
 
     // If we have a formatted model_id but no indices, try to parse it or just show it
-    if (!hasIndices && (model.model_id || model.id)) {
-        const id = model.model_id || model.id;
-        const match = String(id).match(/C(\d+)F(\d+)/i);
+    if (!hasIndices && preferredId) {
+        const id = preferredId;
+        const match = String(id).match(/^([C-Z])([0-9A-F]{2})F([0-9A-F]+)$/i);
         if (match) {
             return (
                 <span className={`font-mono font-black ${size === 'sm' ? 'text-[10px]' : 'text-[14px]'}`}>
-                    <span className={mutedColor}>C</span>
-                    <span className={primaryColor}>{match[1]}</span>
+                    <span className={mutedColor}>{match[1].toUpperCase()}</span>
+                    <span className={primaryColor}>{match[2].toUpperCase()}</span>
                     <span className={`${mutedColor} ml-0.5`}>F</span>
-                    <span className={primaryColor}>{match[2]}</span>
+                    <span className={primaryColor}>{match[3].toUpperCase()}</span>
                 </span>
             );
         }
@@ -64,9 +67,9 @@ const ModelIdBadge = ({ model, size = 'sm', isActive = false }) => {
     return (
         <span className={`font-mono font-black ${size === 'sm' ? 'text-[10px]' : 'text-[14px]'}`}>
             <span className={mutedColor}>C</span>
-            <span className={primaryColor}>{(candidateIdx).toString().padStart(2, '0')}</span>
+            <span className={primaryColor}>{(displayCandidateIdx).toString(16).toUpperCase().padStart(2, '0')}</span>
             <span className={`${mutedColor} ml-0.5`}>F</span>
-            <span className={primaryColor}>{foldIdx}</span>
+            <span className={primaryColor}>{Number(foldIdx).toString(16).toUpperCase()}</span>
         </span>
     );
 };
@@ -434,11 +437,12 @@ const getVerdict = (trainAcc, valAcc) => {
 };
 
 const historyId = (item) => item?.model_id || item?.id || '--';
-const historyCandidate = (item) => item?.candidate_index || item?.candidate_idx || 0;
+const historyCandidate = (item) => (item?.candidate_index ?? item?.candidate_idx ?? 0) + 1;
 const historyFold = (item) => item?.fold_index || item?.fold_idx || 0;
 const historyParams = (item) => item?.hyperparameters || item?.params || {};
+const formatCandidateDecimal = (value) => String(Number(value) || 0).padStart(2, '0');
 
-const HistoryList = ({ history = [], selectedId, onSelect, emptyText = 'No training history available.' }) => {
+const HistoryList = ({ history = [], selectedId, onSelect, emptyText = 'No training history available.', decimalCandidateDisplay = false }) => {
     const grouped = useMemo(() => {
         const groups = {};
         history.forEach((item) => {
@@ -461,7 +465,9 @@ const HistoryList = ({ history = [], selectedId, onSelect, emptyText = 'No train
                 <div key={cand.idx} className="p-3 rounded-xl bg-[var(--bg)]/50 border border-[var(--border)]">
                     <div className="flex items-center justify-between mb-2">
                         <div>
-                            <div className="text-[10px] font-black text-[var(--muted)] uppercase tracking-[0.18em]">Candidate {cand.idx}</div>
+                            <div className="text-[10px] font-black text-[var(--muted)] uppercase tracking-[0.18em]">
+                                Candidate {decimalCandidateDisplay ? formatCandidateDecimal(cand.idx) : cand.idx}
+                            </div>
                             <div className="text-[10px] text-[var(--text)] font-mono truncate">
                                 {Object.entries(cand.params).map(([k, v]) => `${k}: ${v}`).join(' | ') || 'No hyperparameters recorded'}
                             </div>
@@ -491,7 +497,7 @@ const HistoryList = ({ history = [], selectedId, onSelect, emptyText = 'No train
     );
 };
 
-const HistoryDetailCard = ({ item }) => {
+const HistoryDetailCard = ({ item, decimalCandidateDisplay = false }) => {
     if (!item) {
         return <div className="flex h-full items-center justify-center text-sm italic text-[var(--muted)] opacity-60">Click a model ID like C01F1 to inspect it.</div>;
     }
@@ -514,7 +520,9 @@ const HistoryDetailCard = ({ item }) => {
             <div className="grid grid-cols-2 gap-3">
                 <div className="p-3 rounded-lg border border-[var(--border)] bg-[var(--surface)]">
                     <div className="text-[10px] uppercase text-[var(--muted)] font-black mb-1">Candidate / Fold</div>
-                    <div className="text-sm font-mono text-[var(--text)]">{historyCandidate(item)} / {historyFold(item)}</div>
+                    <div className="text-sm font-mono text-[var(--text)]">
+                        {decimalCandidateDisplay ? formatCandidateDecimal(historyCandidate(item)) : historyCandidate(item)} / {historyFold(item)}
+                    </div>
                 </div>
                 <div className="p-3 rounded-lg border border-[var(--border)] bg-[var(--surface)]">
                     <div className="text-[10px] uppercase text-[var(--muted)] font-black mb-1">Train Accuracy</div>
@@ -548,7 +556,7 @@ const HistoryDetailCard = ({ item }) => {
     );
 };
 
-const TrainingHistoryCard = ({ title = 'Training History', history = [], selectedItem, onSelectItem, detailLabel = 'Model Detail' }) => (
+const TrainingHistoryCard = ({ title = 'Training History', history = [], selectedItem, onSelectItem, detailLabel = 'Model Detail', decimalCandidateDisplay = false }) => (
     <div className={`${card} h-full flex flex-col overflow-hidden`}>
         <div className="p-3 border-b border-[var(--border)] flex items-center justify-between shrink-0">
             <div className="flex items-center gap-2">
@@ -559,11 +567,11 @@ const TrainingHistoryCard = ({ title = 'Training History', history = [], selecte
         </div>
         <div className="flex-1 min-h-0 grid grid-cols-12 gap-3 p-3">
             <div className="col-span-12 lg:col-span-7 overflow-y-auto pr-1 [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-                <HistoryList history={history} selectedId={historyId(selectedItem)} onSelect={onSelectItem} />
+                <HistoryList history={history} selectedId={historyId(selectedItem)} onSelect={onSelectItem} decimalCandidateDisplay={decimalCandidateDisplay} />
             </div>
             <div className="col-span-12 lg:col-span-5 min-h-0">
                 <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--muted)] font-black mb-2">{detailLabel}</div>
-                <HistoryDetailCard item={selectedItem} />
+                <HistoryDetailCard item={selectedItem} decimalCandidateDisplay={decimalCandidateDisplay} />
             </div>
         </div>
     </div>
@@ -818,9 +826,9 @@ const TrainingStatusDashboard = ({ job, countdown, params, selectedHistoryItem, 
                                         {latestFold ? (
                                             <span className='text-[24px] font-black font-mono leading-none'>
                                                 <span className="text-[var(--muted)]">C</span>
-                                                <span className="text-[var(--primary)]">{(latestFold.candidate_index || latestFold.candidate_idx || 0).toString().padStart(2, '0')}</span>
+                                                <span className="text-[var(--primary)]">{((latestFold.candidate_index ?? latestFold.candidate_idx ?? 0) + 1).toString(16).toUpperCase().padStart(2, '0')}</span>
                                                 <span className="text-[var(--muted)]">F</span>
-                                                <span className="text-[var(--primary)]">{latestFold.fold_index || latestFold.fold_idx || 0}</span>
+                                                <span className="text-[var(--primary)]">{Number(latestFold.fold_index ?? latestFold.fold_idx ?? 0).toString(16).toUpperCase()}</span>
                                             </span>
                                         ) : '--'}
                                     </span>
@@ -830,9 +838,9 @@ const TrainingStatusDashboard = ({ job, countdown, params, selectedHistoryItem, 
                                         <Layers size={18} color='var(--text)' /> <span>Candidates</span>
                                     </div>
                                     <span className="text-[24px] font-black font-mono leading-none">
-                                        <span className="text-[var(--primary)]">{(job?.candidate_index || 0).toString().padStart(2, '0')}</span>
+                                        <span className="text-[var(--primary)]">{((job?.candidate_index ?? 0) + 1).toString(16).toUpperCase().padStart(2, '0')}</span>
                                         <span className="opacity-30 mx-1.5 text-[var(--muted)]">/</span>
-                                        <span className="text-[var(--muted)]">{(job?.total_candidates || 0).toString().padStart(2, '0')}</span>
+                                        <span className="text-[var(--muted)]">{Number(job?.total_candidates || 0).toString(16).toUpperCase().padStart(2, '0')}</span>
                                     </span>
                                 </div>
                                 <div className="flex flex-col items-center">
@@ -885,16 +893,24 @@ const TrainingStatusDashboard = ({ job, countdown, params, selectedHistoryItem, 
                     selectedItem={selectedHistoryItem}
                     onSelectItem={onSelectHistory}
                     detailLabel="Model Performance Analysis"
+                    decimalCandidateDisplay={true}
                 />
             </div>
         </div >
     );
 };
 
-const DataInsightCard = ({ result, sensor, params, selectedSessionName, onMatrixToggle }) => {
+const DataInsightCard = ({ result, sensor, params, selectedSessionName, embedded = false, onMatrixToggle }) => {
     if (!result) return <div className={`p-4 ${card} h-full text-[var(--muted)] flex items-center justify-center italic relative`}>No insight data available yet.</div>;
 
     const v = getVerdict(result.train_accuracy, result.validation_accuracy, result.test_accuracy || result.accuracy);
+    const trainedSessionNames = Array.isArray(result?.session_names) && result.session_names.length
+        ? result.session_names
+        : (result?.session_name ? [result.session_name] : []);
+    const trainedSessionLabel = trainedSessionNames.length ? trainedSessionNames.join(', ') : (selectedSessionName || '--');
+    const trainedSampleCount = result?.n_samples ?? result?.split_summary?.total_samples ?? '--';
+    const groupCount = result?.group_counts ? Object.keys(result.group_counts).length : '--';
+    const classLabelSummary = Array.isArray(result?.labels) && result.labels.length ? result.labels.join(', ') : '--';
     const mRow = (label, val, perc = false, mono = false) => (
         <div className="flex justify-between items-center py-1 border-b border-[var(--border)]/30 last:border-0 hover:bg-white/5 px-1 rounded transition-colors">
             <span className="text-[12px] font-bold text-[var(--muted)] uppercase tracking-wider">{label}</span>
@@ -902,42 +918,38 @@ const DataInsightCard = ({ result, sensor, params, selectedSessionName, onMatrix
         </div>
     );
 
-    const getSensorIcon = () => {
-        const iconSize = 32;
-        const iconClass = "mr-4 border border-text bg-bg rounded-lg";
-        if (sensor === 'EEG') return <Brain size={iconSize} className={iconClass} color='var(--text)' />;
-        if (sensor === 'EMG') return <Hand size={iconSize} className={iconClass} color='var(--text)' />;
-        if (sensor === 'EOG') return <Eye size={iconSize} className={iconClass} color='var(--text)' />;
-        return <Info size={iconSize} className={iconClass} color='var(--text)' />;
-    };
-
     // Calculate split ratios
     const trainPct = Math.round((params?.train_ratio || 0.7) * 100);
     const valPct = Math.round((params?.val_ratio || 0.15) * 100);
     const testPct = Math.round((params?.test_ratio || 0.15) * 100);
 
     return (
-        <div className={`pt-2 px-2 pb-0 card h-full overflow-hidden flex flex-col relative group/insight`}>
-            {/* Header */}
-            <div className="flex items-center justify-between border-b border-[var(--border)] pb-2 shrink-0">
-                <div className="flex items-center text-[18px] font-bold text-[var(--muted)] uppercase tracking-widest">
-                    {getSensorIcon()}
-                    <span className="flex items-center gap-2">
-                        {sensor} Data Insight
-                        <button
-                            onClick={onMatrixToggle}
-                            className="transition-all group flex items-center ml-4 gap-3"
-                            title="Switch to Confusion Matrix"
-                        >
-                            < ArrowRightFromLine size={18} className="text-muted group-hover:text-primary transition-all group-hover:translate-x-0.5" />
-                            <Grid3X3 size={24} className="text-muted group-hover:text-primary transition-colors" />
-                        </button>
-                    </span>
+        <div className={`${embedded ? 'h-full' : 'pt-2 px-2 pb-0 card'} overflow-hidden flex flex-col relative group/insight`}>
+            {!embedded && (
+                <div className="flex items-center justify-between border-b border-[var(--border)] pb-2 shrink-0">
+                    <div className="flex items-center text-[18px] font-bold text-[var(--muted)] uppercase tracking-widest">
+                        {sensor === 'EEG'
+                            ? <Brain size={32} className='mr-4 border border-text bg-bg rounded-lg' color='var(--text)' />
+                            : sensor === 'EMG'
+                                ? <Hand size={32} className='mr-4 border border-text bg-bg rounded-lg' color='var(--text)' />
+                                : <Eye size={32} className='mr-4 border border-text bg-bg rounded-lg' color='var(--text)' />}
+                        <span className="flex items-center gap-2">
+                            {sensor} Data Insight
+                            {onMatrixToggle && (
+                                <button
+                                    onClick={onMatrixToggle}
+                                    className="transition-all group flex items-center ml-4 gap-3"
+                                    title="Switch to Confusion Matrix"
+                                >
+                                    <ArrowRightFromLine size={18} className="text-muted group-hover:text-primary transition-all group-hover:translate-x-0.5" />
+                                    <Grid3X3 size={24} className="text-muted group-hover:text-primary transition-colors" />
+                                </button>
+                            )}
+                        </span>
+                    </div>
                 </div>
-            </div>
-
-            {/* Content: 3-Column Layout */}
-            <div className="flex-1 grid grid-cols-3 min-h-0 overflow-hidden">
+            )}
+            <div className={`flex-1 grid grid-cols-3 min-h-0 overflow-hidden ${embedded ? '' : 'pt-2'}`}>
 
                 {/* Column 1: Identity & Suitability */}
                 <div className="flex flex-col justify-between pb-2">
@@ -960,10 +972,13 @@ const DataInsightCard = ({ result, sensor, params, selectedSessionName, onMatrix
                         </div>
 
                         <div className="space-y-2 pt-2">
-
                             <div className="flex flex-col gap-0.5">
                                 <span className="text-[12px] uppercase tracking-wider text-[var(--muted)] font-bold">Training Session</span>
-                                <span className="text-[14px] font-black text-[var(--text)] truncate opacity-90" title={selectedSessionName}>{selectedSessionName}</span>
+                                <span className="text-[14px] font-black text-[var(--text)] truncate opacity-90" title={trainedSessionLabel}>{trainedSessionLabel}</span>
+                            </div>
+                            <div className="flex flex-col gap-0.5">
+                                <span className="text-[12px] uppercase tracking-wider text-[var(--muted)] font-bold">Training Samples</span>
+                                <span className="text-[14px] font-black text-[var(--text)] opacity-90 font-mono">{trainedSampleCount}</span>
                             </div>
                         </div>
                     </div>
@@ -1011,11 +1026,12 @@ const DataInsightCard = ({ result, sensor, params, selectedSessionName, onMatrix
                         {mRow('Train Samples', result.split_summary?.train_samples || '--', false, true)}
                         {mRow('Val Samples', result.split_summary?.val_samples || '--', false, true)}
                         {mRow('Test Samples', result.split_summary?.test_samples ?? '--', false, true)}
-                        {mRow('Class Groups', result.group_counts ? Object.keys(result.group_counts).length : (result.labels?.length || '--'), false, true)}
+                        {mRow('Class Groups', groupCount, false, true)}
+                        {mRow('Classes', classLabelSummary, false, false)}
                     </div>
                 </div>
             </div>
-        </div >
+        </div>
     );
 };
 
@@ -1208,7 +1224,7 @@ const RenderClassLabel = ({ label, sensor }) => {
     return <span>{label}</span>;
 }
 
-const ConfusionMatrixCard = ({ matrix, labels, n_samples, sensor, onMatrixToggle }) => {
+const ConfusionMatrixCard = ({ matrix, labels, n_samples, sensor, embedded = false }) => {
     // ADJUST THIS SCALE TO CHANGE SIZE (e.g. 0.8 to shrink, 1.2 to enlarge)
     const scale = 1.125;
     const cellSize = Math.floor(64 * scale);
@@ -1220,29 +1236,23 @@ const ConfusionMatrixCard = ({ matrix, labels, n_samples, sensor, onMatrixToggle
 
     return (
         <div
-            className={`card bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-sm pt-1 pr-4 pb-5 ${sensor === 'EEG' ? 'h-fit ml-0' : 'h-full flex flex-col'}`}
+            className={`${embedded ? '' : 'card bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-sm'} ${sensor === 'EEG' ? 'h-fit ml-0' : 'h-full flex flex-col'} pt-1 pr-4 pb-5`}
             style={sensor === 'EEG' ? { width: cardWidth, minWidth: cardWidth } : {}}
         >
-            <div className="flex justify-between items-center border-b border-[var(--border)] pb-2 pt-2 gap-2 overflow-hidden">
-                <h3 className="text-[18px] flex items-center font-bold text-[var(--muted)] uppercase tracking-widest truncate">
-                    <Grid3X3 size={28} className='mr-2 border border-text bg-bg rounded-[4px] shrink-0' color='var(--bg)' fill='var(--text)' />
-                    <span className="truncate">Confusion Matrix</span>
-                    {n_samples !== undefined && <span className="ml-1 text-[12px] normal-case opacity-70 shrink-0">({n_samples}) Samples</span>}
-                    <button
-                        onClick={() => setInsightView('insight')}
-                        className="transition-all group flex items-center ml-4 gap-3"
-                        title="Switch to Data Insight"
-                    >
-                        < ArrowRightFromLine size={18} className="text-muted group-hover:text-primary transition-all group-hover:translate-x-0.5" />
-                        <Info size={24} className="text-muted group-hover:text-primary transition-colors" />
-                    </button>
-                </h3>
-                <div className="flex items-center gap-1.5 text-[13px] bg-[var(--bg)] px-[6px] py-[2px] shrink-0">
-                    <span className="font-bold text-[var(--text)]">Actual</span>
-                    <span className="text-[var(--muted)]"><ArrowRight size={12} /></span>
-                    <span className="font-bold text-[var(--primary)]">Predicted</span>
+            {!embedded && (
+                <div className="flex justify-between items-center border-b border-[var(--border)] pb-2 pt-2 gap-2 overflow-hidden">
+                    <h3 className="text-[18px] flex items-center font-bold text-[var(--muted)] uppercase tracking-widest truncate">
+                        <Grid3X3 size={28} className='mr-2 border border-text bg-bg rounded-[4px] shrink-0' color='var(--bg)' fill='var(--text)' />
+                        <span className="truncate">Confusion Matrix</span>
+                        {n_samples !== undefined && <span className="ml-1 text-[12px] normal-case opacity-70 shrink-0">({n_samples}) Samples</span>}
+                    </h3>
+                    <div className="flex items-center gap-1.5 text-[13px] bg-[var(--bg)] px-[6px] py-[2px] shrink-0">
+                        <span className="font-bold text-[var(--text)]">Actual</span>
+                        <span className="text-[var(--muted)]"><ArrowRight size={12} /></span>
+                        <span className="font-bold text-[var(--primary)]">Predicted</span>
+                    </div>
                 </div>
-            </div>
+            )}
             <div className={`flex-grow overflow-auto relative [&::-webkit-scrollbar]:hidden ${sensor === 'EEG' ? '' : 'flex flex-col h-full'}`} style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
                 {matrix ? (
                     <table className={`text-center text-[var(--text)] border-collapse table-fixed ${sensor === 'EEG' ? 'w-auto' : 'min-w-[42rem] w-full h-full text-[16px]'}`}>
@@ -1281,6 +1291,91 @@ const ConfusionMatrixCard = ({ matrix, labels, n_samples, sensor, onMatrixToggle
                         <p className="text-sm text-[var(--muted)] opacity-60">No confusion data</p>
                     </div>
                 )}
+            </div>
+        </div>
+    );
+};
+
+const InsightWorkspaceCard = ({ view, result, sensor, params, selectedSessionName, onSwitchView }) => {
+    const nSamples = result?.n_samples;
+    const headerIcon = view === 'matrix'
+        ? <Grid3X3 size={28} className='mr-2 border border-text bg-bg rounded-[4px] shrink-0' color='var(--bg)' fill='var(--text)' />
+        : sensor === 'EEG'
+            ? <Brain size={32} className='mr-4 border border-text bg-bg rounded-lg shrink-0' color='var(--text)' />
+            : sensor === 'EMG'
+                ? <Hand size={32} className='mr-4 border border-text bg-bg rounded-lg shrink-0' color='var(--text)' />
+                : <Eye size={32} className='mr-4 border border-text bg-bg rounded-lg shrink-0' color='var(--text)' />;
+
+    return (
+        <div className="card h-full flex flex-col px-4 pt-2 pb-4 bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-sm overflow-hidden">
+            <div className="flex justify-between items-center border-b border-[var(--border)] pb-2 shrink-0">
+                <AnimatePresence mode="wait">
+                    <motion.div
+                        key={`insight-header-${view}`}
+                        initial={{ opacity: 0, filter: 'blur(8px)' }}
+                        animate={{ opacity: 1, filter: 'blur(0px)' }}
+                        exit={{ opacity: 0, filter: 'blur(8px)' }}
+                        transition={{ duration: 0.25 }}
+                        className="flex items-center min-w-0"
+                    >
+                        {headerIcon}
+                        <h3 className="text-[18px] flex items-center font-bold text-[var(--muted)] uppercase tracking-widest truncate">
+                            <span className="truncate">{view === 'matrix' ? 'Confusion Matrix' : `${sensor} Data Insight`}</span>
+                            {view === 'matrix' && nSamples !== undefined && <span className="ml-1 text-[12px] normal-case opacity-70 shrink-0">({nSamples}) Samples</span>}
+                        </h3>
+                    </motion.div>
+                </AnimatePresence>
+
+                <div className="flex items-center gap-2 shrink-0">
+                    {view === 'matrix' && (
+                        <div className="flex items-center gap-1.5 text-[13px] bg-[var(--bg)] px-[6px] py-[2px] shrink-0">
+                            <span className="font-bold text-[var(--text)]">Actual</span>
+                            <span className="text-[var(--muted)]"><ArrowRight size={12} /></span>
+                            <span className="font-bold text-[var(--primary)]">Predicted</span>
+                        </div>
+                    )}
+                    <button
+                        onClick={() => onSwitchView(view === 'matrix' ? 'insight' : 'matrix')}
+                        className="transition-all group flex items-center ml-2 gap-3"
+                        title={view === 'matrix' ? 'Switch to Data Insight' : 'Switch to Confusion Matrix'}
+                    >
+                        <ArrowRightFromLine size={18} className="text-muted group-hover:text-primary transition-all group-hover:translate-x-0.5" />
+                        {view === 'matrix'
+                            ? <Info size={24} className="text-muted group-hover:text-primary transition-colors" />
+                            : <Grid3X3 size={24} className="text-muted group-hover:text-primary transition-colors" />}
+                    </button>
+                </div>
+            </div>
+
+            <div className="flex-1 min-h-0 relative overflow-hidden">
+                <AnimatePresence mode="wait">
+                    <motion.div
+                        key={`insight-body-${view}`}
+                        initial={{ opacity: 0, filter: 'blur(8px)' }}
+                        animate={{ opacity: 1, filter: 'blur(0px)' }}
+                        exit={{ opacity: 0, filter: 'blur(8px)' }}
+                        transition={{ duration: 0.3 }}
+                        className="h-full pt-2"
+                    >
+                        {view === 'matrix' ? (
+                            <ConfusionMatrixCard
+                                matrix={result?.confusion_matrix}
+                                labels={result?.labels || []}
+                                n_samples={nSamples}
+                                sensor={sensor}
+                                embedded={true}
+                            />
+                        ) : (
+                            <DataInsightCard
+                                result={result}
+                                sensor={sensor}
+                                params={params}
+                                selectedSessionName={selectedSessionName}
+                                embedded={true}
+                            />
+                        )}
+                    </motion.div>
+                </AnimatePresence>
             </div>
         </div>
     );
@@ -1723,6 +1818,8 @@ export default function MLTrainingView({ onSwitchLab }) {
     const [loading, setLoading] = useState(false);
     const [evalLoading, setEvalLoading] = useState(false);
     const [error, setError] = useState(null);
+    const socketRef = useRef(null);
+    const finalizedJobRef = useRef(null);
 
     // --- TREE INSPECTION STATE ---
     const [treeIndex, setTreeIndex] = useState(0);
@@ -1789,23 +1886,104 @@ export default function MLTrainingView({ onSwitchLab }) {
 
     // --- GENERIC TRAIN/EVAL ---
 
-    const pollJob = async (jobId) => {
-        try {
-            const res = await fetch(`${API_BASE_URL}/api/train-jobs/${jobId}`);
-            const data = await res.json();
-            setTrainingJob(data);
-            if (data.status === 'completed' || data.status === 'failed' || data.status === 'error') {
-                return data; // Done
-            }
-            // Poll again very quickly (150ms ping)
-            await new Promise(r => setTimeout(r, 150));
-            return pollJob(jobId);
-        } catch (e) {
-            console.error("Polling error", e);
-            setTrainingJob(prev => ({ ...prev, status: 'failed' }));
-            throw e;
-        }
+    const fetchJobSnapshot = async (jobId) => {
+        const res = await fetch(`${API_BASE_URL}/api/train-jobs/${jobId}`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to fetch training job');
+        return data;
     };
+
+    useEffect(() => {
+        if (socketRef.current) return;
+
+        const endpoint = API_BASE_URL || window.location.origin;
+        const socket = io(endpoint, {
+            reconnection: true,
+            timeout: 30000,
+            transports: ['websocket', 'polling']
+        });
+
+        socket.on('training_job_update', (job) => {
+            setTrainingJob(prev => {
+                if (!job?.job_id) return prev;
+                if (prev?.job_id && prev.job_id !== job.job_id) return prev;
+                return job;
+            });
+        });
+
+        socketRef.current = socket;
+        return () => {
+            socket.disconnect();
+            socketRef.current = null;
+        };
+    }, [API_BASE_URL]);
+
+    useEffect(() => {
+        if (!trainingJob?.job_id) return undefined;
+        if (trainingJob.status === 'completed' || trainingJob.status === 'failed' || trainingJob.status === 'error') return undefined;
+
+        let cancelled = false;
+        const interval = setInterval(async () => {
+            try {
+                const snapshot = await fetchJobSnapshot(trainingJob.job_id);
+                if (!cancelled) {
+                    setTrainingJob(prev => (prev?.job_id === snapshot.job_id || !prev?.job_id ? snapshot : prev));
+                }
+            } catch (e) {
+                console.error("Polling error", e);
+            }
+        }, 300);
+
+        return () => {
+            cancelled = true;
+            clearInterval(interval);
+        };
+    }, [API_BASE_URL, trainingJob?.job_id, trainingJob?.status]);
+
+    useEffect(() => {
+        if (!trainingJob?.job_id) {
+            finalizedJobRef.current = null;
+            return;
+        }
+        if (finalizedJobRef.current === trainingJob.job_id) return;
+
+        if (trainingJob.status === 'completed') {
+            finalizedJobRef.current = trainingJob.job_id;
+            const resObj = trainingJob.result || trainingJob;
+            const history = trainingJob.history || resObj.training_history || [];
+            const sensorKey = trainingJob.sensor || activeTab;
+            setResults(prev => ({ ...prev, [sensorKey]: { ...resObj, source: getSourceName(true) } }));
+            setEvalResults(prev => ({ ...prev, [sensorKey]: null }));
+            setSelectedModels(prev => ({ ...prev, [sensorKey]: trainingJob.model_name || resObj.model_name || prev[sensorKey] }));
+            setLastHistory(prev => ({ ...prev, [sensorKey]: history }));
+            setSelectedHistoryItems(prev => ({ ...prev, [sensorKey]: history[history.length - 1] || null }));
+            setTreeIndex(0);
+            fetchModels(trainingJob.model_name || resObj.model_name);
+            setLoading(false);
+            soundHandler.playSuccess();
+            const timer = setInterval(() => {
+                setCountdown(c => {
+                    const next = (c ?? 5) - 1;
+                    if (next <= 0) {
+                        clearInterval(timer);
+                        setCountdown(null);
+                        setTrainingJob(null);
+                        return 0;
+                    }
+                    return next;
+                });
+            }, 1000);
+            setCountdown(5);
+            return () => clearInterval(timer);
+        }
+
+        if (trainingJob.status === 'failed' || trainingJob.status === 'error') {
+            finalizedJobRef.current = trainingJob.job_id;
+            setError(trainingJob.error || 'Training failed');
+            setLoading(false);
+            setCountdown(null);
+        }
+    }, [trainingJob, activeTab]);
 
     const handleTrain = async () => {
         soundHandler.playMLTrain();
@@ -1835,7 +2013,7 @@ export default function MLTrainingView({ onSwitchLab }) {
                 body: JSON.stringify({
                     // Hyperparameters
                     ...activeParams,
-                    
+
                     // Rename for backend compatibility
                     n_folds: enforcedKForBackend,
                     train_split: activeParams.train_ratio,
@@ -1852,37 +2030,16 @@ export default function MLTrainingView({ onSwitchLab }) {
             if (!res.ok) throw new Error(data.error || 'Training failed');
 
             if (data.job_id) {
-                const finalJobResult = await pollJob(data.job_id);
-                if (finalJobResult && (finalJobResult.status === 'completed' || finalJobResult.status === 'success')) {
-                    // Start 5-second countdown
-                    setCountdown(5);
-                    const timer = setInterval(() => {
-                        setCountdown(c => {
-                            if (c <= 1) {
-                                clearInterval(timer);
-                                // Finalize
-                                const resObj = finalJobResult.result || finalJobResult;
-                                setResults(prev => ({ ...prev, [activeTab]: { ...resObj, source: getSourceName(true) } }));
-                                setEvalResults(prev => ({ ...prev, [activeTab]: null }));
-                                setSelectedModels(prev => ({ ...prev, [activeTab]: modelNameFinal }));
-                                const history = finalJobResult.history || resObj.training_history || [];
-                                setLastHistory(prev => ({ ...prev, [activeTab]: history }));
-                                setSelectedHistoryItems(prev => ({ ...prev, [activeTab]: history[history.length - 1] || null }));
-                                setTreeIndex(0);
-                                fetchModels(modelNameFinal);
-                                setTrainingJob(null);
-                                setCountdown(null);
-                                setLoading(false);
-                                soundHandler.playSuccess();
-                                return 0;
-                            }
-                            return c - 1;
-                        });
-                    }, 1000);
-                } else {
-                    const errorMsg = finalJobResult?.error || "Job failed or returned no result.";
-                    throw new Error(errorMsg);
-                }
+                finalizedJobRef.current = null;
+                setCountdown(null);
+                setTrainingJob({
+                    job_id: data.job_id,
+                    status: data.status || 'queued',
+                    sensor: data.sensor || activeTab,
+                    model_name: modelNameFinal,
+                    progress: 0,
+                    history: [],
+                });
             } else {
                 setResults(prev => ({ ...prev, [activeTab]: { ...data, source: getSourceName(true) } }));
                 setEvalResults(prev => ({ ...prev, [activeTab]: null }));
@@ -2075,24 +2232,14 @@ export default function MLTrainingView({ onSwitchLab }) {
                                     </div>
 
                                     <div className="col-span-12 md:col-span-6 row-span-2 min-h-0 flex flex-col overflow-hidden relative group">
-                                        {insightView === 'matrix' ? (
-                                            <div className="h-full flex flex-col relative">
-                                                <ConfusionMatrixCard
-                                                    matrix={(activeResult || activeEvalResult).confusion_matrix}
-                                                    labels={(activeResult || activeEvalResult).labels || []}
-                                                    n_samples={(activeResult || activeEvalResult).n_samples}
-                                                    sensor={activeTab}
-                                                />
-                                            </div>
-                                        ) : (
-                                            <DataInsightCard
-                                                result={activeResult || activeEvalResult}
-                                                sensor={activeTab}
-                                                params={activeParams}
-                                                selectedSessionName={selectedSessionName}
-                                                onMatrixToggle={() => setInsightView('matrix')}
-                                            />
-                                        )}
+                                        <InsightWorkspaceCard
+                                            view={insightView === 'history' ? 'matrix' : insightView}
+                                            result={activeResult || activeEvalResult}
+                                            sensor={activeTab}
+                                            params={activeParams}
+                                            selectedSessionName={selectedSessionName}
+                                            onSwitchView={setInsightView}
+                                        />
 
                                     </div>
                                 </>

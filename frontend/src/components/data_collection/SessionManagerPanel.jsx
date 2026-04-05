@@ -30,7 +30,7 @@ export default function SessionManagerPanel({
     const SENSOR_LABEL_MAP = {
         'EMG': { 0: 'Rest', 1: 'Rock', 2: 'Paper', 3: 'Scissors' },
         'EOG': { 0: 'Rest', 1: 'SingleBlink', 2: 'DoubleBlink' },
-        'EEG': { 0: 'Rest', 1: 'Concentration', 2: 'Relaxation' }
+        'EEG': { 0: 'Rest', 1: 'T1', 2: 'T2', 3: 'T3', 4: 'T4', 5: 'T5', 6: 'T6' }
     };
 
     const getLabelName = (sensor, val) => {

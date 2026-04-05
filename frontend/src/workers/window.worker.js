@@ -79,6 +79,9 @@ self.onmessage = function (e) {
                 }
             });
             break;
+        case 'RESUME_NEXT_BATCH':
+            startAutoWindowing();
+            break;
     }
 };
 
@@ -94,6 +97,12 @@ function startAutoWindowing() {
         ).length;
 
         if (autoCalibrate && currentBatchCount >= autoLimit) {
+            // Stop production interval once batch limit is reached
+            if (windowInterval) {
+                console.log(`[WindowWorker] Batch limit (${autoLimit}) reached. Stopping interval.`);
+                clearInterval(windowInterval);
+                windowInterval = null;
+            }
             return;
         }
 
@@ -170,11 +179,19 @@ function handleWindowCollected(collectedWindow) {
     }
 }
 
+let updateThrottleTimeout = null;
+const UPDATE_THROTTLE_MS = 100; // 10Hz
+
 function notifyWindowsUpdate() {
-    self.postMessage({
-        type: 'WINDOWS_UPDATED',
-        payload: markedWindows.map(toWindowSummary)
-    });
+    if (updateThrottleTimeout) return;
+
+    updateThrottleTimeout = setTimeout(() => {
+        self.postMessage({
+            type: 'WINDOWS_UPDATED',
+            payload: markedWindows.map(toWindowSummary)
+        });
+        updateThrottleTimeout = null;
+    }, UPDATE_THROTTLE_MS);
 }
 
 function mergeWindow(collectedWindow) {

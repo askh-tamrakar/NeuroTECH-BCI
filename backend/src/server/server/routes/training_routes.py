@@ -1,6 +1,8 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, current_app
 import json
 import time
+import uuid
+import threading
 import numpy as np
 import pandas as pd
 from src.server.server.state import state
@@ -34,6 +36,187 @@ from src.config.window_config import SESSION_CONFIG
 from src.feature.extractors.rps_extractor import EMG_BASE_FEATURES, EMG_FEATURE_COLUMNS
 
 training_bp = Blueprint('training', __name__)
+EMG_BURST_WINDOWS = 5
+EMG_BURST_STRIDE_MS = 150.0
+TRAINING_JOBS = {}
+TRAINING_JOBS_LOCK = threading.Lock()
+
+
+def _normalize_eeg_label(label):
+    raw = str(label).strip()
+    lowered = raw.lower()
+    mapping = {
+        'rest': 0,
+        '0': 0,
+        't1': 1,
+        'target 1': 1,
+        'concentration': 1,
+        '1': 1,
+        't2': 2,
+        'target 2': 2,
+        'relaxation': 2,
+        '2': 2,
+        't3': 3,
+        'target 3': 3,
+        '3': 3,
+        't4': 4,
+        'target 4': 4,
+        '4': 4,
+        't5': 5,
+        'target 5': 5,
+        '5': 5,
+        't6': 6,
+        'target 6': 6,
+        '6': 6,
+    }
+    return mapping.get(lowered, 0)
+
+
+def _job_snapshot(job_id):
+    with TRAINING_JOBS_LOCK:
+        job = TRAINING_JOBS.get(job_id)
+        return dict(job) if job else None
+
+
+def _safe_socket_emit(event_name, payload):
+    try:
+        if getattr(socketio, "server", None) is not None:
+            socketio.emit(event_name, payload)
+    except Exception:
+        pass
+
+
+def _emit_job_update(job_id):
+    snapshot = _job_snapshot(job_id)
+    if snapshot:
+        _safe_socket_emit('training_job_update', snapshot)
+
+
+def _create_training_job(sensor: str, model_name: str):
+    job_id = uuid.uuid4().hex
+    now = time.time()
+    job = {
+        "job_id": job_id,
+        "status": "queued",
+        "sensor": sensor,
+        "model_name": model_name,
+        "progress": 0.0,
+        "elapsed_seconds": 0.0,
+        "eta_seconds": None,
+        "candidate_index": 0,
+        "total_candidates": 1,
+        "fold_index": 0,
+        "total_folds": 0,
+        "history": [],
+        "result": None,
+        "error": None,
+        "_started_at": now,
+    }
+    with TRAINING_JOBS_LOCK:
+        TRAINING_JOBS[job_id] = job
+    _emit_job_update(job_id)
+    return job
+
+
+def _update_training_job(job_id, **updates):
+    with TRAINING_JOBS_LOCK:
+        job = TRAINING_JOBS.get(job_id)
+        if not job:
+            return None
+        job.update(updates)
+        started_at = job.get("_started_at", time.time())
+        elapsed = max(0.0, time.time() - started_at)
+        job["elapsed_seconds"] = elapsed
+        progress = float(job.get("progress") or 0.0)
+        if 0 < progress < 1:
+            job["eta_seconds"] = max(0.0, elapsed * ((1 / progress) - 1))
+        elif progress >= 1.0:
+            job["eta_seconds"] = 0.0
+        snapshot = dict(job)
+    _safe_socket_emit('training_job_update', snapshot)
+    return snapshot
+
+
+def _finalize_training_job(job_id, *, status: str, result=None, error=None, history=None):
+    return _update_training_job(
+        job_id,
+        status=status,
+        progress=1.0 if status == "completed" else float((_job_snapshot(job_id) or {}).get("progress") or 0.0),
+        result=result,
+        error=error,
+        history=history if history is not None else (_job_snapshot(job_id) or {}).get("history", []),
+    )
+
+
+def _run_training_job(app, job_id, trainer, trainer_kwargs, *, on_success=None):
+    def progress_callback(update):
+        update = dict(update or {})
+        history = update.get("history")
+        if history is not None:
+            update["history"] = list(history)
+        _update_training_job(job_id, **update)
+
+    def target():
+        with app.app_context():
+            try:
+                _update_training_job(job_id, status="running")
+                result = trainer(progress_callback=progress_callback, **trainer_kwargs)
+                if isinstance(result, dict) and result.get("error"):
+                    _finalize_training_job(job_id, status="failed", error=result.get("error"))
+                    return
+                if on_success:
+                    on_success(result, trainer_kwargs)
+                _finalize_training_job(job_id, status="completed", result=result, history=result.get("training_history", []))
+            except Exception as exc:
+                _finalize_training_job(job_id, status="failed", error=str(exc))
+
+    thread = threading.Thread(target=target, daemon=True)
+    thread.start()
+
+
+def _emg_window_params(sr, metadata, samples):
+    explicit_window_ms = metadata.get('windowMs') or metadata.get('sessionWindowMs') or metadata.get('window_ms')
+    explicit_capture_ms = metadata.get('captureWindowMs') or metadata.get('capture_window_ms')
+    selected_window_ms = float(explicit_window_ms or ((len(samples) / max(sr, 1)) * 1000.0))
+    selected_window_samples = max(1, int((selected_window_ms / 1000.0) * sr))
+    stride_samples = max(1, int((EMG_BURST_STRIDE_MS / 1000.0) * sr))
+    expected_capture_samples = selected_window_samples + stride_samples * (EMG_BURST_WINDOWS - 1)
+    capture_samples = expected_capture_samples
+    capture_window_ms = float((capture_samples / sr) * 1000.0)
+
+    if explicit_capture_ms is not None:
+        capture_window_ms = float(explicit_capture_ms)
+        capture_samples = max(1, int((capture_window_ms / 1000.0) * sr))
+
+    is_valid_burst = abs(capture_samples - expected_capture_samples) <= max(2, stride_samples // 10)
+    return selected_window_ms, selected_window_samples, stride_samples, capture_samples, capture_window_ms, is_valid_burst
+
+
+def _resolve_serial_id(raw_value):
+    try:
+        if raw_value in (None, ""):
+            return 0
+        return int(float(raw_value))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _normalize_eog_label(label):
+    raw = str(label).strip()
+    lowered = raw.lower()
+    mapping = {
+        'rest': 0,
+        '0': 0,
+        'singleblink': 1,
+        'single_blink': 1,
+        'single blink': 1,
+        '1': 1,
+        'doubleblink': 2,
+        'double_blink': 2,
+        'double blink': 2,
+        '2': 2,
+    }
+    return mapping.get(lowered, 0)
 
 def extract_features_wrapper(sensor: str, samples: list, sr: int = 1000) -> dict:
     """Route to sensor-specific feature extraction."""
@@ -70,24 +253,37 @@ def api_train_emg():
         min_impurity_decrease = float(params.get('min_impurity_decrease', 0.0))
         model_name = params.get('model_name', 'emg_rf_model')
         
-        result = train_emg_model(
-            n_estimators=n_est, 
-            max_depth=max_d, 
-            min_impurity_decrease=min_impurity_decrease,
-            train_split=train_split,
-            val_split=val_split,
-            test_split=test_split,
-            n_folds=n_folds,
-            table_name=target_table, 
-            model_name=model_name
+        job = _create_training_job("EMG", model_name)
+        _run_training_job(
+            current_app._get_current_object(),
+            job["job_id"],
+            train_emg_model,
+            {
+                "n_estimators": n_est,
+                "max_depth": max_d,
+                "min_impurity_decrease": min_impurity_decrease,
+                "n_estimators_min": params.get("n_estimators_min"),
+                "n_estimators_max": params.get("n_estimators_max"),
+                "max_depth_min": params.get("max_depth_min"),
+                "max_depth_max": params.get("max_depth_max"),
+                "min_impurity_decrease_min": params.get("min_impurity_decrease_min"),
+                "min_impurity_decrease_max": params.get("min_impurity_decrease_max"),
+                "search_resolution": params.get("search_resolution", 1),
+                "train_split": train_split,
+                "val_split": val_split,
+                "test_split": test_split,
+                "n_folds": n_folds,
+                "table_name": target_table,
+                "model_name": model_name,
+            },
+            on_success=lambda _result, _kwargs: state.rps_detector.load_model(model_name, verbose=False) if state.rps_detector else None,
         )
-        if "error" in result:
-             return jsonify(result), 400
-             
-        if state.rps_detector:
-             state.rps_detector.load_model(model_name, verbose=False)
-             
-        return jsonify(result)
+        return jsonify({
+            "job_id": job["job_id"],
+            "status": job["status"],
+            "sensor": "EMG",
+            "model_name": model_name,
+        })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -111,20 +307,36 @@ def api_train_eog():
         
         min_impurity_decrease = float(params.get('min_impurity_decrease', 0.0))
         
-        result = train_eog_model(
-            n_estimators=n_est, 
-            max_depth=max_d, 
-            min_impurity_decrease=min_impurity_decrease,
-            train_split=train_split,
-            val_split=val_split,
-            test_split=test_split,
-            n_folds=n_folds,
-            table_name=table_name or "eog_windows", 
-            model_name=model_name
+        job = _create_training_job("EOG", model_name)
+        _run_training_job(
+            current_app._get_current_object(),
+            job["job_id"],
+            train_eog_model,
+            {
+                "n_estimators": n_est,
+                "max_depth": max_d,
+                "min_impurity_decrease": min_impurity_decrease,
+                "n_estimators_min": params.get("n_estimators_min"),
+                "n_estimators_max": params.get("n_estimators_max"),
+                "max_depth_min": params.get("max_depth_min"),
+                "max_depth_max": params.get("max_depth_max"),
+                "min_impurity_decrease_min": params.get("min_impurity_decrease_min"),
+                "min_impurity_decrease_max": params.get("min_impurity_decrease_max"),
+                "search_resolution": params.get("search_resolution", 1),
+                "train_split": train_split,
+                "val_split": val_split,
+                "test_split": test_split,
+                "n_folds": n_folds,
+                "table_name": table_name or "eog_windows",
+                "model_name": model_name,
+            },
         )
-        if "error" in result:
-             return jsonify(result), 400
-        return jsonify(result)
+        return jsonify({
+            "job_id": job["job_id"],
+            "status": job["status"],
+            "sensor": "EOG",
+            "model_name": model_name,
+        })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -145,22 +357,44 @@ def api_train_eeg_lda():
         model_name = params.get('model_name', 'eeg_lda')
         solver = params.get('solver', 'eigen')
         shrinkage = params.get('shrinkage', 'auto')
+        tol = float(params.get('tol', params.get('tol_min', 0.0001)))
 
-        result = train_eeg_lda_model(
-            table_name=table_name,
-            train_split=train_split,
-            val_split=val_split,
-            test_split=test_split,
-            n_folds=n_folds,
-            model_name=model_name,
-            solver=solver,
-            shrinkage=shrinkage,
+        job = _create_training_job("EEG", model_name)
+        _run_training_job(
+            current_app._get_current_object(),
+            job["job_id"],
+            train_eeg_lda_model,
+            {
+                "table_name": table_name,
+                "train_split": train_split,
+                "val_split": val_split,
+                "test_split": test_split,
+                "n_folds": n_folds,
+                "model_name": model_name,
+                "solver": solver,
+                "shrinkage": shrinkage,
+                "tol": tol,
+                "tol_min": params.get("tol_min"),
+                "tol_max": params.get("tol_max"),
+                "search_resolution": params.get("search_resolution", 1),
+            },
         )
-        if "error" in result:
-            return jsonify(result), 400
-        return jsonify(result)
+        return jsonify({
+            "job_id": job["job_id"],
+            "status": job["status"],
+            "sensor": "EEG",
+            "model_name": model_name,
+        })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@training_bp.route('/api/train-jobs/<job_id>', methods=['GET'])
+def api_get_training_job(job_id):
+    job = _job_snapshot(job_id)
+    if not job:
+        return jsonify({"error": "Training job not found"}), 404
+    return jsonify(job)
 
 
 @training_bp.route('/api/model/evaluate', methods=['POST'])
@@ -457,74 +691,114 @@ def _save_window_payload(payload):
 
         sr = state.config.get('sampling_rate', 1000) if state.config else 1000
         sensor_upper = str(sensor).upper()
-        
-        # Trial ID management
-        trial_id = metadata.get('trial') or f"trial_{int(time.time() * 1000)}"
-        
-        # EEG Label Mapping (T1-T6)
-        if sensor_upper == 'EEG':
-            # Map labels like "Target 1" or "Concentration" to "T1", "T2" etc.
-            # Frontend should ideally send T1-T6, but we'll try to map common names.
-            if action in ["Target 1", "Concentration"]: action = "T1"
-            elif action in ["Target 2", "Relaxation"]: action = "T2"
-            elif action in ["Target 3"]: action = "T3"
-            elif action in ["Target 4"]: action = "T4"
-            elif action in ["Target 5"]: action = "T5"
-            elif action in ["Target 6"]: action = "T6"
-            # If it's already T1-T6, it stays same.
 
-        # Special logic for EMG 1500ms burst (5 overlapping windows)
         sub_windows = []
-        if sensor_upper == 'EMG' and len(samples) >= 1500:
-            window_len = 900
-            stride = 150
-            for i in range(5):
-                start_idx = i * stride
-                end_idx = start_idx + window_len
-                sub_samples = samples[start_idx:end_idx]
-                sub_windows.append(sub_samples)
-        else:
-            sub_windows.append(samples)
-
         session_name = payload.get('session_name', 'Manual_Windows')
         table_name = db_manager.create_session_table(sensor, session_name)
+        session_id = str(int(time.time() * 1000))
+        trial_id = metadata.get('trial') or (db_manager.next_trial_id(sensor_upper, table_name) if sensor_upper in {'EMG', 'EEG'} else None)
+        serial_id = _resolve_serial_id(metadata.get('serial_id'))
+        if sensor_upper == 'EOG' and serial_id <= 0:
+            serial_id = db_manager.next_serial_id(table_name)
+
+        if sensor_upper == 'EMG':
+            selected_window_ms, selected_window_samples, stride_samples, capture_samples, capture_window_ms, is_valid_burst = _emg_window_params(sr, metadata, samples)
+            raw_samples = np.asarray(samples).flatten()
+            db_manager.save_session_metadata('EMG', table_name, {
+                "sensor": "EMG",
+                "table_name": table_name,
+                "session_name": session_name,
+                "storage_format": "compact_emg_v3",
+                "feature_columns": EMG_FEATURE_COLUMNS,
+                "channel_index": int(metadata.get('channelIndex', payload.get('channel', 0)) or 0),
+                "sample_count": int(selected_window_samples),
+                "sampling_rate": float(sr),
+                "window_ms": float(selected_window_ms),
+                "training_window_ms": float(selected_window_ms),
+                "capture_window_ms": float(capture_window_ms),
+                "session_window_ms": float(selected_window_ms),
+                "session_overlap": float(metadata.get('sessionOverlap', 0) or 0),
+                "session_stride_ms": float(metadata.get('sessionStrideMs', EMG_BURST_STRIDE_MS) or EMG_BURST_STRIDE_MS),
+                "gap_ms": float(metadata.get('gapMs', 0) or 0),
+                "source": metadata.get('source', 'frontend_auto_window'),
+            })
+            if is_valid_burst and len(raw_samples) >= capture_samples:
+                for offset in range(0, capture_samples - selected_window_samples + 1, stride_samples):
+                    sub_windows.append(raw_samples[offset: offset + selected_window_samples].tolist())
+            else:
+                sub_windows.append(raw_samples[:selected_window_samples].tolist())
+        elif sensor_upper == 'EEG':
+            resolved_window_ms = float(metadata.get('windowMs') or ((len(samples) / sr) * 1000.0))
+            resolved_target_frequency = float(metadata.get('targetFrequency', metadata.get('frequency', 0)) or 0)
+            db_manager.save_session_metadata('EEG', table_name, {
+                "sensor": "EEG",
+                "table_name": table_name,
+                "session_name": session_name,
+                "storage_format": "compact_eeg_v1",
+                "channel_index": int(metadata.get('channelIndex', payload.get('channel', 0)) or 0),
+                "sample_count": int(metadata.get('sampleCount') or len(samples) or 0),
+                "sampling_rate": float(sr),
+                "window_ms": resolved_window_ms,
+                "target_frequency": resolved_target_frequency,
+                "source": metadata.get('source', 'ssvep_collector'),
+            })
+            sub_windows.append(samples)
+        else:
+            sub_windows.append(samples)
         
-        last_result = None
-        for i, current_samples in enumerate(sub_windows):
-            # Compute features for each sub-window
+        last_features = None
+        prev_features = None
+        for current_samples in sub_windows:
             if sensor_upper == 'EMG':
-                # Use incremental logic for stride? Or just fresh?
-                features = extract_emg_features(current_samples, sr)
+                features = extract_emg_features(current_samples, sr, prev_features=prev_features)
                 features['trial'] = trial_id
-                features['window_ms'] = 900.0
-                features['session_window_ms'] = 900.0
-                features['session_stride_ms'] = 150.0
+                features['sample_count'] = int(len(current_samples))
+                features['window_ms'] = float(selected_window_ms)
+                features['capture_window_ms'] = float(capture_window_ms)
+                features['sampling_rate'] = float(sr)
+                features['session_window_ms'] = float(selected_window_ms)
+                features['session_stride_ms'] = float(EMG_BURST_STRIDE_MS)
+                features['source'] = metadata.get('source', 'frontend_auto_window')
+                prev_features = {key: features.get(key, 0.0) for key in EMG_FEATURE_COLUMNS if not key.startswith('d_')}
             elif sensor_upper == 'EEG':
                 features = extract_eeg_features(current_samples, sr)
                 features['trial'] = trial_id
+                features['sample_count'] = int(len(current_samples))
+                features['window_ms'] = float(metadata.get('windowMs') or ((len(current_samples) / sr) * 1000.0))
+                features['channel_index'] = int(metadata.get('channelIndex', payload.get('channel', 0)) or 0)
                 features['target_frequency'] = float(metadata.get('targetFrequency', metadata.get('frequency', 0)) or 0)
             else:
                 features = extract_features_wrapper(sensor, current_samples, sr)
                 if sensor_upper == 'EOG':
-                    features['serial_id'] = int(metadata.get('serial_id', 0))
+                    features['serial_id'] = serial_id
 
             ts = time.time()
             features['timestamp'] = ts
-            features['metadata_json'] = json.dumps(metadata)
+            features['metadata_json'] = json.dumps({
+                **metadata,
+                "trial": trial_id,
+                "serial_id": serial_id,
+                "session_name": session_name,
+            })
+            last_features = features
 
-            # Insert into DB
             if sensor_upper == 'EMG':
-                db_manager.insert_emg_window(features, action, session_id=str(int(ts)), table_name=table_name)
+                label_value = int(action) if str(action).isdigit() else {
+                    'rest': 0, 'rock': 1, 'paper': 2, 'scissors': 3
+                }.get(str(action).lower(), 0)
+                db_manager.insert_emg_window(features, label_value, session_id=session_id, table_name=table_name)
                 if "merge" not in table_name.lower():
-                    db_manager.insert_emg_window(features, action, session_id=str(int(ts)), table_name="emg_windows")
+                    db_manager.insert_emg_window(features, label_value, session_id=session_id, table_name="emg_windows")
             elif sensor_upper == 'EOG':
-                db_manager.insert_eog_window(features, action, session_id=str(int(ts)), table_name=table_name)
+                label_value = _normalize_eog_label(action)
+                db_manager.insert_eog_window(features, label_value, session_id=session_id, table_name=table_name)
                 if "merge" not in table_name.lower():
-                    db_manager.insert_eog_window(features, action, session_id=str(int(ts)), table_name="eog_windows")
+                    db_manager.insert_eog_window(features, label_value, session_id=session_id, table_name="eog_windows")
             elif sensor_upper == 'EEG':
-                db_manager.insert_eeg_window(features, action, session_id=str(int(ts)), table_name=table_name)
+                label_value = _normalize_eeg_label(action)
+                db_manager.insert_eeg_window(features, label_value, session_id=session_id, table_name=table_name)
                 if "merge" not in table_name.lower():
-                    db_manager.insert_eeg_window(features, action, session_id=str(int(ts)), table_name="eeg_windows")
+                    db_manager.insert_eeg_window(features, label_value, session_id=session_id, table_name="eeg_windows")
 
         final_response = {
             "status": "saved",
@@ -532,9 +806,10 @@ def _save_window_payload(payload):
             "table": table_name,
             "windows_saved": len(sub_windows),
             "trial": trial_id,
+            "serial_id": serial_id if sensor_upper == 'EOG' else None,
         }
-        if last_result:
-            final_response["features"] = last_result["features"]
+        if last_features:
+            final_response["features"] = last_features
             
         return jsonify(final_response)
 

@@ -1,189 +1,310 @@
 import json
-import random
+from itertools import product
 from datetime import datetime
+
 import joblib
 import numpy as np
-import pandas as pd
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.metrics import accuracy_score, confusion_matrix
 from sklearn.model_selection import GroupKFold, train_test_split
 from sklearn.preprocessing import StandardScaler
-import os
 
-from src.database.db_manager import db_manager
-from src.learning.emg_trainer import DISPLAY_LABELS, LABELS_MAP, get_model_paths, get_rejected_model_paths, generate_hex_id
-from src.utils.config import config_manager
+from src.learning.emg_trainer import (
+    DISPLAY_LABELS,
+    LABELS_MAP,
+    _artifact_path_for_ui,
+    _build_result_payload,
+    _candidate_prefix,
+    _extract_session_names,
+    _hyperparameters_for_response,
+    _load_table,
+    _normalize_label,
+    _prepare_dataframe,
+    _read_metadata,
+    _resolve_split_configuration,
+    delete_model as _delete_model,
+    evaluate_saved_model as _evaluate_saved_model,
+    generate_model_id,
+    get_group_column,
+    get_model_paths,
+    get_rejected_model_paths,
+    list_saved_models as _list_saved_models,
+    load_model as _load_model,
+    _resolution_count,
+    _candidate_values,
+)
 
 EEG_LDA_FEATURES = [
     "score_1", "score_2", "score_3", "score_4", "score_5", "score_6",
     "max_score", "second_max_score", "score_ratio", "score_mean", "score_std",
-    "peak_freq", "target_frequency"
+    "peak_freq", "target_frequency",
 ]
 
-def _resolve_model_feature_order(model=None, scaler=None):
-    expected = getattr(scaler, "n_features_in_", None)
-    if expected is None and model is not None:
-        expected = getattr(model, "n_features_in_", None)
-    if not expected:
-        expected = len(EEG_LDA_FEATURES)
-    return EEG_LDA_FEATURES[: int(expected)]
 
-def _normalize_feature_importances(model, feature_order) -> tuple[dict, dict]:
-    coefficients = getattr(model, "coef_", None)
-    if coefficients is None: return {}, {}
-    coeffs = pd.DataFrame(coefficients, columns=feature_order)
-    raw_importances = coeffs.abs().mean(axis=0)
-    total = float(raw_importances.sum())
-    normalized = (raw_importances / total).to_dict() if total > 1e-12 else {f: 0.0 for f in feature_order}
-    return normalized, raw_importances.to_dict()
-
-def _build_lda_visualization(model, X_scaled, y, feature_order) -> dict:
+def _build_visualization(model, x_scaled, y):
     visualization = {"component_count": 0, "class_centroids": [], "class_signatures": []}
     try:
-        projections = model.transform(X_scaled)
-        if projections.ndim == 1: projections = projections.reshape(-1, 1)
-        visualization["component_count"] = int(projections.shape[1])
-        for label in sorted(pd.Series(y).astype(int).unique().tolist()):
-            mask = (pd.Series(y).astype(int).to_numpy() == label)
-            if not np.any(mask): continue
-            subset = projections[mask]
+        projection = model.transform(x_scaled)
+        if projection.ndim == 1:
+            projection = projection.reshape(-1, 1)
+        visualization["component_count"] = int(projection.shape[1])
+        y_values = np.asarray(y, dtype=int)
+        for label in sorted(np.unique(y_values)):
+            mask = y_values == label
+            subset = projection[mask]
             visualization["class_centroids"].append({
-                "label": label,
-                "name": str(DISPLAY_LABELS["EEG"].get(label, label)),
+                "label": int(label),
+                "name": DISPLAY_LABELS["EEG"].get(int(label), str(label)),
                 "count": int(subset.shape[0]),
                 "ld1": float(np.mean(subset[:, 0])) if subset.shape[1] > 0 else 0.0,
                 "ld2": float(np.mean(subset[:, 1])) if subset.shape[1] > 1 else 0.0,
             })
-    except: pass
-    
+    except Exception:
+        pass
+
     coefficients = getattr(model, "coef_", None)
     classes = getattr(model, "classes_", [])
     if coefficients is not None and len(classes):
-        coeffs = pd.DataFrame(coefficients, columns=feature_order)
         for index, class_id in enumerate(classes):
-            if index >= len(coeffs): continue
-            row = coeffs.iloc[index]
-            top_features = row.abs().sort_values(ascending=False).head(4)
-            max_abs = float(top_features.max()) if len(top_features) else 0.0
-            signature = [{"feature": k, "weight": float(v), "relative": (abs(float(v))/max_abs) if max_abs > 1e-12 else 0.0} for k,v in top_features.items()]
-            visualization["class_signatures"].append({"label": class_id, "name": str(DISPLAY_LABELS["EEG"].get(class_id, class_id)), "signature": signature})
+            row = np.abs(coefficients[index])
+            top_indices = np.argsort(row)[::-1][:4]
+            max_value = float(np.max(row[top_indices])) if len(top_indices) else 0.0
+            visualization["class_signatures"].append({
+                "label": int(class_id),
+                "name": DISPLAY_LABELS["EEG"].get(int(class_id), str(class_id)),
+                "signature": [
+                    {
+                        "feature": EEG_LDA_FEATURES[idx],
+                        "weight": float(coefficients[index][idx]),
+                        "relative": float(abs(coefficients[index][idx]) / max_value) if max_value > 1e-12 else 0.0,
+                    }
+                    for idx in top_indices
+                ],
+            })
     return visualization
 
-def train_eeg_lda_model(table_name: str = "eeg_windows", train_split=0.7, val_split=0.15, test_split=0.15, n_folds=1, model_name=None, solver="eigen", shrinkage="auto"):
-    conn = db_manager.connect("EEG")
-    try:
-        df = pd.read_sql_query(f"SELECT * FROM {table_name}", conn)
-    finally: conn.close()
-    
-    if df.empty: return {"error": "Database is empty."}
-    
-    for col in EEG_LDA_FEATURES:
-        if col not in df.columns: df[col] = 0.0
-    
-    df = df[df["label"].notna()]
-    if df["label"].nunique() < 2: return {"error": "Need at least 2 classes."}
-    
-    X = df[EEG_LDA_FEATURES].fillna(0.0)
-    y = df["label"]
-    groups = df["trial"] if "trial" in df.columns else pd.Series(["T0"]*len(df))
-    
-    unique_trials = groups.unique()
-    if len(unique_trials) < 3:
-        train_val_idx, test_idx = train_test_split(np.arange(len(y)), test_size=test_split, stratify=y, random_state=42)
-    else:
-        tv_trials, test_trials = train_test_split(unique_trials, test_size=test_split, random_state=42)
-        train_val_idx = df[groups.isin(tv_trials)].index
-        test_idx = df[groups.isin(test_trials)].index
-    
-    X_tv, y_tv, groups_tv = X.iloc[train_val_idx], y.iloc[train_val_idx], groups.iloc[train_val_idx]
-    X_test, y_test = X.iloc[test_idx], y.iloc[test_idx]
-    
-    candidate_base = random.randint(0x100, 0xFFF)
-    fold_results = []
-    
-    if n_folds > 1 and len(groups_tv.unique()) >= n_folds:
-        gkf = GroupKFold(n_splits=n_folds)
-        folds = list(gkf.split(X_tv, y_tv, groups=groups_tv))
-    else:
-        # Single fold (Trial-Aware)
-        n_folds = 1
-        unique_trials_tv = groups_tv.unique()
-        if len(unique_trials_tv) >= 2:
-            tr_t, val_t = train_test_split(unique_trials_tv, test_size=val_split/(train_split+val_split), random_state=42)
-            tr_idx = groups_tv[groups_tv.isin(tr_t)].index
-            val_idx = groups_tv[groups_tv.isin(val_t)].index
-            folds = [(tr_idx, val_idx)]
-        else:
-            # Row-wise fallback
-            tr_idx, val_idx = train_test_split(np.arange(len(y_tv)), test_size=val_split/(train_split+val_split), random_state=42)
-            folds = [(tr_idx, val_idx)]
-        
-    best_acc, best_data = -1, None
-    for f_idx, (t_idx, v_idx) in enumerate(folds):
-        X_f_t, X_f_v = X_tv.iloc[t_idx], X_tv.iloc[v_idx]
-        y_f_t, y_f_v = y_tv.iloc[t_idx], y_tv.iloc[v_idx]
-        
-        scaler = StandardScaler()
-        X_f_t_s = scaler.fit_transform(X_f_t)
-        X_f_v_s = scaler.transform(X_f_v)
-        
-        model = LinearDiscriminantAnalysis(solver=solver, shrinkage="auto" if solver in ["lsqr", "eigen"] else None)
-        model.fit(X_f_t_s, y_f_t)
-        
-        acc = accuracy_score(y_f_v, model.predict(X_f_v_s))
-        model_id = generate_hex_id(candidate_base, f_idx + 1)
-        
-        r_paths = get_rejected_model_paths("EEG", model_id)
-        joblib.dump(model, r_paths["model"])
-        joblib.dump(scaler, r_paths["scaler"])
-        with open(r_paths["meta"], 'w') as f_m: json.dump({"accuracy": acc, "fold": f_idx+1, "candidate": f"{candidate_base:X}"}, f_m)
-        
-        fold_results.append({"fold": f_idx+1, "accuracy": acc, "model_id": model_id})
-        if acc > best_acc: best_acc, best_data = acc, (model, scaler, model_id)
 
-    best_m, best_s, best_id = best_data
-    X_test_s = best_s.transform(X_test)
-    y_test_pred = best_m.predict(X_test_s)
-    test_acc = accuracy_score(y_test, y_test_pred)
-    
-    final_id = model_name or generate_hex_id(candidate_base, 0)
-    final_paths = get_model_paths("EEG", final_id)
-    joblib.dump(best_m, final_paths["model"])
-    joblib.dump(best_s, final_paths["scaler"])
-    with open(final_paths["meta"], 'w') as f_m: 
-        json.dump({"accuracy": test_acc, "val_accuracy": best_acc, "folds": fold_results, "id": final_id, "created_at": datetime.now().isoformat()}, f_m)
-        
-    config_manager.set_active_model("EEG", final_id)
-    
-    std_labels = LABELS_MAP["EEG"]
-    cm = confusion_matrix(y_test, y_test_pred, labels=std_labels).tolist()
-    
-    return {
-        "status": "success", "sensor": "EEG", "accuracy": test_acc, "val_accuracy": best_acc,
-        "confusion_matrix": cm, "labels": [DISPLAY_LABELS["EEG"].get(i, str(i)) for i in std_labels],
-        "model_id": final_id, "best_fold_id": best_id, "folds": fold_results,
-        "visualization": _build_lda_visualization(best_m, X_test_s, y_test, EEG_LDA_FEATURES)
+def _lda_candidate_grid(params: dict):
+    resolution = _resolution_count(params)
+    tol_values = _candidate_values(
+        params.get("tol_min", params.get("tol", 1e-4)),
+        params.get("tol_max", params.get("tol", 1e-4)),
+        resolution,
+        "float",
+    )
+    candidates = []
+    for tol in product(tol_values):
+        candidates.append({
+            "solver": params.get("solver", "svd"),
+            "shrinkage": params.get("shrinkage", "auto"),
+            "tol": float(tol[0]),
+            "search_resolution": resolution,
+        })
+    return candidates
+
+
+def train_eeg_lda_model(table_name="eeg_windows", train_split=0.7, val_split=0.15, test_split=0.15, n_folds=2, model_name=None, solver="eigen", shrinkage="auto", tol=1e-4, progress_callback=None, **search_params):
+    df = _prepare_dataframe('EEG', table_name)
+    if df.empty:
+        return {"error": "Database is empty."}
+
+    feature_cols = list(EEG_LDA_FEATURES)
+    for column in feature_cols:
+        if column not in df.columns:
+            df[column] = 0.0
+    if df["label"].nunique() < 2:
+        return {"error": "Need at least 2 classes."}
+
+    split_cfg = _resolve_split_configuration(train_split, val_split, test_split, n_folds)
+    resolved_split = split_cfg["resolved"]
+    group_col = get_group_column('EEG')
+    groups = df[group_col].astype(str)
+    unique_groups = groups.unique()
+    if len(unique_groups) < 3:
+        indices = np.arange(len(df))
+        train_idx, test_idx = train_test_split(indices, test_size=resolved_split["test_ratio"], random_state=42, stratify=df["label"])
+        train_df = df.iloc[train_idx].copy()
+        test_df = df.iloc[test_idx].copy()
+    else:
+        train_groups, test_groups = train_test_split(unique_groups, test_size=resolved_split["test_ratio"], random_state=42)
+        train_df = df[groups.isin(train_groups)].copy()
+        test_df = df[groups.isin(test_groups)].copy()
+
+    train_groups = train_df[group_col].astype(str)
+    if len(train_groups.unique()) >= resolved_split["k_folds"]:
+        folds = list(GroupKFold(n_splits=resolved_split["k_folds"]).split(train_df, train_df["label"], train_groups))
+    else:
+        row_indices = np.arange(len(train_df))
+        train_idx, val_idx = train_test_split(row_indices, test_size=1 / resolved_split["k_folds"], random_state=42)
+        folds = [(train_idx, val_idx)]
+
+    candidates = _lda_candidate_grid({
+        "solver": solver,
+        "shrinkage": shrinkage,
+        "tol": tol,
+        **search_params,
+    })
+    history = []
+    best = None
+    total_folds = max(1, len(folds))
+    total_candidates = max(1, len(candidates))
+    total_runs = max(1, total_candidates * total_folds)
+    completed_runs = 0
+    if progress_callback:
+        progress_callback({
+            "status": "running",
+            "progress": 0.0,
+            "candidate_index": 0,
+            "total_candidates": total_candidates,
+            "fold_index": 0,
+            "total_folds": total_folds,
+            "history": [],
+        })
+    for candidate_index, candidate_params in enumerate(candidates):
+        hyperparameters = _hyperparameters_for_response("EEG", candidate_params, resolved_split)
+        for fold_number, (train_idx, val_idx) in enumerate(folds, start=1):
+            fold_train = train_df.iloc[train_idx].copy()
+            fold_val = train_df.iloc[val_idx].copy()
+            scaler = StandardScaler()
+            x_train = scaler.fit_transform(fold_train[feature_cols].fillna(0.0))
+            x_val = scaler.transform(fold_val[feature_cols].fillna(0.0))
+            y_train = fold_train["label"].astype(int)
+            y_val = fold_val["label"].astype(int)
+
+            model = LinearDiscriminantAnalysis(
+                solver=candidate_params["solver"],
+                shrinkage=candidate_params["shrinkage"] if candidate_params["solver"] in {"lsqr", "eigen"} else None,
+                tol=float(candidate_params.get("tol", 1e-4)),
+            )
+            model.fit(x_train, y_train)
+            train_accuracy = float(accuracy_score(y_train, model.predict(x_train)))
+            validation_accuracy = float(accuracy_score(y_val, model.predict(x_val)))
+
+            fold_id = generate_model_id(candidate_index, fold_number)
+            rejected_paths = get_rejected_model_paths("EEG", fold_id)
+            joblib.dump(model, rejected_paths["model"])
+            joblib.dump(scaler, rejected_paths["scaler"])
+            history_item = {
+                "id": fold_id,
+                "model_id": fold_id,
+                "candidate_index": candidate_index,
+                "candidate_idx": candidate_index,
+                "fold_index": fold_number,
+                "fold_idx": fold_number,
+                "train_accuracy": train_accuracy,
+                "validation_accuracy": validation_accuracy,
+                "accuracy": validation_accuracy,
+                "n_train_samples": int(len(fold_train)),
+                "n_validation_samples": int(len(fold_val)),
+                "hyperparameters": hyperparameters["selected_hyperparameters"],
+                "artifact_path": _artifact_path_for_ui(rejected_paths["model"]),
+                "created_at": datetime.now().isoformat(),
+            }
+            rejected_paths["meta"].write_text(json.dumps(history_item, indent=2), encoding="utf-8")
+            history.append(history_item)
+            completed_runs += 1
+            if progress_callback:
+                progress_callback({
+                    "status": "running",
+                    "progress": min(0.95, completed_runs / total_runs),
+                    "candidate_index": candidate_index,
+                    "total_candidates": total_candidates,
+                    "fold_index": fold_number,
+                    "total_folds": total_folds,
+                    "history": list(history),
+                    "latest_history_item": history_item,
+                })
+            if best is None or validation_accuracy > best["validation_accuracy"]:
+                best = {
+                    "model": model,
+                    "scaler": scaler,
+                    "train_accuracy": train_accuracy,
+                    "validation_accuracy": validation_accuracy,
+                    "history_item": history_item,
+                    "hyperparameters": hyperparameters,
+                }
+
+    final_name = model_name or generate_model_id(0, 0)
+    final_paths = get_model_paths("EEG", final_name)
+    joblib.dump(best["model"], final_paths["model"])
+    joblib.dump(best["scaler"], final_paths["scaler"])
+
+    x_test = best["scaler"].transform(test_df[feature_cols].fillna(0.0))
+    y_test = test_df["label"].astype(int)
+    y_pred = best["model"].predict(x_test)
+    test_accuracy = float(accuracy_score(y_test, y_pred))
+    confusion = confusion_matrix(y_test, y_pred, labels=LABELS_MAP["EEG"]).tolist()
+    visualization = _build_visualization(best["model"], x_test, y_test)
+
+    session_names = _extract_session_names(df, table_name)
+    metadata = {
+        "sensor": "EEG",
+        "model_name": final_name,
+        "model_id": final_name,
+        "best_fold_id": best["history_item"]["model_id"],
+        "candidate_index": best["history_item"]["candidate_index"],
+        "fold_index": best["history_item"]["fold_index"],
+        "classifier": "LDA",
+        "session_name": session_names[0] if session_names else table_name,
+        "session_names": session_names,
+        "n_samples": int(len(df)),
+        "train_accuracy": best["train_accuracy"],
+        "validation_accuracy": best["validation_accuracy"],
+        "test_accuracy": test_accuracy,
+        "accuracy": test_accuracy,
+        "mean_accuracy": float(np.mean([item["validation_accuracy"] for item in history])) if history else best["validation_accuracy"],
+        "fold_std": float(np.std([item["validation_accuracy"] for item in history])) if history else 0.0,
+        "fold_min": float(min(item["validation_accuracy"] for item in history)) if history else best["validation_accuracy"],
+        "split_summary": {
+            "total_samples": int(len(df)),
+            "train_samples": int(history[0]["n_train_samples"]) if history else 0,
+            "val_samples": int(history[0]["n_validation_samples"]) if history else 0,
+            "test_samples": int(len(test_df)),
+        },
+        "train_ratio": resolved_split["train_ratio"],
+        "val_ratio": resolved_split["val_ratio"],
+        "test_ratio": resolved_split["test_ratio"],
+        "k_folds": resolved_split["k_folds"],
+        "resolved_split": resolved_split,
+        "training_history": history,
+        "hyperparameters": best["hyperparameters"],
+        "group_counts": train_df.groupby(group_col)["label"].count().to_dict(),
+        "confusion_matrix": confusion,
+        "labels": [DISPLAY_LABELS["EEG"].get(label, str(label)) for label in LABELS_MAP["EEG"]],
+        "feature_order": feature_cols,
+        "visualization": visualization,
+        "artifact_path": _artifact_path_for_ui(final_paths["model"]),
+        "created_at": datetime.now().isoformat(),
+        "table_name": table_name,
     }
+    final_paths["meta"].write_text(json.dumps(metadata, indent=2), encoding="utf-8")
+    _load_model("EEG", final_name)
+    if progress_callback:
+        progress_callback({
+            "status": "finalizing",
+            "progress": 0.98,
+            "candidate_index": best["history_item"]["candidate_index"],
+            "total_candidates": total_candidates,
+            "fold_index": best["history_item"]["fold_index"],
+            "total_folds": total_folds,
+            "history": list(history),
+            "latest_history_item": best["history_item"],
+            "result": _build_result_payload("EEG", final_name, metadata),
+        })
+    return _build_result_payload("EEG", final_name, metadata)
+
 
 def evaluate_eeg_lda_model(table_name="eeg_windows", model_name=None):
-    model_name = model_name or config_manager.get_active_model("EEG")
-    if not model_name: return {"error": "No model active."}
-    paths = get_model_paths("EEG", model_name)
-    model = joblib.load(paths["model"])
-    scaler = joblib.load(paths["scaler"])
-    conn = db_manager.connect("EEG")
-    try: df = pd.read_sql_query(f"SELECT * FROM {table_name}", conn)
-    finally: conn.close()
-    X = df[EEG_LDA_FEATURES].fillna(0.0)
-    y = df["label"]
-    X_eval = scaler.transform(X)
-    y_pred = model.predict(X_eval)
-    
-    acc = accuracy_score(y, y_pred)
-    std_labels = LABELS_MAP["EEG"]
-    cm = confusion_matrix(y, y_pred, labels=std_labels).tolist()
-    
-    return {
-        "accuracy": acc, "confusion_matrix": cm,
-        "labels": [str(DISPLAY_LABELS["EEG"].get(i, i)) for i in std_labels]
-    }
+    return _evaluate_saved_model(sensor='EEG', table_name=table_name, model_name=model_name)
+
+
+def list_saved_models():
+    return _list_saved_models('EEG')
+
+
+def delete_model(model_name):
+    return _delete_model('EEG', model_name)
+
+
+def load_model(model_name):
+    return _load_model('EEG', model_name)

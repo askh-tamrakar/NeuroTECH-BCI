@@ -5,12 +5,11 @@ import WindowListPanel from '../data_collection/WindowListPanel';
 import EEGDataCollectionPanel from '../data_collection/EEGDataCollectionPanel';
 import ConfigPanel from '../data_collection/ConfigPanel';
 import SessionManagerPanel from '../data_collection/SessionManagerPanel';
+import AutoCalibrationWizard from '../data_collection/AutoCalibrationWizard';
 import CustomSwitchPill from '../ui/inputs/CustomSwitchPill';
 import InlineModeToggle from '../ui/inputs/InlineModeToggle';
 import { CalibrationApi } from '../../services/calibrationApi';
 import CustomSelect from '../ui/inputs/CustomSelect';
-import CustomNumberInput from '../ui/inputs/CustomNumberInput';
-import FromToRangeInput from '../ui/inputs/FromToRangeInput';
 import { formatAmplitudeValue } from '../../utils/spectrumFormat';
 import { useSettings } from '../../contexts/SettingsContext';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -31,7 +30,10 @@ const DEFAULT_PALETTE = [
     '#06b6d4', '#f97316', '#06d6a0'
 ];
 
+
 const EMG_COLLECTION_GAP_MS = 500;
+const EMG_BURST_STRIDE_MS = 150;
+const EMG_BURST_WINDOWS = 5;
 const WINDOW_PREVIEW_POINTS = 72;
 
 const SENSOR_LABELS = {
@@ -53,7 +55,12 @@ function downsampleSamples(samples, maxPoints = WINDOW_PREVIEW_POINTS) {
     });
 }
 
-import AutoCalibrationWizard from '../data_collection/AutoCalibrationWizard';
+function getActualEmgCaptureWindowMs(durWindowMs) {
+    const duration = Number(durWindowMs) || 0;
+    return duration + ((EMG_BURST_WINDOWS - 1) * EMG_BURST_STRIDE_MS);
+}
+
+
 
 /**
  * DataCollectionView
@@ -320,6 +327,11 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
         return eegTargets.find(target => target.label === targetLabel) || null;
     }, [eegTargets, targetLabel]);
 
+    const actualCaptureWindowMs = useMemo(
+        () => (activeSensor === 'EMG' ? getActualEmgCaptureWindowMs(windowDuration) : windowDuration),
+        [activeSensor, windowDuration]
+    );
+
     const windowDurationOptions = useMemo(() => {
         if (activeSensor === 'EEG') return [1000, 1500, 2000, 3000];
         if (activeSensor === 'EMG') return [900, 1200, 1500, 1800];
@@ -472,6 +484,23 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                 pending.resolve(payload);
             } else if (type === 'SAVE_WINDOWS_ERROR') {
                 pending.reject(new Error(payload?.error || 'Batch save failed'));
+            } else if (type === 'SAVE_SINGLE_WINDOW_COMPLETE') {
+                // Update specific window in markedWindows
+                windowWorkerRef.current?.postMessage({
+                    type: 'WINDOW_COLLECTED',
+                    payload: {
+                        id: payload.id,
+                        status: 'saved',
+                        features: payload.features,
+                        predictedLabel: payload.predicted_label,
+                        windows_saved: payload.windows_saved
+                    }
+                });
+            } else if (type === 'SAVE_SINGLE_WINDOW_ERROR') {
+                windowWorkerRef.current?.postMessage({
+                    type: 'WINDOW_COLLECTED',
+                    payload: { id: payload.id, status: 'error' }
+                });
             }
             pendingSaveRequestRef.current = null;
         };
@@ -487,7 +516,7 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                 mode,
                 autoLimit,
                 autoCalibrate,
-                windowDuration,
+                windowDuration: actualCaptureWindowMs,
                 timeWindow,
                 isCalibrating
             }
@@ -504,10 +533,9 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
     useEffect(() => {
         windowWorkerRef.current?.postMessage({
             type: 'UPDATE_STATE',
-            payload: { activeSensor, activeChannelIndex, targetLabel, mode, autoLimit, autoCalibrate, windowDuration, timeWindow }
+            payload: { activeSensor, activeChannelIndex, targetLabel, mode, autoLimit, autoCalibrate, windowDuration: actualCaptureWindowMs, timeWindow }
         });
-    }, [activeSensor, activeChannelIndex, targetLabel, mode, autoLimit, autoCalibrate, windowDuration, timeWindow]);
-
+    }, [activeSensor, activeChannelIndex, targetLabel, mode, autoLimit, autoCalibrate, actualCaptureWindowMs, timeWindow]);
 
     // Ensure config is loaded on mount
     useEffect(() => {
@@ -598,7 +626,6 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
     // Refs for real-time windowing
     const windowIntervalRef = useRef(null);
     const appendLockRef = useRef(false);
-    const GAP_DURATION = 500; // ms
     const MAX_WINDOWS = autoCalibrate ? 50 : 2000;
 
     // Additional Refs for windowing logic (Defined here to avoid TDZ)
@@ -656,20 +683,22 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
 
     const buildWindowMetadata = useCallback((win) => {
         if (activeSensor === 'EMG') {
+            const durWindowMs = Number(win.windowDurationMs || windowDuration || 0);
             const captureWindowMs = Number(
                 win.captureWindowMs
-                || (win.endTime && win.startTime ? Math.max(0, win.endTime - win.startTime) : windowDuration)
-                || windowDuration
+                || (win.endTime && win.startTime ? Math.max(0, win.endTime - win.startTime) : actualCaptureWindowMs)
+                || actualCaptureWindowMs
             );
             return {
                 collectionMode: mode,
                 channelIndex: win.channel ?? activeChannelIndex,
                 sampleCount: Array.isArray(win.samples) ? win.samples.length : 0,
-                windowMs: captureWindowMs,
+                windowMs: durWindowMs,
                 captureWindowMs,
-                sessionWindowMs: captureWindowMs,
+                sessionWindowMs: durWindowMs,
                 sessionOverlap: 0,
-                strideMs: captureWindowMs + EMG_COLLECTION_GAP_MS,
+                sessionStrideMs: EMG_BURST_STRIDE_MS,
+                strideMs: EMG_BURST_STRIDE_MS,
                 gapMs: EMG_COLLECTION_GAP_MS,
                 samplingRate: Number(config?.sampling_rate || 1000),
                 source: 'frontend_auto_window',
@@ -685,7 +714,8 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
             sampleCount: Array.isArray(win.samples) ? win.samples.length : 0,
             windowMs: win.endTime && win.startTime ? Math.max(0, win.endTime - win.startTime) : windowDuration,
         };
-    }, [activeSensor, eegTargets, selectedEegTarget, activeChannelIndex, windowDuration, mode, config]);
+    }, [activeSensor, eegTargets, selectedEegTarget, activeChannelIndex, windowDuration, actualCaptureWindowMs, mode, config]);
+
 
     const startAutoWindowing = useCallback(() => {
         windowWorkerRef.current?.postMessage({ type: 'START_WINDOWING' });
@@ -700,6 +730,7 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
             time_window_ms: timeWindow,
             gap_duration_ms: activeSensor === 'EMG' ? EMG_COLLECTION_GAP_MS : 0,
             overlap: 0,
+            capture_window_ms: activeSensor === 'EMG' ? actualCaptureWindowMs : windowDuration,
         })
             .catch(e => console.error("Start Calib API failed", e));
 
@@ -708,7 +739,7 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                 startAutoWindowing();
             }
         }
-    }, [activeSensor, mode, targetLabel, windowDuration, sessionName, startAutoWindowing, activeChannelIndex, timeWindow]);
+    }, [activeSensor, mode, targetLabel, windowDuration, actualCaptureWindowMs, sessionName, startAutoWindowing, activeChannelIndex, timeWindow, autoCalibrate, batchSize, autoLimit]);
 
     const handleStopCalibration = useCallback(async () => {
         setIsCalibrating(false);
@@ -717,9 +748,6 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
         await CalibrationApi.stopCalibration(activeSensor);
         setActiveWindow(null);
     }, [activeSensor]);
-
-
-
 
     const handleManualWindowSelect = useCallback(async (start, end) => {
         const id = Math.random().toString(36).substr(2, 9);
@@ -907,6 +935,30 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
         });
     }, []);
 
+    const dispatchSingleSave = useCallback((window) => {
+        if (!saveWorkerRef.current) return;
+
+        const requestId = `single_${window.id}_${Date.now()}`;
+        saveWorkerRef.current.postMessage({
+            type: 'SAVE_SINGLE_WINDOW',
+            payload: {
+                requestId,
+                apiBaseUrl: API_BASE_URL,
+                sensor: activeSensor,
+                mode,
+                session_name: sessionName,
+                window: {
+                    id: window.id,
+                    action: window.label,
+                    channel: window.channel,
+                    samples: window.samples,
+                    timestamps: window.timestamps,
+                    metadata: buildWindowMetadata(window),
+                }
+            }
+        });
+    }, [API_BASE_URL, activeSensor, mode, sessionName, buildWindowMetadata]);
+
     const dispatchBatchSave = useCallback((windowsToSave) => {
         return new Promise((resolve, reject) => {
             if (!saveWorkerRef.current) {
@@ -995,21 +1047,15 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                 const windowsForSave = pendingIds
                     .map((id) => fullWindowsById.get(id))
                     .filter(Boolean);
-                const batchResult = await dispatchBatchSave(windowsForSave);
-                const byId = new Map((batchResult.results || []).map((result) => [result.id, result]));
-
-                toAppend.forEach((win) => {
-                    const saveResult = byId.get(win.id);
-                    const isError = !saveResult || saveResult.error;
+                
+                // Dispatch each window individually to prevent UI freeze
+                windowsForSave.forEach(win => {
+                    dispatchSingleSave(win);
+                    
+                    // Optimistically set status to 'saving' in the window worker
                     windowWorkerRef.current?.postMessage({
                         type: 'WINDOW_COLLECTED',
-                        payload: {
-                            id: win.id,
-                            status: isError ? 'error' : 'saved',
-                            features: saveResult?.features,
-                            predictedLabel: saveResult?.predicted_label,
-                            windows_saved: saveResult?.windows_saved // NEW: feedback for EMG bursts
-                        }
+                        payload: { id: win.id, status: 'saving' }
                     });
                 });
             }
@@ -1047,24 +1093,25 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
         handleAppendSamplesRef.current = handleAppendSamples;
     }, [handleAppendSamples]);
 
-    const deleteWindow = (id) => {
+    const deleteWindow = useCallback((id) => {
         windowWorkerRef.current?.postMessage({ type: 'DELETE_WINDOW', payload: id });
-    };
+    }, []);
 
-    const handleClearAllWindows = () => {
+    const handleClearAllWindows = useCallback(() => {
         windowWorkerRef.current?.postMessage({ type: 'CLEAR_ALL_WINDOWS' });
         setTotalPredictedCount(0);
         setActiveWindow(null);
-    };
+    }, []);
 
-    const markMissed = (id) => {
+    const markMissed = useCallback((id) => {
         setMarkedWindows(prev => prev.map(w => w.id === id ? { ...w, isMissedActual: !w.isMissedActual } : w));
-    };
+    }, []);
 
     // Test Mode Handler
     const handleTestRecord = async (targetGestureLabel) => {
         return new Promise((resolve, reject) => {
             const currentTw = timeWindowRef.current;
+            const actualCaptureDur = activeSensor === 'EMG' ? getActualEmgCaptureWindowMs(currentDur) : currentDur;
             const currentDur = windowDurationRef.current;
             const latestTs = latestSignalTimeRef.current; // Ref
 
@@ -1082,7 +1129,8 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                 channel: activeChannelIndex,
                 status: 'pending',
                 samples: [],
-                captureWindowMs: currentDur
+                captureWindowMs: actualCaptureDur,
+                windowDurationMs: currentDur
             };
 
             setMarkedWindows(prev => [...prev, newWindow].slice(-MAX_WINDOWS));
@@ -1156,7 +1204,7 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                     setRunInProgress(false);
                     setActiveWindow(null);
                 }
-            }, delayToCenter + currentDur + 200);
+            }, delayToCenter + actualCaptureDur + 200);
         });
     };
 
@@ -1251,6 +1299,8 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
     // Optimization: Flusing directly to Worker
     const incomingBufferRef = useRef([]);
 
+    const lastTimeUpdateRef = useRef(0);
+
     useEffect(() => {
         if (!wsData) return;
         const payload = wsData.raw || wsData;
@@ -1262,7 +1312,13 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
         if (!incomingTs || incomingTs < 1e9) incomingTs = Date.now();
 
         latestSignalTimeRef.current = incomingTs;
-        windowWorkerRef.current?.postMessage({ type: 'UPDATE_SIGNAL_TIME', payload: incomingTs });
+
+        // Throttle the update to the window worker to 10Hz
+        const now = Date.now();
+        if (now - lastTimeUpdateRef.current > 100) {
+            windowWorkerRef.current?.postMessage({ type: 'UPDATE_SIGNAL_TIME', payload: incomingTs });
+            lastTimeUpdateRef.current = now;
+        }
     }, [wsData]);
 
     // Sync Windows to Worker
@@ -1622,7 +1678,7 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                                     />
                                     {activeSensor === 'EMG' && (
                                         <div className="rounded-lg border border-border/70 bg-surface/60 p-2 text-[11px] leading-relaxed text-muted">
-                                            Each {windowDuration} ms capture burst is saved as one EMG training window to match the live detector and reduce save lag.
+                                            Each EMG sample uses {windowDuration} ms duration. The actual capture burst is derived automatically as {actualCaptureWindowMs} ms and will be sliced into 5 samples with 150 ms stride.
                                         </div>
                                     )}
                                 </div>
@@ -1761,7 +1817,7 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                                     <div className="flex items-center gap-2 ">
                                         <div className="flex items-center gap-1.5 text-muted">
                                             <Target size={18} />
-                                            <span className="text-xs font-bold uppercase tracking-wider">Capture</span>
+                                            <span className="text-xs font-bold uppercase tracking-wider">{activeSensor === 'EMG' ? 'Sample' : 'Capture'}</span>
                                         </div>
                                         <div className="w-[150px]">
                                             <CustomSelect
@@ -1769,7 +1825,7 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                                                 onChange={(value) => setWindowDuration(Number(value))}
                                                 options={windowDurationOptions.map(v => ({
                                                     value: v,
-                                                    label: activeSensor === 'EMG' ? `${v}ms burst` : `${v}ms`
+                                                    label: activeSensor === 'EMG' ? `${v}ms sample` : `${v}ms`
                                                 }))}
                                                 triggerClassName="h-8 px-2.5 !rounded-lg !bg-bg/80 !border-border text-sm font-bold"
                                             />
