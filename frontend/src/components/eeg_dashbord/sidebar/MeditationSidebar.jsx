@@ -3,7 +3,7 @@ import {
     Settings, Play, Square, Activity, Wind, Power, Zap,
     History, Menu, ChevronLeft, Brain, BookOpen, Eye, Grid,
     Music, Volume2, Trophy, Clock, Calendar, CheckSquare,
-    Sparkles, VolumeX
+    Sparkles, VolumeX, Layers
 } from 'lucide-react';
 
 const WISDOM = [
@@ -85,6 +85,8 @@ const MeditationSidebar = ({
     onToggleSession = () => {},
     onPresetChange = () => {},
     onToggleConn = () => {},
+    sidebarMode,
+    setSidebarMode,
 }) => {
     const wisdom = WISDOM[wisdomIdx] || WISDOM[0];
 
@@ -94,11 +96,19 @@ const MeditationSidebar = ({
             {/* Header */}
             <div className="flex items-center justify-between shrink-0 mb-1">
                 <div>
-                    <h2 className="text-[22px] font-bold text-text mb-1 flex items-center gap-3 tracking-[2px]">
-                        <Wind size={26} className="text-primary" />
-                        <span style={{ letterSpacing: '2.3px' }}>NEURO TRAINER</span>
+                    <h2 className="text-[20px] font-bold text-text flex items-center gap-2.5 tracking-[1.5px]">
+                        <Wind size={22} className="text-primary" />
+                        <span style={{ letterSpacing: '2px' }}>NEURO TRAINER</span>
                     </h2>
                 </div>
+                <button
+                    onClick={() => setSidebarMode(sidebarMode === 'main' ? 'page' : 'main')}
+                    className="nav-controls-toggle"
+                    title="Switch to Navigation"
+                >
+                    <Layers size={14} />
+                    NAV
+                </button>
             </div>
 
             <div className="flex flex-col gap-4 h-full overflow-y-auto [&::-webkit-scrollbar]:hidden pb-10">

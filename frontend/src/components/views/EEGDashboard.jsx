@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Activity, Music, Wind, Eye, Grid, MonitorPlay, Layers } from 'lucide-react';
+import { Activity, Music, Wind, Eye, Grid, MonitorPlay, Layers, ChevronLeft, ChevronRight } from 'lucide-react';
 import '../../styles/views/EEGDashboard.css';
 
 import SSVEPView from '../eeg_dashbord/SSVEPView';
@@ -35,6 +35,7 @@ const OverviewGrid = ({ onSelect }) => (
 const EEGDashboardContent = ({ wsEvent, isConnected, wsUrl }) => {
   const [currentView, setCurrentView] = useState("overview");
   const [eegResult, setEegResult] = useState(null);
+  const [isCollapsed, setIsCollapsed] = useState(false);
   const { sidebarMode, setSidebarMode, sidebarSlot } = useSidebar();
 
   useEffect(() => {
@@ -100,35 +101,38 @@ const EEGDashboardContent = ({ wsEvent, isConnected, wsUrl }) => {
     <div className="flex flex-row h-full w-full bg-[var(--bg)] overflow-hidden">
 
       {/* ── DUAL SIDEBAR SYSTEM ── */}
-      <div className="w-[18rem] bg-[var(--surface)] border-r border-[var(--border)] shrink-0 flex flex-col h-full z-20 relative transition-all duration-500">
+      <div className={`w-[18rem] bg-[var(--surface)] border-r border-[var(--border)] shrink-0 flex flex-col h-full z-20 relative sidebar-container ${isCollapsed ? 'sidebar-collapsed' : ''}`}>
 
-        {/* LabVIEW-style Toggle Button — always a fixed header row */}
-        <div className="shrink-0 flex items-center justify-end px-4 pt-3 pb-2 border-b border-[var(--border)]/30">
-          {isFullContainer ? (
-            <button
-              onClick={() => setSidebarMode(sidebarMode === 'main' ? 'page' : 'main')}
-              className="nav-controls-toggle"
-              title="Switch Navigation / Controls"
-            >
-              <Layers size={14} />
-              {sidebarMode === 'main' ? 'NAV' : 'CTRL'}
-            </button>
-          ) : (
-            <span className="text-[9px] font-black tracking-[3px] uppercase text-[var(--muted)]/40 pr-1">EEG Suite</span>
-          )}
-        </div>
+        {/* Sidebar Toggle Handle (Center of vertical border) */}
+        <button
+          className="sidebar-toggle-handle"
+          onClick={() => setIsCollapsed(!isCollapsed)}
+          title={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+        >
+          {isCollapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
+        </button>
 
         {/* Sidebar content — flex-1 allows it to grow and inner panel handles scroll */}
         <div className="sidebar-wrapper flex-1 min-h-0">
           {/* Global Navigation Panel */}
           <div className={`sidebar-panel ${sidebarMode === 'main' ? 'sidebar-active' : 'sidebar-hidden'}`}>
-            <MainSidebar currentView={currentView} onSelect={handleSelectView} />
+            <MainSidebar 
+                currentView={currentView} 
+                onSelect={handleSelectView} 
+                sidebarMode={sidebarMode} 
+                setSidebarMode={setSidebarMode} 
+                isFullContainer={isFullContainer} 
+            />
           </div>
 
           {/* Page-Specific Sidebar Panel (Empty for overview) */}
           <div className={`sidebar-panel ${sidebarMode === 'page' ? 'sidebar-active' : 'sidebar-hidden'}`}>
             <div className="h-full">
-              {sidebarSlot || (
+              {sidebarSlot ? React.cloneElement(sidebarSlot, { 
+                sidebarMode, 
+                setSidebarMode, 
+                isFullContainer 
+              }) : (
                 <div className="flex flex-col items-center justify-center h-full opacity-40 text-center px-6">
                   <MonitorPlay size={40} className="mb-4 text-[var(--primary)]" />
                   <p className="text-[10px] font-bold tracking-widest uppercase">

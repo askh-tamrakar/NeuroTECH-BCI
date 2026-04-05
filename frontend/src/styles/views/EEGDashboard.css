@@ -318,23 +318,55 @@
   /* Allow the active panel to scroll its content */
   overflow-y: auto;
   overflow-x: hidden;
-  /* Custom thin scrollbar */
-  scrollbar-width: thin;
-  scrollbar-color: rgba(var(--primary-rgb, 0,245,255), 0.25) transparent;
+  /* Hide scrollbar while keeping functionality */
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
 }
 
 .sidebar-active::-webkit-scrollbar {
-  width: 4px;
+  display: none;
 }
-.sidebar-active::-webkit-scrollbar-track {
-  background: transparent;
+
+/* Sidebar toggle handle in the center of the border line */
+.sidebar-toggle-handle {
+  position: absolute;
+  right: -10px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 50;
+  width: 20px;
+  height: 48px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--muted);
+  transition: all 0.2s ease;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
 }
-.sidebar-active::-webkit-scrollbar-thumb {
-  background: rgba(var(--primary-rgb, 0,245,255), 0.25);
-  border-radius: 4px;
+
+.sidebar-toggle-handle:hover {
+  background: var(--bg);
+  color: var(--primary);
+  border-color: var(--primary);
+  box-shadow: 0 0 15px rgba(var(--primary-rgb), 0.2);
 }
-.sidebar-active::-webkit-scrollbar-thumb:hover {
-  background: rgba(var(--primary-rgb, 0,245,255), 0.5);
+
+.sidebar-container {
+  transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sidebar-collapsed {
+  width: 0 !important;
+  border-right-width: 0 !important;
+}
+
+.sidebar-collapsed .sidebar-wrapper,
+.sidebar-collapsed > div:not(.sidebar-toggle-handle) {
+  display: none;
 }
 
 .sidebar-hidden {

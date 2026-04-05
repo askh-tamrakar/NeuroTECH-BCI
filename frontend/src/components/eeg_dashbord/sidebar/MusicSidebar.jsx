@@ -1,10 +1,10 @@
-import React from 'react';
-import { Music, Activity, Wind, Eye, Grid, ChevronLeft, Menu, Play, Pause, Volume2, VolumeX, Headphones, FastForward } from 'lucide-react';
+import { Music, Activity, Wind, Eye, Grid, ChevronLeft, Menu, Play, Pause, Volume2, VolumeX, Headphones, FastForward, Layers } from 'lucide-react';
 
 const MusicSidebar = ({ 
     isPlaying, togglePlayback, 
     isMuted, setIsMuted, 
-    result, stateTheme 
+    result, stateTheme,
+    sidebarMode, setSidebarMode
 }) => {
     return (
         <div className="flex-grow flex flex-col p-4 font-mono transition-opacity duration-300 w-full shrink-0">
@@ -23,6 +23,14 @@ const MusicSidebar = ({
                         </p>
                     </div>
                 </div>
+                <button
+                    onClick={() => setSidebarMode(sidebarMode === 'main' ? 'page' : 'main')}
+                    className="nav-controls-toggle"
+                    title="Switch to Navigation"
+                >
+                    <Layers size={14} />
+                    NAV
+                </button>
             </div>
 
             {/* Playback Controls */}

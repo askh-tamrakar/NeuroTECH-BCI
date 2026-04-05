@@ -1,13 +1,11 @@
 import React from 'react';
 import {
     Settings, Play, Square, Activity, MousePointer2, Zap,
-    History, Menu, ChevronLeft, Gamepad2, Mouse, Trash2, Power
+    History, Menu, ChevronLeft, Gamepad2, Mouse, Trash2, Power, Layers
 } from 'lucide-react';
 
 /**
  * BubbleSidebar — page-specific controls sidebar for BubbleGameView.
- * Props: onBackToMenu, mouseMode, setMouseMode,
- *        difficulty, setDifficulty, realTimeFreq, globalRunning, containerRef
  */
 const BubbleSidebar = ({
     onBackToMenu,
@@ -17,6 +15,8 @@ const BubbleSidebar = ({
     focusScore,
     globalRunning,
     containerRef,
+    sidebarMode,
+    setSidebarMode,
 }) => {
     // ... within the return ...
     const dashOffset = 201 - (Math.min(100, focusScore || 0) / 100) * 201;
@@ -26,11 +26,19 @@ const BubbleSidebar = ({
             {/* Header */}
             <div className="flex items-center justify-between shrink-0 mb-1">
                 <div>
-                    <h2 className="text-[22px] font-bold text-[var(--text)] mb-1 flex items-center gap-3 tracking-[2px]">
-                        <Gamepad2 size={26} className="text-[var(--primary)]" />
-                        BUBBLE GAME
+                    <h2 className="text-[20px] font-bold text-[var(--text)] flex items-center gap-2.5 tracking-[1.5px]">
+                        <Gamepad2 size={22} className="text-[var(--primary)]" />
+                        <span style={{ letterSpacing: '2px' }}>BUBBLE GAME</span>
                     </h2>
                 </div>
+                <button
+                    onClick={() => setSidebarMode(sidebarMode === 'main' ? 'page' : 'main')}
+                    className="nav-controls-toggle"
+                    title="Switch to Navigation"
+                >
+                    <Layers size={14} />
+                    NAV
+                </button>
             </div>
 
             {/* Global Play/Stop */}

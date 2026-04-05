@@ -2,7 +2,7 @@ import React from 'react';
 import {
     Settings, Play, Square, Activity, MousePointer2, Keyboard,
     Sun, Monitor, Power, Zap, Trash2, History, Target, Menu,
-    ChevronLeft, Brain, Eye, Radio, Wind, ChevronRight
+    ChevronLeft, Brain, Eye, Radio, Wind, ChevronRight, Layers
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import CustomNumberInput from '../../ui/inputs/CustomNumberInput';
@@ -14,7 +14,6 @@ const MOUSE_ACTIONS = ['None', 'Left Click', 'Right Click', 'Double Click', 'Scr
 
 /**
  * SSVEPSidebar — page-specific controls sidebar for SSVEPView.
- * All state is owned by SSVEPView; props are passed down.
  */
 const SSVEPSidebar = ({
     onBackToMenu,
@@ -33,6 +32,8 @@ const SSVEPSidebar = ({
     showTargets, setShowTargets,
     openDropdownId, setOpenDropdownId,
     isConnected,
+    sidebarMode,
+    setSidebarMode,
 }) => {
     return (
         <div className="flex-grow flex flex-col overflow-hidden p-4 gap-3 font-mono transition-opacity duration-300 w-full shrink-0">
@@ -40,12 +41,19 @@ const SSVEPSidebar = ({
             {/* Header */}
             <div className="flex items-center justify-between shrink-0 mb-2">
                 <div>
-                    <h2 className="text-2xl font-bold text-[var(--text)] mb-1 flex items-center gap-3">
-                        <Settings size={28} className="text-[var(--primary)] animate-pulse" />
-                        <span style={{ letterSpacing: '2.3px' }}>SSVEP CONTROLS</span>
+                    <h2 className="text-[20px] font-bold text-[var(--text)] flex items-center gap-2.5 tracking-[1.5px]">
+                        <Settings size={22} className="text-[var(--primary)]" />
+                        <span style={{ letterSpacing: '2px' }}>SSVEP CONTROLS</span>
                     </h2>
-                    <p className="text-xs text-[var(--muted)]">Neurofeedback Stimulation</p>
                 </div>
+                <button
+                    onClick={() => setSidebarMode(sidebarMode === 'main' ? 'page' : 'main')}
+                    className="nav-controls-toggle"
+                    title="Switch to Navigation"
+                >
+                    <Layers size={14} />
+                    NAV
+                </button>
             </div>
 
             {/* ML Pipeline Toggle */}
