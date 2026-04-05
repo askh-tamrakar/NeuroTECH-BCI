@@ -1,7 +1,8 @@
 import Tree from 'react-d3-tree';
-import { useState, useEffect, Fragment, useMemo, useRef } from 'react';
+import { useState, useEffect, Fragment, useMemo, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { io } from 'socket.io-client';
+import { buildApiUrl, getSocketIoConnection } from '../../utils/runtimeConnection';
 import {
     Trash2, Rocket, ArrowRight, Save, Target, ListOrdered,
     Database, Hand, Eye, Network, Grid3X3, Brain, PieChart,
@@ -300,6 +301,13 @@ const FeatureInsightCard = ({ importances, featureOrder, sensor }) => {
         'score_1', 'score_2', 'score_3', 'score_4', 'score_5', 'score_6',
         'max_score', 'second_max_score', 'score_ratio', 'score_mean', 'score_std', 'peak_freq'
     ];
+    const normalizedImportances = (() => {
+        const entries = Object.entries(importances || {});
+        if (entries.length > 0) return importances || {};
+        if (sensor !== 'EEG' || !features.length) return {};
+        const fallbackWeight = 1 / features.length;
+        return Object.fromEntries(features.map((feature) => [feature, fallbackWeight]));
+    })();
 
     useEffect(() => {
         if (features.length > 0) {
@@ -307,7 +315,7 @@ const FeatureInsightCard = ({ importances, featureOrder, sensor }) => {
         }
     }, [sensor, features.length]);
 
-    const sortedImportances = Object.entries(importances || {}).sort(([, a], [, b]) => b - a);
+    const sortedImportances = Object.entries(normalizedImportances).sort(([, a], [, b]) => b - a);
     const activeDetail = fullMetadata[selectedFeature] || { full: selectedFeature, short: selectedFeature, detail: 'No detailed metadata available for this feature.' };
 
     return (
@@ -424,16 +432,28 @@ const FeatureInsightCard = ({ importances, featureOrder, sensor }) => {
 const pct = (val) => val === undefined || val === null || isNaN(val) ? '--' : `${(val * 100).toFixed(1)}%`;
 const card = "bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-sm";
 
-const getVerdict = (trainAcc, valAcc) => {
-    if (!trainAcc || !valAcc) return { text: '--', color: 'text-[var(--muted)]', bg: 'bg-[var(--bg)]/10', desc: 'No data' };
-    const gap = trainAcc - valAcc;
+const getVerdict = (trainAcc, valAcc, testAcc) => {
+    const train = Number(trainAcc);
+    const val = Number(valAcc);
+    const test = Number(testAcc);
+    const hasTrain = !Number.isNaN(train);
+    const hasVal = !Number.isNaN(val);
+    const hasTest = !Number.isNaN(test);
 
-    if (trainAcc < 0.65) return { text: 'UNDERFIT', color: 'text-orange-400', bg: 'bg-orange-500/10 border-orange-500/30', desc: 'Model lacks capacity or features' };
-    if (trainAcc > 0.98 && valAcc < 0.85) return { text: 'SEVERE OVERFIT', color: 'text-red-400', bg: 'bg-red-500/10 border-red-500/30', desc: 'Memorized training data' };
-    if (gap > 0.12) return { text: 'OVERFIT', color: 'text-yellow-400', bg: 'bg-yellow-500/10 border-yellow-500/30', desc: 'Poor generalization / wide gap' };
-    if (valAcc > 0.80) return { text: 'OPTIMAL FIT', color: 'text-green-400', bg: 'bg-green-500/10 border-green-500/30', desc: 'Model generalized well' };
+    if (!hasTrain && !hasVal && !hasTest) return { text: '--', color: 'text-[var(--muted)]', bg: 'bg-[var(--bg)]/10', desc: 'No data' };
 
-    return { text: 'MODERATE FIT', color: 'text-[var(--primary)]', bg: 'bg-[var(--primary)]/10 border-[var(--primary)]/30', desc: 'Acceptable performance' };
+    const generalization = hasTest ? test : (hasVal ? val : train);
+    const validationGap = hasTrain && hasVal ? train - val : 0;
+    const testGap = hasTrain && hasTest ? train - test : validationGap;
+    const effectiveGap = Math.max(validationGap, testGap);
+
+    if (generalization < 0.6) return { text: 'UNDERFIT', color: 'text-orange-400', bg: 'bg-orange-500/10 border-orange-500/30', desc: 'Model is not learning a stable decision boundary' };
+    if (hasTrain && train > 0.98 && generalization < 0.8) return { text: 'SEVERE OVERFIT', color: 'text-red-400', bg: 'bg-red-500/10 border-red-500/30', desc: 'Training score is much stronger than held-out performance' };
+    if (effectiveGap > 0.12) return { text: 'OVERFIT', color: 'text-yellow-400', bg: 'bg-yellow-500/10 border-yellow-500/30', desc: 'Generalization gap is too wide across validation/test' };
+    if (generalization >= 0.9 && effectiveGap <= 0.08) return { text: 'OPTIMAL FIT', color: 'text-green-400', bg: 'bg-green-500/10 border-green-500/30', desc: 'Train, validation, and test scores are all strong and aligned' };
+    if (generalization >= 0.75) return { text: 'MODERATE FIT', color: 'text-[var(--primary)]', bg: 'bg-[var(--primary)]/10 border-[var(--primary)]/30', desc: 'Model performance is usable but still has room to improve' };
+
+    return { text: 'WEAK FIT', color: 'text-yellow-300', bg: 'bg-yellow-500/10 border-yellow-500/30', desc: 'Model is learning something, but held-out performance is still low' };
 };
 
 const historyId = (item) => item?.model_id || item?.id || '--';
@@ -441,6 +461,10 @@ const historyCandidate = (item) => (item?.candidate_index ?? item?.candidate_idx
 const historyFold = (item) => item?.fold_index || item?.fold_idx || 0;
 const historyParams = (item) => item?.hyperparameters || item?.params || {};
 const formatCandidateDecimal = (value) => String(Number(value) || 0).padStart(2, '0');
+const formatFixedFive = (value) => {
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? numeric.toFixed(5) : '--';
+};
 
 const HistoryList = ({ history = [], selectedId, onSelect, emptyText = 'No training history available.', decimalCandidateDisplay = false }) => {
     const grouped = useMemo(() => {
@@ -586,7 +610,7 @@ const formatDuration = (seconds) => {
 };
 
 
-const HyperparametersCard = ({ params, setParamsTab, job, activeTab, models = [], activeModelName, onSelectRun }) => {
+const HyperparametersCard = ({ params, setParamsTab, activeTab, models = [] }) => {
     const [view] = useState('params'); // 'params' or 'runs'
     const minVal = Math.round((params.train_ratio || 0.7) * 100);
     const maxVal = Math.round(((params.train_ratio || 0.7) + (params.val_ratio || 0.15)) * 100);
@@ -608,126 +632,126 @@ const HyperparametersCard = ({ params, setParamsTab, job, activeTab, models = []
             <div className="flex-1 min-h-0 relative">
                 <div className="h-full overflow-y-auto [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
                     {/* Global Parameters: Split & Search Resolution */}
-                    <div className="space-y-1">
-                        <div className="p-0 border-0 bg-transparent">
-                            <div className="flex justify-between items-center mb-1 px-1">
-                                <span className="text-[12px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em]"> Data Partition </span>
-                                <div className="flex items-center gap-2 font-mono font-black text-[18px]">
-                                    <span className="text-[var(--text)]">{Math.round(params.train_ratio * 100)}%</span>
-                                    <span className="text-[var(--muted)] opacity-30">/</span>
-                                    <span className="text-[var(--muted)]">{Math.round(params.val_ratio * 100)}%</span>
-                                    <span className="text-[var(--muted)] opacity-30">/</span>
-                                    <span className="text-[var(--accent)]">{Math.round(params.test_ratio * 100)}%</span>
-                                </div>
-                            </div>
-                            <RangeSlider
-                                min={0} max={100} step={1}
-                                minValue={minVal} maxValue={maxVal}
-                                leftColor="var(--text)"
-                                middleColor="var(--muted)"
-                                rightColor="var(--accent)"
-                                hideLabels={true}
-                                compact={true}
-                                minLimit={1}
-                                maxLimit={99}
-                                onChange={(vals) => {
-                                    const totalNonTest = vals.left + vals.middle;
-                                    const rawK = Math.round(totalNonTest / (vals.middle || 0.1));
-                                    const k = Math.max(2, Math.min(20, rawK));
 
-                                    setParamsTab({
-                                        train_ratio: parseFloat(vals.left.toFixed(3)),
-                                        val_ratio: parseFloat(vals.middle.toFixed(3)),
-                                        test_ratio: parseFloat(vals.right.toFixed(3)),
-                                        k_folds: k
-                                    });
-                                }}
-                            />
+                    <div className="p-0 border-0 bg-transparent">
+                        <div className="flex justify-between items-center mb-1 px-1">
+                            <span className="text-[12px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em]"> Data Partition </span>
+                            <div className="flex items-center gap-2 font-mono font-black text-[18px]">
+                                <span className="text-[var(--text)]">{Math.round(params.train_ratio * 100)}%</span>
+                                <span className="text-[var(--muted)] opacity-30">/</span>
+                                <span className="text-[var(--muted)]">{Math.round(params.val_ratio * 100)}%</span>
+                                <span className="text-[var(--muted)] opacity-30">/</span>
+                                <span className="text-[var(--accent)]">{Math.round(params.test_ratio * 100)}%</span>
+                            </div>
                         </div>
+                        <RangeSlider
+                            min={0} max={100} step={1}
+                            minValue={minVal} maxValue={maxVal}
+                            leftColor="var(--text)"
+                            middleColor="var(--muted)"
+                            rightColor="var(--accent)"
+                            hideLabels={true}
+                            compact={true}
+                            minLimit={1}
+                            maxLimit={99}
+                            onChange={({ min, max }) => {
+                                const trainRatio = parseFloat((min / 100).toFixed(3));
+                                const valRatio = parseFloat(((max - min) / 100).toFixed(3));
+                                const testRatio = parseFloat(((100 - max) / 100).toFixed(3));
+                                const totalNonTest = trainRatio + valRatio;
+                                const rawK = Math.round(totalNonTest / (valRatio || 0.001));
+                                const k = Math.max(2, Math.min(20, rawK));
 
-                        <div className="p-0 border-0 bg-transparent">
-                            <div className="flex justify-between items-center mb-2 px-1">
-                                <span className="text-[12px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em]">Search Resolution</span>
-                                <span className="text-[18px] text-[var(--header-text)] font-black font-mono leading-none">{params.search_resolution}</span>
-                            </div>
-                            <CustomSlider min={2} max={10} step={1}
-                                backgroundColor="var(--bg)"
-                                value={params.search_resolution} onChange={(value) => setParamsTab({ search_resolution: value })} />
-                        </div>
-
-                        {activeTab !== 'EEG' ? (
-                            <div className="space-y-1 pb-2">
-                                <div className="grid grid-cols-2 gap-3">
-                                    <div className="col-span-2 p-0 border-0 bg-transparent">
-                                        <div className="flex justify-between items-end mb-4 px-1">
-                                            <span className="text-[12px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em]">Estimators Range</span>
-                                            <div className="flex items-center gap-2 text-[18px] font-black font-mono text-[var(--header-text)]">
-                                                <span >{params.n_estimators_min || 50}</span>
-                                                <span className="text-[var(--muted)]">-</span>
-                                                <span >{params.n_estimators_max || 200}</span></div>
-                                        </div>
-
-                                        <RangeSlider min={5} max={500} step={15}
-                                            leftColor="var(--muted)" rightColor="var(--muted)"
-                                            minValue={params.n_estimators_min || 50} maxValue={params.n_estimators_max || 200} hideLabels={true} compact={true} color="var(--primary)" onChange={(vals) => setParamsTab({ n_estimators_min: vals.min, n_estimators_max: vals.max })} />
-                                    </div>
-
-                                    <div className="p-0 border-0 bg-transparent">
-                                        <div className="flex justify-between items-end mb-2 px-1">
-                                            <span className="text-[12px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em]">Max Depth</span>
-                                            <div className="flex items-center gap-1 font-mono text-[16px] text-[var(--header-text)] font-black">{params.max_depth_min || 5} - {params.max_depth_max || 15}</div>
-                                        </div>
-
-                                        <RangeSlider min={2} max={30} step={1}
-                                            leftColor="var(--muted)" rightColor="var(--muted)" minValue={params.max_depth_min || 5} maxValue={params.max_depth_max || 15} hideLabels={true} compact={true} color="var(--primary)" onChange={(vals) => setParamsTab({ max_depth_min: vals.min, max_depth_max: vals.max })} />
-                                    </div>
-
-                                    <div className="p-0 border-0 bg-transparent">
-                                        <div className="flex justify-between items-end mb-2 px-1">
-                                            <span className="text-[12px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em]">Impurity</span>
-                                            <div className="text-[16px] font-mono text-[var(--header-text)] font-black truncate">{params.min_impurity_decrease_min || 0} - {params.min_impurity_decrease_max || 0.05}</div>
-                                        </div>
-                                        <RangeSlider min={0} max={0.1} step={0.005}
-                                            leftColor="var(--muted)" rightColor="var(--muted)" minValue={params.min_impurity_decrease_min || 0} maxValue={params.min_impurity_decrease_max || 0.05} hideLabels={true} compact={true} color="var(--primary)" onChange={(vals) => setParamsTab({ min_impurity_decrease_min: vals.min, min_impurity_decrease_max: vals.max })} />
-                                    </div>
-
-                                    <div className="p-0 border-0 bg-transparent">
-                                        <div className="text-[12px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em] mb-1.5 px-1">Criterion</div>
-                                        <CustomSelect className='font-bold text-[var(--header-text)]' direction="up" value={params.criterion || 'gini'} onChange={(value) => setParamsTab({ criterion: value })} options={[{ value: 'gini', label: 'Gini' }, { value: 'entropy', label: 'Entropy' }, { value: 'gini,entropy', label: 'Both' }]} />
-                                    </div>
-
-                                    <div className="p-0 border-0 bg-transparent">
-                                        <div className="text-[12px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em] mb-1.5 px-1">Features</div>
-                                        <CustomSelect className='font-bold text-[var(--header-text)]' direction="up" value={params.max_features || 'sqrt'} onChange={(value) => setParamsTab({ max_features: value })} options={[{ value: 'sqrt', label: 'Sqrt' }, { value: 'log2', label: 'Log2' }, { value: 'None', label: 'None' }, { value: 'sqrt,log2', label: 'Both' }]} />
-                                    </div>
-                                </div>
-                            </div>
-                        ) : (
-                            <div className="space-y-[10px]">
-                                <div className="p-0 border-0 bg-transparent">
-                                    <div className="flex justify-between items-end px-1 mb-4">
-                                        <span className="text-[12px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em]">LDA Tolerance Range</span>
-                                        <div className="flex items-center gap-1 text-[18px] font-black font-mono text-[var(--header-text)]">
-                                            {params.tol_min || 0.0001} - {params.tol_max || 0.01}
-                                        </div>
-                                    </div>
-                                    <RangeSlider min={0.0001} max={0.1} step={0.001}
-                                        leftColor="var(--muted)" rightColor="var(--muted)" minValue={params.tol_min || 0.0001} maxValue={params.tol_max || 0.01} hideLabels={true} compact={true} color="var(--primary)" onChange={(vals) => setParamsTab({ tol_min: vals.min, tol_max: vals.max })} />
-                                </div>
-
-                                <div className="grid grid-cols-2 gap-3">
-                                    <div className="p-0 border-0 bg-transparent">
-                                        <div className="text-[12px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em] mb-1.5 px-1">Solver</div>
-                                        <CustomSelect className='font-bold text-[var(--header-text)]' direction="up" value={params.solver || 'svd'} onChange={(value) => setParamsTab({ solver: value })} options={[{ value: 'svd', label: 'SVD' }, { value: 'lsqr', label: 'LSQR' }, { value: 'eigen', label: 'Eigen' }, { value: 'svd,lsqr,eigen', label: 'All' }]} />
-                                    </div>
-                                    <div className="p-0 border-0 bg-transparent">
-                                        <div className="text-[12px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em] mb-1.5 px-1">Shrinkage</div>
-                                        <CustomSelect className='font-bold text-[var(--header-text)]' direction="up" value={params.shrinkage || 'auto'} onChange={(value) => setParamsTab({ shrinkage: value })} options={[{ value: 'auto', label: 'Auto' }, { value: 'none', label: 'None' }, { value: 'auto,none', label: 'Both' }]} />
-                                    </div>
-                                </div>
-                            </div>
-                        )}
+                                setParamsTab({
+                                    train_ratio: trainRatio,
+                                    val_ratio: valRatio,
+                                    test_ratio: testRatio,
+                                    k_folds: k
+                                });
+                            }}
+                        />
                     </div>
+
+                    <div className="p-0 border-0 bg-transparent">
+                        <div className="flex justify-between items-center mb-1 px-1">
+                            <span className="text-[12px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em]">Search Resolution</span>
+                            <span className="text-[18px] text-[var(--header-text)] font-black font-mono leading-none">{params.search_resolution}</span>
+                        </div>
+                        <CustomSlider min={2} max={10} step={1}
+                            backgroundColor="var(--bg)"
+                            value={params.search_resolution} onChange={(value) => setParamsTab({ search_resolution: value })} />
+                    </div>
+
+                    {activeTab !== 'EEG' ? (
+                        <div className="grid grid-cols-2 gap-1 pb-2">
+                            <div className="col-span-2 p-0 border-0 bg-transparent">
+                                <div className="flex justify-between items-end mb-2 px-1">
+                                    <span className="text-[12px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em]">Estimators Range</span>
+                                    <div className="flex items-center gap-2 text-[18px] font-black font-mono text-[var(--header-text)]">
+                                        <span >{params.n_estimators_min || 50}</span>
+                                        <span className="text-[var(--muted)]">-</span>
+                                        <span >{params.n_estimators_max || 200}</span></div>
+                                </div>
+
+                                <RangeSlider min={5} max={500} step={15}
+                                    leftColor="var(--muted)" rightColor="var(--muted)"
+                                    minValue={params.n_estimators_min || 50} maxValue={params.n_estimators_max || 200} hideLabels={true} compact={true} color="var(--primary)" onChange={(vals) => setParamsTab({ n_estimators_min: vals.min, n_estimators_max: vals.max })} />
+                            </div>
+
+                            <div className="p-0 border-0 bg-transparent">
+                                <div className="flex justify-between items-end mb-2 px-1">
+                                    <span className="text-[12px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em]">Max Depth</span>
+                                    <div className="flex items-center gap-1 font-mono text-[16px] text-[var(--header-text)] font-black">{params.max_depth_min || 5} - {params.max_depth_max || 15}</div>
+                                </div>
+
+                                <RangeSlider min={2} max={30} step={1}
+                                    leftColor="var(--muted)" rightColor="var(--muted)" minValue={params.max_depth_min || 5} maxValue={params.max_depth_max || 15} hideLabels={true} compact={true} color="var(--primary)" onChange={(vals) => setParamsTab({ max_depth_min: vals.min, max_depth_max: vals.max })} />
+                            </div>
+
+                            <div className="p-0 border-0 bg-transparent">
+                                <div className="flex justify-between items-end mb-2 px-1">
+                                    <span className="text-[12px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em]">Impurity</span>
+                                    <div className="text-[16px] font-mono text-[var(--header-text)] font-black truncate">{params.min_impurity_decrease_min || 0} - {params.min_impurity_decrease_max || 0.05}</div>
+                                </div>
+                                <RangeSlider min={0} max={0.1} step={0.005}
+                                    leftColor="var(--muted)" rightColor="var(--muted)" minValue={params.min_impurity_decrease_min || 0} maxValue={params.min_impurity_decrease_max || 0.05} hideLabels={true} compact={true} color="var(--primary)" onChange={(vals) => setParamsTab({ min_impurity_decrease_min: vals.min, min_impurity_decrease_max: vals.max })} />
+                            </div>
+
+                            <div className="p-0 border-0 bg-transparent">
+                                <div className="text-[12px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em] mb-1.5 px-1">Criterion</div>
+                                <CustomSelect className='font-bold text-[var(--header-text)]' direction="up" value={params.criterion || 'gini'} onChange={(value) => setParamsTab({ criterion: value })} options={[{ value: 'gini', label: 'Gini' }, { value: 'entropy', label: 'Entropy' }, { value: 'gini,entropy', label: 'Both' }]} />
+                            </div>
+
+                            <div className="p-0 border-0 bg-transparent">
+                                <div className="text-[12px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em] mb-1.5 px-1">Features</div>
+                                <CustomSelect className='font-bold text-[var(--header-text)]' direction="up" value={params.max_features || 'sqrt'} onChange={(value) => setParamsTab({ max_features: value })} options={[{ value: 'sqrt', label: 'Sqrt' }, { value: 'log2', label: 'Log2' }, { value: 'None', label: 'None' }, { value: 'sqrt,log2', label: 'Both' }]} />
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="space-y-[10px]">
+                            <div className="p-0 border-0 bg-transparent">
+                                <div className="flex justify-between items-end px-1 mb-2">
+                                    <span className="text-[12px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em]">LDA Tolerance Range</span>
+                                    <div className="flex items-center gap-1 text-[18px] font-black font-mono text-[var(--header-text)]">
+                                        {params.tol_min || 0.0001} - {params.tol_max || 0.01}
+                                    </div>
+                                </div>
+                                <RangeSlider min={0.0001} max={0.1} step={0.001}
+                                    leftColor="var(--muted)" rightColor="var(--muted)" minValue={params.tol_min || 0.0001} maxValue={params.tol_max || 0.01} hideLabels={true} compact={true} color="var(--primary)" onChange={(vals) => setParamsTab({ tol_min: vals.min, tol_max: vals.max })} />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="p-0 border-0 bg-transparent">
+                                    <div className="text-[12px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em] mb-1.5 px-1">Solver</div>
+                                    <CustomSelect className='font-bold text-[var(--header-text)]' direction="up" value={params.solver || 'svd'} onChange={(value) => setParamsTab({ solver: value })} options={[{ value: 'svd', label: 'SVD' }, { value: 'lsqr', label: 'LSQR' }, { value: 'eigen', label: 'Eigen' }, { value: 'svd,lsqr,eigen', label: 'All' }]} />
+                                </div>
+                                <div className="p-0 border-0 bg-transparent">
+                                    <div className="text-[12px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em] mb-1.5 px-1">Shrinkage</div>
+                                    <CustomSelect className='font-bold text-[var(--header-text)]' direction="up" value={params.shrinkage || 'auto'} onChange={(value) => setParamsTab({ shrinkage: value })} options={[{ value: 'auto', label: 'Auto' }, { value: 'none', label: 'None' }, { value: 'auto,none', label: 'Both' }]} />
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
         </div >
@@ -838,9 +862,9 @@ const TrainingStatusDashboard = ({ job, countdown, params, selectedHistoryItem, 
                                         <Layers size={18} color='var(--text)' /> <span>Candidates</span>
                                     </div>
                                     <span className="text-[24px] font-black font-mono leading-none">
-                                        <span className="text-[var(--primary)]">{((job?.candidate_index ?? 0) + 1).toString(16).toUpperCase().padStart(2, '0')}</span>
+                                        <span className="text-[var(--primary)]">{formatCandidateDecimal((job?.candidate_index ?? 0) + 1)}</span>
                                         <span className="opacity-30 mx-1.5 text-[var(--muted)]">/</span>
-                                        <span className="text-[var(--muted)]">{Number(job?.total_candidates || 0).toString(16).toUpperCase().padStart(2, '0')}</span>
+                                        <span className="text-[var(--muted)]">{formatCandidateDecimal(job?.total_candidates || 0)}</span>
                                     </span>
                                 </div>
                                 <div className="flex flex-col items-center">
@@ -904,10 +928,13 @@ const DataInsightCard = ({ result, sensor, params, selectedSessionName, embedded
     if (!result) return <div className={`p-4 ${card} h-full text-[var(--muted)] flex items-center justify-center italic relative`}>No insight data available yet.</div>;
 
     const v = getVerdict(result.train_accuracy, result.validation_accuracy, result.test_accuracy || result.accuracy);
+    const cleanedSessionName = (name) => String(name || '').replace(/^[a-z]+_session_/i, '');
     const trainedSessionNames = Array.isArray(result?.session_names) && result.session_names.length
         ? result.session_names
         : (result?.session_name ? [result.session_name] : []);
-    const trainedSessionLabel = trainedSessionNames.length ? trainedSessionNames.join(', ') : (selectedSessionName || '--');
+    const trainedSessionLabel = trainedSessionNames.length
+        ? trainedSessionNames.map(cleanedSessionName).join(', ')
+        : cleanedSessionName(selectedSessionName || '--');
     const trainedSampleCount = result?.n_samples ?? result?.split_summary?.total_samples ?? '--';
     const groupCount = result?.group_counts ? Object.keys(result.group_counts).length : '--';
     const classLabelSummary = Array.isArray(result?.labels) && result.labels.length ? result.labels.join(', ') : '--';
@@ -960,25 +987,21 @@ const DataInsightCard = ({ result, sensor, params, selectedSessionName, embedded
                                     Model Identity</div>
                                 <div className="text-[12px] uppercase tracking-[0.2em] text-[var(--muted)] mb-0.5 font-black">
                                     Classifier</div>
-
                             </div>
 
                             <div className="flex flex-row justify-between w-full">
                                 <div className="text-[24px] font-black text-[var(--primary)] truncate leading-tight" title={result?.model_name || 'Neuro'}>
                                     {result?.model_name || 'Neuro'}
                                 </div>
-                                <div className="font-mono text-xs font-bold truncate leading-tight text-[var(--primary)] px-2 py-1.5 bg-[var(--bg)] rounded border border-[var(--border)] shadow-sm">{result?.classifier || (sensor === 'EEG' ? 'LDA' : 'Random Forest')}</div>
+                                <div className="font-mono text-[18px] font-bold text-center flex items-center justify-center truncate leading-tight text-[var(--primary)] bg-[var(--bg)] rounded border border-[var(--border)] px-1 shadow-sm min-w-[120px]">{result?.classifier || (sensor === 'EEG' ? 'LDA' : 'Random Forest')}</div>
                             </div>
                         </div>
 
-                        <div className="space-y-2 pt-2">
-                            <div className="flex flex-col gap-0.5">
-                                <span className="text-[12px] uppercase tracking-wider text-[var(--muted)] font-bold">Training Session</span>
-                                <span className="text-[14px] font-black text-[var(--text)] truncate opacity-90" title={trainedSessionLabel}>{trainedSessionLabel}</span>
-                            </div>
-                            <div className="flex flex-col gap-0.5">
-                                <span className="text-[12px] uppercase tracking-wider text-[var(--muted)] font-bold">Training Samples</span>
-                                <span className="text-[14px] font-black text-[var(--text)] opacity-90 font-mono">{trainedSampleCount}</span>
+                        <div className="space-y-2 py-2">
+                            <div className="flex flex-row justify-between w-full">
+                                <span className="text-[18px] font-black text-[var(--text)] truncate opacity-90" title={trainedSessionLabel}>{trainedSessionLabel}</span>
+
+                                <span className="font-mono text-[18px] font-bold text-center flex items-center justify-center truncate leading-tight text-[var(--primary)] bg-[var(--bg)] rounded border border-[var(--border)] shadow-sm min-w-[56px]">{trainedSampleCount}</span>
                             </div>
                         </div>
                     </div>
@@ -1004,7 +1027,7 @@ const DataInsightCard = ({ result, sensor, params, selectedSessionName, embedded
                         {mRow('Mean CV Score', result.mean_accuracy || result.cv_mean, true, true)}
                         {mRow('Validation Acc', result.validation_accuracy, true, true)}
                         {mRow('Training Acc', result.train_accuracy, true, true)}
-                        {mRow('Fold Variance', result.fold_std || result.cv_std, false, true)}
+                        {mRow('Fold Variance', formatFixedFive(result.fold_std ?? result.cv_std), false, true)}
                         {mRow('Accuracy Gap', (result.train_accuracy && result.validation_accuracy) ? (result.train_accuracy - result.validation_accuracy).toFixed(3) : '--', false, true)}
                         {mRow('Worst Fold', result.fold_min || result.cv_min, true, true)}
                     </div>
@@ -1236,7 +1259,7 @@ const ConfusionMatrixCard = ({ matrix, labels, n_samples, sensor, embedded = fal
 
     return (
         <div
-            className={`${embedded ? '' : 'card bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-sm'} ${sensor === 'EEG' ? 'h-fit ml-0' : 'h-full flex flex-col'} pt-1 pr-4 pb-5`}
+            className={`${embedded ? '' : 'card bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-sm'} ${sensor === 'EEG' ? 'h-fit ml-0' : 'h-full flex flex-col'} pb-3`}
             style={sensor === 'EEG' ? { width: cardWidth, minWidth: cardWidth } : {}}
         >
             {!embedded && (
@@ -1244,12 +1267,15 @@ const ConfusionMatrixCard = ({ matrix, labels, n_samples, sensor, embedded = fal
                     <h3 className="text-[18px] flex items-center font-bold text-[var(--muted)] uppercase tracking-widest truncate">
                         <Grid3X3 size={28} className='mr-2 border border-text bg-bg rounded-[4px] shrink-0' color='var(--bg)' fill='var(--text)' />
                         <span className="truncate">Confusion Matrix</span>
-                        {n_samples !== undefined && <span className="ml-1 text-[12px] normal-case opacity-70 shrink-0">({n_samples}) Samples</span>}
                     </h3>
-                    <div className="flex items-center gap-1.5 text-[13px] bg-[var(--bg)] px-[6px] py-[2px] shrink-0">
-                        <span className="font-bold text-[var(--text)]">Actual</span>
-                        <span className="text-[var(--muted)]"><ArrowRight size={12} /></span>
-                        <span className="font-bold text-[var(--primary)]">Predicted</span>
+                    <div className="flex flex-row gap-2 items-center bg-[var(--bg)] px-[6px]">
+                        <span className="items-center text-[14px] normal-case shrink-0 text-[var(--text)]">({n_samples}) Samples </span>
+
+                        <div className="flex flex-row items-center gap-1.5 text-[14px] bg-[var(--bg)] py-[2px] border-l border-[var(--border)] pl-2 shrink-0">
+                            <span className="font-bold text-[var(--text)]">Actual</span>
+                            <span className="text-[var(--muted)]"><ArrowRight size={12} /></span>
+                            <span className="font-bold text-[var(--primary)]">Predicted</span>
+                        </div>
                     </div>
                 </div>
             )}
@@ -1299,7 +1325,7 @@ const ConfusionMatrixCard = ({ matrix, labels, n_samples, sensor, embedded = fal
 const InsightWorkspaceCard = ({ view, result, sensor, params, selectedSessionName, onSwitchView }) => {
     const nSamples = result?.n_samples;
     const headerIcon = view === 'matrix'
-        ? <Grid3X3 size={28} className='mr-2 border border-text bg-bg rounded-[4px] shrink-0' color='var(--bg)' fill='var(--text)' />
+        ? <Grid3X3 size={32} className='mr-4 border border-text bg-bg rounded-[4px] shrink-0' color='var(--bg)' fill='var(--text)' />
         : sensor === 'EEG'
             ? <Brain size={32} className='mr-4 border border-text bg-bg rounded-lg shrink-0' color='var(--text)' />
             : sensor === 'EMG'
@@ -1307,43 +1333,49 @@ const InsightWorkspaceCard = ({ view, result, sensor, params, selectedSessionNam
                 : <Eye size={32} className='mr-4 border border-text bg-bg rounded-lg shrink-0' color='var(--text)' />;
 
     return (
-        <div className="card h-full flex flex-col px-4 pt-2 pb-4 bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-sm overflow-hidden">
+        <div className="card pb-0 h-full flex flex-col bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-sm overflow-hidden">
             <div className="flex justify-between items-center border-b border-[var(--border)] pb-2 shrink-0">
-                <AnimatePresence mode="wait">
-                    <motion.div
-                        key={`insight-header-${view}`}
-                        initial={{ opacity: 0, filter: 'blur(8px)' }}
-                        animate={{ opacity: 1, filter: 'blur(0px)' }}
-                        exit={{ opacity: 0, filter: 'blur(8px)' }}
-                        transition={{ duration: 0.25 }}
-                        className="flex items-center min-w-0"
-                    >
-                        {headerIcon}
-                        <h3 className="text-[18px] flex items-center font-bold text-[var(--muted)] uppercase tracking-widest truncate">
-                            <span className="truncate">{view === 'matrix' ? 'Confusion Matrix' : `${sensor} Data Insight`}</span>
-                            {view === 'matrix' && nSamples !== undefined && <span className="ml-1 text-[12px] normal-case opacity-70 shrink-0">({nSamples}) Samples</span>}
-                        </h3>
-                    </motion.div>
-                </AnimatePresence>
+                <span className="flex items-center min-w-0">
+                    {headerIcon}
+                    <h3 className="text-[18px] flex items-center font-bold text-[var(--muted)] uppercase tracking-widest truncate">
+                        <span className="truncate">{view === 'matrix' ? 'Confusion Matrix' : `${sensor} Data Insight`}</span>
 
-                <div className="flex items-center gap-2 shrink-0">
-                    {view === 'matrix' && (
-                        <div className="flex items-center gap-1.5 text-[13px] bg-[var(--bg)] px-[6px] py-[2px] shrink-0">
-                            <span className="font-bold text-[var(--text)]">Actual</span>
-                            <span className="text-[var(--muted)]"><ArrowRight size={12} /></span>
-                            <span className="font-bold text-[var(--primary)]">Predicted</span>
-                        </div>
-                    )}
+                    </h3>
                     <button
                         onClick={() => onSwitchView(view === 'matrix' ? 'insight' : 'matrix')}
-                        className="transition-all group flex items-center ml-2 gap-3"
+                        className="transition-all flex items-center ml-2 gap-3"
                         title={view === 'matrix' ? 'Switch to Data Insight' : 'Switch to Confusion Matrix'}
                     >
-                        <ArrowRightFromLine size={18} className="text-muted group-hover:text-primary transition-all group-hover:translate-x-0.5" />
+                        <ArrowRightFromLine size={22} className="text-[var(--text)] group-hover:text-primary transition-all group-hover:translate-x-1.5" />
                         {view === 'matrix'
-                            ? <Info size={24} className="text-muted group-hover:text-primary transition-colors" />
-                            : <Grid3X3 size={24} className="text-muted group-hover:text-primary transition-colors" />}
+                            ? <Info size={28} className="text-muted group-hover:text-primary transition-colors" />
+                            : <Grid3X3 size={28} className="text-muted group-hover:text-primary transition-colors" />}
                     </button>
+                </span>
+
+                <div className="flex flex-row items-center shrink-0">
+                    <AnimatePresence mode="wait">
+                        <motion.div
+                            key={`insight-body-${view}`}
+                            initial={{ opacity: 0, filter: 'blur(8px)' }}
+                            animate={{ opacity: 1, filter: 'blur(0px)' }}
+                            exit={{ opacity: 0, filter: 'blur(8px)' }}
+                            transition={{ duration: 0.3 }}
+                            className="h-full pt-2"
+                        >
+                            {view === 'matrix' && (
+                                <div className="flex flex-row gap-2 items-center bg-[var(--bg)] px-[6px]">
+                                    <span className="items-center text-[14px] normal-case shrink-0 text-[var(--text)]">({nSamples}) Samples </span>
+
+                                    <div className="flex flex-row items-center gap-1.5 text-[14px] bg-[var(--bg)] py-[2px] border-l border-[var(--border)] pl-2 shrink-0">
+                                        <span className="font-bold text-[var(--text)]">Actual</span>
+                                        <span className="text-[var(--muted)]"><ArrowRight size={12} /></span>
+                                        <span className="font-bold text-[var(--primary)]">Predicted</span>
+                                    </div>
+                                </div>
+                            )}
+                        </motion.div>
+                    </AnimatePresence>
                 </div>
             </div>
 
@@ -1355,7 +1387,7 @@ const InsightWorkspaceCard = ({ view, result, sensor, params, selectedSessionNam
                         animate={{ opacity: 1, filter: 'blur(0px)' }}
                         exit={{ opacity: 0, filter: 'blur(8px)' }}
                         transition={{ duration: 0.3 }}
-                        className="h-full pt-2"
+                        className="h-full"
                     >
                         {view === 'matrix' ? (
                             <ConfusionMatrixCard
@@ -1615,7 +1647,6 @@ const ControlPanel = ({
 
 export default function MLTrainingView({ onSwitchLab }) {
     const { currentThemeId } = useTheme();
-    const API_BASE_URL = import.meta.env.VITE_API_URL || '';
     const [activeTab, setActiveTab] = useState('EMG');
 
     // --- SESSIONS ---
@@ -1626,7 +1657,7 @@ export default function MLTrainingView({ onSwitchLab }) {
     // Fetch total samples for selected session to display in Split UI
     useEffect(() => {
         if (!selectedSession) {
-            fetch(`${API_BASE_URL}/api/dataset-size/${activeTab}`)
+            fetch(buildApiUrl(`/api/dataset-size/${activeTab}`))
                 .then(res => res.json())
                 .then(data => {
                     if (data && typeof data.total !== 'undefined') {
@@ -1641,7 +1672,7 @@ export default function MLTrainingView({ onSwitchLab }) {
                 });
             return;
         }
-        fetch(`${API_BASE_URL}/api/sessions/${activeTab}/${selectedSession}?limit=1`)
+        fetch(buildApiUrl(`/api/sessions/${activeTab}/${selectedSession}?limit=1`))
             .then(res => res.json())
             .then(data => {
                 if (data && typeof data.total !== 'undefined') {
@@ -1660,7 +1691,7 @@ export default function MLTrainingView({ onSwitchLab }) {
     const fetchSessions = async () => {
         try {
             const sensor = activeTab;
-            const res = await fetch(`${API_BASE_URL}/api/sessions/${sensor}`);
+            const res = await fetch(buildApiUrl(`/api/sessions/${sensor}`));
             if (res.ok) {
                 const data = await res.json();
                 if (data.tables) {
@@ -1714,7 +1745,7 @@ export default function MLTrainingView({ onSwitchLab }) {
 
     const fetchModels = async (forcedName = null) => {
         try {
-            const res = await fetch(`${API_BASE_URL}/api/models/${activeTab}`);
+            const res = await fetch(buildApiUrl(`/api/models/${activeTab}`));
             if (res.ok) {
                 const data = await res.json();
                 setModels(data);
@@ -1741,7 +1772,7 @@ export default function MLTrainingView({ onSwitchLab }) {
     const handleDeleteModel = async (name) => {
         // Removed confirmation as requested
         try {
-            const res = await fetch(`${API_BASE_URL}/api/models/${activeTab}/${name}`, { method: 'DELETE' });
+            const res = await fetch(buildApiUrl(`/api/models/${activeTab}/${name}`), { method: 'DELETE' });
             if (res.ok) {
                 fetchModels();
                 if (selectedModelName === name) setSelectedModels(prev => ({ ...prev, [activeTab]: null }));
@@ -1766,7 +1797,7 @@ export default function MLTrainingView({ onSwitchLab }) {
 
         try {
             setEvalLoading(true);
-            const res = await fetch(`${API_BASE_URL}/api/models/${activeTab}/load`, {
+            const res = await fetch(buildApiUrl(`/api/models/${activeTab}/load`), {
                 method: 'POST',
                 body: JSON.stringify({ model_name: name }),
                 headers: { 'Content-Type': 'application/json' }
@@ -1834,7 +1865,7 @@ export default function MLTrainingView({ onSwitchLab }) {
         setTreeLoading(true);
         soundHandler.playMLTreeStep(); // Play sound on tree step
         try {
-            const res = await fetch(`${API_BASE_URL}/api/model/tree`, {
+            const res = await fetch(buildApiUrl('/api/model/tree'), {
                 method: 'POST',
                 body: JSON.stringify({ sensor: activeTab, model_name: model, tree_index: index }),
                 headers: { 'Content-Type': 'application/json' }
@@ -1887,20 +1918,25 @@ export default function MLTrainingView({ onSwitchLab }) {
     // --- GENERIC TRAIN/EVAL ---
 
     const fetchJobSnapshot = async (jobId) => {
-        const res = await fetch(`${API_BASE_URL}/api/train-jobs/${jobId}`);
+        const res = await fetch(buildApiUrl(`/api/train-jobs/${jobId}`));
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Failed to fetch training job');
         return data;
     };
 
+    const clearTrainingJobState = useCallback(() => {
+        setTrainingJob(null);
+        setCountdown(null);
+        setLoading(false);
+    }, []);
+
     useEffect(() => {
         if (socketRef.current) return;
 
-        const endpoint = API_BASE_URL || window.location.origin;
+        const { endpoint, options } = getSocketIoConnection();
         const socket = io(endpoint, {
-            reconnection: true,
             timeout: 30000,
-            transports: ['websocket', 'polling']
+            ...options,
         });
 
         socket.on('training_job_update', (job) => {
@@ -1916,7 +1952,7 @@ export default function MLTrainingView({ onSwitchLab }) {
             socket.disconnect();
             socketRef.current = null;
         };
-    }, [API_BASE_URL]);
+    }, []);
 
     useEffect(() => {
         if (!trainingJob?.job_id) return undefined;
@@ -1938,7 +1974,7 @@ export default function MLTrainingView({ onSwitchLab }) {
             cancelled = true;
             clearInterval(interval);
         };
-    }, [API_BASE_URL, trainingJob?.job_id, trainingJob?.status]);
+    }, [trainingJob?.job_id, trainingJob?.status]);
 
     useEffect(() => {
         if (!trainingJob?.job_id) {
@@ -1947,7 +1983,8 @@ export default function MLTrainingView({ onSwitchLab }) {
         }
         if (finalizedJobRef.current === trainingJob.job_id) return;
 
-        if (trainingJob.status === 'completed') {
+        const isCompleted = trainingJob.status === 'completed' || (trainingJob.result && trainingJob.progress >= 1);
+        if (isCompleted) {
             finalizedJobRef.current = trainingJob.job_id;
             const resObj = trainingJob.result || trainingJob;
             const history = trainingJob.history || resObj.training_history || [];
@@ -1961,29 +1998,27 @@ export default function MLTrainingView({ onSwitchLab }) {
             fetchModels(trainingJob.model_name || resObj.model_name);
             setLoading(false);
             soundHandler.playSuccess();
+            setCountdown(5);
             const timer = setInterval(() => {
                 setCountdown(c => {
-                    const next = (c ?? 5) - 1;
+                    const next = (typeof c === 'number' ? c : 5) - 1;
                     if (next <= 0) {
                         clearInterval(timer);
-                        setCountdown(null);
-                        setTrainingJob(null);
+                        clearTrainingJobState();
                         return 0;
                     }
                     return next;
                 });
             }, 1000);
-            setCountdown(5);
             return () => clearInterval(timer);
         }
 
         if (trainingJob.status === 'failed' || trainingJob.status === 'error') {
             finalizedJobRef.current = trainingJob.job_id;
             setError(trainingJob.error || 'Training failed');
-            setLoading(false);
-            setCountdown(null);
+            clearTrainingJobState();
         }
-    }, [trainingJob, activeTab]);
+    }, [trainingJob, activeTab, clearTrainingJobState]);
 
     const handleTrain = async () => {
         soundHandler.playMLTrain();
@@ -1995,9 +2030,9 @@ export default function MLTrainingView({ onSwitchLab }) {
 
         try {
             const endpointMap = {
-                'EMG': `${API_BASE_URL}/api/train-emg-rf`,
-                'EOG': `${API_BASE_URL}/api/train-eog-rf`,
-                'EEG': `${API_BASE_URL}/api/train-eeg-lda`
+                'EMG': buildApiUrl('/api/train-emg-rf'),
+                'EOG': buildApiUrl('/api/train-eog-rf'),
+                'EEG': buildApiUrl('/api/train-eeg-lda')
             };
 
             const modelNameFinal = trainModelNameInput.trim();
@@ -2067,9 +2102,9 @@ export default function MLTrainingView({ onSwitchLab }) {
 
         try {
             const endpointMap = {
-                'EMG': `${API_BASE_URL}/api/model/evaluate`,
-                'EOG': `${API_BASE_URL}/api/model/evaluate/eog`,
-                'EEG': `${API_BASE_URL}/api/model/evaluate/eeg`
+                'EMG': buildApiUrl('/api/model/evaluate'),
+                'EOG': buildApiUrl('/api/model/evaluate/eog'),
+                'EEG': buildApiUrl('/api/model/evaluate/eeg')
             };
 
             const res = await fetch(endpointMap[activeTab], {

@@ -545,8 +545,8 @@ export default function SessionManagerPanel({
             </div>
 
             {/* RIGHT PANE: Session List */}
-            <div className="w-1/3 min-w-[180px] max-w-[250px] flex flex-col bg-[var(--panel-bg)] rounded-lg border border-[var(--panel-border)] overflow-hidden">
-                <div className="p-3 border-b border-[var(--panel-border)] bg-[var(--surface)]">
+            <div className="w-1/3 min-w-[180px] max-w-[250px] flex flex-col bg-[var(--panel-bg)] rounded-lg border border-[var(--border)] overflow-hidden">
+                <div className="p-3 border-b border-[var(--border)] bg-[var(--surface)]">
                     <h3 className="font-bold text-base text-[var(--title)] uppercase tracking-wide flex items-center justify-between pr-2 mb-2">
                         <span>Sessions</span>
                         <div className="flex gap-1 items-center">

@@ -1,3 +1,5 @@
+import { fetchWithBase } from '../utils/runtimeConnection';
+
 /**
  * @typedef {'EMG' | 'EOG' | 'EEG'} SensorType
  */
@@ -37,8 +39,7 @@ export const CalibrationApi = {
      */
     async fetchSensorConfig() {
         console.log('[CalibrationApi] Fetching sensor config...');
-        const API_BASE_URL = import.meta.env.VITE_API_URL || '';
-        const response = await fetch(`${API_BASE_URL}/api/config`);
+        const response = await fetchWithBase('/api/config');
         if (!response.ok) {
             // Fallback or mock if backend is not ready
             return {
@@ -61,8 +62,7 @@ export const CalibrationApi = {
      */
     async saveSensorConfig(updatedConfig) {
         console.log('[CalibrationApi] Saving sensor config:', updatedConfig);
-        const API_BASE_URL = import.meta.env.VITE_API_URL || '';
-        const response = await fetch(`${API_BASE_URL}/api/config`, {
+        const response = await fetchWithBase('/api/config', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(updatedConfig)
@@ -79,8 +79,7 @@ export const CalibrationApi = {
      */
     async startCalibration(sensorType, mode, classLabel, windowDurationMs, sessionName = null, extra = {}) {
         console.log(`[CalibrationApi] Starting ${mode} calibration for ${sensorType} (${classLabel})`);
-        const API_BASE_URL = import.meta.env.VITE_API_URL || '';
-        const response = await fetch(`${API_BASE_URL}/api/calibration/start`, {
+        const response = await fetchWithBase('/api/calibration/start', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -105,8 +104,7 @@ export const CalibrationApi = {
      */
     async stopCalibration(sensorType) {
         console.log(`[CalibrationApi] Stopping calibration for ${sensorType}`);
-        const API_BASE_URL = import.meta.env.VITE_API_URL || '';
-        const response = await fetch(`${API_BASE_URL}/api/calibration/stop`, {
+        const response = await fetchWithBase('/api/calibration/stop', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ sensor: sensorType })
@@ -147,8 +145,7 @@ export const CalibrationApi = {
                 status: w.status
             }));
 
-            const API_BASE_URL = import.meta.env.VITE_API_URL || '';
-            const response = await fetch(`${API_BASE_URL}/api/calibrate`, {
+            const response = await fetchWithBase('/api/calibrate', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -188,8 +185,7 @@ export const CalibrationApi = {
                 session_name: sessionName // Pass session name
             };
 
-            const API_BASE_URL = import.meta.env.VITE_API_URL || '';
-            const resp = await fetch(`${API_BASE_URL}/api/window`, {
+            const resp = await fetchWithBase('/api/window', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body)
@@ -221,8 +217,7 @@ export const CalibrationApi = {
                 samples: windowPayload.samples
             };
 
-            const API_BASE_URL = import.meta.env.VITE_API_URL || '';
-            const resp = await fetch(`${API_BASE_URL}/api/prediction/window/predict`, {
+            const resp = await fetchWithBase('/api/prediction/window/predict', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body)
@@ -246,8 +241,7 @@ export const CalibrationApi = {
      */
     async listRecordings() {
         try {
-            const API_BASE_URL = import.meta.env.VITE_API_URL || '';
-            const response = await fetch(`${API_BASE_URL}/api/recordings`);
+            const response = await fetchWithBase('/api/recordings');
             if (!response.ok) throw new Error('Failed to list recordings');
             return response.json();
         } catch (error) {
@@ -263,8 +257,7 @@ export const CalibrationApi = {
      */
     async getRecording(filename) {
         try {
-            const API_BASE_URL = import.meta.env.VITE_API_URL || '';
-            const response = await fetch(`${API_BASE_URL}/api/recordings/${encodeURIComponent(filename)}`);
+            const response = await fetchWithBase(`/api/recordings/${encodeURIComponent(filename)}`);
             console.log(response);
             if (!response.ok) throw new Error('Failed to fetch recording');
             return response.json();
@@ -280,8 +273,7 @@ export const CalibrationApi = {
      */
     async startEmgRecording(label) {
         try {
-            const API_BASE_URL = import.meta.env.VITE_API_URL || '';
-            const response = await fetch(`${API_BASE_URL}/api/emg/start`, {
+            const response = await fetchWithBase('/api/emg/start', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ label })
@@ -298,8 +290,7 @@ export const CalibrationApi = {
      */
     async stopEmgRecording() {
         try {
-            const API_BASE_URL = import.meta.env.VITE_API_URL || '';
-            const response = await fetch(`${API_BASE_URL}/api/emg/stop`, { method: 'POST' });
+            const response = await fetchWithBase('/api/emg/stop', { method: 'POST' });
             return response.json();
         } catch (error) {
             console.error('[CalibrationApi] Error stopping EMG recording:', error);
@@ -312,8 +303,7 @@ export const CalibrationApi = {
      */
     async getEmgStatus() {
         try {
-            const API_BASE_URL = import.meta.env.VITE_API_URL || '';
-            const response = await fetch(`${API_BASE_URL}/api/emg/status`);
+            const response = await fetchWithBase('/api/emg/status');
             if (!response.ok) return null;
             return response.json();
         } catch (error) {
@@ -328,7 +318,6 @@ export const CalibrationApi = {
      * @param {boolean} isActive 
      */
     async togglePrediction(sensorType, isActive) {
-        const API_BASE_URL = import.meta.env.VITE_API_URL || '';
         sensorType = sensorType.toUpperCase();
         const action = isActive ? 'start' : 'stop';
         let endpoint = '';
@@ -339,7 +328,7 @@ export const CalibrationApi = {
         }
         
         try {
-            const response = await fetch(`${API_BASE_URL}${endpoint}`, { method: 'POST' });
+            const response = await fetchWithBase(endpoint, { method: 'POST' });
             if (!response.ok) throw new Error('Failed to toggle prediction');
             return await response.json();
         } catch (error) {
@@ -355,8 +344,7 @@ export const CalibrationApi = {
      */
     async sendManualClawCommand(action) {
         try {
-            const API_BASE_URL = import.meta.env.VITE_API_URL || '';
-            const response = await fetch(`${API_BASE_URL}/api/servo/manual`, {
+            const response = await fetchWithBase('/api/servo/manual', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action })

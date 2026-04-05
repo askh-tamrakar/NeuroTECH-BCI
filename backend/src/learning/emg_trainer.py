@@ -43,7 +43,7 @@ def get_feature_cols(sensor):
     if sensor == 'EOG':
         return ['amplitude', 'duration_ms', 'rise_time_ms', 'fall_time_ms', 'asymmetry', 'peak_count', 'kurtosis', 'skewness']
     if sensor == 'EEG':
-        return ['score_1', 'score_2', 'score_3', 'score_4', 'score_5', 'score_6', 'max_score', 'second_max_score', 'score_ratio', 'score_mean', 'score_std', 'dominant_freq', 'peak_freq', 'target_frequency']
+        return ['score_1', 'score_2', 'score_3', 'score_4', 'score_5', 'score_6', 'max_score', 'second_max_score', 'score_ratio', 'score_mean', 'score_std', 'dominant_freq', 'peak_freq']
     return []
 
 

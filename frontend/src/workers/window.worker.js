@@ -7,11 +7,15 @@ let targetLabel = 'Rock';
 let mode = 'collection';
 let autoLimit = 30;
 let autoCalibrate = false;
+let batchSize = 5;
+let numBatches = 6;
 let windowDuration = 1500;
 let timeWindow = 5000;
 const GAP_DURATION = 500;
+const COUNTABLE_STATUSES = new Set(['pending', 'recording', 'collected', 'saved', 'correct']);
+let currentBatchIndex = 0;
 
-let windowInterval = null;
+let windowTimer = null;
 let markedWindows = [];
 let latestSignalTime = Date.now();
 const MAX_WINDOWS = 2000;
@@ -30,6 +34,8 @@ self.onmessage = function (e) {
             if (payload.mode !== undefined) mode = payload.mode;
             if (payload.autoLimit !== undefined) autoLimit = payload.autoLimit;
             if (payload.autoCalibrate !== undefined) autoCalibrate = payload.autoCalibrate;
+            if (payload.batchSize !== undefined) batchSize = payload.batchSize;
+            if (payload.numBatches !== undefined) numBatches = payload.numBatches;
             if (payload.windowDuration !== undefined) windowDuration = payload.windowDuration;
             if (payload.timeWindow !== undefined) timeWindow = payload.timeWindow;
 
@@ -44,6 +50,8 @@ self.onmessage = function (e) {
             if (payload.mode !== undefined) mode = payload.mode;
             if (payload.autoLimit !== undefined) autoLimit = payload.autoLimit;
             if (payload.autoCalibrate !== undefined) autoCalibrate = payload.autoCalibrate;
+            if (payload.batchSize !== undefined) batchSize = payload.batchSize;
+            if (payload.numBatches !== undefined) numBatches = payload.numBatches;
             if (payload.windowDuration !== undefined) windowDuration = payload.windowDuration;
             if (payload.timeWindow !== undefined) timeWindow = payload.timeWindow;
             break;
@@ -51,13 +59,10 @@ self.onmessage = function (e) {
             latestSignalTime = payload;
             break;
         case 'START_WINDOWING':
-            startAutoWindowing();
+            startAutoWindowing(payload || {});
             break;
         case 'STOP_WINDOWING':
-            if (windowInterval) {
-                clearInterval(windowInterval);
-                windowInterval = null;
-            }
+            stopAutoWindowing();
             break;
         case 'WINDOW_COLLECTED':
             handleWindowCollected(payload);
@@ -80,29 +85,41 @@ self.onmessage = function (e) {
             });
             break;
         case 'RESUME_NEXT_BATCH':
-            startAutoWindowing();
+            startAutoWindowing(payload || {});
             break;
     }
 };
 
-function startAutoWindowing() {
-    if (windowInterval) clearInterval(windowInterval);
+function startAutoWindowing(options = {}) {
+    stopAutoWindowing();
+
+    const desiredBatchSize = Math.max(1, Number(options.batchSize || batchSize || 1));
+    currentBatchIndex = autoCalibrate ? Math.max(1, Number(options.batchIndex || currentBatchIndex || 1)) : 0;
+    const cadenceMs = windowDuration + GAP_DURATION;
 
     const createNextWindow = () => {
         if (mode === 'recording') return; // Handled manually
 
-        const currentBatchCount = markedWindows.filter(w =>
-            w.label === targetLabel &&
-            (w.status === 'pending' || w.status === 'collected')
-        ).length;
+        const currentBatchCount = autoCalibrate
+            ? markedWindows.filter((window) =>
+                Number(window.batchIndex || 0) === currentBatchIndex && COUNTABLE_STATUSES.has(window.status)
+            ).length
+            : markedWindows.filter((window) => COUNTABLE_STATUSES.has(window.status)).length;
 
-        if (autoCalibrate && currentBatchCount >= autoLimit) {
-            // Stop production interval once batch limit is reached
-            if (windowInterval) {
-                console.log(`[WindowWorker] Batch limit (${autoLimit}) reached. Stopping interval.`);
-                clearInterval(windowInterval);
-                windowInterval = null;
-            }
+        if (autoCalibrate && currentBatchCount >= desiredBatchSize) {
+            self.postMessage({
+                type: 'BATCH_PRODUCTION_COMPLETE',
+                payload: {
+                    batchIndex: currentBatchIndex,
+                    batchSize: desiredBatchSize,
+                    totalBatches: numBatches,
+                }
+            });
+            stopAutoWindowing();
+            return;
+        }
+        if (!autoCalibrate && currentBatchCount >= autoLimit) {
+            stopAutoWindowing();
             return;
         }
 
@@ -122,7 +139,8 @@ function startAutoWindowing() {
             channel: activeChannelIndex,
             status: 'pending',
             samples: [],
-            captureWindowMs: windowDuration
+            captureWindowMs: windowDuration,
+            batchIndex: currentBatchIndex
         };
 
         markedWindows = [...markedWindows, newWindow].slice(-MAX_WINDOWS);
@@ -138,10 +156,18 @@ function startAutoWindowing() {
                 delay: delayToCenter + windowDuration + 100
             }
         });
+
+        windowTimer = setTimeout(createNextWindow, cadenceMs);
     };
 
     createNextWindow();
-    windowInterval = setInterval(createNextWindow, windowDuration + GAP_DURATION);
+}
+
+function stopAutoWindowing() {
+    if (windowTimer) {
+        clearTimeout(windowTimer);
+        windowTimer = null;
+    }
 }
 
 function getLabelForWindow() {

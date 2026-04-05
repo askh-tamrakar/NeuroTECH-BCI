@@ -6,8 +6,9 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { io } from 'socket.io-client'
+import { getSocketIoConnection } from '../utils/runtimeConnection'
 
-export function useWebSocket(url = 'http://localhost:5005') {
+export function useWebSocket(url = '') {
   const [status, setStatus] = useState('disconnected')
   const [lastMessage, setLastMessage] = useState(null)
   const [lastConfig, setLastConfig] = useState(null)
@@ -27,7 +28,8 @@ export function useWebSocket(url = 'http://localhost:5005') {
   }, [url])
 
   const connect = (connectUrl) => {
-    const endpoint = connectUrl || currentUrl || url
+    const { endpoint: defaultEndpoint, options: socketOptions } = getSocketIoConnection()
+    const endpoint = connectUrl || currentUrl || url || defaultEndpoint
 
     // Don't reconnect if already connected to same endpoint
     if (socketRef.current?.connected && endpoint === currentUrl) {
@@ -40,11 +42,9 @@ export function useWebSocket(url = 'http://localhost:5005') {
     setCurrentUrl(endpoint)
 
     try {
-      // Connect directly using the imported 'io' function
       socketRef.current = io(endpoint, {
-        reconnection: true,
         timeout: 10000,
-        transports: ['websocket', 'polling']
+        ...socketOptions,
       })
 
       setupSocketListeners()

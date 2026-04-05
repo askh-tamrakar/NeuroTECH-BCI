@@ -23,12 +23,9 @@ requires-python = ">=3.10"
 # Core runtime dependencies (mirrors requirements.txt)
 dependencies = [
     # Web server & real-time comms
-    "Flask>=3.1.0",
-    "Flask-Cors>=6.0.0",
-    "Flask-SocketIO>=5.5.0",
+    "fastapi>=0.115.0",
     "python-socketio>=5.5.0",
-    "Werkzeug>=3.0.0",
-    "eventlet>=0.33.0",
+    "uvicorn>=0.32.0",
 
     # Scientific computing
     "numpy>=1.26.0,<3.0.0",
@@ -57,6 +54,7 @@ dependencies = [
 dev = [
     "pytest>=8.0",
     "pytest-cov>=5.0",
+    "httpx>=0.27.0",
     "black>=24.0",
     "ruff>=0.4.0",
     "mypy>=1.10",
@@ -137,4 +135,4 @@ exclude                = [
 [tool.pytest.ini_options]
 testpaths    = ["tests"]
 python_files = ["test_*.py", "*_test.py"]
-addopts      = "-v --tb=short"
+addopts      = "-v --tb=short --basetemp=.pytest_tmp"

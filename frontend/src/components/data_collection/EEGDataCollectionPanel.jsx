@@ -6,14 +6,12 @@ export default function EEGDataCollectionPanel({
     targetLabel,
     targetFrequency,
     onRecord,
-    savedCount
+    savedCount = 0,
+    targetCount = 40
 }) {
     // Phases: 'IDLE', 'REST_PRE', 'FOCUS', 'REST_POST'
     const [phase, setPhase] = useState('IDLE');
     const [timeLeft, setTimeLeft] = useState(0);
-    const [trialCount, setTrialCount] = useState(savedCount || 0);
-    const RECOMMENDED_TRIALS = 40;
-
     // We use a ref for accurate timing
     const phaseTimeoutRef = useRef(null);
     const countdownIntervalRef = useRef(null);
@@ -34,13 +32,6 @@ export default function EEGDataCollectionPanel({
             startPhase('REST_PRE');
         }
     }, [isCalibrating]);
-
-    // Update trial count when savedCount updates
-    useEffect(() => {
-        if (savedCount !== undefined) {
-            setTrialCount(savedCount);
-        }
-    }, [savedCount]);
 
     const startPhase = useCallback((newPhase) => {
         setPhase(newPhase);
@@ -118,7 +109,9 @@ export default function EEGDataCollectionPanel({
     }, []);
 
     // Calculate progress
-    const progressPercent = Math.min(100, (trialCount / RECOMMENDED_TRIALS) * 100);
+    const effectiveTargetCount = Math.max(1, Number(targetCount) || 1);
+    const trialCount = Number(savedCount) || 0;
+    const progressPercent = Math.min(100, (trialCount / effectiveTargetCount) * 100);
 
     return (
         <div className="flex flex-col h-full bg-[var(--surface)] border-2 border-[var(--border)] rounded-xl overflow-hidden shadow-card animate-in fade-in duration-300">
@@ -140,12 +133,12 @@ export default function EEGDataCollectionPanel({
                         <span className="text-muted">Trials Collected</span>
                         <div className="flex gap-1">
                             <span className="text-text">{trialCount}</span>
-                            <span className="text-muted">/ {RECOMMENDED_TRIALS}</span>
+                            <span className="text-muted">/ {effectiveTargetCount}</span>
                         </div>
                     </div>
                     <div className="h-2 w-full bg-bg rounded-full overflow-hidden shadow-inner">
                         <div
-                            className={`h-full transition-all duration-500 ease-out ${trialCount >= RECOMMENDED_TRIALS ? 'bg-emerald-500 shadow-glow' : 'bg-primary'}`}
+                            className={`h-full transition-all duration-500 ease-out ${trialCount >= effectiveTargetCount ? 'bg-emerald-500 shadow-glow' : 'bg-primary'}`}
                             style={{ width: `${progressPercent}%` }}
                         />
                     </div>
@@ -200,8 +193,8 @@ export default function EEGDataCollectionPanel({
             {/* Footer */}
             <div className="p-3 border-t border-[var(--border)] bg-[var(--bg)]/50 flex justify-between items-center">
                 <div className="text-xs uppercase font-bold text-muted flex items-center gap-1">
-                    {trialCount >= RECOMMENDED_TRIALS && <CheckCircle2 size={14} className="text-emerald-500" />}
-                    {trialCount >= RECOMMENDED_TRIALS ? 'Target Reached' : 'Auto-collecting'}
+                    {trialCount >= effectiveTargetCount && <CheckCircle2 size={14} className="text-emerald-500" />}
+                    {trialCount >= effectiveTargetCount ? 'Target Reached' : 'Auto-collecting'}
                 </div>
                 <div className="text-xs text-muted font-mono bg-surface px-2 py-1 rounded">
                     Protocol: 2s ↔ 3s ↔ 2s

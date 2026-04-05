@@ -132,6 +132,7 @@ export default defineConfig({
         target: 'http://localhost:5005',
         changeOrigin: true,
         ws: true,
+        secure: false,
       }
     },
     watch: {

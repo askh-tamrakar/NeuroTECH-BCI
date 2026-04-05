@@ -106,6 +106,8 @@ export default function SSVEPView({ isConnected, wsEvent, onBackToMenu }) {
     const [predictedFreq, setPredictedFreq] = useState(0);
     const [scoreVector, setScoreVector] = useState([]);
     const [useML, setUseML] = useState(true);
+    const [runtimeMLState, setRuntimeMLState] = useState(true);
+    const [detectorMode, setDetectorMode] = useState('fbcca');
     const [trials, setTrials] = useState([]);
     const [currentTrialIdx, setCurrentTrialIdx] = useState(0);
     const [protocolMode, setProtocolMode] = useState(false);
@@ -116,11 +118,15 @@ export default function SSVEPView({ isConnected, wsEvent, onBackToMenu }) {
     const configsRef = useRef(configs);
     const useMLRef = useRef(useML);
     const logsRef = useRef(logs);
+    const runtimeMLStateRef = useRef(runtimeMLState);
+    const detectorModeRef = useRef(detectorMode);
 
     useEffect(() => { globalRunningRef.current = globalRunning; }, [globalRunning]);
     useEffect(() => { configsRef.current = configs; }, [configs]);
     useEffect(() => { useMLRef.current = useML; }, [useML]);
     useEffect(() => { logsRef.current = logs; }, [logs]);
+    useEffect(() => { runtimeMLStateRef.current = runtimeMLState; }, [runtimeMLState]);
+    useEffect(() => { detectorModeRef.current = detectorMode; }, [detectorMode]);
 
     const addLog = useCallback((message, type = 'INFO') => {
         const time = new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -181,6 +187,8 @@ export default function SSVEPView({ isConnected, wsEvent, onBackToMenu }) {
             <SSVEPSidebar
                 onBackToMenu={onBackToMenu}
                 useML={useML}
+                runtimeMLState={runtimeMLState}
+                detectorMode={detectorMode}
                 setUseML={setUseML}
                 availableModels={availableModels}
                 selectedModel={selectedModel}
@@ -212,7 +220,7 @@ export default function SSVEPView({ isConnected, wsEvent, onBackToMenu }) {
             />
         );
     }, [
-        onBackToMenu, useML, availableModels, selectedModel,
+        onBackToMenu, useML, runtimeMLState, detectorMode, availableModels, selectedModel,
         addLog, realTimeFreq, predictedFreq, scoreVector, configs, updateConfig,
         isSyncing, lastModifiedTargetId, globalRunning, protocolMode, startFlicker,
         stopFlicker, runProtocol, brightness, refreshRate,
@@ -277,10 +285,10 @@ export default function SSVEPView({ isConnected, wsEvent, onBackToMenu }) {
         let predictedValue = null;
         if (wsEvent.event === 'eeg_prediction' && wsEvent.peak_frequency !== undefined) {
             freqValue = wsEvent.peak_frequency;
-            predictedValue = wsEvent.predicted_frequency ?? wsEvent.frequency;
+            predictedValue = wsEvent.ml_enabled ? (wsEvent.predicted_frequency ?? wsEvent.frequency) : wsEvent.peak_frequency;
         } else if (wsEvent.event === 'eeg_prediction' && wsEvent.frequency !== undefined) {
             freqValue = wsEvent.frequency;
-            predictedValue = wsEvent.predicted_frequency ?? wsEvent.frequency;
+            predictedValue = wsEvent.ml_enabled ? (wsEvent.predicted_frequency ?? wsEvent.frequency) : wsEvent.frequency;
         } else if (typeof wsEvent.event === 'string' && wsEvent.event.startsWith('TARGET_')) {
             const numStr = wsEvent.event.replace('TARGET_', '').replace('HZ', '').replace('_', '.');
             freqValue = parseFloat(numStr);
@@ -293,6 +301,19 @@ export default function SSVEPView({ isConnected, wsEvent, onBackToMenu }) {
         }
         if (predictedValue !== null && predictedValue !== undefined) {
             setPredictedFreq(predictedValue || 0);
+        }
+
+        if (wsEvent.event === 'eeg_prediction') {
+            const nextMLState = Boolean(wsEvent.ml_enabled);
+            const nextDetectorMode = wsEvent.detector_mode || (nextMLState ? 'lda' : 'fbcca');
+            if (nextMLState !== runtimeMLStateRef.current || nextDetectorMode !== detectorModeRef.current) {
+                setRuntimeMLState(nextMLState);
+                setDetectorMode(nextDetectorMode);
+                addLog(
+                    `EEG detector mode: ${nextDetectorMode.toUpperCase()} (${nextMLState ? 'model included' : 'model excluded'})${wsEvent.model_name ? ` [${wsEvent.model_name}]` : ''}`,
+                    'SETTINGS'
+                );
+            }
         }
 
         if (wsEvent.features?.display_score_vector) {

@@ -42,6 +42,7 @@ import { useSettings } from '../../contexts/SettingsContext'
 import { soundHandler } from '../../handlers/SoundHandler'
 import { Music, Volume2, Upload, VolumeX } from 'lucide-react'
 import { audioStorage } from '../../utils/AudioStorage'
+import { buildApiUrl } from '../../utils/runtimeConnection'
 
 // Helper for color inputs
 const ColorInput = ({ label, value, onChange }) => (
@@ -303,10 +304,9 @@ export default function SettingsView({
 
       // 3. Optional: Try to upload to backend if online
       try {
-        const API_BASE_URL = import.meta.env.VITE_API_URL || '';
         const formData = new FormData();
         formData.append('file', file);
-        fetch(`${API_BASE_URL}/api/audio/upload`, { method: 'POST', body: formData })
+        fetch(buildApiUrl('/api/audio/upload'), { method: 'POST', body: formData })
           .catch(e => console.log('Offline: Could not sync to server, but saved locally.'));
       } catch (e) {
         // Ignore backend sync errors
@@ -338,8 +338,7 @@ export default function SettingsView({
 
       // 3. Optional: Try to delete from server
       try {
-        const API_BASE_URL = import.meta.env.VITE_API_URL || '';
-        fetch(`${API_BASE_URL}/api/audio/track/${filename}`, { method: 'DELETE' })
+        fetch(buildApiUrl(`/api/audio/track/${filename}`), { method: 'DELETE' })
           .catch(e => console.log('Offline: Could not delete from server.'));
       } catch (e) { }
 
@@ -368,8 +367,7 @@ export default function SettingsView({
           } else if (track?.isDefault) {
             trackUrl = `data/audio/${track.name}`;
           } else {
-            const API_BASE_URL = import.meta.env.VITE_API_URL || '';
-            trackUrl = `${API_BASE_URL}/api/audio/track/${settings.audio.bgmTrack}`;
+            trackUrl = buildApiUrl(`/api/audio/track/${settings.audio.bgmTrack}`);
           }
 
           if (trackUrl) {

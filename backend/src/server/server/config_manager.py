@@ -11,34 +11,34 @@ FILTER_CONFIG_PATH = CONFIG_DIR / "filter_config.json"
 FEATURE_CONFIG_PATH = CONFIG_DIR / "feature_config.json"
 DEFAULT_SR = 1000
 
-def load_config() -> dict:
-    """Load config from sensor, filter, and feature JSON files."""
-    defaults = {
+
+def build_default_config() -> dict:
+    return {
         "sampling_rate": DEFAULT_SR,
         "channel_mapping": {
             "ch0": {
-                "sensor": "EMG", 
+                "sensor": "EMG",
                 "enabled": True
             },
             "ch1": {
-                "sensor": "EEG", 
+                "sensor": "EEG",
                 "enabled": True
             }
         },
         "filters": {
-             "EMG": {"cutoff": 20.0, "order": 4, "notch_enabled": True, "notch_freq": 50, "bandpass_enabled": True, "bandpass_low": 20, "bandpass_high": 250},
+            "EMG": {"cutoff": 20.0, "order": 4, "notch_enabled": True, "notch_freq": 50, "bandpass_enabled": True, "bandpass_low": 20, "bandpass_high": 250},
             "EOG": {
                 "type": "low_pass",
                 "cutoff": 10.0,
                 "order": 4
             },
             "EEG": {
-                "filters": [ 
+                "filters": [
                     {
                         "type": "notch",
                         "freq": 50,
                         "Q": 30
-                    },  
+                    },
                     {
                         "type": "bandpass",
                         "low": 0.5,
@@ -56,6 +56,10 @@ def load_config() -> dict:
         "num_channels": 2
     }
 
+def load_config() -> dict:
+    """Load config from sensor, filter, and feature JSON files."""
+    defaults = build_default_config()
+
     merged = defaults.copy()
 
     # 1. Load Sensor Config
@@ -69,9 +73,9 @@ def load_config() -> dict:
             if 'channel_mapping' in cfg:
                 merged['channel_mapping'] = {**defaults.get('channel_mapping', {}), **cfg['channel_mapping']}
         except Exception as e:
-             print(f"⚠️  Error loading sensor config: {e}")
+             print(f"Warning: error loading sensor config: {e}")
     else:
-        print(f"ℹ️  Config file not found at {CONFIG_PATH}")
+        print(f"Info: config file not found at {CONFIG_PATH}")
 
     # 2. Load Filter Config (Overrides 'filters' key)
     if FILTER_CONFIG_PATH.exists():
@@ -81,7 +85,7 @@ def load_config() -> dict:
              if 'filters' in filter_cfg:
                  merged['filters'] = filter_cfg['filters']
         except Exception as e:
-            print(f"⚠️  Error loading filter config: {e}")
+            print(f"Warning: error loading filter config: {e}")
 
     # 3. Load Feature Config
     if FEATURE_CONFIG_PATH.exists():
@@ -110,14 +114,18 @@ def save_config(config: dict) -> bool:
             filter_payload = {"filters": config['filters']}
             with open(FILTER_CONFIG_PATH, 'w') as f:
                 json.dump(filter_payload, f, indent=2)
-            print(f"💾 Filters saved to {FILTER_CONFIG_PATH}")
+            print(f"Saved filters to {FILTER_CONFIG_PATH}")
+        elif FILTER_CONFIG_PATH.exists():
+            FILTER_CONFIG_PATH.unlink()
 
         # 2. Save Features to feature_config.json
         if 'features' in config:
             feature_payload = config['features']
             with open(FEATURE_CONFIG_PATH, 'w') as f:
                 json.dump(feature_payload, f, indent=2)
-            print(f"💾 Features saved to {FEATURE_CONFIG_PATH}")
+            print(f"Saved features to {FEATURE_CONFIG_PATH}")
+        elif FEATURE_CONFIG_PATH.exists():
+            FEATURE_CONFIG_PATH.unlink()
 
         # 3. Save Sensor/Display Config to sensor_config.json (exclude modular sections)
         sensor_payload = config.copy()
@@ -129,11 +137,11 @@ def save_config(config: dict) -> bool:
         with open(CONFIG_PATH, 'w') as f:
             json.dump(sensor_payload, f, indent=2)
         
-        print(f"💾 Sensor config saved to {CONFIG_PATH}")
+        print(f"Saved sensor config to {CONFIG_PATH}")
         state.config = config
         return True
     except Exception as e:
-        print(f"❌ Error saving config: {e}")
+        print(f"Error saving config: {e}")
         return False
 
 DETECTION_STATE_PATH = CONFIG_DIR / "detection_state.json"
@@ -172,4 +180,4 @@ def set_detection_state(active: bool, target: str | None = None):
                 "target": (str(target).upper() if target and active else None)
             }, f)
     except Exception as e:
-        print(f"❌ Error saving detection state: {e}")
+        print(f"Error saving detection state: {e}")

@@ -386,6 +386,7 @@ export default function Sidebar({
                     {/* EMG FILTER */}
                     <FilterSection
                         sensorType="EMG"
+                        config={config}
                         filterConfig={getFilterConfig('EMG')}
                         onFilterChange={handleSensorFilterChange}
                         colorClass="text-primary"
@@ -400,6 +401,7 @@ export default function Sidebar({
                     {/* EOG FILTER */}
                     <FilterSection
                         sensorType="EOG"
+                        config={config}
                         filterConfig={getFilterConfig('EOG')}
                         onFilterChange={handleSensorFilterChange}
                         colorClass="text-emerald-500"
@@ -414,6 +416,7 @@ export default function Sidebar({
                     {/* EEG FILTER */}
                     <FilterSection
                         sensorType="EEG"
+                        config={config}
                         filterConfig={getFilterConfig('EEG')}
                         onFilterChange={handleSensorFilterChange}
                         colorClass="text-orange-500"
@@ -472,6 +475,7 @@ function MapButton({ onSave }) {
 
 function FilterSection({
     sensorType,
+    config,
     filterConfig,
     onFilterChange,
     colorClass,
@@ -495,6 +499,13 @@ function FilterSection({
         orange: 'bg-orange-500'
     };
     const buttonBg = bgColors[accentColor] || 'bg-primary';
+    const buildUpdatedConfig = (field, value) => ({
+        ...config,
+        filters: {
+            ...config.filters,
+            [sensorType]: { ...config.filters?.[sensorType], [field]: value }
+        }
+    });
 
     return (
         <div className="space-y-3 p-3 rounded-lg border border-border bg-surface/50">
@@ -528,13 +539,7 @@ function FilterSection({
                         checked={filterConfig.notch_enabled || false}
                         onChange={(e) => {
                             onFilterChange(sensorType, 'notch_enabled', e.target.checked);
-                            onSave?.({
-                                ...config,
-                                filters: {
-                                    ...config.filters,
-                                    [sensorType]: { ...config.filters?.[sensorType], notch_enabled: e.target.checked }
-                                }
-                            });
+                            onSave?.(buildUpdatedConfig('notch_enabled', e.target.checked));
                         }}
                         className="accent-primary hidden"
                     />
@@ -549,13 +554,7 @@ function FilterSection({
                             value={filterConfig.notch_freq || 50}
                             onChange={(val) => {
                                 onFilterChange(sensorType, 'notch_freq', val);
-                                onSave?.({
-                                    ...config,
-                                    filters: {
-                                        ...config.filters,
-                                        [sensorType]: { ...config.filters?.[sensorType], notch_freq: val }
-                                    }
-                                });
+                                onSave?.(buildUpdatedConfig('notch_freq', val));
                             }}
                             accentColor={accentColor}
                             className="w-[100px] !h-[1.75rem]"
@@ -572,13 +571,7 @@ function FilterSection({
                         checked={filterConfig.bandpass_enabled || false}
                         onChange={(e) => {
                             onFilterChange(sensorType, 'bandpass_enabled', e.target.checked);
-                            onSave?.({
-                                ...config,
-                                filters: {
-                                    ...config.filters,
-                                    [sensorType]: { ...config.filters?.[sensorType], bandpass_enabled: e.target.checked }
-                                }
-                            });
+                            onSave?.(buildUpdatedConfig('bandpass_enabled', e.target.checked));
                         }}
                         className="accent-primary hidden"
                     />
@@ -610,22 +603,23 @@ function FilterSection({
                                     }
                                     labelSuffix="Hz"
                                     onChange={({ min, max }) => {
-                                        handleSensorFilterChange(sensorType, 'bandpass_low', min);
-                                        handleSensorFilterChange(sensorType, 'bandpass_high', max);
+                                        onFilterChange(sensorType, 'bandpass_low', min);
+                                        onFilterChange(sensorType, 'bandpass_high', max);
                                     }}
                                     onFinalChange={({ min, max }) => {
-                                        const updatedConfig = {
-                                            ...config,
-                                            filters: {
-                                                ...config.filters,
-                                                [sensorType]: {
-                                                    ...config.filters?.[sensorType],
-                                                    bandpass_low: min,
-                                                    bandpass_high: max
+                                        if (onSave) {
+                                            onSave({
+                                                ...config,
+                                                filters: {
+                                                    ...config.filters,
+                                                    [sensorType]: {
+                                                        ...config.filters?.[sensorType],
+                                                        bandpass_low: min,
+                                                        bandpass_high: max
+                                                    }
                                                 }
-                                            }
-                                        };
-                                        if (onSave) onSave(updatedConfig);
+                                            });
+                                        }
                                     }}
                                 />
                             );
@@ -649,13 +643,7 @@ function FilterSection({
                         value={filterConfig.cutoff || 1}
                         onChange={(val) => onFilterChange(sensorType, 'cutoff', val)}
                         onFinalChange={(val) => {
-                            onSave?.({
-                                ...config,
-                                filters: {
-                                    ...config.filters,
-                                    [sensorType]: { ...config.filters?.[sensorType], cutoff: val }
-                                }
-                            });
+                            onSave?.(buildUpdatedConfig('cutoff', val));
                         }}
                         accentColor={accentColor}
                     />
@@ -682,13 +670,7 @@ function FilterSection({
                             value={filterConfig.order || 4}
                             onChange={(val) => onFilterChange(sensorType, 'order', val)}
                             onFinalChange={(val) => {
-                                onSave?.({
-                                    ...config,
-                                    filters: {
-                                        ...config.filters,
-                                        [sensorType]: { ...config.filters?.[sensorType], order: val }
-                                    }
-                                });
+                                onSave?.(buildUpdatedConfig('order', val));
                             }}
                             accentColor={accentColor}
                         />

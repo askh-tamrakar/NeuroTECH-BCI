@@ -1,10 +1,10 @@
-from flask import Blueprint, jsonify, request, current_app
 import json
 import time
 import uuid
-import threading
 import numpy as np
 import pandas as pd
+from fastapi import APIRouter, Body
+from fastapi.responses import JSONResponse
 from src.server.server.state import state
 from src.server.server.config_manager import load_config, save_config
 from src.server.server.extensions import socketio
@@ -34,12 +34,21 @@ from src.learning.eog_trainer import (
 from src.learning.eeg_lda_trainer import train_eeg_lda_model, evaluate_eeg_lda_model
 from src.config.window_config import SESSION_CONFIG
 from src.feature.extractors.rps_extractor import EMG_BASE_FEATURES, EMG_FEATURE_COLUMNS
+from src.server.server.services.training_job_service import (
+    create_training_job as _create_training_job,
+    job_snapshot as _job_snapshot,
+    run_training_job as _run_training_job,
+)
 
-training_bp = Blueprint('training', __name__)
+training_bp = APIRouter()
 EMG_BURST_WINDOWS = 5
 EMG_BURST_STRIDE_MS = 150.0
-TRAINING_JOBS = {}
-TRAINING_JOBS_LOCK = threading.Lock()
+
+
+def _json(payload, status_code: int = 200):
+    if status_code == 200:
+        return payload
+    return JSONResponse(content=payload, status_code=status_code)
 
 
 def _normalize_eeg_label(label):
@@ -72,12 +81,6 @@ def _normalize_eeg_label(label):
     return mapping.get(lowered, 0)
 
 
-def _job_snapshot(job_id):
-    with TRAINING_JOBS_LOCK:
-        job = TRAINING_JOBS.get(job_id)
-        return dict(job) if job else None
-
-
 def _safe_socket_emit(event_name, payload):
     try:
         if getattr(socketio, "server", None) is not None:
@@ -86,92 +89,18 @@ def _safe_socket_emit(event_name, payload):
         pass
 
 
+def _error_response(message, status_code=400, **extra):
+    payload = {"error": message}
+    if extra:
+        payload.update(extra)
+    return payload, status_code
+
+
 def _emit_job_update(job_id):
     snapshot = _job_snapshot(job_id)
     if snapshot:
         _safe_socket_emit('training_job_update', snapshot)
 
-
-def _create_training_job(sensor: str, model_name: str):
-    job_id = uuid.uuid4().hex
-    now = time.time()
-    job = {
-        "job_id": job_id,
-        "status": "queued",
-        "sensor": sensor,
-        "model_name": model_name,
-        "progress": 0.0,
-        "elapsed_seconds": 0.0,
-        "eta_seconds": None,
-        "candidate_index": 0,
-        "total_candidates": 1,
-        "fold_index": 0,
-        "total_folds": 0,
-        "history": [],
-        "result": None,
-        "error": None,
-        "_started_at": now,
-    }
-    with TRAINING_JOBS_LOCK:
-        TRAINING_JOBS[job_id] = job
-    _emit_job_update(job_id)
-    return job
-
-
-def _update_training_job(job_id, **updates):
-    with TRAINING_JOBS_LOCK:
-        job = TRAINING_JOBS.get(job_id)
-        if not job:
-            return None
-        job.update(updates)
-        started_at = job.get("_started_at", time.time())
-        elapsed = max(0.0, time.time() - started_at)
-        job["elapsed_seconds"] = elapsed
-        progress = float(job.get("progress") or 0.0)
-        if 0 < progress < 1:
-            job["eta_seconds"] = max(0.0, elapsed * ((1 / progress) - 1))
-        elif progress >= 1.0:
-            job["eta_seconds"] = 0.0
-        snapshot = dict(job)
-    _safe_socket_emit('training_job_update', snapshot)
-    return snapshot
-
-
-def _finalize_training_job(job_id, *, status: str, result=None, error=None, history=None):
-    return _update_training_job(
-        job_id,
-        status=status,
-        progress=1.0 if status == "completed" else float((_job_snapshot(job_id) or {}).get("progress") or 0.0),
-        result=result,
-        error=error,
-        history=history if history is not None else (_job_snapshot(job_id) or {}).get("history", []),
-    )
-
-
-def _run_training_job(app, job_id, trainer, trainer_kwargs, *, on_success=None):
-    def progress_callback(update):
-        update = dict(update or {})
-        history = update.get("history")
-        if history is not None:
-            update["history"] = list(history)
-        _update_training_job(job_id, **update)
-
-    def target():
-        with app.app_context():
-            try:
-                _update_training_job(job_id, status="running")
-                result = trainer(progress_callback=progress_callback, **trainer_kwargs)
-                if isinstance(result, dict) and result.get("error"):
-                    _finalize_training_job(job_id, status="failed", error=result.get("error"))
-                    return
-                if on_success:
-                    on_success(result, trainer_kwargs)
-                _finalize_training_job(job_id, status="completed", result=result, history=result.get("training_history", []))
-            except Exception as exc:
-                _finalize_training_job(job_id, status="failed", error=str(exc))
-
-    thread = threading.Thread(target=target, daemon=True)
-    thread.start()
 
 
 def _emg_window_params(sr, metadata, samples):
@@ -230,10 +159,10 @@ def extract_features_wrapper(sensor: str, samples: list, sr: int = 1000) -> dict
     else:
         return extract_emg_features(samples, sr)
 
-@training_bp.route('/api/train-emg-rf', methods=['POST'])
-def api_train_emg():
+@training_bp.post('/api/train-emg-rf')
+def api_train_emg(payload: dict | None = Body(default=None)):
     try:
-        params = request.get_json() or {}
+        params = payload or {}
         target_table = params.get('table_name', 'emg_windows')
         
         if target_table == 'ALL':
@@ -255,7 +184,6 @@ def api_train_emg():
         
         job = _create_training_job("EMG", model_name)
         _run_training_job(
-            current_app._get_current_object(),
             job["job_id"],
             train_emg_model,
             {
@@ -278,19 +206,19 @@ def api_train_emg():
             },
             on_success=lambda _result, _kwargs: state.rps_detector.load_model(model_name, verbose=False) if state.rps_detector else None,
         )
-        return jsonify({
+        return {
             "job_id": job["job_id"],
             "status": job["status"],
             "sensor": "EMG",
             "model_name": model_name,
-        })
+        }
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return _json({"error": str(e)}, 500)
 
-@training_bp.route('/api/train-eog-rf', methods=['POST'])
-def api_train_eog():
+@training_bp.post('/api/train-eog-rf')
+def api_train_eog(payload: dict | None = Body(default=None)):
     try:
-        params = request.get_json() or {}
+        params = payload or {}
         n_est = int(params.get('n_estimators', 100))
         max_d = params.get('max_depth')
         table_name = params.get('table_name') 
@@ -309,7 +237,6 @@ def api_train_eog():
         
         job = _create_training_job("EOG", model_name)
         _run_training_job(
-            current_app._get_current_object(),
             job["job_id"],
             train_eog_model,
             {
@@ -331,20 +258,20 @@ def api_train_eog():
                 "model_name": model_name,
             },
         )
-        return jsonify({
+        return {
             "job_id": job["job_id"],
             "status": job["status"],
             "sensor": "EOG",
             "model_name": model_name,
-        })
+        }
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return _json({"error": str(e)}, 500)
 
 
-@training_bp.route('/api/train-eeg-lda', methods=['POST'])
-def api_train_eeg_lda():
+@training_bp.post('/api/train-eeg-lda')
+def api_train_eeg_lda(payload: dict | None = Body(default=None)):
     try:
-        params = request.get_json() or {}
+        params = payload or {}
         table_name = params.get('table_name', 'eeg_windows')
         if table_name == 'ALL':
             table_name = 'eeg_windows'
@@ -361,7 +288,6 @@ def api_train_eeg_lda():
 
         job = _create_training_job("EEG", model_name)
         _run_training_job(
-            current_app._get_current_object(),
             job["job_id"],
             train_eeg_lda_model,
             {
@@ -379,77 +305,77 @@ def api_train_eeg_lda():
                 "search_resolution": params.get("search_resolution", 1),
             },
         )
-        return jsonify({
+        return {
             "job_id": job["job_id"],
             "status": job["status"],
             "sensor": "EEG",
             "model_name": model_name,
-        })
+        }
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return _json({"error": str(e)}, 500)
 
 
-@training_bp.route('/api/train-jobs/<job_id>', methods=['GET'])
+@training_bp.get('/api/train-jobs/{job_id}')
 def api_get_training_job(job_id):
     job = _job_snapshot(job_id)
     if not job:
-        return jsonify({"error": "Training job not found"}), 404
-    return jsonify(job)
+        return _json({"error": "Training job not found"}, 404)
+    return job
 
 
-@training_bp.route('/api/model/evaluate', methods=['POST'])
-def api_eval_emg():
-    params = request.get_json() or {}
+@training_bp.post('/api/model/evaluate')
+def api_eval_emg(payload: dict | None = Body(default=None)):
+    params = payload or {}
     table_name = params.get('table_name') or 'emg_windows'
     model_name = params.get('model_name')
     res = evaluate_saved_model(sensor='EMG', table_name=table_name, model_name=model_name)
     if "error" in res:
-        return jsonify(res), 200
-    return jsonify(res)
+        return res
+    return res
 
-@training_bp.route('/api/model/evaluate/eog', methods=['POST'])
-def api_eval_eog():
-    params = request.get_json() or {}
+@training_bp.post('/api/model/evaluate/eog')
+def api_eval_eog(payload: dict | None = Body(default=None)):
+    params = payload or {}
     table_name = params.get('table_name') or 'eog_windows'
     model_name = params.get('model_name')
     res = evaluate_saved_eog_model(table_name=table_name, model_name=model_name)
     if "error" in res:
-        return jsonify(res), 200
-    return jsonify(res)
+        return res
+    return res
 
-@training_bp.route('/api/model/evaluate/eeg', methods=['POST'])
-def api_eval_eeg():
-    params = request.get_json() or {}
+@training_bp.post('/api/model/evaluate/eeg')
+def api_eval_eeg(payload: dict | None = Body(default=None)):
+    params = payload or {}
     table_name = params.get('table_name') or 'eeg_windows'
     model_name = params.get('model_name')
     res = evaluate_eeg_lda_model(table_name=table_name, model_name=model_name)
     if "error" in res:
-        return jsonify(res), 200
-    return jsonify(res)
+        return res
+    return res
 
-@training_bp.route('/api/models/emg', methods=['GET'])
+@training_bp.get('/api/models/emg')
 def api_list_emg_models():
     """List all saved EMG models."""
     try:
         models = list_saved_emg_models()
-        return jsonify(models)
+        return models
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return _json({"error": str(e)}, 500)
 
-@training_bp.route('/api/models/eog', methods=['GET'])
+@training_bp.get('/api/models/eog')
 def api_list_eog_models():
     """List all saved EOG models."""
     try:
         # Use existing EOG trainer which is known good
         models = list_saved_eog_models()
-        return jsonify(models)
+        return models
     except Exception as e:
         import traceback
         tb = traceback.format_exc()
         print(f"❌ Error listing EOG models: {tb}")
-        return jsonify({"error": str(e), "traceback": tb}), 500
+        return _json({"error": str(e), "traceback": tb}, 500)
 
-@training_bp.route('/api/models/<sensor>', methods=['GET'])
+@training_bp.get('/api/models/{sensor}')
 def api_list_models_generic(sensor):
     """List all saved models for a sensor (Generic Route)."""
     try:
@@ -461,42 +387,42 @@ def api_list_models_generic(sensor):
         elif sensor_upper == 'EEG':
             # EEG models are managed via emg_trainer.list_saved_models('EEG') or similar
             # Actually, emg_trainer.py has a generic list_saved_models(sensor)
-            return jsonify(list_saved_emg_models('EEG'))
+            return list_saved_emg_models('EEG')
         else:
-            return jsonify({"error": f"Unknown sensor type {sensor}"}), 400
+            return _json({"error": f"Unknown sensor type {sensor}"}, 400)
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return _json({"error": str(e)}, 500)
 
 
 
-@training_bp.route('/api/models/emg/<model_name>', methods=['DELETE'])
+@training_bp.delete('/api/models/emg/{model_name}')
 def api_delete_emg_model_endpoint(model_name):
     """Delete a specific EMG model."""
     try:
         result = delete_emg_model('EMG', model_name)
         if "errors" in result and result["errors"]:
-             return jsonify(result), 400 
-        return jsonify(result)
+             return _json(result, 400)
+        return result
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return _json({"error": str(e)}, 500)
 
-@training_bp.route('/api/models/eog/<model_name>', methods=['DELETE'])
+@training_bp.delete('/api/models/eog/{model_name}')
 def api_delete_eog_model(model_name):
     """Delete a specific EOG model."""
     try:
         result = delete_eog_model(model_name)
         if "errors" in result and result["errors"]:
-             return jsonify(result), 400 
-        return jsonify(result)
+             return _json(result, 400)
+        return result
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return _json({"error": str(e)}, 500)
 
 
-@training_bp.route('/api/emg/calibrate-scaler', methods=['POST'])
-def api_calibrate_emg_scaler():
+@training_bp.post('/api/emg/calibrate-scaler')
+def api_calibrate_emg_scaler(payload: dict | None = Body(default=None)):
     try:
         from src.calibration.calibration_manager import calibration_manager
-        params = request.get_json() or {}
+        params = payload or {}
         table_name = params.get('table_name', 'emg_windows')
         model_name = params.get('model_name', 'emg_rf_model')
         if table_name == 'ALL':
@@ -507,13 +433,13 @@ def api_calibrate_emg_scaler():
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table_name,))
         if not cursor.fetchone():
             conn.close()
-            return jsonify({"error": f"Table {table_name} not found"}), 404
+            return _json({"error": f"Table {table_name} not found"}, 404)
 
         rows = pd.read_sql_query(f"SELECT * FROM {table_name}", conn)
         conn.close()
 
         if rows.empty:
-            return jsonify({"error": "No EMG rows available for scaler calibration"}), 400
+            return _json({"error": "No EMG rows available for scaler calibration"}, 400)
 
         feature_rows = rows.to_dict(orient='records')
         scaler_path = calibration_manager.calibrate_emg_scaler(feature_rows, model_name=model_name)
@@ -524,15 +450,15 @@ def api_calibrate_emg_scaler():
                 state.rps_detector.load_model(model_name, verbose=False)
         except Exception:
             pass
-        return jsonify({"status": "success", "table_name": table_name, "scaler_path": scaler_path, "samples": len(feature_rows)})
+        return {"status": "success", "table_name": table_name, "scaler_path": scaler_path, "samples": len(feature_rows)}
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return _json({"error": str(e)}, 500)
 
-@training_bp.route('/api/eog/calibrate-scaler', methods=['POST'])
-def api_calibrate_eog_scaler():
+@training_bp.post('/api/eog/calibrate-scaler')
+def api_calibrate_eog_scaler(payload: dict | None = Body(default=None)):
     try:
         from src.calibration.calibration_manager import calibration_manager
-        params = request.get_json() or {}
+        params = payload or {}
         table_name = params.get('table_name', 'eog_windows')
         model_name = params.get('model_name', 'eog_rf')
         if table_name == 'ALL':
@@ -543,13 +469,13 @@ def api_calibrate_eog_scaler():
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table_name,))
         if not cursor.fetchone():
             conn.close()
-            return jsonify({"error": f"Table {table_name} not found"}), 404
+            return _json({"error": f"Table {table_name} not found"}, 404)
 
         rows = pd.read_sql_query(f"SELECT * FROM {table_name}", conn)
         conn.close()
 
         if rows.empty:
-            return jsonify({"error": "No EOG rows available for scaler calibration"}), 400
+            return _json({"error": "No EOG rows available for scaler calibration"}, 400)
 
         feature_rows = rows.to_dict(orient='records')
         scaler_path = calibration_manager.calibrate_eog_scaler(feature_rows, model_name=model_name)
@@ -558,11 +484,11 @@ def api_calibrate_eog_scaler():
             config_manager.set_active_model('EOG', model_name)
         except Exception:
             pass
-        return jsonify({"status": "success", "table_name": table_name, "scaler_path": scaler_path, "samples": len(feature_rows)})
+        return {"status": "success", "table_name": table_name, "scaler_path": scaler_path, "samples": len(feature_rows)}
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return _json({"error": str(e)}, 500)
 
-@training_bp.route('/api/models/<sensor>/<model_name>', methods=['DELETE'])
+@training_bp.delete('/api/models/{sensor}/{model_name}')
 def api_delete_model_generic(sensor, model_name):
     """Delete a specific model for any supported sensor."""
     try:
@@ -574,48 +500,48 @@ def api_delete_model_generic(sensor, model_name):
         elif sensor_upper == 'EEG':
             result = delete_emg_model('EEG', model_name)
         else:
-            return jsonify({"error": f"Unsupported sensor {sensor}"}), 400
+            return _json({"error": f"Unsupported sensor {sensor}"}, 400)
 
         if "errors" in result and result["errors"]:
-            return jsonify(result), 400
-        return jsonify(result)
+            return _json(result, 400)
+        return result
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return _json({"error": str(e)}, 500)
 
-@training_bp.route('/api/models/emg/load', methods=['POST'])
-def api_load_emg_model_endpoint():
+@training_bp.post('/api/models/emg/load')
+def api_load_emg_model_endpoint(payload: dict | None = Body(default=None)):
     """Load a specific EMG model to be active."""
     try:
-        params = request.get_json() or {}
+        params = payload or {}
         model_name = params.get('model_name')
         if not model_name:
-            return jsonify({"error": "model_name required"}), 400
+            return _json({"error": "model_name required"}, 400)
             
         result = load_emg_model('EMG', model_name)
         if "error" in result:
-             return jsonify(result), 400
+             return _json(result, 400)
         
         # Update Real-time Detector
         if state.rps_detector:
             print(f"Reloading RPS Detector with {model_name}")
             state.rps_detector.load_model(model_name, verbose=False)
             
-        return jsonify(result)
+        return result
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return _json({"error": str(e)}, 500)
 
-@training_bp.route('/api/models/eog/load', methods=['POST'])
-def api_load_eog_model():
+@training_bp.post('/api/models/eog/load')
+def api_load_eog_model(payload: dict | None = Body(default=None)):
     """Load a specific EOG model to be active."""
     try:
-        params = request.get_json() or {}
+        params = payload or {}
         model_name = params.get('model_name')
         if not model_name:
-            return jsonify({"error": "model_name required"}), 400
+            return _json({"error": "model_name required"}, 400)
             
         result = load_eog_model(model_name)
         if "error" in result:
-             return jsonify(result), 400
+             return _json(result, 400)
              
         # Update Persisted Config so Router sees it
         try:
@@ -625,18 +551,18 @@ def api_load_eog_model():
         except Exception as e:
              print(f"Warning: Failed to update config manager: {e}")
             
-        return jsonify(result)
+        return result
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return _json({"error": str(e)}, 500)
 
-@training_bp.route('/api/models/<sensor>/load', methods=['POST'])
-def api_load_model_generic(sensor):
+@training_bp.post('/api/models/{sensor}/load')
+def api_load_model_generic(sensor, payload: dict | None = Body(default=None)):
     """Load a specific model (Generic)."""
     try:
-        params = request.get_json() or {}
+        params = payload or {}
         model_name = params.get('model_name')
         if not model_name:
-            return jsonify({"error": "model_name required"}), 400
+            return _json({"error": "model_name required"}, 400)
 
         sensor_upper = sensor.upper()
         if sensor_upper == 'EOG':
@@ -645,21 +571,21 @@ def api_load_model_generic(sensor):
             result = load_emg_model(sensor_upper, model_name)
 
         if "error" in result:
-             return jsonify(result), 400
+             return _json(result, 400)
         
         # Update Real-time Detector
         if sensor_upper == 'EMG' and state.rps_detector:
              state.rps_detector.load_model(model_name, verbose=False)
 
-        return jsonify(result)
+        return result
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return _json({"error": str(e)}, 500)
 
-@training_bp.route('/api/model/tree', methods=['POST'])
-def api_get_tree():
+@training_bp.post('/api/model/tree')
+def api_get_tree(payload: dict | None = Body(default=None)):
     """Get a specific tree structure."""
     try:
-        params = request.get_json() or {}
+        params = payload or {}
         model_name = params.get('model_name')
         tree_index = int(params.get('tree_index', 0))
         # Infer sensor or pass it? For now, we iterate or try EMG default logic if model_name matches active
@@ -670,16 +596,16 @@ def api_get_tree():
         
         result = get_model_tree_structure(sensor=sensor, model_name=model_name, tree_index=tree_index)
         if "error" in result:
-             return jsonify(result), 400
-        return jsonify(result)
+             return _json(result, 400)
+        return result
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return _json({"error": str(e)}, 500)
 
 
 def _save_window_payload(payload):
     try:
         if not payload:
-            return {"error": "No payload provided"}, 400
+            return _error_response("No payload provided", 400)
 
         sensor = payload.get('sensor')
         action = payload.get('action')
@@ -687,7 +613,7 @@ def _save_window_payload(payload):
         metadata = payload.get('metadata', {}) or {}
 
         if sensor is None or action is None or samples is None:
-            return {"error": "Missing required fields: sensor, action, samples"}, 400
+            return _error_response("Missing required fields: sensor, action, samples", 400)
 
         sr = state.config.get('sampling_rate', 1000) if state.config else 1000
         sensor_upper = str(sensor).upper()
@@ -704,6 +630,12 @@ def _save_window_payload(payload):
         if sensor_upper == 'EMG':
             selected_window_ms, selected_window_samples, stride_samples, capture_samples, capture_window_ms, is_valid_burst = _emg_window_params(sr, metadata, samples)
             raw_samples = np.asarray(samples).flatten()
+            if (not is_valid_burst) or len(raw_samples) < capture_samples:
+                return _error_response(
+                    f"Discarded EMG window: expected a valid {EMG_BURST_WINDOWS}-sample burst "
+                    f"({int(selected_window_ms)}ms slices, {int(capture_window_ms)}ms capture)",
+                    422
+                )
             db_manager.save_session_metadata('EMG', table_name, {
                 "sensor": "EMG",
                 "table_name": table_name,
@@ -722,11 +654,13 @@ def _save_window_payload(payload):
                 "gap_ms": float(metadata.get('gapMs', 0) or 0),
                 "source": metadata.get('source', 'frontend_auto_window'),
             })
-            if is_valid_burst and len(raw_samples) >= capture_samples:
-                for offset in range(0, capture_samples - selected_window_samples + 1, stride_samples):
-                    sub_windows.append(raw_samples[offset: offset + selected_window_samples].tolist())
-            else:
-                sub_windows.append(raw_samples[:selected_window_samples].tolist())
+            for offset in range(0, capture_samples - selected_window_samples + 1, stride_samples):
+                sub_windows.append(raw_samples[offset: offset + selected_window_samples].tolist())
+            if len(sub_windows) != EMG_BURST_WINDOWS:
+                return _error_response(
+                    f"Discarded EMG window: burst slicing produced {len(sub_windows)} samples instead of {EMG_BURST_WINDOWS}",
+                    422
+                )
         elif sensor_upper == 'EEG':
             resolved_window_ms = float(metadata.get('windowMs') or ((len(samples) / sr) * 1000.0))
             resolved_target_frequency = float(metadata.get('targetFrequency', metadata.get('frequency', 0)) or 0)
@@ -811,34 +745,33 @@ def _save_window_payload(payload):
         if last_features:
             final_response["features"] = last_features
             
-        return jsonify(final_response)
+        return final_response
 
     except Exception as e:
         import traceback
         tb = traceback.format_exc()
         print(f"❌ Error saving window: {tb}")
-        return jsonify({"error": str(e), "traceback": tb}), 500
+        return _error_response(str(e), 500, traceback=tb)
 
 
-@training_bp.route('/api/window', methods=['POST'])
-def api_save_window():
+@training_bp.post('/api/window')
+def api_save_window(payload: dict | None = Body(default=None)):
     """Accept a recorded window, save as CSV/DB, compute features and update config thresholds."""
-    payload = request.get_json()
     response = _save_window_payload(payload)
     if isinstance(response, tuple):
         result, status = response
-        return jsonify(result), status
+        return _json(result, status)
     return response
 
 
-@training_bp.route('/api/windows/batch', methods=['POST'])
-def api_save_windows_batch():
+@training_bp.post('/api/windows/batch')
+def api_save_windows_batch(payload: dict | None = Body(default=None)):
     """Persist multiple windows in one request to reduce collection/save latency."""
     try:
-        payload = request.get_json() or {}
+        payload = payload or {}
         windows = payload.get('windows') or []
         if not windows:
-            return jsonify({"error": "No windows provided"}), 400
+            return _json({"error": "No windows provided"}, 400)
 
         shared_sensor = payload.get('sensor')
         shared_session_name = payload.get('session_name') or payload.get('sessionName')
@@ -861,8 +794,8 @@ def api_save_windows_batch():
             if isinstance(response, tuple):
                 result, status = response
             else:
-                result = response.get_json() if hasattr(response, "get_json") else {"error": "Unknown save response"}
-                status = getattr(response, "status_code", 200)
+                result = response
+                status = 200
             results.append({
                 "index": index,
                 "id": window_payload.get('id'),
@@ -875,31 +808,30 @@ def api_save_windows_batch():
 
         response_status = 200 if error_count == 0 else (207 if saved_count > 0 else 400)
         response_state = "success" if error_count == 0 else ("partial_success" if saved_count > 0 else "error")
-        return jsonify({
+        return _json({
             "status": response_state,
             "saved_count": saved_count,
             "error_count": error_count,
             "results": results,
-        }), response_status
+        }, response_status)
     except Exception as e:
         import traceback
         tb = traceback.format_exc()
-        return {"error": str(e), "traceback": tb}, 500
+        return _json({"error": str(e), "traceback": tb}, 500)
 
 
-@training_bp.route('/api/calibrate', methods=['POST'])
-def api_calibrate():
+@training_bp.post('/api/calibrate')
+def api_calibrate(payload: dict | None = Body(default=None)):
     """Calibrate detection thresholds based on collected windows."""
     try:
-        payload = request.get_json()
         if not payload:
-            return jsonify({"error": "No payload provided"}), 400
+            return _json({"error": "No payload provided"}, 400)
         
         sensor = payload.get('sensor')
         windows = payload.get('windows', [])
         
         if not sensor or not windows:
-            return jsonify({"error": "Missing sensor or windows"}), 400
+            return _json({"error": "Missing sensor or windows"}, 400)
         
         windows_by_action = {}
         for w in windows:
@@ -914,7 +846,7 @@ def api_calibrate():
                 })
         
         if not windows_by_action:
-            return jsonify({"error": "No valid windows with features found"}), 400
+            return _json({"error": "No valid windows with features found"}, 400)
         
         total_before = len(windows)
         correct_before = sum(1 for w in windows if w.get('status') == 'correct')
@@ -1012,14 +944,11 @@ def api_calibrate():
             "config_saved": save_success
         }
         
-        try:
-            socketio.emit('config_updated', {"sensor": sensor})
-        except Exception:
-            pass
+        _safe_socket_emit('config_updated', {"sensor": sensor})
         
         print(f"🎯 Calibration complete: {sensor} | Acc: {accuracy_before:.1%} -> {accuracy_after:.1%}")
-        return jsonify(result)
+        return result
     
     except Exception as e:
         print(f"❌ Calibration error: {e}")
-        return jsonify({"error": str(e)}), 500
+        return _json({"error": str(e)}, 500)

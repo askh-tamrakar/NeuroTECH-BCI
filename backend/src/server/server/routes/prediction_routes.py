@@ -1,174 +1,102 @@
-from flask import Blueprint, jsonify, request
-import sqlite3
-import time
-import json
-import os
 import socket
-from pathlib import Path
-from src.server.server.state import state
-from src.server.server.lsl_service import extract_emg_features, extract_eog_features
+import time
+
+from fastapi import APIRouter, Body
+from fastapi.responses import JSONResponse
+
+from src.calibration.calibration_manager import calibration_manager
 from src.database.db_manager import db_manager
+from src.server.server.lsl_service import extract_emg_features
+from src.server.server.services.prediction_store import (
+    clear_predictions,
+    delete_prediction_row,
+    insert_prediction,
+    list_predictions,
+)
+from src.server.server.state import state
 
-prediction_bp = Blueprint('prediction', __name__)
 
-@prediction_bp.route('/api/servo/manual', methods=['POST'])
-def manual_servo_override():
+prediction_bp = APIRouter()
+
+
+def _error_response(error: str, status_code: int = 500, **extra):
+    return JSONResponse({"error": error, **extra}, status_code=status_code)
+
+
+@prediction_bp.post("/api/servo/manual")
+def manual_servo_override(payload: dict | None = Body(default=None)):
     try:
-        payload = request.get_json()
-        action = payload.get('action', '')
-        
-        # Map manual actions to DEG
-        if action == 'Open':
-            angle = 1
-        elif action == 'Close':
-            angle = 97
-        elif action == 'Snap MIDDLE':
-            angle = 48
-        else:
-            angle = 48
-            
-        if angle >= 0:
-            # Send to StreamManager Relay on 6002
-            try:
-                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                s.settimeout(1.0)
-                s.connect(('127.0.0.1', 6002))
-                s.sendall(f"DEG {angle}\n".encode())
-                s.close()
-            except Exception as e:
-                print(f"Failed to send manual command to relay: {e}")
-                
-        return jsonify({"status": "sent", "action": action, "angle": angle})
+        payload = payload or {}
+        action = payload.get("action", "")
+        angle = {"Open": 1, "Close": 97, "Snap MIDDLE": 48}.get(action, 48)
+
+        try:
+            with socket.create_connection(("127.0.0.1", 6002), timeout=1.0) as relay:
+                relay.sendall(f"DEG {angle}\n".encode())
+        except Exception as e:
+            print(f"Failed to send manual command to relay: {e}")
+
+        return {"status": "sent", "action": action, "angle": angle}
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return _error_response(str(e))
 
-# DB Path configuration
-from src.utils.paths import get_base_data_dir
-PREDICTION_DB_DIR = get_base_data_dir() / "PREDICTION" / "EMG"
-PREDICTION_DB_PATH = PREDICTION_DB_DIR / "emg.db"
 
-def get_db_connection():
-    if not PREDICTION_DB_DIR.exists():
-        PREDICTION_DB_DIR.mkdir(parents=True, exist_ok=True)
-    
-    conn = sqlite3.connect(str(PREDICTION_DB_PATH))
-    conn.row_factory = sqlite3.Row
-    return conn
-
-def init_db():
-    conn = get_db_connection()
-    # Create predictions table if not exists
-    # Columns: id, timestamp, ground_truth, predicted_label, confidence, features (JSON)
-    conn.execute('''
-        CREATE TABLE IF NOT EXISTS predictions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            timestamp REAL,
-            ground_truth TEXT,
-            predicted_label TEXT,
-            confidence REAL,
-            features TEXT
-        )
-    ''')
-    conn.commit()
-    conn.close()
-
-# Initialize on module load (or first request)
-try:
-    init_db()
-except Exception as e:
-    print(f"Custom DB init failed: {e}")
-
-@prediction_bp.route('/api/prediction/window/predict', methods=['POST'])
-def predict_window():
+@prediction_bp.post("/api/prediction/window/predict")
+def predict_window(payload: dict | None = Body(default=None)):
     try:
-        payload = request.get_json()
         if not payload:
-            return jsonify({"error": "No payload"}), 400
-            
-        samples = payload.get('samples')
-        label = payload.get('label', 'Unknown') # Ground truth
-        
+            return _error_response("No payload", 400)
+
+        samples = payload.get("samples")
+        label = payload.get("label", "Unknown")
         if not samples:
-            return jsonify({"error": "No samples provided"}), 400
-            
-        # 1. Extract Features
-        # Assuming EMG for now as per request "prediction/emg/emg.db"
-        sr = state.config.get('sampling_rate', 1000) if state.config else 1000
+            return _error_response("No samples provided", 400)
+
+        sr = state.config.get("sampling_rate", 1000) if state.config else 1000
         features = extract_emg_features(samples, sr)
-        
-        # 2. Predict (Stateless)
         predicted_label = "Unknown"
         confidence = 0.0
-        
+
         if state.rps_detector:
-            # Use predict_instant for single window test
             pred, conf = state.rps_detector.predict_instant(features)
             predicted_label = pred
             confidence = float(conf)
-            
-        # 3. Save to DB
-        conn = get_db_connection()
-        conn.execute(
-            "INSERT INTO predictions (timestamp, ground_truth, predicted_label, confidence, features) VALUES (?, ?, ?, ?, ?)",
-            (time.time(), label, predicted_label, confidence, json.dumps(features))
-        )
-        conn.commit()
-        conn.close()
-        
-        return jsonify({
+
+        insert_prediction(label, predicted_label, confidence, features)
+        return {
             "status": "predicted",
             "predicted_label": predicted_label,
             "confidence": confidence,
             "features": features,
             "ground_truth": label,
-            "match": (predicted_label == label)
-        })
-        
+            "match": predicted_label == label,
+        }
     except Exception as e:
         import traceback
-        tb = traceback.format_exc()
-        print(f"Error: {e}")
-        return jsonify({"error": str(e), "traceback": tb}), 500
 
-@prediction_bp.route('/api/prediction/history', methods=['GET'])
+        tb = traceback.format_exc()
+        return _error_response(str(e), 500, traceback=tb)
+
+
+@prediction_bp.get("/api/prediction/history")
 def get_history():
     try:
-        conn = get_db_connection()
-        rows = conn.execute("SELECT * FROM predictions ORDER BY id DESC LIMIT 1000").fetchall()
-        conn.close()
-        
-        result = []
-        for r in rows:
-            result.append({
-                "id": r["id"],
-                "timestamp": r["timestamp"],
-                "label": r["ground_truth"], # Mapping ground_truth to 'label' for frontend compatibility
-                "class": r["predicted_label"], # Mapping predicted to 'class' or similar
-                "predicted_label": r["predicted_label"],
-                "confidence": r["confidence"],
-                "features": json.loads(r["features"]) if r["features"] else {}
-            })
-            
-        # Frontend SessionManager expects { columns: [], rows: [] } usually, or just rows?
-        # SessionManagerPanel.jsx line 162: `setSelectedSessionRows(Array.isArray(data) ? data : (data.rows || []));`
-        # So array is fine.
-        return jsonify(result)
-        
+        return list_predictions()
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return _error_response(str(e))
 
 
-@prediction_bp.route('/api/emg/feedback', methods=['POST'])
-def save_emg_feedback():
+@prediction_bp.post("/api/emg/feedback")
+def save_emg_feedback(payload: dict | None = Body(default=None)):
     try:
-        payload = request.get_json() or {}
-        prediction = payload.get('prediction')
-        corrected_label = payload.get('corrected_label') or prediction
-        features = payload.get('features') or {}
-        confidence = float(payload.get('confidence', 0.0) or 0.0)
+        payload = payload or {}
+        prediction = payload.get("prediction")
+        corrected_label = payload.get("corrected_label") or prediction
+        features = payload.get("features") or {}
+        confidence = float(payload.get("confidence", 0.0) or 0.0)
 
         if not corrected_label or not features:
-            return jsonify({"error": "prediction/corrected_label and features are required"}), 400
+            return _error_response("prediction/corrected_label and features are required", 400)
 
         label_map = {"Rest": 0, "Rock": 1, "Paper": 2, "Scissors": 3}
         save_label = label_map.get(str(corrected_label), 0)
@@ -180,7 +108,7 @@ def save_emg_feedback():
         save_features["source"] = "feedback"
         save_features["corrected_label"] = corrected_int if corrected_label != prediction else None
 
-        db_manager.insert_window(
+        db_manager.insert_emg_window(
             save_features,
             save_label,
             session_id=f"feedback_{int(time.time())}",
@@ -188,28 +116,29 @@ def save_emg_feedback():
         )
 
         try:
-            from src.calibration.calibration_manager import calibration_manager
             calibration_manager.update_emg_running_stats(save_features)
         except Exception:
             pass
 
-        return jsonify({"status": "saved", "label": corrected_label, "prediction": prediction})
+        return {"status": "saved", "label": corrected_label, "prediction": prediction}
     except Exception as e:
         import traceback
-        tb = traceback.format_exc()
-        return jsonify({"error": str(e), "traceback": tb}), 500
 
-@prediction_bp.route('/api/eog/feedback', methods=['POST'])
-def save_eog_feedback():
+        tb = traceback.format_exc()
+        return _error_response(str(e), 500, traceback=tb)
+
+
+@prediction_bp.post("/api/eog/feedback")
+def save_eog_feedback(payload: dict | None = Body(default=None)):
     try:
-        payload = request.get_json() or {}
-        prediction = payload.get('prediction')
-        corrected_label = payload.get('corrected_label') or prediction
-        features = payload.get('features') or {}
-        confidence = float(payload.get('confidence', 0.0) or 0.0)
+        payload = payload or {}
+        prediction = payload.get("prediction")
+        corrected_label = payload.get("corrected_label") or prediction
+        features = payload.get("features") or {}
+        confidence = float(payload.get("confidence", 0.0) or 0.0)
 
         if not corrected_label or not features:
-            return jsonify({"error": "prediction/corrected_label and features are required"}), 400
+            return _error_response("prediction/corrected_label and features are required", 400)
 
         label_map = {"Rest": 0, "SingleBlink": 1, "DoubleBlink": 2}
         save_label = label_map.get(str(corrected_label), 0)
@@ -229,49 +158,44 @@ def save_eog_feedback():
         )
 
         try:
-            from src.calibration.calibration_manager import calibration_manager
             calibration_manager.update_eog_running_stats(save_features)
         except Exception:
             pass
 
-        return jsonify({"status": "saved", "label": corrected_label, "prediction": prediction})
+        return {"status": "saved", "label": corrected_label, "prediction": prediction}
     except Exception as e:
         import traceback
+
         tb = traceback.format_exc()
-        return jsonify({"error": str(e), "traceback": tb}), 500
+        return _error_response(str(e), 500, traceback=tb)
 
-@prediction_bp.route('/api/prediction/sessions', methods=['GET'])
+
+@prediction_bp.get("/api/prediction/sessions")
 def get_sessions_mock():
-    # Mocking a session list response for SessionManagerPanel
-    # It expects { tables: [...] }
-    return jsonify({
-        "tables": ["prediction_session_History"]
-    })
+    return {"tables": ["prediction_session_History"]}
 
-@prediction_bp.route('/api/prediction/sessions/<path:session_name>', methods=['GET'])
+
+@prediction_bp.get("/api/prediction/sessions/{session_name:path}")
 def get_session_details(session_name):
-    # Route that matches what SessionManager might call if we redirected the base URL
-    # But since we are likely going to change the fetch URL in frontend, we can just use /api/prediction/history
+    del session_name
     return get_history()
 
-@prediction_bp.route('/api/prediction/sessions/<path:session_name>/rows/<row_id>', methods=['DELETE'])
-def delete_row(session_name, row_id):
-    try:
-        conn = get_db_connection()
-        conn.execute("DELETE FROM predictions WHERE id = ?", (row_id,))
-        conn.commit()
-        conn.close()
-        return jsonify({"status": "deleted"})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
 
-@prediction_bp.route('/api/prediction/sessions/<path:session_name>', methods=['DELETE'])
-def clear_history(session_name):
+@prediction_bp.delete("/api/prediction/sessions/{session_name:path}/rows/{row_id}")
+def delete_row(session_name, row_id):
+    del session_name
     try:
-        conn = get_db_connection()
-        conn.execute("DELETE FROM predictions")
-        conn.commit()
-        conn.close()
-        return jsonify({"status": "cleared"})
+        delete_prediction_row(row_id)
+        return {"status": "deleted"}
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return _error_response(str(e))
+
+
+@prediction_bp.delete("/api/prediction/sessions/{session_name:path}")
+def clear_history(session_name):
+    del session_name
+    try:
+        clear_predictions()
+        return {"status": "cleared"}
+    except Exception as e:
+        return _error_response(str(e))

@@ -36,7 +36,16 @@ def compute_ssvep_features(samples, sr: int = 1000, target_freqs=None, num_harmo
     max_target = max(targets)
     harmonic_ceiling = min((sr / 2) - 1.0, max(40.0, (max_target * max(1, num_harmonics)) + 6.0))
 
-    centered = detrend(data)
+    if not np.all(np.isfinite(data)):
+        data = np.nan_to_num(data, nan=0.0, posinf=0.0, neginf=0.0)
+
+    try:
+        if data.size < 8 or float(np.ptp(data)) <= 1e-12:
+            centered = data - np.mean(data)
+        else:
+            centered = detrend(data)
+    except Exception:
+        centered = data - np.mean(data)
     std = float(np.std(centered))
     if std > 1e-8:
         normalized = (centered - np.mean(centered)) / std
@@ -44,17 +53,19 @@ def compute_ssvep_features(samples, sr: int = 1000, target_freqs=None, num_harmo
         normalized = centered - np.mean(centered)
 
     filtered_signal = normalized
-    try:
-        b_bp, a_bp = butter(4, [2, harmonic_ceiling], btype='bandpass', fs=sr)
-        filtered_signal = filtfilt(b_bp, a_bp, normalized)
-    except Exception:
-        pass
+    can_filter = float(np.std(normalized)) > 1e-8 and len(normalized) >= 16
+    if can_filter:
+        try:
+            b_bp, a_bp = butter(4, [2, harmonic_ceiling], btype='bandpass', fs=sr)
+            filtered_signal = filtfilt(b_bp, a_bp, normalized)
+        except Exception:
+            filtered_signal = normalized
 
-    try:
-        b_notch, a_notch = butter(2, [49, 51], btype='bandstop', fs=sr)
-        filtered_signal = filtfilt(b_notch, a_notch, filtered_signal)
-    except Exception:
-        pass
+        try:
+            b_notch, a_notch = butter(2, [49, 51], btype='bandstop', fs=sr)
+            filtered_signal = filtfilt(b_notch, a_notch, filtered_signal)
+        except Exception:
+            pass
 
     freqs_psd, psd = welch(filtered_signal, sr, nperseg=min(len(filtered_signal), max(256, len(filtered_signal))))
     
@@ -73,29 +84,32 @@ def compute_ssvep_features(samples, sr: int = 1000, target_freqs=None, num_harmo
     bp_gamma = _band_power(freqs_psd, psd, 30, min(60, sr / 2 - 1))
     total_power = bp_delta + bp_theta + bp_alpha + bp_beta + bp_gamma
 
-    cca = CCA(n_components=1)
     score_values = []
+    if can_filter:
+        cca = CCA(n_components=1)
 
-    for target_freq in targets:
-        ref = generate_reference(target_freq, sr, len(filtered_signal), num_harmonics)
-        weighted_score = 0.0
+        for target_freq in targets:
+            ref = generate_reference(target_freq, sr, len(filtered_signal), num_harmonics)
+            weighted_score = 0.0
 
-        for (low, high), weight in zip(FILTER_BANKS, FILTER_WEIGHTS):
-            try:
-                high_cut = min(high or harmonic_ceiling, harmonic_ceiling, (sr / 2) - 1.0)
-                if high_cut <= low:
+            for (low, high), weight in zip(FILTER_BANKS, FILTER_WEIGHTS):
+                try:
+                    high_cut = min(high or harmonic_ceiling, harmonic_ceiling, (sr / 2) - 1.0)
+                    if high_cut <= low:
+                        continue
+                    b_sub, a_sub = butter(4, [low, high_cut], btype='bandpass', fs=sr)
+                    subband = filtfilt(b_sub, a_sub, filtered_signal).reshape(-1, 1)
+                    cca.fit(subband, ref)
+                    x_score, y_score = cca.transform(subband, ref)
+                    corr = np.corrcoef(x_score[:, 0], y_score[:, 0])[0, 1]
+                    if np.isfinite(corr):
+                        weighted_score += weight * float(corr ** 2)
+                except Exception:
                     continue
-                b_sub, a_sub = butter(4, [low, high_cut], btype='bandpass', fs=sr)
-                subband = filtfilt(b_sub, a_sub, filtered_signal).reshape(-1, 1)
-                cca.fit(subband, ref)
-                x_score, y_score = cca.transform(subband, ref)
-                corr = np.corrcoef(x_score[:, 0], y_score[:, 0])[0, 1]
-                if np.isfinite(corr):
-                    weighted_score += weight * float(corr ** 2)
-            except Exception:
-                continue
 
-        score_values.append(max(0.0, weighted_score))
+            score_values.append(max(0.0, weighted_score))
+    else:
+        score_values = [0.0 for _ in targets]
 
     padded_scores = list(score_values[:6]) + [0.0] * max(0, 6 - len(score_values))
     scores_arr = np.asarray(padded_scores, dtype=float)

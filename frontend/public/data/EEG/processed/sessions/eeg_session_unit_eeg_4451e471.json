@@ -1,0 +1,12 @@
+{
+  "sensor": "EEG",
+  "table_name": "eeg_session_unit_eeg_4451e471",
+  "storage_format": "compact_eeg_v1",
+  "session_name": "unit_eeg_4451e471",
+  "channel_index": 0,
+  "sample_count": 1500,
+  "sampling_rate": 1000.0,
+  "window_ms": 1500.0,
+  "target_frequency": 6.33,
+  "source": "unit_test"
+}

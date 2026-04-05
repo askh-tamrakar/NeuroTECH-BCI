@@ -37,8 +37,79 @@ from src.learning.emg_trainer import (
 EEG_LDA_FEATURES = [
     "score_1", "score_2", "score_3", "score_4", "score_5", "score_6",
     "max_score", "second_max_score", "score_ratio", "score_mean", "score_std",
-    "peak_freq", "target_frequency",
+    "peak_freq",
 ]
+
+
+def _parse_solver_options(raw_solver):
+    value = str(raw_solver or "svd").strip().lower()
+    allowed = {"svd", "lsqr", "eigen"}
+    options = [item.strip() for item in value.split(",") if item.strip()]
+    parsed = [item for item in options if item in allowed]
+    return parsed or ["svd"]
+
+
+def _parse_shrinkage_options(raw_shrinkage, solver: str):
+    if solver == "svd":
+        return [None]
+
+    value = str(raw_shrinkage or "auto").strip().lower()
+    options = [item.strip() for item in value.split(",") if item.strip()]
+    parsed = []
+    for item in options:
+        if item == "auto":
+            parsed.append("auto")
+        elif item == "none":
+            parsed.append(None)
+        else:
+            try:
+                numeric = float(item)
+                if 0.0 <= numeric <= 1.0:
+                    parsed.append(numeric)
+            except Exception:
+                continue
+    return parsed or ["auto"]
+
+
+def _shrinkage_for_metadata(shrinkage):
+    return "none" if shrinkage is None else shrinkage
+
+
+def _eeg_frequency_labels(df):
+    labels = []
+    if "target_frequency" in df.columns:
+        frequency_column = df["target_frequency"].fillna(0.0).astype(float)
+        for label in LABELS_MAP["EEG"]:
+            if label == 0:
+                labels.append("Rest")
+                continue
+            label_rows = df[df["label"].astype(int) == int(label)]
+            if not label_rows.empty:
+                positive_freqs = label_rows["target_frequency"].fillna(0.0).astype(float)
+                positive_freqs = positive_freqs[positive_freqs > 0]
+                if not positive_freqs.empty:
+                    mode_series = positive_freqs.round(2).mode()
+                    if not mode_series.empty:
+                        labels.append(f"{mode_series.iloc[0]:.2f}Hz")
+                        continue
+            labels.append(DISPLAY_LABELS["EEG"].get(label, str(label)))
+        return labels
+
+    return [DISPLAY_LABELS["EEG"].get(label, str(label)) for label in LABELS_MAP["EEG"]]
+
+
+def _lda_feature_importances(model):
+    coefficients = getattr(model, "coef_", None)
+    if coefficients is None:
+        return {}
+    weights = np.mean(np.abs(coefficients), axis=0)
+    total = float(np.sum(weights))
+    if total > 1e-12:
+        weights = weights / total
+    return {
+        feature: float(weights[idx])
+        for idx, feature in enumerate(EEG_LDA_FEATURES[: len(weights)])
+    }
 
 
 def _build_visualization(model, x_scaled, y):
@@ -93,13 +164,16 @@ def _lda_candidate_grid(params: dict):
         "float",
     )
     candidates = []
-    for tol in product(tol_values):
-        candidates.append({
-            "solver": params.get("solver", "svd"),
-            "shrinkage": params.get("shrinkage", "auto"),
-            "tol": float(tol[0]),
-            "search_resolution": resolution,
-        })
+    solver_options = _parse_solver_options(params.get("solver", "svd"))
+    for solver in solver_options:
+        for shrinkage in _parse_shrinkage_options(params.get("shrinkage", "auto"), solver):
+            for tol in product(tol_values):
+                candidates.append({
+                    "solver": solver,
+                    "shrinkage": shrinkage,
+                    "tol": float(tol[0]),
+                    "search_resolution": resolution,
+                })
     return candidates
 
 
@@ -161,7 +235,10 @@ def train_eeg_lda_model(table_name="eeg_windows", train_split=0.7, val_split=0.1
             "history": [],
         })
     for candidate_index, candidate_params in enumerate(candidates):
-        hyperparameters = _hyperparameters_for_response("EEG", candidate_params, resolved_split)
+        hyperparameters = _hyperparameters_for_response("EEG", {
+            **candidate_params,
+            "shrinkage": _shrinkage_for_metadata(candidate_params.get("shrinkage")),
+        }, resolved_split)
         for fold_number, (train_idx, val_idx) in enumerate(folds, start=1):
             fold_train = train_df.iloc[train_idx].copy()
             fold_val = train_df.iloc[val_idx].copy()
@@ -235,6 +312,7 @@ def train_eeg_lda_model(table_name="eeg_windows", train_split=0.7, val_split=0.1
     test_accuracy = float(accuracy_score(y_test, y_pred))
     confusion = confusion_matrix(y_test, y_pred, labels=LABELS_MAP["EEG"]).tolist()
     visualization = _build_visualization(best["model"], x_test, y_test)
+    feature_importances = _lda_feature_importances(best["model"])
 
     session_names = _extract_session_names(df, table_name)
     metadata = {
@@ -270,7 +348,8 @@ def train_eeg_lda_model(table_name="eeg_windows", train_split=0.7, val_split=0.1
         "hyperparameters": best["hyperparameters"],
         "group_counts": train_df.groupby(group_col)["label"].count().to_dict(),
         "confusion_matrix": confusion,
-        "labels": [DISPLAY_LABELS["EEG"].get(label, str(label)) for label in LABELS_MAP["EEG"]],
+        "labels": _eeg_frequency_labels(df),
+        "feature_importances": feature_importances,
         "feature_order": feature_cols,
         "visualization": visualization,
         "artifact_path": _artifact_path_for_ui(final_paths["model"]),

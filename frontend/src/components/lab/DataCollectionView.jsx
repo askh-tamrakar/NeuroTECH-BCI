@@ -6,13 +6,13 @@ import EEGDataCollectionPanel from '../data_collection/EEGDataCollectionPanel';
 import ConfigPanel from '../data_collection/ConfigPanel';
 import SessionManagerPanel from '../data_collection/SessionManagerPanel';
 import AutoCalibrationWizard from '../data_collection/AutoCalibrationWizard';
-import CustomSwitchPill from '../ui/inputs/CustomSwitchPill';
 import InlineModeToggle from '../ui/inputs/InlineModeToggle';
 import { CalibrationApi } from '../../services/calibrationApi';
 import CustomSelect from '../ui/inputs/CustomSelect';
 import { formatAmplitudeValue } from '../../utils/spectrumFormat';
 import { useSettings } from '../../contexts/SettingsContext';
 import { useTheme } from '../../contexts/ThemeContext';
+import { getRuntimeConnection } from '../../utils/runtimeConnection';
 import {
     Activity, Play, Square, Database, Zap,
     Target, ChartSpline, Brain, ArrowRightFromLine,
@@ -60,16 +60,23 @@ function getActualEmgCaptureWindowMs(durWindowMs) {
     return duration + ((EMG_BURST_WINDOWS - 1) * EMG_BURST_STRIDE_MS);
 }
 
+function isEditableElement(target) {
+    if (!(target instanceof HTMLElement)) return false;
+    if (target.isContentEditable) return true;
+    const tagName = target.tagName?.toLowerCase();
+    return tagName === 'input' || tagName === 'textarea' || tagName === 'select';
+}
+
 
 
 /**
  * DataCollectionView
  * The main container for the BCI data collection experience.
  */
-export default function DataCollectionView({ wsData, wsEvent, config: initialConfig, wsUrl, onSwitchLab }) {
+export default function DataCollectionView({ wsData, config: initialConfig, wsUrl, onSwitchLab }) {
     const { settings, updateSettings } = useSettings();
     const { currentTheme } = useTheme();
-    const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+    const { apiUrl: runtimeApiUrl } = getRuntimeConnection();
 
     // Top-level states
     const [activeSensor, setActiveSensor] = useState('EMG'); // 'EMG' | 'EOG' | 'EEG'
@@ -88,6 +95,11 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
     const [showEegWindowList, setShowEegWindowList] = useState(false); // Toggle between collection panel and list
     const [activeWindow, setActiveWindow] = useState(null);
     const [targetLabel, setTargetLabel] = useState('Rock'); // e.g., 'Rock', 'Paper', etc.
+    const [currentBatchIndex, setCurrentBatchIndex] = useState(0);
+    const [completedBatchCount, setCompletedBatchCount] = useState(0);
+    const [activeBatchWindowIds, setActiveBatchWindowIds] = useState([]);
+    const [isBatchProducing, setIsBatchProducing] = useState(false);
+    const [isBatchSaving, setIsBatchSaving] = useState(false);
 
     const [totalPredictedCount, setTotalPredictedCount] = useState(0);
 
@@ -100,6 +112,7 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
     const handleAppendSamplesRef = useRef(null);
     const windowRequestIdRef = useRef(0);
     const pendingWindowRequestsRef = useRef(new Map());
+    const batchTransitionLockRef = useRef(false);
 
     // Session Management State (Managed by Worker)
     const [sessions, setSessions] = useState([]);
@@ -212,6 +225,14 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
     const autoLimitRef = useRef(autoLimit);
     useEffect(() => { autoLimitRef.current = autoLimit; }, [autoLimit]);
     useEffect(() => { sessionNameRef.current = sessionName; }, [sessionName]);
+    const currentBatchIndexRef = useRef(currentBatchIndex);
+    const completedBatchCountRef = useRef(completedBatchCount);
+    const isBatchProducingRef = useRef(isBatchProducing);
+    const isBatchSavingRef = useRef(isBatchSaving);
+    useEffect(() => { currentBatchIndexRef.current = currentBatchIndex; }, [currentBatchIndex]);
+    useEffect(() => { completedBatchCountRef.current = completedBatchCount; }, [completedBatchCount]);
+    useEffect(() => { isBatchProducingRef.current = isBatchProducing; }, [isBatchProducing]);
+    useEffect(() => { isBatchSavingRef.current = isBatchSaving; }, [isBatchSaving]);
 
     // Update autoLimit based on batch settings in auto mode
     useEffect(() => {
@@ -331,6 +352,8 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
         () => (activeSensor === 'EMG' ? getActualEmgCaptureWindowMs(windowDuration) : windowDuration),
         [activeSensor, windowDuration]
     );
+    const autoTargetCount = useMemo(() => Math.max(1, batchSize * numBatches), [batchSize, numBatches]);
+    const producedStatuses = useMemo(() => new Set(['pending', 'recording', 'collected', 'saved', 'correct']), []);
 
     const windowDurationOptions = useMemo(() => {
         if (activeSensor === 'EEG') return [1000, 1500, 2000, 3000];
@@ -352,6 +375,30 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
         console.log('[DataCollectionView] Initializing DataWorker...');
         const worker = new Worker(new URL('../../workers/data.worker.js', import.meta.url), { type: 'module' });
         dataWorkerRef.current = worker;
+
+        worker.onmessage = (e) => {
+            const { type, payload, error } = e.data || {};
+
+            if (type === 'UI_UPDATE') {
+                const incomingTs = Number(payload?.lastSample?.timestamp);
+                if (incomingTs && incomingTs > 0) {
+                    latestSignalTimeRef.current = incomingTs;
+                    setDataLastUpdated(Date.now());
+
+                    const now = Date.now();
+                    if (now - lastTimeUpdateRef.current > 50) {
+                        windowWorkerRef.current?.postMessage({ type: 'UPDATE_SIGNAL_TIME', payload: incomingTs });
+                        lastTimeUpdateRef.current = now;
+                    }
+                }
+            } else if (type === 'STATUS') {
+                if (payload === 'error' && error) {
+                    console.error('[DataCollectionView] DataWorker error:', error);
+                }
+            } else if (type === 'CONFIG' && payload) {
+                setConfig((prev) => payload || prev);
+            }
+        };
 
         worker.postMessage({ type: 'CONNECT', payload: { url: wsUrl } });
 
@@ -451,12 +498,36 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                                             captureWindowMs: end - start
                                         }
                                     });
+                                } else {
+                                    windowWorkerRef.current.postMessage({
+                                        type: 'WINDOW_COLLECTED',
+                                        payload: {
+                                            id,
+                                            startTime: start,
+                                            endTime: end,
+                                            status: 'error',
+                                            captureWindowMs: end - start
+                                        }
+                                    });
                                 }
                             } catch (err) {
                                 console.error("Failed to get samples for worker window", err);
+                                windowWorkerRef.current.postMessage({
+                                    type: 'WINDOW_COLLECTED',
+                                    payload: {
+                                        id,
+                                        startTime: start,
+                                        endTime: end,
+                                        status: 'error',
+                                        captureWindowMs: end - start
+                                    }
+                                });
                             }
                         }
                     }, delay);
+                    break;
+                case 'BATCH_PRODUCTION_COMPLETE':
+                    setIsBatchProducing(false);
                     break;
                 case 'TRIGGER_AUTO_APPEND':
                     handleAppendSamplesRef.current?.();
@@ -480,29 +551,25 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                 return;
             }
 
-            if (type === 'SAVE_WINDOWS_COMPLETE') {
-                pending.resolve(payload);
-            } else if (type === 'SAVE_WINDOWS_ERROR') {
-                pending.reject(new Error(payload?.error || 'Batch save failed'));
-            } else if (type === 'SAVE_SINGLE_WINDOW_COMPLETE') {
-                // Update specific window in markedWindows
+            if (type === 'SAVE_WINDOW_PROGRESS') {
+                const result = payload?.result || {};
                 windowWorkerRef.current?.postMessage({
                     type: 'WINDOW_COLLECTED',
                     payload: {
-                        id: payload.id,
-                        status: 'saved',
-                        features: payload.features,
-                        predictedLabel: payload.predicted_label,
-                        windows_saved: payload.windows_saved
+                        id: result.id,
+                        status: result.error ? 'error' : 'saved',
+                        features: result.features,
+                        predictedLabel: result.predicted_label,
+                        windows_saved: result.windows_saved ?? 1,
                     }
                 });
-            } else if (type === 'SAVE_SINGLE_WINDOW_ERROR') {
-                windowWorkerRef.current?.postMessage({
-                    type: 'WINDOW_COLLECTED',
-                    payload: { id: payload.id, status: 'error' }
-                });
+            } else if (type === 'SAVE_WINDOWS_COMPLETE') {
+                pending.resolve(payload);
+                pendingSaveRequestRef.current = null;
+            } else if (type === 'SAVE_WINDOWS_ERROR') {
+                pending.reject(new Error(payload?.error || 'Batch save failed'));
+                pendingSaveRequestRef.current = null;
             }
-            pendingSaveRequestRef.current = null;
         };
 
         // Initial Worker Config
@@ -516,6 +583,8 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                 mode,
                 autoLimit,
                 autoCalibrate,
+                batchSize,
+                numBatches,
                 windowDuration: actualCaptureWindowMs,
                 timeWindow,
                 isCalibrating
@@ -533,9 +602,9 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
     useEffect(() => {
         windowWorkerRef.current?.postMessage({
             type: 'UPDATE_STATE',
-            payload: { activeSensor, activeChannelIndex, targetLabel, mode, autoLimit, autoCalibrate, windowDuration: actualCaptureWindowMs, timeWindow }
+            payload: { activeSensor, activeChannelIndex, targetLabel, mode, autoLimit, autoCalibrate, batchSize, numBatches, windowDuration: actualCaptureWindowMs, timeWindow }
         });
-    }, [activeSensor, activeChannelIndex, targetLabel, mode, autoLimit, autoCalibrate, actualCaptureWindowMs, timeWindow]);
+    }, [activeSensor, activeChannelIndex, targetLabel, mode, autoLimit, autoCalibrate, batchSize, numBatches, actualCaptureWindowMs, timeWindow]);
 
     // Ensure config is loaded on mount
     useEffect(() => {
@@ -624,7 +693,6 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
     }, [manualYRange, zoom]);
 
     // Refs for real-time windowing
-    const windowIntervalRef = useRef(null);
     const appendLockRef = useRef(false);
     const MAX_WINDOWS = autoCalibrate ? 50 : 2000;
 
@@ -717,12 +785,16 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
     }, [activeSensor, eegTargets, selectedEegTarget, activeChannelIndex, windowDuration, actualCaptureWindowMs, mode, config]);
 
 
-    const startAutoWindowing = useCallback(() => {
-        windowWorkerRef.current?.postMessage({ type: 'START_WINDOWING' });
+    const startAutoWindowing = useCallback((payload = {}) => {
+        windowWorkerRef.current?.postMessage({ type: 'START_WINDOWING', payload });
     }, []);
 
     const handleStartCalibration = useCallback(async (overriddenLabel) => {
         setIsCalibrating(true);
+        batchTransitionLockRef.current = false;
+        setCompletedBatchCount(0);
+        setActiveBatchWindowIds([]);
+        setIsBatchSaving(false);
         soundHandler.playRPSStart(); // Sounds similar to a start/alert
         const label = overriddenLabel || targetLabel;
         CalibrationApi.startCalibration(activeSensor, mode, label, windowDuration, sessionName, {
@@ -736,13 +808,27 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
 
         if (mode === 'collection' || mode === 'test') {
             if (activeSensor !== 'EEG') {
-                startAutoWindowing();
+                if (autoCalibrate) {
+                    setCurrentBatchIndex(1);
+                    setIsBatchProducing(true);
+                    startAutoWindowing({ batchIndex: 1, batchSize, totalBatches: numBatches });
+                } else {
+                    setCurrentBatchIndex(0);
+                    setIsBatchProducing(false);
+                    startAutoWindowing();
+                }
             }
         }
-    }, [activeSensor, mode, targetLabel, windowDuration, actualCaptureWindowMs, sessionName, startAutoWindowing, activeChannelIndex, timeWindow, autoCalibrate, batchSize, autoLimit]);
+    }, [activeSensor, mode, targetLabel, windowDuration, actualCaptureWindowMs, sessionName, startAutoWindowing, activeChannelIndex, timeWindow, autoCalibrate, batchSize, numBatches, autoLimit]);
 
     const handleStopCalibration = useCallback(async () => {
         setIsCalibrating(false);
+        batchTransitionLockRef.current = false;
+        setCurrentBatchIndex(0);
+        setCompletedBatchCount(0);
+        setActiveBatchWindowIds([]);
+        setIsBatchProducing(false);
+        setIsBatchSaving(false);
         soundHandler.playDinoPause();
         windowWorkerRef.current?.postMessage({ type: 'STOP_WINDOWING' });
         await CalibrationApi.stopCalibration(activeSensor);
@@ -894,18 +980,26 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
             });
 
             setDataLastUpdated(Date.now());
-            refreshSessionData(true);
+            refreshSessionData(true, {
+                fullName: `${activeSensor.toLowerCase()}_session_${sessionName}`,
+            });
         } catch (err) {
             console.error("EEG manual record extraction failed:", err);
         }
     }, [activeSensor, activeChannelIndex, sessionName, eegTargets, selectedEegTarget, refreshSessionData]);
 
-    function refreshSessionData(silent = false) {
-        sessionWorkerRef.current?.postMessage({ type: 'FETCH_SESSIONS', payload: { silent } });
+    function refreshSessionData(silent = false, options = {}) {
+        const { includeSessions = false, fullName = null } = options;
 
-        const fallbackFullName = mode === 'test'
-            ? 'prediction_session_History'
-            : (fullCurrentSessionName || (sessionName ? `${activeSensor.toLowerCase()}_session_${sessionName}` : null));
+        if (includeSessions) {
+            sessionWorkerRef.current?.postMessage({ type: 'FETCH_SESSIONS', payload: { silent } });
+        }
+
+        const fallbackFullName = fullName || (
+            mode === 'test'
+                ? 'prediction_session_History'
+                : (fullCurrentSessionName || (sessionName ? `${activeSensor.toLowerCase()}_session_${sessionName}` : null))
+        );
 
         if (!fallbackFullName) return;
 
@@ -935,30 +1029,6 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
         });
     }, []);
 
-    const dispatchSingleSave = useCallback((window) => {
-        if (!saveWorkerRef.current) return;
-
-        const requestId = `single_${window.id}_${Date.now()}`;
-        saveWorkerRef.current.postMessage({
-            type: 'SAVE_SINGLE_WINDOW',
-            payload: {
-                requestId,
-                apiBaseUrl: API_BASE_URL,
-                sensor: activeSensor,
-                mode,
-                session_name: sessionName,
-                window: {
-                    id: window.id,
-                    action: window.label,
-                    channel: window.channel,
-                    samples: window.samples,
-                    timestamps: window.timestamps,
-                    metadata: buildWindowMetadata(window),
-                }
-            }
-        });
-    }, [API_BASE_URL, activeSensor, mode, sessionName, buildWindowMetadata]);
-
     const dispatchBatchSave = useCallback((windowsToSave) => {
         return new Promise((resolve, reject) => {
             if (!saveWorkerRef.current) {
@@ -978,7 +1048,7 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                 type: 'SAVE_WINDOWS',
                 payload: {
                     requestId,
-                    apiBaseUrl: API_BASE_URL,
+                    apiBaseUrl: runtimeApiUrl,
                     sensor: activeSensor,
                     mode,
                     session_name: sessionName,
@@ -994,14 +1064,22 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                 }
             });
         });
-    }, [API_BASE_URL, activeSensor, buildWindowMetadata, mode, sessionName]);
+    }, [runtimeApiUrl, activeSensor, buildWindowMetadata, mode, sessionName]);
 
     /**
      * Saves all collected windows to the database.
      */
-    const handleAppendSamples = useCallback(async () => {
+    const handleAppendSamples = useCallback(async (explicitWindowIds = null) => {
         if (appendLockRef.current) return;
-        const toAppend = markedWindows.filter(w => w.status === 'collected');
+        const appendCountLimit = Array.isArray(explicitWindowIds) && explicitWindowIds.length > 0
+            ? explicitWindowIds.length
+            : (autoCalibrate ? Math.max(1, batchSize) : Math.max(1, autoLimit));
+        const explicitIdSet = Array.isArray(explicitWindowIds) && explicitWindowIds.length > 0
+            ? new Set(explicitWindowIds)
+            : null;
+        const toAppend = markedWindows
+            .filter(w => w.status === 'collected' && (!explicitIdSet || explicitIdSet.has(w.id)))
+            .slice(0, appendCountLimit);
         if (!toAppend || toAppend.length === 0) return;
 
         const pendingIds = toAppend.map((window) => window.id);
@@ -1047,47 +1125,164 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                 const windowsForSave = pendingIds
                     .map((id) => fullWindowsById.get(id))
                     .filter(Boolean);
-                
-                // Dispatch each window individually to prevent UI freeze
-                windowsForSave.forEach(win => {
-                    dispatchSingleSave(win);
-                    
-                    // Optimistically set status to 'saving' in the window worker
-                    windowWorkerRef.current?.postMessage({
-                        type: 'WINDOW_COLLECTED',
-                        payload: { id: win.id, status: 'saving' }
-                    });
-                });
+
+                await dispatchBatchSave(windowsForSave);
+                const sessionTableName = `${activeSensor.toLowerCase()}_session_${sessionName}`;
+
+                refreshSessionData(true, { fullName: sessionTableName });
             }
 
             setDataLastUpdated(Date.now());
-            refreshSessionData(true);
         } finally {
             setRunInProgress(false);
             appendLockRef.current = false;
         }
-    }, [mode, activeSensor, markedWindows, dispatchBatchSave, refreshSessionData, requestFullWindows]);
+    }, [mode, activeSensor, markedWindows, autoCalibrate, batchSize, autoLimit, dispatchBatchSave, refreshSessionData, requestFullWindows]);
 
-    // Auto-save and Auto-stop logic (Moved here to ensure handlers are initialized)
+    const producedCount = useMemo(
+        () => markedWindows.filter((window) => producedStatuses.has(window.status)).length,
+        [markedWindows, producedStatuses]
+    );
+    const activeBatchWindows = useMemo(
+        () => autoCalibrate
+            ? markedWindows.filter((window) => Number(window.batchIndex || 0) === currentBatchIndex)
+            : [],
+        [markedWindows, autoCalibrate, currentBatchIndex]
+    );
+    const activeBatchProducedCount = activeBatchWindows.filter((window) => producedStatuses.has(window.status)).length;
+    const activeBatchPendingCount = activeBatchWindows.filter((window) => ['pending', 'recording'].includes(window.status)).length;
+    const activeBatchCollectedIds = activeBatchWindows
+        .filter((window) => window.status === 'collected')
+        .map((window) => window.id);
+    const activeBatchSavedCount = activeBatchWindows.filter((window) => ['saved', 'correct'].includes(window.status)).length;
+    const activeBatchErrorCount = activeBatchWindows.filter((window) => ['error', 'incorrect'].includes(window.status)).length;
+    const manualProgressPercent = useMemo(
+        () => Math.min(100, (producedCount / Math.max(1, autoLimit)) * 100),
+        [producedCount, autoLimit]
+    );
+    const batchProgressPercent = useMemo(
+        () => Math.min(100, (completedBatchCount / Math.max(1, numBatches)) * 100),
+        [completedBatchCount, numBatches]
+    );
+
+    const advanceAutoBatch = useCallback(async () => {
+        if (batchTransitionLockRef.current) return;
+        batchTransitionLockRef.current = true;
+
+        const finishedBatch = currentBatchIndexRef.current;
+        const nextCompletedCount = finishedBatch;
+
+        setCompletedBatchCount(nextCompletedCount);
+        setActiveBatchWindowIds([]);
+        setIsBatchSaving(false);
+        setIsBatchProducing(false);
+
+        if (nextCompletedCount >= numBatches || producedCount >= autoTargetCount) {
+            await handleStopCalibration();
+        } else {
+            const nextBatchIndex = finishedBatch + 1;
+            setCurrentBatchIndex(nextBatchIndex);
+            setIsBatchProducing(true);
+            windowWorkerRef.current?.postMessage({
+                type: 'RESUME_NEXT_BATCH',
+                payload: {
+                    batchIndex: nextBatchIndex,
+                    batchSize,
+                    totalBatches: numBatches,
+                }
+            });
+        }
+
+        batchTransitionLockRef.current = false;
+    }, [autoTargetCount, batchSize, numBatches, producedCount, handleStopCalibration]);
+
+    const resumeActiveBatch = useCallback(() => {
+        if (batchTransitionLockRef.current) return;
+        batchTransitionLockRef.current = true;
+        const activeBatch = currentBatchIndexRef.current;
+        setActiveBatchWindowIds([]);
+        setIsBatchSaving(false);
+        setIsBatchProducing(true);
+        windowWorkerRef.current?.postMessage({
+            type: 'RESUME_NEXT_BATCH',
+            payload: {
+                batchIndex: activeBatch,
+                batchSize,
+                totalBatches: numBatches,
+            }
+        });
+        batchTransitionLockRef.current = false;
+    }, [batchSize, numBatches]);
+
+    // Auto-save, batch gating, and manual stop logic
     useEffect(() => {
         if (!isCalibrating) return;
 
-        // statsTotal = recordingCount + processedCount + savedCount
-        const recordingCount = markedWindows.filter(w => w.status === 'recording' || w.status === 'pending').length;
-        const processedCount = markedWindows.filter(w => w.status === 'collected').length;
-        const savedCount = markedWindows.filter(w => (w.status === 'saved' || w.status === 'correct')).length;
-        const statsTotal = recordingCount + processedCount + savedCount;
-
-        // Auto-save when batch size is reached (Auto-Calibrate only)
-        if (autoCalibrate && processedCount >= batchSize && !appendLockRef.current) {
-            handleAppendSamples();
+        if (!autoCalibrate) {
+            if (activeSensor !== 'EEG' && producedCount >= Math.max(1, autoLimit)) {
+                handleStopCalibration();
+            }
+            return;
         }
 
-        // Auto-stop when limit is reached (Applies to both modes if isCalibrating is true)
-        if (statsTotal >= autoLimit) {
-            handleStopCalibration();
+        if (currentBatchIndex <= 0) return;
+
+        if (
+            !isBatchProducingRef.current &&
+            !isBatchSavingRef.current &&
+            activeBatchProducedCount >= batchSize &&
+            activeBatchPendingCount === 0 &&
+            activeBatchCollectedIds.length > 0
+        ) {
+            if (!appendLockRef.current) {
+                setActiveBatchWindowIds(activeBatchCollectedIds);
+                setIsBatchSaving(true);
+                handleAppendSamples(activeBatchCollectedIds);
+            }
+            return;
         }
-    }, [markedWindows, autoCalibrate, isCalibrating, batchSize, autoLimit, handleAppendSamples, handleStopCalibration]);
+
+        if (
+            isBatchSavingRef.current &&
+            activeBatchPendingCount === 0 &&
+            activeBatchCollectedIds.length === 0 &&
+            activeBatchWindowIds.length > 0
+        ) {
+            if (activeBatchSavedCount >= batchSize) {
+                advanceAutoBatch();
+            } else if (activeBatchProducedCount < batchSize) {
+                resumeActiveBatch();
+            }
+            return;
+        }
+
+        if (
+            !isBatchProducingRef.current &&
+            !isBatchSavingRef.current &&
+            activeBatchProducedCount < batchSize &&
+            activeBatchErrorCount > 0
+        ) {
+            resumeActiveBatch();
+        }
+    }, [
+        isCalibrating,
+        autoCalibrate,
+        activeSensor,
+        producedCount,
+        autoLimit,
+        currentBatchIndex,
+        batchSize,
+        activeBatchProducedCount,
+        activeBatchPendingCount,
+        activeBatchCollectedIds,
+        activeBatchSavedCount,
+        activeBatchErrorCount,
+        activeBatchWindowIds.length,
+        handleAppendSamples,
+        handleStopCalibration,
+        advanceAutoBatch,
+        resumeActiveBatch
+    ]);
 
     useEffect(() => {
         handleAppendSamplesRef.current = handleAppendSamples;
@@ -1101,6 +1296,10 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
         windowWorkerRef.current?.postMessage({ type: 'CLEAR_ALL_WINDOWS' });
         setTotalPredictedCount(0);
         setActiveWindow(null);
+        setActiveBatchWindowIds([]);
+        setCompletedBatchCount(0);
+        setCurrentBatchIndex(autoCalibrate ? currentBatchIndexRef.current : 0);
+        setIsBatchSaving(false);
     }, []);
 
     const markMissed = useCallback((id) => {
@@ -1190,7 +1389,9 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                     }));
 
                     setDataLastUpdated(Date.now());
-                    refreshSessionData(true);
+                    refreshSessionData(true, {
+                        fullName: `${activeSensor.toLowerCase()}_session_${sessionName}`,
+                    });
 
                     resolve({ detected: resp.detected, predicted_label: resp.predicted_label });
 
@@ -1283,26 +1484,23 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
         const readyBatchCount = markedWindows.filter(w => w.status === 'collected' && w.label === targetLabel).length;
 
         // Check Limit (Batch Size)
-        if (readyBatchCount >= autoLimit) {
+        if (readyBatchCount >= autoTargetCount) {
             // Check if we have unsaved collected windows
             const hasUnsaved = markedWindows.some(w => w.status === 'collected');
 
             if (hasUnsaved) {
-                console.log(`[DataCollectionView] Limit ${autoLimit} reached. Auto-appending...`);
+                console.log(`[DataCollectionView] Limit ${autoTargetCount} reached. Auto-appending...`);
                 handleAppendSamples();
             }
             return;
         }
 
-    }, [markedWindows, autoCalibrate, isCalibrating, runInProgress, activeSensor, autoLimit]);
-
-    // Optimization: Flusing directly to Worker
-    const incomingBufferRef = useRef([]);
+    }, [markedWindows, autoCalibrate, isCalibrating, runInProgress, activeSensor, autoTargetCount, handleAppendSamples]);
 
     const lastTimeUpdateRef = useRef(0);
 
     useEffect(() => {
-        if (!wsData) return;
+        if (!wsData || dataWorkerRef.current) return;
         const payload = wsData.raw || wsData;
         const samples = payload._batch || payload.samples || (payload.channels ? [payload] : []);
         if (samples.length === 0) return;
@@ -1348,18 +1546,10 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
 
     const scannerValue = 0; // Worker chart handles scanner internally
 
-    // Cleanup
-    useEffect(() => {
-        return () => {
-            if (windowIntervalRef.current) clearInterval(windowIntervalRef.current);
-        };
-    }, []);
-
     // Keyboard Controls
     useEffect(() => {
         const handleKeyDown = (e) => {
-            // Ignore if typing in an input (except for AltRight/AltGr)
-            const isTyping = e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA';
+            const isTyping = isEditableElement(e.target);
 
             const code = e.code;
             const km = settings?.keymap?.collection || {};
@@ -1427,6 +1617,34 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                     return options[(idx + 1) % options.length];
                 });
                 setManualYRange("");
+            } else if (code === 'ArrowUp') {
+                e.preventDefault();
+                if (autoCalibrate) {
+                    setNumBatches(prev => Math.max(1, prev + 1));
+                } else {
+                    setAutoLimit(prev => Math.min(200, prev + 5));
+                }
+            } else if (code === 'ArrowDown') {
+                e.preventDefault();
+                if (autoCalibrate) {
+                    setNumBatches(prev => Math.max(1, prev - 1));
+                } else {
+                    setAutoLimit(prev => Math.max(1, prev - 5));
+                }
+            } else if (code === 'ArrowRight') {
+                e.preventDefault();
+                if (autoCalibrate) {
+                    setBatchSize(prev => Math.max(1, prev + 1));
+                } else {
+                    setAutoLimit(prev => Math.min(200, prev + 1));
+                }
+            } else if (code === 'ArrowLeft') {
+                e.preventDefault();
+                if (autoCalibrate) {
+                    setBatchSize(prev => Math.max(1, prev - 1));
+                } else {
+                    setAutoLimit(prev => Math.max(1, prev - 1));
+                }
             } else if (code === km.limitIncr5) {
                 e.preventDefault();
                 setAutoLimit(prev => Math.min(200, prev + 5));
@@ -1451,7 +1669,7 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [isCalibrating, handleStartCalibration, handleStopCalibration, settings?.keymap?.collection, activeSensor, handleAppendSamples, availableLabels, windowDurationOptions]);
+    }, [isCalibrating, handleStartCalibration, handleStopCalibration, settings?.keymap?.collection, activeSensor, handleAppendSamples, availableLabels, windowDurationOptions, autoCalibrate]);
 
 
 
@@ -1529,8 +1747,6 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
 
     return (
         <div className="flex flex-col flex-1 min-h-0 bg-bg text-text animate-in fade-in duration-500 overflow-hidden gap-2">
-
-
             {/* TOP ROW: SIDEBAR + CHART (50%) */}
             <div className="flex-1 flex min-h-0 px-2 pb-1 pt-2 gap-2">
                 {/* SIDEBAR CARD */}
@@ -1819,7 +2035,7 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                                             <Target size={18} />
                                             <span className="text-xs font-bold uppercase tracking-wider">{activeSensor === 'EMG' ? 'Sample' : 'Capture'}</span>
                                         </div>
-                                        <div className="w-[150px]">
+                                        <div className="w-[160px]">
                                             <CustomSelect
                                                 value={windowDuration}
                                                 onChange={(value) => setWindowDuration(Number(value))}
@@ -1946,7 +2162,6 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                             activeSensor={activeSensor}
                             currentSessionName={sessionName}
                             onSessionChange={setSessionName}
-                            refreshTrigger={dataLastUpdated}
                             isTestMode={mode === 'test'}
                             inputRef={sessionInputRef}
                             sessions={sessions}
@@ -1975,16 +2190,43 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                     {activeSensor === 'EEG' ? (
                         <>
                             <div className="flex flex-col flex-1 gap-2 overflow-hidden">
-                                <CustomSwitchPill
-                                    activeTab={showEegWindowList ? 'list' : 'collection'}
-                                    onSwitch={(id) => setShowEegWindowList(id === 'list')}
-                                    tabs={[
-                                        { id: 'collection', label: 'COLLECTIONS', icon: Zap },
-                                        { id: 'list', label: 'WINDOWS', icon: Database }
-                                    ]}
-                                />
-                                <div className='flex-1 min-h-0 overflow-hidden'>
-                                    {showEegWindowList ? (
+                                <div className="flex items-center gap-1 rounded-xl border border-border bg-bg/80 p-1 shadow-sm">
+                                    {[
+                                        { id: 'collection', label: 'Collections', icon: Zap },
+                                        { id: 'list', label: 'Windows', icon: Database }
+                                    ].map((tab) => {
+                                        const Icon = tab.icon;
+                                        const isActive = (showEegWindowList ? 'list' : 'collection') === tab.id;
+                                        return (
+                                            <button
+                                                key={tab.id}
+                                                type="button"
+                                                onClick={() => setShowEegWindowList(tab.id === 'list')}
+                                                className={`flex-1 rounded-lg px-3 py-2 text-sm font-bold uppercase tracking-wider transition-all duration-200 ${isActive
+                                                    ? 'bg-primary/15 text-primary border border-primary/30'
+                                                    : 'border border-transparent text-muted hover:bg-surface hover:text-text'
+                                                    }`}
+                                            >
+                                                <span className="flex items-center justify-center gap-2">
+                                                    <Icon size={16} />
+                                                    {tab.label}
+                                                </span>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                                <div className='relative flex-1 min-h-0 overflow-hidden'>
+                                    <div className={`h-full transition-all duration-200 ${showEegWindowList ? 'pointer-events-none absolute inset-0 opacity-0 translate-y-1' : 'opacity-100 translate-y-0'}`}>
+                                        <EEGDataCollectionPanel
+                                            isCalibrating={isCalibrating}
+                                            targetLabel={targetLabel}
+                                            targetFrequency={selectedEegTarget?.freq || 0}
+                                            onRecord={handleEEGRecord}
+                                            savedCount={markedWindows.filter(w => w.label === targetLabel && (w.status === 'saved' || w.status === 'correct')).length}
+                                            targetCount={autoCalibrate ? autoTargetCount : autoLimit}
+                                        />
+                                    </div>
+                                    <div className={`h-full transition-all duration-200 ${showEegWindowList ? 'opacity-100 translate-y-0' : 'pointer-events-none absolute inset-0 opacity-0 -translate-y-1'}`}>
                                         <WindowListPanel
                                             windows={markedWindows}
                                             onDelete={deleteWindow}
@@ -2000,16 +2242,13 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                                             onAutoCalibrateChange={setAutoCalibrate}
                                             onClearSaved={handleAppendSamples}
                                             onDeleteAll={handleClearAllWindows}
+                                            progressMode={autoCalibrate ? 'batches' : 'samples'}
+                                            progressCurrent={autoCalibrate ? completedBatchCount : producedCount}
+                                            progressTotal={autoCalibrate ? numBatches : autoLimit}
+                                            progressPercent={autoCalibrate ? batchProgressPercent : manualProgressPercent}
+                                            currentBatchIndex={currentBatchIndex}
                                         />
-                                    ) : (
-                                        <EEGDataCollectionPanel
-                                            isCalibrating={isCalibrating}
-                                            targetLabel={targetLabel}
-                                            targetFrequency={selectedEegTarget?.freq || 0}
-                                            onRecord={handleEEGRecord}
-                                            savedCount={markedWindows.filter(w => w.label === targetLabel && (w.status === 'saved' || w.status === 'correct')).length}
-                                        />
-                                    )}
+                                    </div>
                                 </div>
                             </div>
                         </>
@@ -2029,6 +2268,11 @@ export default function DataCollectionView({ wsData, wsEvent, config: initialCon
                             onAutoCalibrateChange={setAutoCalibrate}
                             onClearSaved={handleAppendSamples}
                             onDeleteAll={handleClearAllWindows}
+                            progressMode={autoCalibrate ? 'batches' : 'samples'}
+                            progressCurrent={autoCalibrate ? completedBatchCount : producedCount}
+                            progressTotal={autoCalibrate ? numBatches : autoLimit}
+                            progressPercent={autoCalibrate ? batchProgressPercent : manualProgressPercent}
+                            currentBatchIndex={currentBatchIndex}
                         />
                     )}
                 </div>

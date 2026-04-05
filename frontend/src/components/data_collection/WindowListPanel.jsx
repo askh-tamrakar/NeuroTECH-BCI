@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Trash2, Activity, Cpu, Zap, ListOrdered, ListX } from 'lucide-react';
+import { Trash2, Activity, ListX } from 'lucide-react';
 import CustomNumberInput from '../ui/inputs/CustomNumberInput'
 
 // --- Helper Functions ---
@@ -9,13 +9,6 @@ const getWindowTone = (status) => {
         case 'pending':
             return {
                 card: 'bg-[var(--window-pending-bg)] border-[var(--window-pending-border)] hover:border-[var(--window-pending-border-strong)]',
-                dot: 'bg-[var(--window-pending-line)]',
-                text: 'text-[var(--window-pending-line)]',
-                line: 'var(--window-pending-line)'
-            };
-        case 'saving':
-            return {
-                card: 'bg-[var(--window-pending-bg)] border-[var(--window-pending-border)] hover:border-[var(--window-pending-border-strong)] animate-pulse',
                 dot: 'bg-[var(--window-pending-line)]',
                 text: 'text-[var(--window-pending-line)]',
                 line: 'var(--window-pending-line)'
@@ -57,7 +50,7 @@ const Sparkline = React.memo(({ data, color = '#10b981' }) => {
     // Use a fixed step for downsampling to guarantee performance
     const maxPoints = 50;
     const step = Math.max(1, Math.ceil(data.length / maxPoints));
-    
+
     let pathPoints = "";
     for (let i = 0; i < data.length; i += step) {
         const v = data[i];
@@ -86,7 +79,6 @@ const WindowRow = React.memo(({ win, onDelete }) => {
                         <span className={`w-1.5 h-1.5 rounded-full ${tone.dot}`}></span>
                         <span className={`text-xs uppercase ${tone.text}`}>
                             {(win.status === 'recording' || win.status === 'pending') ? 'Recording' :
-                                (win.status === 'saving') ? 'Saving...' :
                                 (win.status === 'collected') ? 'Ready' :
                                     (win.status === 'saved' || win.status === 'correct') ? (
                                         <span>
@@ -141,6 +133,11 @@ function WindowListPanel({
     onAutoCalibrateChange,
     onClearSaved,
     onDeleteAll,
+    progressMode = 'samples',
+    progressCurrent = 0,
+    progressTotal = 1,
+    progressPercent = 0,
+    currentBatchIndex = 0,
 }) {
     // Stats calculated in a single pass for efficiency
     const { recordingCount, processedCount, savedCount } = useMemo(() => {
@@ -153,9 +150,13 @@ function WindowListPanel({
         return { recordingCount: rec, processedCount: proc, savedCount: sav };
     }, [windows]);
 
+    const targetCount = Math.max(1, autoCalibrate ? (batchSize * numBatches) : (autoLimit || 30));
     const statsTotal = processedCount + recordingCount + savedCount;
-    const targetCount = autoLimit || 30;
-    const progress = Math.min(100, (processedCount / targetCount) * 100);
+    const progress = Math.min(100, Number(progressPercent) || 0);
+    const progressLabel = progressMode === 'batches' ? 'Batches' : 'Samples';
+    const progressValueText = progressMode === 'batches'
+        ? `${Math.min(progressCurrent, progressTotal)} / ${Math.max(1, progressTotal)}`
+        : `${Math.min(progressCurrent, progressTotal)} / ${Math.max(1, progressTotal)}`;
 
     // Memoize the reversed windows list to avoid re-calculating it on every render
     const reversedWindows = useMemo(() => [...windows].reverse(), [windows]);
@@ -174,15 +175,15 @@ function WindowListPanel({
                         <div className="flex items-center gap-1.5 px-2 py-1 bg-[var(--bg)] border border-[var(--border)] rounded shadow-sm">
                             <span className="text-[12px] font-bold text-[var(--text-secondary)] uppercase">Limit:</span>
                             <span className="text-sm font-mono font-bold text-[var(--primary)]" title="Calculated: Batch Size × Batches">
-                                {batchSize * numBatches}
+                                {targetCount}
                             </span>
                         </div>
                         <span className={`text-[14px] pl-1 border-l-2 border-t-2 border-b-2 border-[var(--border)] font-bold uppercase ${autoCalibrate ? 'text-[var(--primary)]' : 'text-[var(--text-secondary)]'}`}>Auto</span>
                         <button
                             onClick={() => onAutoCalibrateChange?.(!autoCalibrate)}
-                            className={`w-8 h-4 rounded-full relative transition-colors border-2 border-border ${autoCalibrate ? 'bg-primary' : 'bg-bg'}`}
+                            className={`w-8 h-4 rounded-full relative transition-colors border-2 border-border ${autoCalibrate ? 'bg-primary border-text' : 'bg-bg'}`}
                         >
-                            <div className={`absolute top-0.5 bottom-0.5 w-3 rounded-full bg-text shadow transition-all ${autoCalibrate ? 'left-[calc(100%-14px)]' : 'left-0.5'}`} />
+                            <div className={`absolute top-0.5 bottom-0.5 w-3 rounded-full shadow transition-all ${autoCalibrate ? 'left-[calc(100%-14px)] bg-bg' : 'left-0.5 bg-text'}`} />
                         </button>
                     </div>
                 </div>
@@ -194,6 +195,9 @@ function WindowListPanel({
                         <span>Saved: <span className="text-[var(--window-saved-line)]">{savedCount}</span></span>
                     </div>
                     <div className="flex items-center gap-2">
+                        <div className="text-[14px] font-bold uppercase tracking-wider text-muted">
+                            {progress.toFixed(0)}%
+                        </div>
                         <button
                             onClick={onDeleteAll}
                             className="p-1 hover:bg-red-500/10 text-muted hover:text-red-500 rounded transition all"
@@ -204,14 +208,12 @@ function WindowListPanel({
                     </div>
                 </div>
 
-                {autoCalibrate && (
-                    <div className="h-1 w-full bg-bg rounded-full overflow-hidden">
-                        <div
-                            className="h-full bg-primary transition-all duration-500 ease-out"
-                            style={{ width: `${progress}%` }}
-                        />
-                    </div>
-                )}
+                <div className="h-1.5 w-full pt-1 bg-bg rounded-full overflow-hidden">
+                    <div
+                        className="h-full bg-primary transition-all duration-500 ease-out"
+                        style={{ width: `${progress}%` }}
+                    />
+                </div>
             </div>
 
             <div className="flex-grow min-h-0 flex flex-col overflow-y-auto relative pt-2 no-scrollbar px-2 space-y-2 pb-4">
@@ -227,41 +229,55 @@ function WindowListPanel({
                 )}
             </div>
 
-            <div className="p-2 border-t border-border bg-bg/50 flex items-center gap-2">
-                <button
-                    onClick={onClearSaved}
-                    disabled={autoCalibrate}
-                    className={`flex-1 py-1 rounded-lg font-bold text-[16px] uppercase tracking-wider transition-all flex items-center justify-center gap-1 ${autoCalibrate
-                        ? 'bg-bg text-muted border border-border cursor-not-allowed opacity-50'
-                        : 'bg-emerald-500 text-white hover:opacity-90 shadow-glow'
-                        }`}
-                >
-                    Save Windows
-                </button>
+            <div className="border-t border-border bg-bg/50 p-2">
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={onClearSaved}
+                        disabled={autoCalibrate}
+                        className={`flex-1 min-w-0 py-1 rounded-lg font-bold text-[16px] uppercase tracking-wider transition-all flex items-center justify-center gap-1 ${autoCalibrate
+                            ? 'bg-bg text-muted border border-border cursor-not-allowed opacity-50'
+                            : 'bg-emerald-500 text-white hover:opacity-90 shadow-glow'
+                            }`}
+                    >
+                        Save Windows
+                    </button>
 
-                {autoCalibrate ? (
-                    <div className="flex items-center gap-2">
-                        <CustomNumberInput
-                            value={batchSize}
-                            onChange={(value) => onBatchSizeChange?.(Number(value))}
-                            min={0}
-                            unit={"Size"}
-                        />
-                        <CustomNumberInput
-                            value={numBatches}
-                            onChange={(value) => onNumBatchesChange?.(Number(value))}
-                            min={0}
-                            unit={"Batches"}
-                        />
-                    </div>
-                ) : (
-                    <CustomNumberInput
-                        value={autoLimit}
-                        onChange={(value) => onAutoLimitChange?.(Number(value))}
-                        min={0}
-                        unit={"Limit"}
-                    />
-                )}
+                    {autoCalibrate ? (
+                        <>
+                            <div className="flex items-center gap-1 bg-bg border border-border rounded-lg pl-1 h-[34px] shrink-0">
+                                <span className="text-[12px] font-bold text-muted uppercase tracking-wider whitespace-nowrap">Size</span>
+                                <CustomNumberInput
+                                    value={batchSize}
+                                    onChange={(value) => onBatchSizeChange?.(Number(value))}
+                                    min={1}
+                                    borderless
+                                    className="w-[50px]"
+                                />
+                            </div>
+                            <div className="flex items-center gap-1 bg-bg border border-border rounded-lg pl-1 h-[34px] shrink-0">
+                                <span className="text-[12px] font-bold text-muted uppercase tracking-wider whitespace-nowrap">Batch</span>
+                                <CustomNumberInput
+                                    value={numBatches}
+                                    onChange={(value) => onNumBatchesChange?.(Number(value))}
+                                    min={1}
+                                    borderless
+                                    className="w-[50px]"
+                                />
+                            </div>
+                        </>
+                    ) : (
+                        <div className="flex items-center gap-1 bg-bg border border-border rounded-lg pl-1 h-[34px] shrink-0">
+                            <span className="text-[12px] font-bold text-muted uppercase tracking-wider">Limit</span>
+                            <CustomNumberInput
+                                value={autoLimit}
+                                onChange={(value) => onAutoLimitChange?.(Number(value))}
+                                min={1}
+                                borderless
+                                className="w-[50px]"
+                            />
+                        </div>
+                    )}
+                </div>
             </div>
         </div>
     );

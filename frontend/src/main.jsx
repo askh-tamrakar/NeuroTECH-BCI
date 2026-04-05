@@ -6,6 +6,9 @@ import './styles/index.css'
 import ClickSpark from './components/ui/overlays/ClickSpark'
 import { ThemeProvider } from './contexts/ThemeContext'
 import { SettingsProvider } from './contexts/SettingsContext'
+import { installConnectionFetchInterceptor } from './utils/runtimeConnection'
+
+installConnectionFetchInterceptor()
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>

@@ -278,6 +278,9 @@ class FeatureRouter:
                                             "predicted_frequency": live_freq,
                                             "peak_frequency": float(runtime_features.get("peak_freq", 0.0) or 0.0),
                                             "confidence": runtime_features.get("detector_confidence", 0.0),
+                                            "ml_enabled": bool(runtime_features.get("ml_enabled", False)),
+                                            "detector_mode": runtime_features.get("detector_mode", "fbcca"),
+                                            "model_name": runtime_features.get("model_name"),
                                         }
                                     )
 

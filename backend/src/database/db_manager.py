@@ -1,6 +1,7 @@
 import json
 import sqlite3
 import re
+import threading
 from typing import Dict, Optional, List, Any
 from src.utils.paths import get_base_data_dir, get_db_path
 
@@ -129,6 +130,7 @@ class DatabaseManager:
             path.parent.mkdir(parents=True, exist_ok=True)
         
         self._verified_tables = set()
+        self._schema_lock = threading.Lock()
         
         self._init_dbs()
         
@@ -137,10 +139,22 @@ class DatabaseManager:
         sensor = sensor_type.upper()
         if sensor not in self.db_paths:
             raise ValueError(f"Unknown sensor type: {sensor}")
-        conn = sqlite3.connect(self.db_paths[sensor])
-        # Enable Write-Ahead Logging (WAL) for better concurrency
+        conn = sqlite3.connect(
+            str(self.db_paths[sensor]),
+            timeout=30.0,
+            check_same_thread=False,
+        )
+        conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA journal_mode=WAL;")
+        conn.execute("PRAGMA synchronous=NORMAL;")
+        conn.execute("PRAGMA busy_timeout = 30000;")
+        conn.execute("PRAGMA foreign_keys = ON;")
         return conn
+
+    def initialize_runtime(self):
+        """Warm up and verify database schemas for the active runtime."""
+        with self._schema_lock:
+            self._init_dbs()
 
     def _init_dbs(self):
         """Initialize all databases."""
@@ -538,6 +552,40 @@ class DatabaseManager:
             print(f"Failed to save session metadata for {session_name}: {e}")
             return None
 
+    def get_session_metadata(self, sensor_type: str, session_name: str):
+        try:
+            path = self._session_metadata_path(sensor_type, session_name)
+            if not path.exists():
+                return {}
+            return json.loads(path.read_text(encoding="utf-8"))
+        except Exception as e:
+            print(f"Failed to read session metadata for {session_name}: {e}")
+            return {}
+
+    def delete_session_metadata(self, sensor_type: str, session_name: str) -> bool:
+        try:
+            path = self._session_metadata_path(sensor_type, session_name)
+            if path.exists():
+                path.unlink()
+            return True
+        except Exception as e:
+            print(f"Failed to delete session metadata for {session_name}: {e}")
+            return False
+
+    def rename_session_metadata(self, sensor_type: str, old_session_name: str, new_session_name: str) -> bool:
+        try:
+            old_path = self._session_metadata_path(sensor_type, old_session_name)
+            new_path = self._session_metadata_path(sensor_type, new_session_name)
+            if not old_path.exists():
+                return True
+            if new_path.exists():
+                new_path.unlink()
+            old_path.rename(new_path)
+            return True
+        except Exception as e:
+            print(f"Failed to rename session metadata for {old_session_name}: {e}")
+            return False
+
     def _extract_session_trial_numbers(self, conn, table_name: str, column_name: str) -> List[int]:
         cursor = conn.cursor()
         try:
@@ -583,28 +631,26 @@ class DatabaseManager:
         prefix = f"{sensor.lower()}_session_"
         table_name = f"{prefix}{safe_suffix}"
         
-        # Optimization: Skip if already verified in this session
-        if table_name in self._verified_tables:
-            return table_name
+        with self._schema_lock:
+            if table_name in self._verified_tables:
+                return table_name
 
-        conn = self.connect(sensor)
-        cursor = conn.cursor()
-        
-        if sensor == "EMG":
-            self._create_emg_session_table(cursor, table_name)
-            self._ensure_emg_session_columns(conn, table_name)
-        elif sensor == "EOG":
-            self._create_eog_session_table(cursor, table_name)
-            self._ensure_eog_session_columns(conn, table_name)
-        elif sensor == "EEG":
-            self._create_eeg_session_table(cursor, table_name)
-            self._ensure_eeg_session_columns(conn, table_name)
+            conn = self.connect(sensor)
+            cursor = conn.cursor()
             
-        conn.commit()
-        conn.close()
-        
-        # Add to verified cache
-        self._verified_tables.add(table_name)
+            if sensor == "EMG":
+                self._create_emg_session_table(cursor, table_name)
+                self._ensure_emg_session_columns(conn, table_name)
+            elif sensor == "EOG":
+                self._create_eog_session_table(cursor, table_name)
+                self._ensure_eog_session_columns(conn, table_name)
+            elif sensor == "EEG":
+                self._create_eeg_session_table(cursor, table_name)
+                self._ensure_eeg_session_columns(conn, table_name)
+                
+            conn.commit()
+            conn.close()
+            self._verified_tables.add(table_name)
 
         if sensor == "EMG":
             self.save_session_metadata(sensor, table_name, {
@@ -653,6 +699,7 @@ class DatabaseManager:
             conn.commit()
             conn.close()
             self.delete_session_metadata(sensor, table_name)
+            self._verified_tables.discard(table_name)
             print(f"Dropped table: {table_name}")
             return True
         except Exception as e:
@@ -684,6 +731,8 @@ class DatabaseManager:
             conn.commit()
             conn.close()
             self.rename_session_metadata(sensor, old_table_name, new_table_name)
+            self._verified_tables.discard(old_table_name)
+            self._verified_tables.add(new_table_name)
             print(f"Renamed table: {old_table_name} to {new_table_name}")
             return True
         except Exception as e:
@@ -1082,6 +1131,9 @@ class DatabaseManager:
             conn.close()
             return counts
         except: return { "0": 0, "1": 0, "2": 0, "3": 0 }
+
+    def insert_window(self, features: Dict[str, float], label: int, session_id: str = None, table_name: str = "emg_windows") -> bool:
+        return self.insert_emg_window(features, label, session_id=session_id, table_name=table_name)
         
     def clear_table(self, sensor_type: str, table_name: str):
         try:

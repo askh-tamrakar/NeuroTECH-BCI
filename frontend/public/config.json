@@ -1,7 +1,7 @@
 {
     "general": {
-        "apiUrl": "http://localhost:8000",
-        "wsUrl": "ws://localhost:5005",
+        "apiUrl": "",
+        "wsUrl": "",
         "useMock": false
     },
     "audio": {

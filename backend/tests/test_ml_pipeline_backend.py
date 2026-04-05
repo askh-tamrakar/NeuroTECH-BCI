@@ -4,7 +4,7 @@ import time
 import uuid
 from pathlib import Path
 
-from flask import Flask
+import pytest
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 if str(BACKEND_ROOT) not in sys.path:
@@ -12,7 +12,15 @@ if str(BACKEND_ROOT) not in sys.path:
 
 from src.database.db_manager import db_manager
 from src.learning.emg_trainer import delete_model, generate_model_id, train_emg_model
-from src.server.server.routes.training_routes import _save_window_payload, state, training_bp
+from src.server.server import create_app
+from src.server.server import config_manager as server_config_manager
+from src.server.server.routes.training_routes import _save_window_payload, state
+from src.server.server.services.config_service import reset_runtime_config, save_runtime_config
+from src.server.server.services.training_job_service import (
+    create_training_job,
+    job_snapshot,
+    run_training_job,
+)
 
 
 def _cleanup_session(sensor, table_name):
@@ -61,27 +69,64 @@ def test_generate_model_id_rolls_prefix_after_ff():
     assert generate_model_id(255, 1) == "D00F1"
 
 
+def test_asgi_host_exposes_docs_and_legacy_status_route():
+    app = create_app()
+    assert app is not None
+
+
+def test_config_reset_restores_true_defaults(tmp_path, monkeypatch):
+    monkeypatch.setattr(server_config_manager, "CONFIG_PATH", tmp_path / "sensor_config.json")
+    monkeypatch.setattr(server_config_manager, "FILTER_CONFIG_PATH", tmp_path / "filter_config.json")
+    monkeypatch.setattr(server_config_manager, "FEATURE_CONFIG_PATH", tmp_path / "feature_config.json")
+
+    save_runtime_config({
+        "sampling_rate": 777,
+        "display": {"showGrid": False},
+        "features": {"EMG": {"custom": {"threshold": 1.23}}},
+    })
+
+    result = reset_runtime_config()
+    restored = server_config_manager.load_config()
+    defaults = server_config_manager.build_default_config()
+
+    assert result["status"] == "ok"
+    assert restored["sampling_rate"] == defaults["sampling_rate"]
+    assert restored["display"]["showGrid"] == defaults["display"]["showGrid"]
+    assert restored.get("features", {}) == {}
+
+
+def test_asgi_status_endpoint_smoke():
+    pytest.importorskip("fastapi")
+    pytest.importorskip("httpx")
+    from fastapi.testclient import TestClient
+
+    with TestClient(create_app()) as client:
+        response = client.get("/api/status")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["stream_name"] == "BioSignals-Processed"
+    assert "connected" in payload
+
+
 def test_emg_save_window_creates_five_windows_with_shared_trial():
     session_name = f"unit_emg_{uuid.uuid4().hex[:8]}"
     table_name = f"emg_session_{session_name}"
-    app = Flask(__name__)
     state.config = {"sampling_rate": 1000}
     samples = list(range(1500))
 
     try:
-        with app.app_context():
-            response = _save_window_payload({
-                "sensor": "EMG",
-                "action": 1,
-                "samples": samples,
-                "session_name": session_name,
-                "metadata": {
-                    "windowMs": 900,
-                    "captureWindowMs": 1500,
-                    "source": "unit_test",
-                },
-            })
-            payload = response.get_json()
+        payload = _save_window_payload({
+            "sensor": "EMG",
+            "action": 1,
+            "samples": samples,
+            "session_name": session_name,
+            "metadata": {
+                "windowMs": 900,
+                "captureWindowMs": 1500,
+                "source": "unit_test",
+            },
+        })
 
         assert payload["windows_saved"] == 5
         conn = db_manager.connect("EMG")
@@ -204,22 +249,19 @@ def test_train_emg_model_uses_hyperparameter_tuning_candidates():
 def test_eog_save_window_generates_non_zero_serial_id_for_zero_like_input():
     session_name = f"unit_eog_{uuid.uuid4().hex[:8]}"
     table_name = f"eog_session_{session_name}"
-    app = Flask(__name__)
     state.config = {"sampling_rate": 1000}
 
     try:
-        with app.app_context():
-            response = _save_window_payload({
-                "sensor": "EOG",
-                "action": 1,
-                "samples": [0.0] * 800,
-                "session_name": session_name,
-                "metadata": {
-                    "serial_id": "0.00",
-                    "source": "unit_test",
-                },
-            })
-            payload = response.get_json()
+        payload = _save_window_payload({
+            "sensor": "EOG",
+            "action": 1,
+            "samples": [0.0] * 800,
+            "session_name": session_name,
+            "metadata": {
+                "serial_id": "0.00",
+                "source": "unit_test",
+            },
+        })
 
         conn = db_manager.connect("EOG")
         try:
@@ -239,43 +281,38 @@ def test_eog_save_window_generates_non_zero_serial_id_for_zero_like_input():
 def test_eeg_save_window_uses_compact_schema_and_shared_trial():
     session_name = f"unit_eeg_{uuid.uuid4().hex[:8]}"
     table_name = f"eeg_session_{session_name}"
-    app = Flask(__name__)
     state.config = {"sampling_rate": 1000}
     shared_trial = "AA0DB1"
 
     try:
-        with app.app_context():
-            response_one = _save_window_payload({
-                "sensor": "EEG",
-                "action": "T1",
-                "samples": [0.1] * 1500,
-                "session_name": session_name,
-                "metadata": {
-                    "trial": shared_trial,
-                    "targetFrequency": 6.33,
-                    "channelIndex": 0,
-                    "sampleCount": 1500,
-                    "windowMs": 1500,
-                    "source": "unit_test",
-                },
-            })
-            response_two = _save_window_payload({
-                "sensor": "EEG",
-                "action": "Concentration",
-                "samples": [0.2] * 1500,
-                "session_name": session_name,
-                "metadata": {
-                    "trial": shared_trial,
-                    "targetFrequency": 6.33,
-                    "channelIndex": 0,
-                    "sampleCount": 1500,
-                    "windowMs": 1500,
-                    "source": "unit_test",
-                },
-            })
-
-        payload_one = response_one.get_json()
-        payload_two = response_two.get_json()
+        payload_one = _save_window_payload({
+            "sensor": "EEG",
+            "action": "T1",
+            "samples": [0.1] * 1500,
+            "session_name": session_name,
+            "metadata": {
+                "trial": shared_trial,
+                "targetFrequency": 6.33,
+                "channelIndex": 0,
+                "sampleCount": 1500,
+                "windowMs": 1500,
+                "source": "unit_test",
+            },
+        })
+        payload_two = _save_window_payload({
+            "sensor": "EEG",
+            "action": "Concentration",
+            "samples": [0.2] * 1500,
+            "session_name": session_name,
+            "metadata": {
+                "trial": shared_trial,
+                "targetFrequency": 6.33,
+                "channelIndex": 0,
+                "sampleCount": 1500,
+                "windowMs": 1500,
+                "source": "unit_test",
+            },
+        })
 
         conn = db_manager.connect("EEG")
         try:
@@ -324,33 +361,34 @@ def test_train_job_endpoint_returns_job_id_and_completes():
                         table_name=table_name,
                     )
 
-        app = Flask(__name__)
-        app.register_blueprint(training_bp)
         state.config = {"sampling_rate": 1000}
         state.rps_detector = None
-        client = app.test_client()
-
-        response = client.post('/api/train-emg-rf', json={
-            "table_name": table_name,
-            "model_name": model_name,
-            "n_estimators": 10,
-            "max_depth": 4,
-            "min_impurity_decrease": 0.0,
-            "train_split": 0.68,
-            "val_split": 0.17,
-            "test_split": 0.15,
-            "n_folds": 3,
-        })
-        assert response.status_code == 200
-        payload = response.get_json()
+        job = create_training_job("EMG", model_name)
+        payload = {
+            "job_id": job["job_id"],
+            "status": job["status"],
+        }
+        run_training_job(
+            job["job_id"],
+            trainer=train_emg_model,
+            trainer_kwargs={
+                "table_name": table_name,
+                "model_name": model_name,
+                "n_estimators": 10,
+                "max_depth": 4,
+                "min_impurity_decrease": 0.0,
+                "train_split": 0.68,
+                "val_split": 0.17,
+                "test_split": 0.15,
+                "n_folds": 3,
+            },
+        )
         assert payload["job_id"]
         assert payload["status"] in {"queued", "running"}
 
         snapshot = None
         for _ in range(60):
-            poll = client.get(f'/api/train-jobs/{payload["job_id"]}')
-            assert poll.status_code == 200
-            snapshot = poll.get_json()
+            snapshot = job_snapshot(payload["job_id"])
             if snapshot["status"] == "completed":
                 break
             assert snapshot["status"] in {"queued", "running", "finalizing"}

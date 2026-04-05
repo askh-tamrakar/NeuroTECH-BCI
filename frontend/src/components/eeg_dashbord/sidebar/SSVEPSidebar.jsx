@@ -19,6 +19,7 @@ const MOUSE_ACTIONS = ['None', 'Left Click', 'Right Click', 'Double Click', 'Scr
 const SSVEPSidebar = ({
     onBackToMenu,
     useML, setUseML,
+    runtimeMLState, detectorMode,
     availableModels, selectedModel, setSelectedModel,
     addLog,
     realTimeFreq, predictedFreq,
@@ -54,7 +55,9 @@ const SSVEPSidebar = ({
                     <Brain size={22} className={useML ? 'text-[var(--primary)] animate-pulse' : 'text-[var(--muted)]'} />
                     <div className="flex flex-col">
                         <span className={`text-[12px] font-black uppercase tracking-widest ${useML ? 'text-[var(--primary)]' : 'text-[var(--muted)]'}`}>Include ML Pipeline</span>
-                        <span className="text-[9px] text-[var(--muted)]/60 font-bold uppercase tracking-tighter">LDA Enhancement</span>
+                        <span className="text-[9px] text-[var(--muted)]/60 font-bold uppercase tracking-tighter">
+                            Runtime: {runtimeMLState ? (detectorMode || 'lda').toUpperCase() : 'FBCCA'}
+                        </span>
                     </div>
                 </div>
                 <button
@@ -69,7 +72,7 @@ const SSVEPSidebar = ({
             <div className="shrink-0 bg-[var(--bg)]/40 border border-[var(--primary)]/20 rounded-xl p-3">
                 <div className="flex items-center justify-between mb-2">
                     <span className="text-[11px] font-black uppercase tracking-widest text-[var(--muted)]/80">EEG Model</span>
-                    <span className="text-[10px] font-mono text-[var(--primary)]/80">{useML ? 'ACTIVE IN PIPELINE' : 'STANDBY'}</span>
+                    <span className="text-[10px] font-mono text-[var(--primary)]/80">{runtimeMLState ? 'ACTIVE IN PIPELINE' : 'EXCLUDED FROM PIPELINE'}</span>
                 </div>
                 <CustomSelect
                     options={availableModels.map(m => ({ value: m.name, label: m.name }))}

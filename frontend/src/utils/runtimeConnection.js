@@ -1,5 +1,5 @@
-const DEFAULT_API_URL = 'http://localhost:5005';
-const DEFAULT_WS_URL = 'ws://localhost:5005';
+const DEFAULT_API_URL = '';
+const DEFAULT_WS_URL = '';
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '0.0.0.0']);
 
 function hasWindow() {
@@ -104,9 +104,10 @@ function shouldUsePageOrigin(endpoint, pageOrigin) {
 }
 
 export function getRuntimeConnection() {
+    const pageOrigin = getLocationOrigin();
     const defaults = {
-        apiUrl: DEFAULT_API_URL,
-        wsUrl: DEFAULT_WS_URL,
+        apiUrl: pageOrigin || DEFAULT_API_URL,
+        wsUrl: deriveWsUrlFromApi(pageOrigin) || DEFAULT_WS_URL,
     };
 
     const publicConfig = getPublicRuntimeConfig()?.general || {};
@@ -114,7 +115,6 @@ export function getRuntimeConnection() {
 
     let apiUrl = normalizeBaseUrl(storedSettings.apiUrl || publicConfig.apiUrl || defaults.apiUrl);
     let wsUrl = normalizeBaseUrl(storedSettings.wsUrl || publicConfig.wsUrl || defaults.wsUrl);
-    const pageOrigin = getLocationOrigin();
 
     if (!apiUrl && wsUrl) apiUrl = deriveApiUrlFromWs(wsUrl);
     if (!wsUrl && apiUrl) wsUrl = deriveWsUrlFromApi(apiUrl);
@@ -135,9 +135,27 @@ export function getRuntimeConnection() {
     };
 }
 
+export function getSocketIoConnection() {
+    const { apiUrl, wsUrl } = getRuntimeConnection();
+    const pageOrigin = getLocationOrigin();
+    const endpoint = deriveApiUrlFromWs(wsUrl) || apiUrl || pageOrigin;
+
+    return {
+        endpoint: normalizeBaseUrl(endpoint || pageOrigin),
+        options: {
+            path: '/socket.io',
+            transports: ['websocket', 'polling'],
+            reconnection: true,
+        },
+    };
+}
+
 export function buildApiUrl(path) {
     const { apiUrl } = getRuntimeConnection();
     const safePath = path.startsWith('/') ? path : `/${path}`;
+    if (!apiUrl) {
+        return safePath;
+    }
     return `${apiUrl}${safePath}`;
 }
 

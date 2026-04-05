@@ -1,5 +1,6 @@
 /* eslint-disable no-restricted-globals */
 import { io } from 'socket.io-client';
+import { getSocketIoConnection } from '../utils/runtimeConnection';
 
 let socket = null;
 const broadcast = new BroadcastChannel('bci-data-stream');
@@ -41,12 +42,14 @@ self.onmessage = (e) => {
 function connect(url) {
     if (socket) socket.disconnect();
 
-    console.log(`[DataWorker] Connecting to ${url}`);
+    const { endpoint: defaultEndpoint, options } = getSocketIoConnection();
+    const endpoint = url || defaultEndpoint;
 
-    socket = io(url, {
-        reconnection: true,
+    console.log(`[DataWorker] Connecting to ${endpoint}`);
+
+    socket = io(endpoint, {
         timeout: 10000,
-        transports: ['websocket', 'polling']
+        ...options,
     });
 
     socket.on('connect', () => {
