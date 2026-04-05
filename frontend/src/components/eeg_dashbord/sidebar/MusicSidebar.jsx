@@ -5,6 +5,7 @@ const MusicSidebar = ({
     isPlaying, togglePlayback, 
     isMuted, setIsMuted, 
     result, stateTheme,
+    tracks = [], currentTrack = {}, onSelectTrack,
     sidebarMode, setSidebarMode, 
     isCollapsed
 }) => {
@@ -69,12 +70,51 @@ const MusicSidebar = ({
 
                 {!isCollapsed && (
                     <div className="flex flex-col items-center gap-1 mt-2">
-                        <span className="text-[10px] font-bold text-[var(--muted)] uppercase tracking-tighter">Current Resonance</span>
+                        <span className="text-[10px] font-bold text-[var(--muted)] uppercase tracking-tighter truncate w-full text-center px-2">
+                           Playing: {currentTrack.label || 'None'}
+                        </span>
                         <span className="text-xl font-black tracking-widest uppercase" style={{ color: stateTheme.primary, textShadow: `0 0 10px ${stateTheme.glow}` }}>
-                            {result?.state || 'Awaiting...'}
+                            {result?.state || 'Neutral'}
                         </span>
                     </div>
                 )}
+            </div>
+
+            {/* Track Library Rail */}
+            <div className={`flex flex-col mb-6 ${isCollapsed ? 'items-center' : ''}`}>
+                {!isCollapsed && (
+                    <h4 className="text-[10px] font-black text-[var(--muted)] uppercase tracking-[3px] px-2 mb-4">
+                        Track Library
+                    </h4>
+                )}
+                <div className={`flex flex-col gap-2 w-full ${isCollapsed ? 'items-center' : 'px-2'}`}>
+                    {tracks.map(track => (
+                        <button
+                            key={track.id}
+                            onClick={() => onSelectTrack(track)}
+                            className={`flex items-center gap-3 p-2 rounded-xl border transition-all text-left ${
+                                currentTrack.id === track.id 
+                                ? 'bg-[var(--primary)]/20 border-[var(--primary)]/40 shadow-glow' 
+                                : 'bg-white/5 border-white/5 hover:bg-white/10'
+                            } ${isCollapsed ? 'w-10 h-10 justify-center overflow-hidden' : 'w-full'}`}
+                            title={isCollapsed ? track.label : ''}
+                        >
+                            <div className={`shrink-0 w-7 h-7 rounded-lg flex items-center justify-center ${currentTrack.id === track.id ? 'bg-[var(--primary)] text-white' : 'bg-white/10 text-[var(--muted)]'}`}>
+                                <Music size={12} />
+                            </div>
+                            {!isCollapsed && (
+                                <div className="min-w-0 flex-grow">
+                                    <div className={`text-[10px] font-black truncate ${currentTrack.id === track.id ? 'text-white' : 'text-white/60'}`}>
+                                        {track.label}
+                                    </div>
+                                    <div className="text-[8px] font-bold text-[var(--muted)] uppercase tracking-widest opacity-60">
+                                        {track.category}
+                                    </div>
+                                </div>
+                            )}
+                        </button>
+                    ))}
+                </div>
             </div>
 
             {/* Neural Insights Rail */}

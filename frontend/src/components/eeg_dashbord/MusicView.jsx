@@ -5,12 +5,23 @@ import MusicSidebar from './sidebar/MusicSidebar';
 import { useSidebar } from './SidebarContext';
 import { musicHandler } from '../../handlers/MusicHandler';
 
+/* ── MUSIC TRACKS ────────────────────── */
+const TRACKS = [
+  { id: 'stress_melt',   label: 'Singing Bowl Waves',  file: '/Resources/eeg_music/meditativetiger-stress-melt-gentle-singing-bowl-waves-489168.mp3', category: 'meditation' },
+  { id: 'nature_calm',   label: 'Nature Calm',          file: '/Resources/eeg_music/andriig-nature-calm-music-507173.mp3',                              category: 'meditation' },
+  { id: 'xylophone',    label: 'Xylophone & Forest',   file: '/Resources/eeg_music/mandakimdk-xylophone-and-forest-307174.mp3',                        category: 'meditation' },
+  { id: 'soft_calm',    label: 'Soft Calm Background', file: '/Resources/eeg_music/krasnoshchok-background-music-soft-calm-404429.mp3',                category: 'focus'     },
+  { id: 'dark_ambient', label: 'Dark Desolation',      file: '/Resources/eeg_music/aberrantrealities-dark-desolation-ambience-219091.mp3',             category: 'focus'     },
+  { id: 'funk_rock',    label: 'Funk Rock',             file: '/Resources/eeg_music/kandlaker-funk-rock-2-226325.mp3',                                  category: 'focus'     },
+  { id: 'countdown',    label: 'Countdown',             file: '/Resources/eeg_music/kaden_cook-countdown-219722.mp3',                                   category: 'focus'     },
+];
+
 const MusicView = ({ result, onNavigate }) => {
   const canvasRef = useRef(null);
   const animationRef = useRef(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
-  const [showSidebar, setShowSidebar] = useState(true);
+  const [currentTrack, setCurrentTrack] = useState(TRACKS[0]);
 
   // State-to-Color Mapping for Visuals
   const stateTheme = useMemo(() => {
@@ -37,6 +48,19 @@ const MusicView = ({ result, onNavigate }) => {
     setIsPlaying(!isPlaying);
   };
 
+  const handleSelectTrack = async (track) => {
+    if (track.id === currentTrack.id) return;
+    
+    musicHandler.stop();
+    setIsPlaying(false);
+    setCurrentTrack(track);
+
+    await musicHandler.loadTrack(track.file);
+    await musicHandler.resume();
+    musicHandler.play();
+    setIsPlaying(true);
+  };
+
   useEffect(() => {
     setSidebarSlot(
       <MusicSidebar
@@ -46,17 +70,19 @@ const MusicView = ({ result, onNavigate }) => {
         setIsMuted={setIsMuted}
         result={result}
         stateTheme={stateTheme}
+        tracks={TRACKS}
+        currentTrack={currentTrack}
+        onSelectTrack={handleSelectTrack}
       />
     );
     return () => setSidebarSlot(null);
-  }, [isPlaying, isMuted, result, stateTheme, setSidebarSlot]);
+  }, [isPlaying, isMuted, result, stateTheme, currentTrack, setSidebarSlot]);
 
   // Track initialization
   useEffect(() => {
     const loadAndInit = async () => {
       await musicHandler.init();
-      // Using the specific file found in the project
-      await musicHandler.loadTrack('/data/audio/Fed_Up_Slowed__Reverb_-_Ghostemane_1772539057.mp3');
+      await musicHandler.loadTrack(currentTrack.file);
     };
     loadAndInit();
 

@@ -38,7 +38,7 @@ const PHASES = [
 const TOTAL_CYCLE = PHASES.reduce((s, p) => s + p.dur, 0);
 
 /* ── PRESETS (minutes) ─────────────────────────── */
-const PRESETS = [3, 5, 10, 15];
+const PRESETS = [5, 10, 20, 30];
 
 const MeditationView = ({ result, currentView, onNavigate }) => {
   const containerRef = useRef(null);
@@ -190,6 +190,9 @@ const MeditationView = ({ result, currentView, onNavigate }) => {
 
   const { setSidebarSlot } = useSidebar();
 
+  const [liveMetrics, setLiveMetrics] = useState({ calm: 0, focus: 0 });
+  const activeTrack = useMemo(() => musicState.find(m => m.active) || musicState.find(m => m.category === 'meditation'), [musicState]);
+
   // Update the sidebar slot whenever state affecting the sidebar changes
   useEffect(() => {
     setSidebarSlot(
@@ -199,7 +202,8 @@ const MeditationView = ({ result, currentView, onNavigate }) => {
         updateVol={updateVol}
         masterVol={masterVol}
         onMasterVol={onMasterVol}
-        stats={stats}
+        activeTrack={activeTrack}
+        stats={{ ...stats, calm: liveMetrics.calm, focus: liveMetrics.focus }}
         wisdomIdx={wisdomIdx}
         isSessionRunning={isSessionRunning}
         selectedMin={selectedMin}
@@ -208,7 +212,7 @@ const MeditationView = ({ result, currentView, onNavigate }) => {
         onToggleConn={onToggleConn}
       />
     );
-  }, [musicState, masterVol, stats, wisdomIdx, isSessionRunning, selectedMin, toggleMusic, updateVol, onMasterVol, onToggleSession, onPresetChange, onToggleConn, setSidebarSlot]);
+  }, [musicState, activeTrack, masterVol, stats, liveMetrics, wisdomIdx, isSessionRunning, selectedMin, toggleMusic, updateVol, onMasterVol, onToggleSession, onPresetChange, onToggleConn, setSidebarSlot]);
 
   // Separate cleanup-only effect: clear slot on unmount
   useEffect(() => {
@@ -224,12 +228,10 @@ const MeditationView = ({ result, currentView, onNavigate }) => {
     /* ── CANVASES ──────────────────────────────── */
     const radar = $('med-radar');
     const waveC1 = $('med-wave-1');
-    const waveC2 = $('med-wave-2');
     const ctxRadar = radar?.getContext('2d');
     const wCtx1 = waveC1?.getContext('2d');
-    const wCtx2 = waveC2?.getContext('2d');
 
-    if (!ctxRadar || !wCtx1 || !wCtx2) return;
+    if (!ctxRadar || !wCtx1) return;
 
     /* ── STATE ─────────────────────────────────── */
     let eegMode = 'simulate';
@@ -437,6 +439,8 @@ const MeditationView = ({ result, currentView, onNavigate }) => {
         const focusScore = Math.round(calmSignal * 100);
         const stressLevel = Math.max(0, Math.round(100 - (calmSignal * 100) + (Math.random() - 0.5) * 10));
 
+        setLiveMetrics({ calm: Math.round(calmSignal * 100), focus: focusScore });
+
         const fv = $('med-focus-val'); if (fv) fv.textContent = focusScore;
         const sv = $('med-stress-val'); if (sv) sv.textContent = stressLevel;
 
@@ -470,6 +474,11 @@ const MeditationView = ({ result, currentView, onNavigate }) => {
         if (res?.meditation_score !== undefined) {
           calmSignal = Math.max(0, Math.min(1, res.meditation_score / 100));
         }
+
+        setLiveMetrics({ 
+          calm: Math.round(calmSignal * 100), 
+          focus: Math.round(calmSignal * 100) 
+        });
 
         // Apply Audio Clarity Filter Frequency
         // Range: 500Hz (Muffled) to 20000Hz (Crystal Clear)
