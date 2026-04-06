@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { audioStorage } from '../utils/AudioStorage';
-import { fetchWithBase } from '../utils/runtimeConnection';
+import { buildApiUrl, getPublicRuntimeConfig, loadPublicRuntimeConfig, setPublicRuntimeConfig } from '../utils/runtimeConnection';
 
 const SettingsContext = createContext(null);
 
@@ -14,8 +14,8 @@ export const useSettings = () => {
 
 const DEFAULT_SETTINGS = {
     general: {
-        apiUrl: '',
-        wsUrl: '',
+        apiUrl: 'http://localhost:5005',
+        wsUrl: 'ws://localhost:5005',
         useMock: false,
     },
     dino: {
@@ -24,7 +24,7 @@ const DEFAULT_SETTINGS = {
         gameSpeed: 5,
         obstacleDensity: 1500,
         controlChannel: 0,
-        difficulty: 'normal',
+        difficulty: 'normal', // easy, normal, hard
         visuals: {
             showTrees: true,
             showClouds: true,
@@ -33,7 +33,7 @@ const DEFAULT_SETTINGS = {
         }
     },
     ssvep: {
-        brightness: 100,
+        brightness: 100, // 0-100
         refreshRate: 60,
         protocol: {
             cueDuration: 2,
@@ -44,14 +44,14 @@ const DEFAULT_SETTINGS = {
     },
     rps: {
         manualMode: false,
-        difficulty: 1,
+        difficulty: 1, // 0-2 (Easy, Medium, Hard)
     },
     calibration: {
-        activeSensor: 'EMG',
+        activeSensor: 'EMG', // EMG, EOG, EEG
         activeChannel: 0,
         yAxisRange: 200,
         zoomLevel: 1,
-        timeWindow: 5,
+        timeWindow: 5, // seconds
     },
     ml: {
         emg: {
@@ -87,7 +87,7 @@ const DEFAULT_SETTINGS = {
     },
     collectionState: {
         zoom: 1,
-        timeWindow: 3000,
+        timeWindow: 3000, // 3s
         windowDuration: 1500,
         autoLimit: 30,
         autoCalibrate: false
@@ -96,28 +96,35 @@ const DEFAULT_SETTINGS = {
         sfxEnabled: true,
         bgmEnabled: true,
         bgmVolume: 0.3,
-        bgmTrack: null,
-        availableTracks: [],
+        bgmTrack: null, // filename of the selected track
+        availableTracks: [], // list of track objects from server
     }
 };
 
 export function SettingsProvider({ children }) {
     const [settings, setSettings] = useState(() => {
+        const publicConfig = getPublicRuntimeConfig();
+        const baseSettings = deepMerge(DEFAULT_SETTINGS, publicConfig || {});
         try {
             const saved = localStorage.getItem('neurotech_settings');
             if (saved) {
+                // Deep merge with defaults to ensure new fields are added if missing in old save
                 const parsed = JSON.parse(saved);
+
+                // MIGRATION: Remove legacy base64 bgmFile to prevent atob errors and save space
                 if (parsed.audio && parsed.audio.bgmFile) {
                     delete parsed.audio.bgmFile;
                 }
-                return deepMerge(DEFAULT_SETTINGS, parsed);
+
+                return deepMerge(baseSettings, parsed);
             }
         } catch (e) {
             console.error('Failed to load settings:', e);
         }
-        return DEFAULT_SETTINGS;
+        return baseSettings;
     });
 
+    // Update a specific setting section
     const updateSettings = useCallback((section, newValues) => {
         setSettings(prev => ({
             ...prev,
@@ -128,6 +135,7 @@ export function SettingsProvider({ children }) {
         }));
     }, []);
 
+    // Deep update helper (for nested objects like dino.visuals)
     const updateDeepSettings = useCallback((path, value) => {
         setSettings(prev => {
             const next = { ...prev };
@@ -142,6 +150,7 @@ export function SettingsProvider({ children }) {
         });
     }, []);
 
+    // Reset a section or all to defaults
     const resetSettings = useCallback((section = null) => {
         if (section) {
             setSettings(prev => ({
@@ -149,21 +158,17 @@ export function SettingsProvider({ children }) {
                 [section]: DEFAULT_SETTINGS[section]
             }));
         } else {
-            setSettings(DEFAULT_SETTINGS);
+            setSettings(deepMerge(DEFAULT_SETTINGS, getPublicRuntimeConfig() || {}));
         }
     }, []);
 
+    // Initial fetch of available tracks and config
     useEffect(() => {
         const fetchInitialData = async () => {
             try {
-                const configRes = await fetch('./config.json');
-                if (configRes.ok) {
-                    const publicConfig = await configRes.json();
-                    if (publicConfig?.general) {
-                        publicConfig.general = { ...publicConfig.general };
-                        if (!publicConfig.general.apiUrl) delete publicConfig.general.apiUrl;
-                        if (!publicConfig.general.wsUrl) delete publicConfig.general.wsUrl;
-                    }
+                const publicConfig = getPublicRuntimeConfig() || await loadPublicRuntimeConfig();
+                if (publicConfig) {
+                    setPublicRuntimeConfig(publicConfig);
                     setSettings(prev => deepMerge(prev, publicConfig));
                 }
             } catch (e) {
@@ -175,30 +180,37 @@ export function SettingsProvider({ children }) {
             ];
 
             try {
+                // 1. Get local tracks from IndexedDB
                 const localTracks = await audioStorage.getAllTracks();
                 const formattedLocal = localTracks.map(t => ({ ...t, isLocal: true }));
 
+                // 2. Try to get server tracks (optional/fallback)
                 let serverTracks = [];
                 try {
-                    const res = await fetchWithBase('/api/audio/tracks', { signal: AbortSignal.timeout(2000) });
-                    if (res.ok) {
-                        serverTracks = await res.json();
-                    } else if (res.status === 404) {
-                        console.log('Backend audio tracks API not available (Offline Mode)');
+                    const API_BASE_URL = buildApiUrl('');
+                    if (API_BASE_URL && !API_BASE_URL.includes('localhost')) {
+                        const res = await fetch(`${API_BASE_URL}/api/audio/tracks`, { signal: AbortSignal.timeout(2000) });
+                        if (res.ok) {
+                            serverTracks = await res.json();
+                        } else if (res.status === 404) {
+                            console.log('ℹ️ Server audio tracks API not available (Offline Mode)');
+                        }
                     }
                 } catch (e) {
                     console.warn('Backend audio API unavailable, using local/default tracks only.');
                 }
 
+                // 3. Combine all tracks, removing duplicates by name
                 const allTracks = [...defaultTracks, ...formattedLocal, ...serverTracks];
                 const uniqueTracks = allTracks.reduce((acc, current) => {
-                    const existing = acc.find(item => item.name === current.name);
-                    if (!existing) return acc.concat([current]);
+                    const x = acc.find(item => item.name === current.name);
+                    if (!x) return acc.concat([current]);
                     return acc;
                 }, []);
 
                 updateDeepSettings('audio.availableTracks', uniqueTracks);
 
+                // 4. Default selection logic
                 const saved = localStorage.getItem('neurotech_settings');
                 const currentSettings = saved ? JSON.parse(saved) : {};
                 if (uniqueTracks.length > 0 && (!currentSettings.audio || !currentSettings.audio.bgmTrack)) {
@@ -212,8 +224,10 @@ export function SettingsProvider({ children }) {
         fetchInitialData();
     }, [updateDeepSettings]);
 
+    // Save to localStorage whenever settings change
     useEffect(() => {
         try {
+            // We DON'T want to save the full availableTracks list to localStorage to keep it small
             const { availableTracks, ...safeAudio } = settings.audio;
             const settingsToSave = {
                 ...settings,
@@ -239,6 +253,7 @@ export function SettingsProvider({ children }) {
     );
 }
 
+// Simple Deep Merge Helper
 function deepMerge(target, source) {
     const result = { ...target };
     if (source) {

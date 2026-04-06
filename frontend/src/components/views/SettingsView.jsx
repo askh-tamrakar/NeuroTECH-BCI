@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
+
 import { useTheme } from '../../contexts/ThemeContext'
 import { useAuth } from '../../contexts/AuthContext'
 import {
@@ -42,6 +44,7 @@ import { useSettings } from '../../contexts/SettingsContext'
 import { soundHandler } from '../../handlers/SoundHandler'
 import { Music, Volume2, Upload, VolumeX } from 'lucide-react'
 import { audioStorage } from '../../utils/AudioStorage'
+import { Reorder } from 'framer-motion'
 import { buildApiUrl } from '../../utils/runtimeConnection'
 
 // Helper for color inputs
@@ -129,25 +132,33 @@ const generateRandomHex = () => {
 
 export default function SettingsView({
   latency = 0,
+  connectionState = 'disconnected',
+  connectionStatus = null,
+  apiUrl = '',
   localWs = '',
   setLocalWs = () => { },
   ngrokWs = '',
   setNgrokWs = () => { },
-  connect = () => { },
-  activeSection: controlledSection,
-  onSectionChange
+  connect = () => { }
 }) {
+  const navigate = useNavigate();
+  const location = useLocation();
+
   const {
     themes,
     currentTheme,
     currentThemeId,
     setTheme,
     addTheme,
+    addFullTheme,
     updateTheme,
     updateThemeColor,
     removeTheme,
     resetThemes,
-    resetThemeColors
+    resetThemeColors,
+    reorderThemes,
+    toggleThemeVisibility,
+    updateThemeOrder
   } = useTheme()
 
   const { user, logout } = useAuth()
@@ -156,18 +167,118 @@ export default function SettingsView({
 
   // Telemetry state
   const [fps, setFps] = useState(0);
-  const [activeSection, setActiveSection] = useState(controlledSection || 'account');
+  // activeSection derived from path
+  const activeSection = useMemo(() => {
+    const path = location.pathname;
+    if (path.includes('/account')) return 'account';
+    if (path.includes('/style')) return 'appearance';
+    if (path.includes('/link')) return 'connectivity';
+    if (path.includes('/sountrack')) return 'audio';
+    if (path.includes('/keys')) return 'hotkeys';
+    return 'account';
+  }, [location.pathname]);
 
-  // Sync with prop
-  useEffect(() => {
-    if (controlledSection) {
-      setActiveSection(controlledSection);
-    }
-  }, [controlledSection]);
+  const isConnectedState = connectionState === 'connected' || connectionState === 'streaming' || connectionState === 'stream_offline';
+  const connectionLabel = connectionState === 'streaming'
+    ? 'Streaming'
+    : connectionState === 'stream_offline'
+      ? 'Stream Offline'
+      : connectionState === 'connected'
+        ? 'Connected'
+        : connectionState === 'connecting'
+          ? 'Connecting'
+          : 'Disconnected';
+  const connectionColorClass = connectionState === 'streaming' || connectionState === 'connected'
+    ? 'text-emerald-500'
+    : connectionState === 'stream_offline' || connectionState === 'connecting'
+      ? 'text-amber-500'
+      : 'text-red-500';
+  const connectionDotClass = connectionState === 'streaming' || connectionState === 'connected'
+    ? 'bg-emerald-500'
+    : connectionState === 'stream_offline' || connectionState === 'connecting'
+      ? 'bg-amber-500'
+      : 'bg-red-500';
 
   const handleSectionChange = (id) => {
-    setActiveSection(id);
-    if (onSectionChange) onSectionChange(id);
+    const pathMap = {
+      'account': 'account',
+      'appearance': 'style',
+      'connectivity': 'link',
+      'audio': 'sountrack',
+      'hotkeys': 'keys'
+    };
+    navigate(`/dashboard/settings/${pathMap[id] || id}`);
+  };
+
+
+  // Theme Builder State
+  const [builderName, setBuilderName] = useState('Custom Theme');
+  const [builderId, setBuilderId] = useState('theme-custom-theme');
+  const [builderTab, setBuilderTab] = useState('json'); // 'json' or 'visual'
+  const [builderJsonText, setBuilderJsonText] = useState('{\n  "accent": "#0ea5e9",\n  "navBase": "#020617",\n  "navPill": "#0ea5e9",\n  "colors": {\n    "--bg": "#020617",\n    "--surface": "#0f172a",\n    "--text": "#f8fafc",\n    "--muted": "#94a3b8",\n    "--primary": "#38bdf8",\n    "--primary-contrast": "#0f172a",\n    "--accent": "#0ea5e9",\n    "--border": "#1e293b",\n    "--shadow": "rgba(0, 0, 0, 0.4)",\n    "--day": "#f8fafc",\n    "--night": "#020617",\n    "--tree-day": "#38bdf8",\n    "--tree-night": "#1e293b",\n    "--cloud-day": "#ffffff",\n    "--cloud-night": "#334155",\n    "--sun-day": "#38bdf8",\n    "--sun-night": "#38bdf8",\n    "--moon-day": "#ffffff",\n    "--moon-night": "#cbd5e1",\n    "--sky-day": "#e0f2fe",\n    "--sky-night": "#020617",\n    "--text-secondary": "#cbd5e1",\n    "--text-tertiary": "#94a3b8",\n    "--text-highlight": "#38bdf8",\n    "--text-error": "#ef4444",\n    "--text-success": "#22c55e",\n    "--title": "#38bdf8",\n    "--heading": "#f8fafc",\n    "--label": "#94a3b8",\n    "--section-bg": "#0f172a",\n    "--section-border": "#1e293b",\n    "--panel-bg": "#020617",\n    "--panel-border": "#1e293b",\n    "--header-bg": "#0f172a",\n    "--header-text": "#f8fafc",\n    "--event-bg": "#0f172a",\n    "--event-border": "#1e293b",\n    "--event-text": "#cbd5e1",\n    "--selection-bg": "rgba(56, 189, 248, 0.15)",\n    "--selection-border": "#38bdf8",\n    "--graph-line-1": "#38bdf8",\n    "--graph-line-2": "#0ea5e9",\n    "--graph-bg": "#020617",\n    "--graph-grid": "rgba(56, 189, 248, 0.1)",\n    "--graph-text": "#cbd5e1"\n  }\n}');
+  const [builderError, setBuilderError] = useState('');
+
+  // Native HTML5 UI Drag and Drop
+  const [draggedThemeId, setDraggedThemeId] = useState(null);
+
+  const handleDragStart = (e, id) => {
+    setDraggedThemeId(id);
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", id);
+    setTimeout(() => { if (e.target) e.target.style.opacity = '0.4'; }, 0);
+  };
+
+  const handleDragEnter = (e, targetId) => {
+    e.preventDefault();
+    if (!draggedThemeId || draggedThemeId === targetId) return;
+    const newThemes = [...themes];
+    const sourceIdx = newThemes.findIndex(t => t.id === draggedThemeId);
+    const targetIdx = newThemes.findIndex(t => t.id === targetId);
+    if (sourceIdx < 0 || targetIdx < 0) return;
+    const [movedObj] = newThemes.splice(sourceIdx, 1);
+    newThemes.splice(targetIdx, 0, movedObj);
+    reorderThemes(newThemes);
+  };
+
+  const handleDragEnd = (e) => {
+    setDraggedThemeId(null);
+    if (e.target) e.target.style.opacity = '1';
+  };
+
+  useEffect(() => {
+    setBuilderId('theme-' + builderName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, ''));
+  }, [builderName]);
+
+  const handleSaveBuiltTheme = () => {
+    setBuilderError('');
+    try {
+      const parsed = JSON.parse(builderJsonText);
+      const reqCols = ['--bg', '--surface', '--text', '--primary', '--accent', '--border'];
+      if (!parsed.colors) { setBuilderError('Missing "colors" object.'); return; }
+      const missing = reqCols.filter(c => !parsed.colors[c]);
+      if (missing.length > 0) { setBuilderError(`Missing required colors: ${missing.join(', ')}`); return; }
+
+      const newTheme = {
+        id: builderId,
+        name: builderName,
+        type: 'custom',
+        accent: parsed.accent || parsed.colors['--accent'],
+        navBase: parsed.navBase || parsed.colors['--bg'],
+        navPill: parsed.navPill || parsed.colors['--primary'],
+        colors: parsed.colors
+      };
+
+      if (themes.some(t => t.id === newTheme.id)) {
+        setBuilderError(`Theme ID "${newTheme.id}" already exists. Use a unique name.`);
+        return;
+      }
+
+      addFullTheme(newTheme);
+      setBuilderError('Success!');
+      setTimeout(() => setBuilderError(''), 3000);
+    } catch (e) {
+      setBuilderError('Invalid JSON format.');
+    }
   };
 
   // Editor state
@@ -183,12 +294,7 @@ export default function SettingsView({
   const [showPreviewLines, setShowPreviewLines] = useState(true);
   const [showTuning, setShowTuning] = useState(false);
 
-  // Emergency Restore: Ensure original colors are applied on mount
-  useEffect(() => {
-    if (currentTheme?.type === 'default') {
-      resetThemeColors(currentThemeId);
-    }
-  }, []);
+
   useEffect(() => {
     let frameCount = 0;
     let lastTime = performance.now();
@@ -408,7 +514,7 @@ export default function SettingsView({
   };
 
   return (
-    <div className="font-sans absolute inset-0 pt-[85px] flex overflow-hidden bg-bg text-text">
+    <div className="font-sans absolute inset-0 pt-[70px] flex overflow-hidden bg-bg text-text">
       {/* Background Image Overlay */}
       <div
         className="absolute inset-0 z-0 pointer-events-none"
@@ -422,34 +528,32 @@ export default function SettingsView({
         }}
       />
       {/* ── SIDEBAR ── */}
-      <aside className="w-[66px] bg-surface/90 border-r border-border flex flex-col items-center py-4 gap-1 shrink-0 z-20">
+      <aside className="w-[82px] bg-surface/90 border-r border-border flex flex-col items-center py-6 gap-2 shrink-0 z-20">
         {[
           { id: 'account', icon: UserPlus, label: 'Account' },
+          { id: 'appearance', icon: Palette, label: 'Style', path: 'style' },
+          { id: 'connectivity', icon: Globe, label: 'Link', path: 'link' },
           { divider: true },
-          { id: 'appearance', icon: Palette, label: 'Style' },
-          { id: 'connectivity', icon: Globe, label: 'Link' },
-          { divider: true },
-          { id: 'audio', icon: Music, label: 'Audio' },
-          { id: 'hotkeys', icon: Keyboard, label: 'Keys' },
-          { divider: true },
-          { id: 'telemetry', icon: Activity, label: 'Telem' }
+          { id: 'audio', icon: Music, label: 'Audio', path: 'sountrack' },
+          { id: 'hotkeys', icon: Keyboard, label: 'Keys', path: 'keys' }
         ].map((item, i) => {
-          if (item.divider) return <div key={`div-${i}`} className="w-[28px] h-px bg-border my-1.5" />;
+          if (item.divider) return <div key={`div-${i}`} className="w-[38px] h-px bg-border my-2" />;
           const isActive = activeSection === item.id;
           const Icon = item.icon;
           return (
             <button
               key={item.id}
-              onClick={() => handleSectionChange(item.id)}
-              className={`relative w-[46px] h-[46px] rounded-xl flex flex-col items-center justify-center gap-0.5 cursor-pointer transition-all border border-transparent group ${isActive ? 'bg-primary/10 border-primary/20' : 'hover:bg-surface'}`}
+              onClick={() => navigate(`/dashboard/settings/${item.path || item.id}`)}
+              className={`relative w-[58px] h-[58px] rounded-2xl flex flex-col items-center justify-center gap-1 cursor-pointer transition-all border border-transparent group ${isActive ? 'bg-primary/10 border-primary/20' : 'hover:bg-surface'}`}
               title={item.label}
             >
-              <Icon size={18} className={`transition-all ${isActive ? 'text-primary' : 'text-muted group-hover:text-text'}`} strokeWidth={1.8} />
-              <span className={`text-[8px] font-bold tracking-[0.07em] uppercase transition-all ${isActive ? 'text-primary' : 'text-muted group-hover:text-text'}`}>
+
+              <Icon size={22} className={`transition-all ${isActive ? 'text-primary' : 'text-muted group-hover:text-text'}`} strokeWidth={1.8} />
+              <span className={`text-[10px] font-black tracking-[0.1em] uppercase transition-all ${isActive ? 'text-primary' : 'text-muted group-hover:text-text'}`}>
                 {item.label}
               </span>
               {isActive && (
-                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 bg-primary rounded-r-[3px] shadow-[0_0_10px_var(--primary)]" />
+                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[4px] h-8 bg-primary rounded-r-[4px] shadow-[0_0_12px_var(--primary)]" />
               )}
             </button>
           );
@@ -457,200 +561,298 @@ export default function SettingsView({
       </aside>
 
       {/* ── MAIN ── */}
-      <main className="flex-1 overflow-y-auto px-5 py-6 flex flex-col items-center min-w-0 custom-scrollbar">
-        <div className="w-full max-w-[900px] flex flex-col gap-6">
+      <main className={`flex-1 overflow-x-hidden px-5 py-6 flex flex-col min-w-0 ${activeSection === 'appearance' ? 'overflow-y-hidden' : 'overflow-y-auto custom-scrollbar'}`}>
+        <style dangerouslySetInnerHTML={{
+          __html: `
+          .hide-scroll::-webkit-scrollbar { display: none; }
+          .hide-scroll { -ms-overflow-style: none; scrollbar-width: none; }
+          .bg-checkered {
+             background-image: linear-gradient(45deg, #222 25%, transparent 25%), linear-gradient(-45deg, #222 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #222 75%), linear-gradient(-45deg, transparent 75%, #222 75%);
+             background-size: 8px 8px;
+             background-position: 0 0, 0 4px, 4px -4px, -4px 0px;
+          }
+        `}} />
+        <div className="w-full h-full flex flex-col gap-6">
           {/* APPEARANCE */}
           {activeSection === 'appearance' && (
-            <div className="flex flex-col gap-4 animate-fade-in">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h2 className="text-[22px] font-bold tracking-tight">Appearance</h2>
-                  <p className="text-[13px] text-muted mt-1">Customize your dashboard theme and color palette</p>
-                </div>
-                <div className="flex gap-2">
-                  <button onClick={resetThemes} className="px-3.5 py-1.5 rounded-lg text-[11px] font-bold tracking-[0.06em] cursor-pointer border border-border bg-surface/95 text-muted hover:text-text hover:border-white/20 transition-all">Reset Defaults</button>
-                  <button onClick={handleCreateTheme} className="px-3.5 py-1.5 rounded-lg text-[11px] font-bold tracking-[0.06em] cursor-pointer border border-primary/30 bg-primary/10 text-primary hover:bg-primary/20 transition-all">+ New Theme</button>
-                </div>
-              </div>
+            <div className="flex flex-col lg:flex-row gap-6 animate-fade-in items-start h-full">
 
-              <div className="bg-surface/95 border border-border rounded-2xl overflow-hidden shadow-lg">
-                <div className="px-5 py-3.5 border-b border-border flex items-center justify-between gap-3">
-                  <span className="text-[11px] font-bold tracking-[0.1em] uppercase text-muted flex items-center gap-2">
-                    <Palette size={14} className="opacity-70" strokeWidth={1.8} /> Color Theme
-                  </span>
-                </div>
-                <div className="p-5 flex flex-col gap-4">
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2.5">
-                    {themes.map((t) => (
-                      <div
-                        key={t.id}
-                        onClick={() => setTheme(t.id)}
-                        className={`border rounded-xl p-3 cursor-pointer transition-all bg-surface/80 hover:-translate-y-[1px] ${currentThemeId === t.id ? 'border-primary ring-1 ring-primary/50 shadow-[0_0_20px_rgba(0,200,240,0.08)]' : 'border-border/50 hover:border-border'}`}
-                      >
-                        <div className="flex gap-1.5 mb-2">
-                          <div className="w-[11px] h-[11px] rounded-full" style={{ backgroundColor: t.colors['--bg'] }} />
-                          <div className="w-[11px] h-[11px] rounded-full" style={{ backgroundColor: t.colors['--primary'] }} />
-                          <div className="w-[11px] h-[11px] rounded-full" style={{ backgroundColor: t.colors['--accent'] }} />
-                        </div>
-                        <div className={`text-[11px] font-medium leading-[1.3] truncate ${currentThemeId === t.id ? 'text-primary' : 'text-muted'}`}>{t.name}</div>
-                      </div>
-                    ))}
+              {/* LEFT PANEL: Theme Organizer */}
+              <div className="flex-[3] flex flex-col gap-4 w-full h-full">
+                <div className="flex items-start justify-between gap-3 shrink-0">
+                  <div>
+                    <h2 className="text-[22px] font-bold tracking-tight">Appearance</h2>
+                    <p className="text-[13px] text-muted mt-1">Organize your dashboard themes (Drag cards to reorder)</p>
                   </div>
-                  <div className="bg-surface/80 rounded-xl px-4 py-3.5 border border-border flex flex-col gap-3">
-                    <div className="flex items-center gap-3.5 w-full">
-                      <div className="text-[11px] font-semibold tracking-[0.08em] uppercase text-muted shrink-0">Active</div>
-                      <div className="flex-1 flex flex-col gap-1.5 min-h-[16px] justify-center">
-                        <div className="h-1.5 rounded-full transition-all duration-300" style={{ width: `${previewLineWidth1}%`, backgroundColor: currentTheme.colors['--primary'] || 'var(--primary)' }} />
-                        <div className="h-1.5 rounded-full transition-all duration-300" style={{ width: `${previewLineWidth2}%`, backgroundColor: currentTheme.colors['--accent'] || 'var(--accent)' }} />
-                      </div>
-                      <div className="flex gap-2 items-center">
-                        <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: currentTheme.colors['--bg'] || 'var(--bg)' }} />
-                        <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: currentTheme.colors['--primary'] || 'var(--primary)' }} />
-                        <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: currentTheme.colors['--accent'] || 'var(--accent)' }} />
-                        <div className="h-4 w-px bg-border/50 mx-1" />
-                        <button
-                          onClick={() => setShowTuning(!showTuning)}
-                          className={`p-1.5 rounded-md transition-all ${showTuning ? 'text-primary' : 'text-muted hover:text-text'}`}
-                          title="Tune Lines"
-                        >
-                          <Settings size={14} className={showTuning ? 'animate-spin-slow' : ''} />
-                        </button>
-                      </div>
-                    </div>
-
-                    {showTuning && (
-                      <div className="flex flex-col gap-3 pt-3 border-t border-border/10 animate-in fade-in slide-in-from-top-1 duration-200">
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="flex flex-col gap-1.5">
-                            <div className="flex justify-between text-[8px] font-bold text-muted uppercase">
-                              <span>Line 1 Scale</span>
-                              <span className="text-primary">{previewLineWidth1}%</span>
-                            </div>
-                            <input type="range" min="5" max="100" value={previewLineWidth1} onChange={(e) => setPreviewLineWidth1(parseInt(e.target.value))} className="w-full h-1 bg-surface-hover rounded-full appearance-none cursor-pointer" style={{ accentColor: 'var(--primary)' }} />
-                          </div>
-                          <div className="flex flex-col gap-1.5">
-                            <div className="flex justify-between text-[8px] font-bold text-primary uppercase">
-                              <span>Line 2 Scale</span>
-                              <span className="text-accent">{previewLineWidth2}%</span>
-                            </div>
-                            <input type="range" min="5" max="100" value={previewLineWidth2} onChange={(e) => setPreviewLineWidth2(parseInt(e.target.value))} className="w-full h-1 bg-surface-hover rounded-full appearance-none cursor-pointer" style={{ accentColor: 'var(--accent)' }} />
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="flex flex-col gap-1.5">
-                            <div className="flex justify-between text-[8px] font-bold uppercase text-primary">
-                              <span>Primary Intensity</span>
-                              <span>{(hexToHsl(currentTheme.colors['--primary'] || '#000000')[1] * 100).toFixed(0)}%</span>
-                            </div>
-                            <input
-                              type="range" min="0" max="1" step="0.01"
-                              value={hexToHsl(currentTheme.colors['--primary'] || '#000000')[1]}
-                              onChange={(e) => {
-                                const [h, s, l] = hexToHsl(currentTheme.colors['--primary']);
-                                updateThemeColor(currentThemeId, '--primary', hslToHex(h, parseFloat(e.target.value), l));
-                              }}
-                              className="w-full h-1 bg-surface-hover rounded-full appearance-none cursor-pointer" style={{ accentColor: 'var(--primary)' }}
-                            />
-                          </div>
-                          <div className="flex flex-col gap-1.5">
-                            <div className="flex justify-between text-[8px] font-bold uppercase text-accent">
-                              <span>Accent Intensity</span>
-                              <span>{(hexToHsl(currentTheme.colors['--accent'] || '#000000')[1] * 100).toFixed(0)}%</span>
-                            </div>
-                            <input
-                              type="range" min="0" max="1" step="0.01"
-                              value={hexToHsl(currentTheme.colors['--accent'] || '#000000')[1]}
-                              onChange={(e) => {
-                                const [h, s, l] = hexToHsl(currentTheme.colors['--accent']);
-                                updateThemeColor(currentThemeId, '--accent', hslToHex(h, parseFloat(e.target.value), l));
-                              }}
-                              className="w-full h-1 bg-surface-hover rounded-full appearance-none cursor-pointer" style={{ accentColor: 'var(--accent)' }}
-                            />
-                          </div>
-                        </div>
-
-                        <button
-                          onClick={() => { resetThemeColors(currentThemeId); setShowTuning(false); }}
-                          className="text-[9px] font-bold text-primary self-center hover:underline flex items-center gap-1 opacity-70 hover:opacity-100 py-1"
-                        >
-                          <RefreshCw size={10} /> Full Restore (Source Colors)
-                        </button>
-                      </div>
-                    )}
+                  <div className="flex gap-2">
+                    <button onClick={resetThemes} className="px-3.5 py-1.5 rounded-lg text-[11px] font-bold tracking-[0.06em] cursor-pointer border border-border bg-surface/95 text-muted hover:text-text hover:border-white/20 transition-all">Reset Defaults</button>
                   </div>
                 </div>
-              </div>
 
-              <div className="bg-surface/85 border border-border rounded-2xl overflow-hidden shadow-lg">
-                <div className="px-5 py-3.5 border-b border-border flex items-center justify-between gap-3">
-                  <span className="text-[11px] font-bold tracking-[0.1em] uppercase text-muted flex items-center gap-2">
-                    <Edit3 size={14} className="opacity-70" strokeWidth={1.8} /> Custom Palette
-                  </span>
-                  {currentTheme.type === 'custom' && (
-                    <div className="flex gap-2">
-                      <button onClick={handleDuplicateTheme} className="px-2 py-1 rounded text-[10px] bg-surface border border-border text-muted hover:text-text">Duplicate</button>
-                      <button onClick={() => removeTheme(currentThemeId)} className="px-2 py-1 rounded text-[10px] bg-red-500/10 border border-red-500/20 text-red-500">Delete</button>
-                    </div>
-                  )}
-                </div>
-                <div className="p-5 flex flex-col">
-                  {currentTheme.type === 'custom' ? (
-                    <>
-                      <div className="flex items-center justify-between py-3 border-b border-border/50">
-                        <span className="text-[14px] font-medium text-text">Theme Name</span>
-                        {isEditingName ? (
-                          <input type="text" autoFocus value={tempName} onChange={e => setTempName(e.target.value)} onBlur={() => { updateTheme(currentThemeId, { name: tempName || currentTheme.name }); setIsEditingName(false); }} onKeyDown={e => { if (e.key === 'Enter') { updateTheme(currentThemeId, { name: tempName || currentTheme.name }); setIsEditingName(false); } }} className="bg-bg border border-primary rounded px-2 py-1 text-sm outline-none w-[150px] text-right" />
-                        ) : (
-                          <span className="text-[14px] font-bold border-b border-dashed border-primary/50 cursor-pointer" onClick={() => { setTempName(currentTheme.name); setIsEditingName(true); }}>{currentTheme.name}</span>
-                        )}
-                      </div>
-                      {[
-                        { label: 'System Background', key: '--bg' },
-                        { label: 'Surface UI Nodes', key: '--surface' },
-                        { label: 'Base Typography', key: '--text' },
-                        { label: 'Primary Action Alpha', key: '--primary' },
-                        { label: 'Accent Highlight', key: '--accent' },
-                        { label: 'Vector Border Edge', key: '--border' }
-                      ].map(({ label, key }) => (
-                        <div key={key} className="flex items-center justify-between py-3 border-b border-border/50 last:border-0 group">
-                          <div className="flex flex-col">
-                            <span className="text-[14px] font-medium transition-colors group-hover:text-primary">{label}</span>
-                            <span className="text-[10px] text-muted font-mono uppercase tracking-tighter opacity-0 group-hover:opacity-100 transition-opacity">{key}</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all mr-2">
-                              <button
-                                onClick={() => updateThemeColor(currentThemeId, key, adjustLightness(currentTheme.colors[key], 0.05))}
-                                className="p-1 rounded bg-surface border border-border hover:text-primary transition-all"
-                                title="Shift Up"
-                              >
-                                <ChevronUp size={12} />
-                              </button>
-                              <button
-                                onClick={() => updateThemeColor(currentThemeId, key, adjustLightness(currentTheme.colors[key], -0.05))}
-                                className="p-1 rounded bg-surface border border-border hover:text-primary transition-all"
-                                title="Shift Down"
-                              >
-                                <ChevronDown size={12} />
-                              </button>
-                              <button
-                                onClick={() => updateThemeColor(currentThemeId, key, generateRandomHex())}
-                                className="p-1 rounded bg-surface border border-border hover:text-primary transition-all"
-                                title="Randomize"
-                              >
-                                <RefreshCw size={12} />
-                              </button>
+                <div className="bg-surface/95 border border-border rounded-2xl overflow-hidden shadow-lg flex-1 flex flex-col min-h-0">
+                  <div className="px-5 py-3.5 border-b border-border flex items-center justify-between gap-3 shrink-0">
+                    <span className="text-[11px] font-bold tracking-[0.1em] uppercase text-muted flex items-center gap-2">
+                      <Palette size={14} className="opacity-70" strokeWidth={1.8} /> Color Themes
+                    </span>
+                  </div>
+                  <div className="p-5 flex flex-col gap-4 overflow-y-auto hide-scroll flex-1">
+                    <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 place-content-start">
+                      {themes.map((t) => (
+                        <div
+                          key={t.id}
+                          draggable="true"
+                          onDragStart={(e) => handleDragStart(e, t.id)}
+                          onDragEnter={(e) => handleDragEnter(e, t.id)}
+                          onDragEnd={handleDragEnd}
+                          onDragOver={(e) => e.preventDefault()}
+                          onClick={() => setTheme(t.id)}
+                          className={`relative border rounded-xl p-5 min-h-[100px] flex flex-col justify-end cursor-grab active:cursor-grabbing transition-all bg-surface/80 hover:scale-[1.02] ${draggedThemeId === t.id ? 'opacity-40 border-dashed border-primary/50' : ''} ${currentThemeId === t.id ? 'border-primary ring-1 ring-primary/50 shadow-[0_0_20px_rgba(0,200,240,0.08)]' : 'border-border/50 hover:border-border'}`}
+                        >
+                          {/* Inline Toggles & Actions */}
+                          <div className="absolute top-2.5 right-2.5 flex items-center gap-2 z-10">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setBuilderName(`${t.name} Draft`);
+                                setBuilderJsonText(JSON.stringify({
+                                  accent: t.accent || t.colors['--accent'],
+                                  navBase: t.navBase || t.colors['--bg'],
+                                  navPill: t.navPill || t.colors['--primary'],
+                                  colors: t.colors
+                                }, null, 2));
+                                setBuilderTab('visual');
+                              }}
+                              className="w-[22px] h-[22px] rounded flex items-center justify-center bg-surface border border-border hover:bg-primary/20 hover:border-primary/50 hover:text-primary transition-all text-muted shadow-sm"
+                              title="Load into Builder"
+                            >
+                              <Copy size={11} strokeWidth={2.5} />
+                            </button>
+
+                            <div
+                              className="w-[16px] h-[16px] rounded-full border cursor-pointer flex items-center justify-center transition-transform hover:scale-110 bg-surface shadow-sm"
+                              onClick={(e) => { e.stopPropagation(); toggleThemeVisibility(t.id); }}
+                              style={{ borderColor: t.visible !== false ? t.colors['--primary'] : 'var(--border)' }}
+                              title={t.visible !== false ? "Theme Enabled. Click to disable" : "Theme Disabled. Click to enable"}
+                            >
+                              {t.visible !== false && <div className="w-[8px] h-[8px] rounded-full" style={{ backgroundColor: t.colors['--primary'] }} />}
                             </div>
-                            <span className="text-[12px] text-muted font-mono min-w-[65px] text-right">{currentTheme.colors[key]}</span>
-                            <input type="color" value={currentTheme.colors[key]} onChange={(e) => updateThemeColor(currentThemeId, key, e.target.value)} className="w-[32px] h-[32px] rounded-lg border border-border cursor-pointer p-0 bg-transparent shrink-0 hover:scale-110 transition-transform" />
                           </div>
+
+                          <div className="flex gap-2.5 mb-2.5 pointer-events-none pr-12">
+                            <div className="w-[14px] h-[14px] rounded-full shadow-sm border border-black/20" style={{ backgroundColor: t.colors['--bg'] }} />
+                            <div className="w-[14px] h-[14px] rounded-full shadow-sm border border-black/20" style={{ backgroundColor: t.colors['--primary'] }} />
+                            <div className="w-[14px] h-[14px] rounded-full shadow-sm border border-black/20" style={{ backgroundColor: t.colors['--accent'] }} />
+                          </div>
+                          <div className={`text-[14px] font-bold tracking-tight leading-[1.3] truncate pointer-events-none ${currentThemeId === t.id ? 'text-primary drop-shadow-[0_0_8px_var(--primary)] text-shadow-glow' : 'text-text'}`}>{t.name}</div>
                         </div>
                       ))}
-                    </>
-                  ) : (
-                    <div className="text-center py-6 text-muted text-sm">Select a custom theme or duplicate the current one to edit colors.</div>
-                  )}
+                    </div>
+
+                    <div className="bg-surface/80 rounded-xl px-4 py-3.5 border border-border flex flex-col gap-3 mt-4">
+                      <div className="flex items-center gap-3.5 w-full">
+                        <div className="text-[11px] font-semibold tracking-[0.08em] uppercase text-muted shrink-0">Active Indicator</div>
+                        <div className="flex-1 flex flex-col gap-1.5 min-h-[16px] justify-center">
+                          <div className="h-1.5 rounded-full transition-all duration-300" style={{ width: `${previewLineWidth1}%`, backgroundColor: currentTheme.colors['--primary'] || 'var(--primary)' }} />
+                          <div className="h-1.5 rounded-full transition-all duration-300" style={{ width: `${previewLineWidth2}%`, backgroundColor: currentTheme.colors['--accent'] || 'var(--accent)' }} />
+                        </div>
+                        <div className="flex gap-2 items-center">
+                          <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: currentTheme.colors['--bg'] || 'var(--bg)' }} />
+                          <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: currentTheme.colors['--primary'] || 'var(--primary)' }} />
+                          <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: currentTheme.colors['--accent'] || 'var(--accent)' }} />
+                          <div className="h-4 w-px bg-border/50 mx-1" />
+                          <button onClick={() => setShowTuning(!showTuning)} className={`p-1.5 rounded-md transition-all ${showTuning ? 'text-primary' : 'text-muted hover:text-text'}`} title="Tune Lines">
+                            <Settings size={14} className={showTuning ? 'animate-spin-slow' : ''} />
+                          </button>
+                        </div>
+                      </div>
+                      {showTuning && (
+                        <div className="flex flex-col gap-3 pt-3 border-t border-border/10 animate-in fade-in slide-in-from-top-1 duration-200">
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="flex flex-col gap-1.5">
+                              <div className="flex justify-between text-[8px] font-bold text-muted uppercase">
+                                <span>Line 1 Scale</span><span className="text-primary">{previewLineWidth1}%</span>
+                              </div>
+                              <input type="range" min="5" max="100" value={previewLineWidth1} onChange={(e) => setPreviewLineWidth1(parseInt(e.target.value))} className="w-full h-1 bg-surface-hover rounded-full appearance-none cursor-pointer" style={{ accentColor: 'var(--primary)' }} />
+                            </div>
+                            <div className="flex flex-col gap-1.5">
+                              <div className="flex justify-between text-[8px] font-bold text-primary uppercase">
+                                <span>Line 2 Scale</span><span className="text-accent">{previewLineWidth2}%</span>
+                              </div>
+                              <input type="range" min="5" max="100" value={previewLineWidth2} onChange={(e) => setPreviewLineWidth2(parseInt(e.target.value))} className="w-full h-1 bg-surface-hover rounded-full appearance-none cursor-pointer" style={{ accentColor: 'var(--accent)' }} />
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="flex flex-col gap-1.5">
+                              <div className="flex justify-between text-[8px] font-bold uppercase text-primary">
+                                <span>Primary Intensity</span>
+                                <span>{(hexToHsl(currentTheme.colors['--primary'] || '#000000')[1] * 100).toFixed(0)}%</span>
+                              </div>
+                              <input type="range" min="0" max="1" step="0.01"
+                                value={hexToHsl(currentTheme.colors['--primary'] || '#000000')[1]}
+                                onChange={(e) => {
+                                  const [h, s, l] = hexToHsl(currentTheme.colors['--primary']);
+                                  updateThemeColor(currentThemeId, '--primary', hslToHex(h, parseFloat(e.target.value), l));
+                                }}
+                                className="w-full h-1 bg-surface-hover rounded-full appearance-none cursor-pointer" style={{ accentColor: 'var(--primary)' }}
+                              />
+                            </div>
+                            <div className="flex flex-col gap-1.5">
+                              <div className="flex justify-between text-[8px] font-bold uppercase text-accent">
+                                <span>Accent Intensity</span>
+                                <span>{(hexToHsl(currentTheme.colors['--accent'] || '#000000')[1] * 100).toFixed(0)}%</span>
+                              </div>
+                              <input
+                                type="range" min="0" max="1" step="0.01"
+                                value={hexToHsl(currentTheme.colors['--accent'] || '#000000')[1]}
+                                onChange={(e) => {
+                                  const [h, s, l] = hexToHsl(currentTheme.colors['--accent']);
+                                  updateThemeColor(currentThemeId, '--accent', hslToHex(h, parseFloat(e.target.value), l));
+                                }}
+                                className="w-full h-1 bg-surface-hover rounded-full appearance-none cursor-pointer" style={{ accentColor: 'var(--accent)' }}
+                              />
+                            </div>
+                          </div>
+
+                          <button
+                            onClick={() => { resetThemeColors(currentThemeId); setShowTuning(false); }}
+                            className="text-[9px] font-bold text-primary self-center hover:underline flex items-center gap-1 opacity-70 hover:opacity-100 py-1"
+                          >
+                            <RefreshCw size={10} /> Full Restore (Source Colors)
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div> {/* End of Left Panel */}
+
+              {/* RIGHT PANEL: Theme Builder */}
+              <div className="flex-[2] flex flex-col w-full h-[calc(100vh-120px)] sticky top-6">
+                <div className="bg-surface/90 border border-border rounded-2xl overflow-hidden shadow-lg flex flex-col h-full">
+                  <div className="px-5 py-4 border-b border-border flex items-center justify-between gap-3 bg-surface z-10 shrink-0">
+                    <span className="text-[11px] font-bold tracking-[0.1em] uppercase text-text flex items-center gap-2">
+                      <Plus size={14} className="opacity-70 text-primary" strokeWidth={1.8} /> Theme Builder
+                    </span>
+                    <button onClick={handleSaveBuiltTheme} className="px-4 py-1.5 bg-primary/10 text-primary border border-primary/40 rounded-lg hover:bg-primary/20 text-[10px] font-bold uppercase tracking-widest transition-all hover:scale-105 active:scale-95 shadow-[0_0_15px_rgba(0,180,255,0.1)]">
+                      Save Theme
+                    </button>
+                  </div>
+
+                  {/* Mode Toggle */}
+                  <div className="flex border-b border-border/50 text-[10px] uppercase font-bold tracking-widest bg-surface/50 shrink-0">
+                    <button onClick={() => setBuilderTab('json')} className={`flex-1 py-3 border-b-2 transition-all ${builderTab === 'json' ? 'border-primary text-primary bg-primary/5' : 'border-transparent text-muted hover:text-text'}`}>
+                      Raw JSON
+                    </button>
+                    <button onClick={() => setBuilderTab('visual')} className={`flex-1 py-3 border-b-2 transition-all ${builderTab === 'visual' ? 'border-primary text-primary bg-primary/5' : 'border-transparent text-muted hover:text-text'}`}>
+                      Visual UI
+                    </button>
+                  </div>
+
+                  <div className="p-5 flex flex-col gap-6 overflow-y-auto hide-scroll flex-1">
+                    <div className="flex flex-col gap-2 relative">
+                      <label className="text-[10px] uppercase font-bold text-muted tracking-widest">Theme Name</label>
+                      <input
+                        type="text"
+                        value={builderName}
+                        onChange={e => setBuilderName(e.target.value)}
+                        className="bg-bg border border-border/80 rounded-lg px-3 py-2.5 text-sm font-semibold outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 text-text transition-all"
+                      />
+                      <div className="flex justify-between items-center mt-1 px-1">
+                        <span className="text-[10px] font-mono text-muted/70 tracking-tight">ID: <span className="text-primary/70">{builderId}</span></span>
+                        <span className="text-[10px] font-mono text-muted/70 tracking-tight">{builderId}.json</span>
+                      </div>
+                    </div>
+
+                    {builderTab === 'json' && (
+                      <div className="flex flex-col gap-2 flex-1">
+                        <div className="flex justify-between items-end mb-1">
+                          <label className="text-[10px] uppercase font-bold text-muted tracking-widest">JSON Definition</label>
+                          <span className="text-[9px] text-muted/60 uppercase font-bold">Raw Import</span>
+                        </div>
+                        <p className="text-[12px] text-muted mb-1 leading-relaxed">Paste your full theme <code className="text-primary bg-primary/10 px-1 rounded">json</code> mapping below. Missing essential tokens will block saving.</p>
+                        <textarea
+                          value={builderJsonText}
+                          onChange={e => setBuilderJsonText(e.target.value)}
+                          className="bg-[#0a0a0c] border border-border/80 rounded-xl p-5 text-[14px] font-mono text-[#a5d6a7] min-h-[500px] h-full flex-1 outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 shadow-inner resize-y custom-scrollbar leading-relaxed"
+                          spellCheck="false"
+                        />
+                      </div>
+                    )}
+
+                    {builderTab === 'visual' && (() => {
+                      let colorsObj = {};
+                      try { colorsObj = JSON.parse(builderJsonText).colors || {}; } catch (e) { }
+
+                      return (
+                        <div className="flex flex-col gap-4">
+                          <div className="flex justify-between items-end mb-1">
+                            <label className="text-[10px] uppercase font-bold text-muted tracking-widest">Visual Color Editor</label>
+                            <span className="text-[9px] text-muted/60 uppercase font-bold">Complete Palette</span>
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pb-2">
+                            {Object.entries(colorsObj).map(([key, val]) => {
+                              const label = key.replace('--', '').split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+                              return (
+                                <div key={key} className="flex flex-col p-3 border border-border/50 rounded-lg bg-bg/50 group hover:border-primary/40 transition-all shadow-sm gap-2">
+                                  <div className="flex justify-between items-start">
+                                    <div className="flex flex-col truncate pr-2">
+                                      <span className="text-[12px] font-bold text-text group-hover:text-primary transition-colors">{label}</span>
+                                      <span className="text-[9px] text-muted font-mono tracking-tighter opacity-70">{key}</span>
+                                    </div>
+                                    <div className="relative w-[28px] h-[28px] rounded-lg overflow-hidden border border-border shrink-0 shadow-inner group-hover:scale-110 transition-transform bg-checkered">
+                                      <div className="absolute inset-0" style={{ backgroundColor: val }} />
+                                      <input
+                                        type="color"
+                                        value={val && typeof val === 'string' && val.length >= 7 ? val.substring(0, 7) : '#000000'}
+                                        onChange={(e) => {
+                                          try {
+                                            const p = JSON.parse(builderJsonText);
+                                            if (!p.colors) p.colors = {};
+                                            p.colors[key] = e.target.value;
+                                            if (key === '--bg') p.navBase = e.target.value;
+                                            if (key === '--primary') p.navPill = e.target.value;
+                                            if (key === '--accent') p.accent = e.target.value;
+                                            setBuilderJsonText(JSON.stringify(p, null, 2));
+                                          } catch (err) { }
+                                        }}
+                                        className="absolute -top-4 -left-4 w-[64px] h-[64px] cursor-pointer opacity-0"
+                                      />
+                                    </div>
+                                  </div>
+                                  <input
+                                    type="text"
+                                    value={val}
+                                    onChange={(e) => {
+                                      try {
+                                        const p = JSON.parse(builderJsonText);
+                                        if (!p.colors) p.colors = {};
+                                        p.colors[key] = e.target.value;
+                                        if (key === '--bg') p.navBase = e.target.value;
+                                        if (key === '--primary') p.navPill = e.target.value;
+                                        if (key === '--accent') p.accent = e.target.value;
+                                        setBuilderJsonText(JSON.stringify(p, null, 2));
+                                      } catch (err) { }
+                                    }}
+                                    className="w-full bg-surface/50 border border-border/60 rounded px-2 py-1.5 text-[11px] font-mono text-muted focus:text-text focus:border-primary focus:ring-1 focus:ring-primary/20 outline-none transition-all placeholder:text-muted/30"
+                                    placeholder="HEX or RGBA"
+                                  />
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {builderError && (
+                      <div className={`text-[12px] font-bold mt-2 px-3 py-2.5 rounded-lg border flex items-center gap-2 shrink-0 ${builderError === 'Success!' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' : 'bg-red-500/10 text-red-500 border-red-500/20'}`}>
+                        {builderError === 'Success!' ? <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> : <span className="w-1.5 h-1.5 rounded-full bg-red-500" />}
+                        {builderError}
+                      </div>
+                    )}
+
+                    <div className="h-[60px] shrink-0 w-full" /> {/* Spacer for footer */}
+                  </div>
                 </div>
               </div>
             </div>
@@ -661,10 +863,10 @@ export default function SettingsView({
             <div className="flex flex-col gap-4 animate-fade-in">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <h2 className="text-[22px] font-bold tracking-tight">Connectivity</h2>
-                  <p className="text-[13px] text-muted mt-1">Manage BCI device link and stream configuration</p>
+                  <h2 className="text-[30px] font-bold tracking-tight text-white">Connectivity</h2>
+                  <p className="text-[15px] text-muted mt-1.5 font-medium">Manage BCI device link and stream configuration</p>
                 </div>
-                <span className={`text-[12px] font-bold tracking-[0.06em] ${latency > 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                <span className={`text-[12px] font-bold tracking-[0.06em] ${connectionColorClass}`}>
                   ● {latency > 0 ? 'Connected' : 'Disconnected'}
                 </span>
               </div>
@@ -677,30 +879,38 @@ export default function SettingsView({
                 </div>
                 <div className="p-5 flex flex-col">
                   <div className="flex flex-col gap-4 mb-6">
-                    <div className="flex flex-col md:flex-row gap-4">
-                      <div className="flex-1 space-y-2">
-                        <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted">Core API Protocol</label>
-                        <input type="text" value={settings.general.apiUrl} onChange={e => updateDeepSettings('general.apiUrl', e.target.value)} className="w-full px-4 py-2 bg-bg border border-border rounded-xl outline-none focus:border-primary text-sm font-mono tabular-nums transition-all" />
+                    <div className="flex flex-col md:flex-row gap-5">
+                      <div className="flex-1 space-y-2.5">
+                        <label className="text-[11px] font-bold uppercase tracking-[0.2em] text-muted">Core API Protocol</label>
+                        <input type="text" value={settings.general.apiUrl} onChange={e => updateDeepSettings('general.apiUrl', e.target.value)} className="w-full px-5 py-2.5 bg-bg border border-border rounded-xl outline-none focus:border-primary text-[14px] font-mono tabular-nums transition-all" />
                       </div>
-                      <div className="flex-1 space-y-2">
-                        <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted">Active Master Socket</label>
-                        <input type="text" value={settings.general.wsUrl} onChange={e => updateDeepSettings('general.wsUrl', e.target.value)} className="w-full px-4 py-2 bg-bg border border-border rounded-xl outline-none focus:border-primary text-sm font-mono tabular-nums transition-all" />
+                      <div className="flex-1 space-y-2.5">
+                        <label className="text-[11px] font-bold uppercase tracking-[0.2em] text-muted">Active Master Socket</label>
+                        <input type="text" value={settings.general.wsUrl} onChange={e => updateDeepSettings('general.wsUrl', e.target.value)} className="w-full px-5 py-2.5 bg-bg border border-border rounded-xl outline-none focus:border-primary text-[14px] font-mono tabular-nums transition-all" />
                       </div>
                     </div>
                     <div className="h-px bg-border/50" />
-                    <div className="flex flex-col md:flex-row gap-4">
-                      <div className="flex-1 space-y-2">
-                        <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted">Local WS URL</label>
-                        <div className="flex gap-2">
-                          <input type="text" value={localWs} onChange={e => setLocalWs(e.target.value)} className="w-full px-4 py-2 bg-bg border border-border rounded-xl outline-none focus:border-primary text-sm font-mono tabular-nums transition-all" />
-                          <button onClick={() => connect(localWs)} className="px-4 py-2 bg-primary/10 text-primary border border-primary/30 rounded-xl font-bold text-sm hover:bg-primary/20 transition-all shrink-0">Connect</button>
+                    <div className="rounded-xl border border-border/60 bg-bg/60 px-4 py-3 text-[12px] font-mono text-muted">
+                      <div>Resolved API: {apiUrl || settings.general.apiUrl || 'unavailable'}</div>
+                      <div>Transport: {connectionState}</div>
+                      {connectionStatus?.stream_active !== undefined && (
+                        <div>Stream active: {connectionStatus.stream_active ? 'yes' : 'no'}</div>
+                      )}
+                    </div>
+                    <div className="h-px bg-border/50" />
+                    <div className="flex flex-col md:flex-row gap-5">
+                      <div className="flex-1 space-y-2.5">
+                        <label className="text-[11px] font-bold uppercase tracking-[0.2em] text-muted">Local WS URL</label>
+                        <div className="flex gap-3">
+                          <input type="text" value={localWs} onChange={e => setLocalWs(e.target.value)} className="w-full px-5 py-2.5 bg-bg border border-border rounded-xl outline-none focus:border-primary text-[14px] font-mono tabular-nums transition-all" />
+                          <button onClick={() => connect(localWs)} className="px-5 py-2.5 bg-primary/10 text-primary border border-primary/30 rounded-xl font-bold text-[14px] hover:bg-primary/20 transition-all shrink-0">Connect</button>
                         </div>
                       </div>
-                      <div className="flex-1 space-y-2">
-                        <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted">Ngrok WS URL</label>
-                        <div className="flex gap-2">
-                          <input type="text" value={ngrokWs} onChange={e => setNgrokWs(e.target.value)} className="w-full px-4 py-2 bg-bg border border-border rounded-xl outline-none focus:border-primary text-sm font-mono tabular-nums transition-all" />
-                          <button onClick={() => connect(ngrokWs)} className="px-4 py-2 bg-primary/10 text-primary border border-primary/30 rounded-xl font-bold text-sm hover:bg-primary/20 transition-all shrink-0">Connect</button>
+                      <div className="flex-1 space-y-2.5">
+                        <label className="text-[11px] font-bold uppercase tracking-[0.2em] text-muted">Ngrok WS URL</label>
+                        <div className="flex gap-3">
+                          <input type="text" value={ngrokWs} onChange={e => setNgrokWs(e.target.value)} className="w-full px-5 py-2.5 bg-bg border border-border rounded-xl outline-none focus:border-primary text-[14px] font-mono tabular-nums transition-all" />
+                          <button onClick={() => connect(ngrokWs)} className="px-5 py-2.5 bg-primary/10 text-primary border border-primary/30 rounded-xl font-bold text-[14px] hover:bg-primary/20 transition-all shrink-0">Connect</button>
                         </div>
                       </div>
                     </div>
@@ -717,6 +927,35 @@ export default function SettingsView({
                   </div>
                 </div>
               </div>
+
+              {/* TELEMETRY CARDS */}
+              <div className="grid grid-cols-2 gap-3 mt-2">
+                <div className="bg-surface/95 border border-border rounded-2xl p-5 flex flex-col relative overflow-hidden shadow-lg">
+                  <div className="text-[10px] font-bold tracking-[0.2em] uppercase text-muted mb-2.5">Neural Pipeline</div>
+                  <div className="text-[32px] font-bold tracking-tight leading-none text-text">
+                    {latency > 0 ? latency : '—'}
+                    <span className="text-[14px] font-normal text-muted ml-1.5 uppercase">ms</span>
+                  </div>
+                  <div className={`text-[12px] font-bold mt-2 flex items-center gap-1.5 ${connectionColorClass}`}>
+                    <div className={`w-1.5 h-1.5 rounded-full ${connectionDotClass} ${isConnectedState ? 'animate-pulse' : ''}`} />
+                    {connectionLabel}
+                  </div>
+                  <div className="absolute right-0 bottom-0 flex items-end gap-[4px] opacity-20 p-4 h-[50px] pointer-events-none">
+                    {[...Array(12)].map((_, i) => (
+                      <div key={i} className="w-[3px] bg-primary rounded-t-[2px]" style={{ height: `${Math.floor(Math.random() * 25 + 5)}px` }} />
+                    ))}
+                  </div>
+                </div>
+
+                <div className="bg-surface/95 border border-border rounded-2xl p-5 flex flex-col shadow-lg">
+                  <div className="text-[10px] font-bold tracking-[0.2em] uppercase text-muted mb-2.5 text-right">Sync Refresh</div>
+                  <div className="text-[32px] font-bold tracking-tight leading-none text-text tabular-nums text-right">
+                    {fps}
+                    <span className="text-[14px] font-normal text-muted ml-1.5 uppercase">fps</span>
+                  </div>
+                  <div className="text-[12px] font-bold mt-2 text-muted text-right uppercase tracking-[0.05em]">Frontend rendering</div>
+                </div>
+              </div>
             </div>
           )}
 
@@ -725,8 +964,8 @@ export default function SettingsView({
             <div className="flex flex-col gap-4 animate-fade-in">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <h2 className="text-[22px] font-bold tracking-tight">Audio & SFX</h2>
-                  <p className="text-[13px] text-muted mt-1">Configure neural feedback audio and system sounds</p>
+                  <h2 className="text-[30px] font-bold tracking-tight text-white">Audio & SFX</h2>
+                  <p className="text-[15px] text-muted mt-1.5 font-medium">Configure neural feedback audio and system sounds</p>
                 </div>
               </div>
 
@@ -801,8 +1040,8 @@ export default function SettingsView({
             <div className="flex flex-col gap-4 animate-fade-in">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <h2 className="text-[22px] font-bold tracking-tight">Neural Hotkeys</h2>
-                  <p className="text-[13px] text-muted mt-1">Keyboard shortcuts for stream and data operations</p>
+                  <h2 className="text-[30px] font-bold tracking-tight text-white">Neural Hotkeys</h2>
+                  <p className="text-[15px] text-muted mt-1.5 font-medium">Keyboard shortcuts for stream and data operations</p>
                 </div>
                 <button onClick={() => updateDeepSettings('keymap', {})} className="px-3.5 py-1.5 rounded-lg text-[11px] font-bold tracking-[0.06em] cursor-pointer border border-primary/30 bg-primary/10 text-primary hover:bg-primary/20 transition-all">Reset Keymap</button>
               </div>
@@ -832,11 +1071,11 @@ export default function SettingsView({
                             <Icon size={14} className="text-muted" strokeWidth={1.8} />
                           </div>
                           <div>
-                            <div className="text-[14px] font-medium">{label}</div>
-                            <div className="text-[12px] text-muted mt-0.5">{desc}</div>
+                            <div className="text-[15px] font-bold text-text">{label}</div>
+                            <div className="text-[13px] text-muted mt-0.5 font-medium">{desc}</div>
                           </div>
                         </div>
-                        <button onClick={() => setListeningKeyFor(isListening ? null : id)} className={`px-2.5 py-1 text-[11px] font-bold font-mono tracking-[0.04em] rounded-md border ${isListening ? 'bg-primary/20 border-primary/40 text-primary animate-pulse shadow-[0_0_8px_rgba(0,200,240,0.3)]' : 'bg-surface border-border-hi text-muted hover:text-text'}`}>
+                        <button onClick={() => setListeningKeyFor(isListening ? null : id)} className={`px-3 py-1.5 text-[12px] font-bold font-mono tracking-[0.04em] rounded-md border ${isListening ? 'bg-primary/20 border-primary/40 text-primary animate-pulse shadow-[0_0_8px_rgba(0,200,240,0.3)]' : 'bg-surface border-border-hi text-muted hover:text-text'}`}>
                           {isListening ? 'AWAITING...' : formatKeyCode(code)}
                         </button>
                       </div>
@@ -892,95 +1131,95 @@ export default function SettingsView({
             <div className="flex flex-col gap-4 animate-fade-in">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <h2 className="text-[22px] font-bold tracking-tight">Telemetry</h2>
-                  <p className="text-[13px] text-muted mt-1">System diagnostics, session analytics and logging</p>
+                  <h2 className="text-[30px] font-bold tracking-tight text-white">Telemetry</h2>
+                  <p className="text-[15px] text-muted mt-1.5 font-medium">System diagnostics, session analytics and logging</p>
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <div className="bg-surface/95 border border-border rounded-xl p-4 flex flex-col relative overflow-hidden">
-                  <div className="text-[10px] font-bold tracking-[0.1em] uppercase text-muted mb-2">Neural Pipeline</div>
-                  <div className="text-[28px] font-bold tracking-tight leading-none text-text">{latency > 0 ? latency : '—'}<span className="text-[13px] font-normal text-muted ml-1">ms</span></div>
-                  <div className={`text-[12px] mt-1 ${latency > 0 ? 'text-emerald-500' : 'text-red-500'}`}>{latency > 0 ? 'Connected' : 'No device connected'}</div>
+                <div className="bg-surface/95 border border-border rounded-xl p-6 flex flex-col relative overflow-hidden">
+                  <div className="text-[11px] font-bold tracking-[0.1em] uppercase text-muted mb-2">Neural Pipeline</div>
+                  <div className="text-[32px] font-bold tracking-tight leading-none text-text">{latency > 0 ? latency : '—'}<span className="text-[15px] font-normal text-muted ml-1 font-mono">ms</span></div>
+                  <div className={`text-[14px] mt-2 font-medium ${connectionColorClass}`}>{connectionLabel}</div>
                   <div className="absolute right-0 bottom-0 flex items-end gap-[3px] opacity-30 p-3 h-[40px] pointer-events-none">
                     {[...Array(10)].map((_, i) => <div key={i} className="w-[3px] bg-primary rounded-t-[2px]" style={{ height: `${Math.floor(Math.random() * 20 + 4)}px` }} />)}
                   </div>
                 </div>
-                <div className="bg-surface/95 border border-border rounded-xl p-4 flex flex-col">
-                  <div className="text-[10px] font-bold tracking-[0.1em] uppercase text-muted mb-2">Sync Refresh</div>
-                  <div className="text-[28px] font-bold tracking-tight leading-none text-text tabular-nums">{fps}<span className="text-[13px] font-normal text-muted ml-1">fps</span></div>
-                  <div className="text-[12px] mt-1 text-muted">Frontend rendering speed</div>
+                <div className="bg-surface/95 border border-border rounded-xl p-6 flex flex-col">
+                  <div className="text-[11px] font-bold tracking-[0.1em] uppercase text-muted mb-2">Sync Refresh</div>
+                  <div className="text-[32px] font-bold tracking-tight leading-none text-text tabular-nums">{fps}<span className="text-[15px] font-normal text-muted ml-1 font-mono">fps</span></div>
+                  <div className="text-[14px] mt-2 text-muted font-medium">Frontend rendering speed</div>
                 </div>
               </div>
             </div>
           )}
           {/* ACCOUNT */}
           {activeSection === 'account' && (
-            <div className="flex flex-col gap-6 animate-fade-in w-full">
-              <div className="flex flex-col items-center justify-center gap-1.5 mb-5 text-center px-4">
-                <h2 className="text-[26px] font-black tracking-tight text-white flex items-center justify-center gap-3">
-                  <div className="p-2 bg-amber-500/50 rounded-xl border border-amber-500/15">
-                    <UserPlus className="text-amber-500" size={22} strokeWidth={2.5} />
+            <div className="flex flex-col gap-4 animate-fade-in w-full">
+              <div className="flex flex-col items-center justify-center gap-1.5 mt-2 mb-1.5 text-center px-4">
+                <h2 className="text-[32px] font-black tracking-tight text-white flex items-center justify-center gap-4">
+                  <div className="p-2.5 bg-amber-500/50 rounded-xl border border-amber-500/15">
+                    <UserPlus className="text-amber-500" size={24} strokeWidth={2.5} />
                   </div>
                   Account Overview
                 </h2>
-                <p className="text-[13px] text-muted max-w-[450px]">Manage operator settings and link credentials in a compact view</p>
+                <p className="text-[16px] text-muted max-w-[550px] font-medium">Manage operator settings and link credentials in a balanced view</p>
               </div>
 
-              <div className="flex flex-col gap-4 mt-1">
+              <div className="flex flex-col gap-4 mt-1 items-stretch">
                 {/* Profile */}
-                <div className="bg-surface/90 border border-amber-500/20 rounded-2xl p-6 relative overflow-hidden group shadow-[0_8px_32px_rgba(0,0,0,0.15)]">
+                <div className="bg-surface/90 border border-amber-500/20 rounded-2xl p-4 relative overflow-hidden group shadow-[0_8px_32px_rgba(0,0,0,0.15)] flex flex-col justify-center">
                   <div className="flex items-center gap-6 relative z-10">
                     <div className="relative">
-                      <div className="w-[60px] h-[60px] rounded-2xl bg-amber-500/50 border border-amber-500/30 flex items-center justify-center text-[28px] font-black text-amber-500 shadow-inner">
+                      <div className="w-[64px] h-[64px] rounded-2xl bg-amber-500/50 border border-amber-500/30 flex items-center justify-center text-[30px] font-black text-amber-500 shadow-inner">
                         {user?.avatarUrl ? <img src={user.avatarUrl} alt="Avatar" className="w-full h-full object-cover" /> : (user?.username?.charAt(0).toUpperCase() || 'U')}
                       </div>
                       <div className="absolute -bottom-1 -right-1 w-[18px] h-[18px] rounded-full bg-emerald-500 border-[3px] border-[#18181b] shadow-[0_0_12px_rgba(16,185,129,0.5)]"></div>
                     </div>
                     <div className="flex-1">
-                      <div className="text-[10px] tracking-[0.2em] text-amber-500/80 uppercase font-black flex items-center gap-2 mb-1.5 px-0.5">
+                      <div className="text-[11px] tracking-[0.2em] text-amber-500/80 uppercase font-black flex items-center gap-1.5 mb-1 px-0.5">
                         <Activity size={10} className="text-amber-500" /> Neural Operator
                       </div>
-                      <div className="text-[22px] font-bold tracking-tight text-white leading-tight mb-0.5 group-hover:text-amber-500 transition-colors duration-300 uppercase">{user?.username || 'ANONYMOUS'}</div>
-                      <div className="text-[13px] text-muted flex items-center gap-2 mt-0.5 opacity-80">{user?.email || 'operator@neurotech.bci'}</div>
+                      <div className="text-[24px] font-bold tracking-tight text-white leading-tight mb-0 group-hover:text-amber-500 transition-colors duration-300 uppercase">{user?.username || 'ANONYMOUS'}</div>
+                      <div className="text-[15px] text-muted flex items-center gap-2 mt-0.5 opacity-80 font-medium">{user?.email || 'operator@neurotech.bci'}</div>
                     </div>
                   </div>
 
                   {user && (
-                    <div className="mt-4 pt-0 relative z-10">
-                      <button onClick={logout} className="w-full py-2.5 rounded-xl border border-red-500/20 bg-red-500/5 text-red-500 text-[11px] font-bold tracking-[0.1em] uppercase cursor-pointer hover:bg-red-500/10 transition-all flex items-center justify-center gap-2">
-                        <Power size={14} className="opacity-80" /> Disconnect Link
+                    <div className="mt-3 pt-0 relative z-10">
+                      <button onClick={logout} className="w-full py-2 rounded-xl border border-red-500/20 bg-red-500/5 text-red-500 text-[12px] font-bold tracking-[0.1em] uppercase cursor-pointer hover:bg-red-500/10 transition-all flex items-center justify-center gap-2">
+                        <Power size={16} className="opacity-80" /> Disconnect Link
                       </button>
                     </div>
                   )}
                 </div>
 
                 {/* Quick Info */}
-                <div className="bg-surface/90 border border-amber-500/25 rounded-2xl overflow-hidden flex flex-col group shadow-[0_8px_32px_rgba(0,0,0,0.15)]">
-                  <div className="px-5 py-3 border-b border-amber-500/15 flex items-center gap-3 relative z-10 bg-amber-500/30">
-                    <Database size={17} className="text-amber-500" strokeWidth={2.5} />
-                    <span className="text-[13px] font-black tracking-[0.15em] uppercase text-text flex items-center gap-2">
+                <div className="bg-surface/90 border border-amber-500/25 rounded-2xl overflow-hidden flex flex-col group shadow-[0_8px_32px_rgba(0,0,0,0.15)] flex-1 min-h-0">
+                  <div className="px-6 py-3.5 border-b border-amber-500/15 flex items-center gap-4 relative z-10 bg-amber-500/30">
+                    <Database size={20} className="text-amber-500" strokeWidth={2.5} />
+                    <span className="text-[15px] font-black tracking-[0.15em] uppercase text-text flex items-center gap-2">
                       System Status
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-1 flex-1 p-4 gap-2 relative z-10">
+                  <div className="grid grid-cols-1 flex-1 p-4 gap-4 relative z-10">
                     {[
                       { label: 'Available themes', value: themes.length, icon: Palette },
                       { label: 'Active hotkeys', value: Object.keys(settings.keymap?.collection || {}).length, icon: Keyboard },
-                      { label: 'Device status', value: latency > 0 ? 'Online' : 'Offline', icon: Activity, isStatus: true },
+                      { label: 'Device status', value: isConnectedState ? 'Online' : 'Offline', icon: Activity, isStatus: true },
                       { label: 'Target Protocol', value: (settings.general.wsUrl || '').replace('ws://', '').replace('wss://', ''), icon: Globe, highlight: true }
                     ].map((stat, i) => {
                       const StatIcon = stat.icon;
                       return (
-                        <div key={i} className="flex justify-between items-center gap-3 px-4 py-3 rounded-xl hover:bg-amber-500/30 border border-amber-500/5 hover:border-amber-500/20 transition-all duration-300 group/item bg-[#000000]/15 shadow-sm">
-                          <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-lg bg-bg/50 border border-amber-500/20 flex items-center justify-center shadow-inner text-amber-500/80 group-hover/item:text-amber-500 transition-colors duration-300 shrink-0">
-                              <StatIcon size={16} strokeWidth={2} />
+                        <div key={i} className="flex justify-between items-center gap-6 px-5 py-4 rounded-xl hover:bg-amber-500/30 border border-amber-500/5 hover:border-amber-500/20 transition-all duration-300 group/item bg-[#000000]/15 shadow-sm">
+                          <div className="flex items-center gap-6">
+                            <div className="w-12 h-12 rounded-lg bg-bg/50 border border-amber-500/20 flex items-center justify-center shadow-inner text-amber-500/80 group-hover/item:text-amber-500 transition-colors duration-300 shrink-0">
+                              <StatIcon size={20} strokeWidth={2} />
                             </div>
-                            <span className="text-[13px] text-muted font-bold group-hover/item:text-white transition-colors duration-300 leading-tight uppercase tracking-tight">{stat.label}</span>
+                            <span className="text-[17px] text-muted font-bold group-hover/item:text-white transition-colors duration-300 leading-tight uppercase tracking-tight">{stat.label}</span>
                           </div>
-                          <span className={`font-black ${stat.isStatus ? (latency > 0 ? 'text-emerald-500 drop-shadow-[0_0_6px_rgba(16,185,129,0.3)] text-[14px]' : 'text-red-500 font-medium text-[14px]') : (stat.highlight ? 'text-amber-400 font-mono text-[11px] bg-amber-500/10 px-2.5 py-1 rounded-md border border-amber-500/20 cursor-default shadow-sm inline-block max-w-[150px] truncate' : 'text-text text-[15px]')}`}>
+                          <span className={`font-black ${stat.isStatus ? (isConnectedState ? 'text-emerald-500 drop-shadow-[0_0_6px_rgba(16,185,129,0.3)] text-[18px]' : 'text-red-500 font-medium text-[18px]') : (stat.highlight ? 'text-amber-400 font-mono text-[14px] bg-amber-500/10 px-3.5 py-1.5 rounded-md border border-amber-500/20 cursor-default shadow-sm inline-block max-w-[200px] truncate' : 'text-text text-[21px]')}`}>
                             {stat.value}
                           </span>
                         </div>
