@@ -10,6 +10,7 @@ class WebServerState:
         self.connected = False
         self.sample_count = 0
         self.clients = 0
+        self.last_sample_ts = 0.0
         self.sr = 1000 # Default, will be updated from inlet
         self.num_channels = 0
         self.config = {}
