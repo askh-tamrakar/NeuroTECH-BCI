@@ -99,6 +99,20 @@ class ModeManager:
         self.view = view_name
         
         preset_lower = (preset_name or "").lower()
+
+        # Dynamically map the default ch0 to the right active electrode name 
+        # so the UI and backend are aligned cleanly on one-channel setups.
+        try:
+            from ..server.server.state import state
+            if state.channel_mapping and "ch0" in state.channel_mapping:
+                state.channel_mapping["ch0"]["sensor"] = "EEG"
+                if "visual" in preset_lower or "ssvep" in preset_lower or "oz" in preset_lower:
+                    state.channel_mapping["ch0"]["label"] = "Oz"
+                else:
+                    state.channel_mapping["ch0"]["label"] = "Fp1"
+        except ImportError:
+            pass # Server state might not be active in some tests
+
         eeg_cfg = config_manager.get_features_for_sensor("EEG")
         target_freqs = eeg_cfg.get("target_freqs", self.ssvep_freqs)
         if target_freqs:

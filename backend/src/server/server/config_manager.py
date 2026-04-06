@@ -17,11 +17,13 @@ def build_default_config() -> dict:
         "sampling_rate": DEFAULT_SR,
         "channel_mapping": {
             "ch0": {
-                "sensor": "EMG",
+                "sensor": "EEG",
+                "label": "Fp1",
                 "enabled": True
             },
             "ch1": {
                 "sensor": "EEG",
+                "label": "Oz",
                 "enabled": True
             }
         },

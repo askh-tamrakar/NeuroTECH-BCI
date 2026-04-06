@@ -86,7 +86,7 @@ const EEGDashboardContent = ({ wsEvent, isConnected, wsUrl }) => {
     switch (currentView) {
       case "overview": return <OverviewGrid onSelect={handleSelectView} />;
       case "music": return <MusicView result={eegResult} onNavigate={handleSelectView} onBackToMenu={handleBackToMenu} />;
-      case "meditation": return <MeditationView result={eegResult} currentView={currentView} onNavigate={handleSelectView} onBackToMenu={handleBackToMenu} />;
+      case "meditation": return <MeditationView result={eegResult} wsEvent={wsEvent} wsUrl={wsUrl} currentView={currentView} onNavigate={handleSelectView} onBackToMenu={handleBackToMenu} />;
       case "bubble": return <BubbleGameView result={eegResult} isConnected={isConnected} onBackToMenu={handleBackToMenu} onNavigate={handleSelectView} />;
       case "ssvep": return <SSVEPView isConnected={isConnected} wsEvent={wsEvent} onBackToMenu={handleBackToMenu} onNavigate={handleSelectView} />;
       default: return <OverviewGrid onSelect={handleSelectView} />;
