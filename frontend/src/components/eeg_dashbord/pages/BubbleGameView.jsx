@@ -362,16 +362,18 @@ const BubbleGameView = ({ result, isConnected, onBackToMenu }) => {
 
     function getCursorRadius() {
       const isManualMode = mouseModeRef.current;
-
-      const base = isManualMode ? 48 : 30, extra = isManualMode ? 60 : 100;
-      const r = base + eegSignal * extra;
+      const r = isManualMode ? 65 : (20 + eegSignal * 110);
+      
       const cur = $('cursor');
       if (cur) {
         const s = Math.round(r * 2 + 20);
         cur.setAttribute('width', s); cur.setAttribute('height', s);
         cur.style.marginLeft = (-s / 2) + 'px'; cur.style.marginTop = (-s / 2) + 'px';
         const aura = $('cursorAura');
-        if (aura) { aura.setAttribute('cx', s / 2); aura.setAttribute('cy', s / 2); aura.setAttribute('r', s / 2 - 4); aura.setAttribute('opacity', 0.3 + eegSignal * 0.55); }
+        if (aura) { 
+          aura.setAttribute('cx', s / 2); aura.setAttribute('cy', s / 2); aura.setAttribute('r', s / 2 - 4); 
+          aura.setAttribute('opacity', isManualMode ? 0.6 : (0.3 + eegSignal * 0.55)); 
+        }
         $$('#cursor circle').forEach((c, i) => { if (i > 0) { c.setAttribute('cx', s / 2); c.setAttribute('cy', s / 2); } });
       }
       return r;
