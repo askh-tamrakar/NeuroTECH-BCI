@@ -8,7 +8,7 @@
     },
     "ch1": {
       "enabled": true,
-      "sensor": "EEG",
+      "sensor": "EOG",
       "label": "UNUSED"
     }
   },
@@ -19,8 +19,8 @@
   },
   "num_channels": 2,
   "active_models": {
-    "EMG": "Nerp",
+    "EMG": "Neo",
     "EOG": "dino-ml",
-    "EEG": "Neo"
+    "EEG": "Neuro"
   }
 }
