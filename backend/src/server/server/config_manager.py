@@ -1,4 +1,6 @@
 import json
+import os
+import tempfile
 from src.server.server.state import state
 
 from src.utils.paths import ensure_runtime_config_files, get_config_dir
@@ -12,6 +14,39 @@ CALIBRATION_CONFIG_PATH = CONFIG_DIR / "calibration_config.json"
 DETECTION_STATE_PATH = CONFIG_DIR / "detection_state.json"
 SENSOR_PRESETS_PATH = CONFIG_DIR / "sensor_presets.json"
 DEFAULT_SR = 1000
+
+
+def _atomic_write_json(path, payload: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temp_name = tempfile.mkstemp(prefix=f"{path.stem}_", suffix=".tmp", dir=path.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, indent=2)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temp_name, path)
+    finally:
+        if os.path.exists(temp_name):
+            try:
+                os.unlink(temp_name)
+            except OSError:
+                pass
+
+
+def _load_json_retry(path):
+    last_error = None
+    for attempt in range(2):
+        try:
+            with open(path, "r", encoding="utf-8") as handle:
+                return json.load(handle)
+        except json.JSONDecodeError as exc:
+            last_error = exc
+            if attempt == 0:
+                import time
+                time.sleep(0.1)
+                continue
+            raise
+    raise last_error if last_error is not None else ValueError(f"Failed to load JSON from {path}")
 
 
 def build_default_config() -> dict:
@@ -103,10 +138,9 @@ def load_calibration_config() -> dict:
     ensure_runtime_config()
     try:
         if CALIBRATION_CONFIG_PATH.exists():
-            with open(CALIBRATION_CONFIG_PATH, "r") as f:
-                data = json.load(f)
-                if isinstance(data, dict):
-                    return data
+            data = _load_json_retry(CALIBRATION_CONFIG_PATH)
+            if isinstance(data, dict):
+                return data
     except Exception as exc:
         print(f"Warning: error loading calibration config: {exc}")
     return build_default_calibration_config()
@@ -115,9 +149,7 @@ def load_calibration_config() -> dict:
 def save_calibration_config(config: dict) -> bool:
     try:
         ensure_runtime_config()
-        CALIBRATION_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-        with open(CALIBRATION_CONFIG_PATH, "w") as f:
-            json.dump(config if isinstance(config, dict) else {}, f, indent=2)
+        _atomic_write_json(CALIBRATION_CONFIG_PATH, config if isinstance(config, dict) else {})
         return True
     except Exception as exc:
         print(f"Error saving calibration config: {exc}")
@@ -224,8 +256,7 @@ def load_config() -> dict:
     # 1. Load Sensor Config
     if CONFIG_PATH.exists():
         try:
-            with open(CONFIG_PATH) as f:
-                cfg = json.load(f)
+            cfg = _load_json_retry(CONFIG_PATH)
             # Merge with defaults
             merged.update(cfg)
             # Deep merge channel_mapping if needed
@@ -239,8 +270,7 @@ def load_config() -> dict:
     # 2. Load Filter Config (Overrides 'filters' key)
     if FILTER_CONFIG_PATH.exists():
         try:
-             with open(FILTER_CONFIG_PATH) as f:
-                filter_cfg = json.load(f)
+             filter_cfg = _load_json_retry(FILTER_CONFIG_PATH)
              if 'filters' in filter_cfg:
                  merged['filters'] = _normalize_filters(filter_cfg['filters'])
         except Exception as e:
@@ -251,8 +281,7 @@ def load_config() -> dict:
     # 3. Load Feature Config
     if FEATURE_CONFIG_PATH.exists():
         try:
-            with open(FEATURE_CONFIG_PATH) as f:
-                feature_cfg = json.load(f)
+            feature_cfg = _load_json_retry(FEATURE_CONFIG_PATH)
             if isinstance(feature_cfg, dict):
                 merged['features'] = feature_cfg
         except Exception as e:
@@ -279,8 +308,7 @@ def save_config(config: dict) -> bool:
         # 1. Save Filters to filter_config.json
         if 'filters' in config:
             filter_payload = {"filters": _normalize_filters(config['filters'])}
-            with open(FILTER_CONFIG_PATH, 'w') as f:
-                json.dump(filter_payload, f, indent=2)
+            _atomic_write_json(FILTER_CONFIG_PATH, filter_payload)
             print(f"Saved filters to {FILTER_CONFIG_PATH}")
         elif FILTER_CONFIG_PATH.exists():
             FILTER_CONFIG_PATH.unlink()
@@ -288,8 +316,7 @@ def save_config(config: dict) -> bool:
         # 2. Save Features to feature_config.json
         if 'features' in config:
             feature_payload = config['features']
-            with open(FEATURE_CONFIG_PATH, 'w') as f:
-                json.dump(feature_payload, f, indent=2)
+            _atomic_write_json(FEATURE_CONFIG_PATH, feature_payload)
             print(f"Saved features to {FEATURE_CONFIG_PATH}")
         elif FEATURE_CONFIG_PATH.exists():
             FEATURE_CONFIG_PATH.unlink()
@@ -301,8 +328,7 @@ def save_config(config: dict) -> bool:
         if 'features' in sensor_payload:
             del sensor_payload['features']
         
-        with open(CONFIG_PATH, 'w') as f:
-            json.dump(sensor_payload, f, indent=2)
+        _atomic_write_json(CONFIG_PATH, sensor_payload)
         
         print(f"Saved sensor config to {CONFIG_PATH}")
         state.config = config
@@ -318,13 +344,12 @@ def get_detection_config() -> dict:
     ensure_runtime_config()
     try:
         if DETECTION_STATE_PATH.exists():
-            with open(DETECTION_STATE_PATH, 'r') as f:
-                data = json.load(f)
-                if isinstance(data, dict):
-                    return {
-                        "active": bool(data.get("active", False)),
-                        "target": data.get("target")
-                    }
+            data = _load_json_retry(DETECTION_STATE_PATH)
+            if isinstance(data, dict):
+                return {
+                    "active": bool(data.get("active", False)),
+                    "target": data.get("target")
+                }
         return {"active": False, "target": None}
     except:
         return {"active": False, "target": None}
@@ -342,11 +367,12 @@ def set_detection_state(active: bool, target: str | None = None):
     """Write detection active state and routed target to file."""
     try:
         ensure_runtime_config()
-        DETECTION_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
-        with open(DETECTION_STATE_PATH, 'w') as f:
-            json.dump({
+        _atomic_write_json(
+            DETECTION_STATE_PATH,
+            {
                 "active": bool(active),
                 "target": (str(target).upper() if target and active else None)
-            }, f)
+            },
+        )
     except Exception as e:
         print(f"Error saving detection state: {e}")

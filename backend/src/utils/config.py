@@ -15,6 +15,7 @@ Provides:
 
 import json
 import os
+import tempfile
 import threading
 import time
 from pathlib import Path
@@ -24,6 +25,24 @@ import logging
 # Set up logging
 from .logging_cfg import get_logger
 logger = get_logger(__name__)
+
+
+def _atomic_write_json(path: Path, payload: Dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temp_name = tempfile.mkstemp(prefix=f"{path.stem}_", suffix=".tmp", dir=path.parent)
+    temp_path = Path(temp_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, indent=2)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temp_path, path)
+    finally:
+        if temp_path.exists():
+            try:
+                temp_path.unlink()
+            except OSError:
+                pass
 
 
 class ConfigWatcher:
@@ -52,8 +71,22 @@ class ConfigWatcher:
                 logger.warning(f"⚠️ {self.name} file not found: {self.config_path}")
                 return False
 
-            with open(self.config_path, "r", encoding="utf-8") as f:
-                config = json.load(f)
+            config = None
+            last_error = None
+            for attempt in range(2):
+                try:
+                    with open(self.config_path, "r", encoding="utf-8") as f:
+                        config = json.load(f)
+                    break
+                except json.JSONDecodeError as exc:
+                    last_error = exc
+                    if attempt == 0:
+                        time.sleep(0.1)
+                        continue
+                    raise
+
+            if config is None:
+                raise last_error if last_error is not None else ValueError("Config load returned no data")
 
             with self._lock:
                 self._config_cache = config
@@ -163,9 +196,8 @@ class ConfigWriter:
             # Create directory if needed
             self.config_path.parent.mkdir(parents=True, exist_ok=True)
 
-            # Write file
-            with open(self.config_path, "w", encoding="utf-8") as f:
-                json.dump(config, f, indent=2)
+            # Write file atomically so watchers do not see truncated JSON.
+            _atomic_write_json(self.config_path, config)
 
             logger.info(f"💾 {self.name} saved: {self.config_path}")
             return True
