@@ -205,7 +205,10 @@ def train_eeg_lda_model(table_name="eeg_windows", train_split=0.7, val_split=0.1
         test_df = df[groups.isin(test_groups)].copy()
 
     train_groups = train_df[group_col].astype(str)
-    if len(train_groups.unique()) >= resolved_split["k_folds"]:
+    if resolved_split["k_folds"] <= 1:
+        row_indices = np.arange(len(train_df))
+        folds = [(row_indices, np.array([], dtype=int))]
+    elif len(train_groups.unique()) >= resolved_split["k_folds"]:
         folds = list(GroupKFold(n_splits=resolved_split["k_folds"]).split(train_df, train_df["label"], train_groups))
     else:
         row_indices = np.arange(len(train_df))
@@ -244,9 +247,13 @@ def train_eeg_lda_model(table_name="eeg_windows", train_split=0.7, val_split=0.1
             fold_val = train_df.iloc[val_idx].copy()
             scaler = StandardScaler()
             x_train = scaler.fit_transform(fold_train[feature_cols].fillna(0.0))
-            x_val = scaler.transform(fold_val[feature_cols].fillna(0.0))
             y_train = fold_train["label"].astype(int)
-            y_val = fold_val["label"].astype(int)
+            if len(fold_val) == 0:
+                x_val = x_train
+                y_val = y_train
+            else:
+                x_val = scaler.transform(fold_val[feature_cols].fillna(0.0))
+                y_val = fold_val["label"].astype(int)
 
             model = LinearDiscriminantAnalysis(
                 solver=candidate_params["solver"],

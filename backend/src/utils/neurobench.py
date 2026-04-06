@@ -8,6 +8,14 @@ import random
 import threading
 import queue
 from pathlib import Path
+
+# --- Path Bootstrapping ---
+# Add the 'backend' directory to sys.path to support 'src' imports when run directly
+backend_root = Path(__file__).resolve().parents[2]
+if str(backend_root) not in sys.path:
+    sys.path.insert(0, str(backend_root))
+# --------------------------
+
 from datetime import datetime
 from PySide6 import QtCore, QtWidgets, QtGui
 import pyqtgraph as pg
@@ -15,6 +23,7 @@ import numpy as np
 import socket
 import brainflow
 from brainflow.board_shim import BoardShim, BrainFlowInputParams, BoardIds
+from src.utils.paths import get_config_dir
 
 # Optional: serial backend
 try:
@@ -25,8 +34,7 @@ except Exception:
     list_ports = None
 
 APP_NAME = "SignalForge (mock device)"
-# Fix path to be relative to this script location
-CONFIG_PATH = Path(__file__).parent.parent.parent / "config" / "sensor_config.json"
+CONFIG_PATH = get_config_dir() / "sensor_config.json"
 SYNC1 = 0xC7
 SYNC2 = 0x7C
 END_BYTE = 0x01

@@ -19,24 +19,24 @@ from scipy import stats as scipy_stats
 # Imports for ML logic
 from src.learning.emg_trainer import (
     train_emg_model,
-    evaluate_saved_model, list_saved_models as list_saved_emg_models, 
+    list_saved_models as list_saved_emg_models, 
     delete_model as delete_emg_model, 
     load_model as load_emg_model, 
     get_model_tree_structure
 )
 from src.learning.eog_trainer import (
     train_eog_model, 
-    evaluate_saved_eog_model, 
     list_saved_models as list_saved_eog_models, 
     delete_model as delete_eog_model, 
     load_model as load_eog_model
 )
-from src.learning.eeg_lda_trainer import train_eeg_lda_model, evaluate_eeg_lda_model
+from src.learning.eeg_lda_trainer import train_eeg_lda_model
 from src.config.window_config import SESSION_CONFIG
 from src.feature.extractors.rps_extractor import EMG_BASE_FEATURES, EMG_FEATURE_COLUMNS
 from src.server.server.services.training_job_service import (
     create_training_job as _create_training_job,
     job_snapshot as _job_snapshot,
+    request_training_job_cancel as _request_training_job_cancel,
     run_training_job as _run_training_job,
 )
 
@@ -323,35 +323,13 @@ def api_get_training_job(job_id):
     return job
 
 
-@training_bp.post('/api/model/evaluate')
-def api_eval_emg(payload: dict | None = Body(default=None)):
-    params = payload or {}
-    table_name = params.get('table_name') or 'emg_windows'
-    model_name = params.get('model_name')
-    res = evaluate_saved_model(sensor='EMG', table_name=table_name, model_name=model_name)
-    if "error" in res:
-        return res
-    return res
+@training_bp.post('/api/train-jobs/{job_id}/cancel')
+def api_cancel_training_job(job_id):
+    job = _request_training_job_cancel(job_id)
+    if not job:
+        return _json({"error": "Training job not found"}, 404)
+    return job
 
-@training_bp.post('/api/model/evaluate/eog')
-def api_eval_eog(payload: dict | None = Body(default=None)):
-    params = payload or {}
-    table_name = params.get('table_name') or 'eog_windows'
-    model_name = params.get('model_name')
-    res = evaluate_saved_eog_model(table_name=table_name, model_name=model_name)
-    if "error" in res:
-        return res
-    return res
-
-@training_bp.post('/api/model/evaluate/eeg')
-def api_eval_eeg(payload: dict | None = Body(default=None)):
-    params = payload or {}
-    table_name = params.get('table_name') or 'eeg_windows'
-    model_name = params.get('model_name')
-    res = evaluate_eeg_lda_model(table_name=table_name, model_name=model_name)
-    if "error" in res:
-        return res
-    return res
 
 @training_bp.get('/api/models/emg')
 def api_list_emg_models():

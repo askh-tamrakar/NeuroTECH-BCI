@@ -9,6 +9,10 @@ TRAINING_JOBS = {}
 TRAINING_JOBS_LOCK = threading.Lock()
 
 
+class TrainingCancelledError(Exception):
+    pass
+
+
 def job_snapshot(job_id):
     with TRAINING_JOBS_LOCK:
         job = TRAINING_JOBS.get(job_id)
@@ -47,6 +51,7 @@ def create_training_job(sensor: str, model_name: str):
         "history": [],
         "result": None,
         "error": None,
+        "cancel_requested": False,
         "_started_at": now,
     }
     with TRAINING_JOBS_LOCK:
@@ -78,15 +83,23 @@ def finalize_training_job(job_id, *, status: str, result=None, error=None, histo
     return update_training_job(
         job_id,
         status=status,
-        progress=1.0 if status == "completed" else float((job_snapshot(job_id) or {}).get("progress") or 0.0),
+        progress=1.0 if status == "completed" else (float((job_snapshot(job_id) or {}).get("progress") or 0.0) if status != "cancelled" else 0.0),
         result=result,
         error=error,
         history=history if history is not None else (job_snapshot(job_id) or {}).get("history", []),
     )
 
 
+def request_training_job_cancel(job_id):
+    snapshot = update_training_job(job_id, cancel_requested=True, status="cancelling")
+    return snapshot
+
+
 def run_training_job(job_id, trainer, trainer_kwargs, *, on_success=None):
     def progress_callback(update):
+        snapshot = job_snapshot(job_id)
+        if snapshot and snapshot.get("cancel_requested"):
+            raise TrainingCancelledError("Training cancelled by user")
         update = dict(update or {})
         history = update.get("history")
         if history is not None:
@@ -97,6 +110,10 @@ def run_training_job(job_id, trainer, trainer_kwargs, *, on_success=None):
         try:
             update_training_job(job_id, status="running")
             result = trainer(progress_callback=progress_callback, **trainer_kwargs)
+            snapshot = job_snapshot(job_id)
+            if snapshot and snapshot.get("cancel_requested"):
+                finalize_training_job(job_id, status="cancelled", error="Training cancelled by user")
+                return
             if isinstance(result, dict) and result.get("error"):
                 finalize_training_job(job_id, status="failed", error=result.get("error"))
                 return
@@ -108,6 +125,8 @@ def run_training_job(job_id, trainer, trainer_kwargs, *, on_success=None):
                 result=result,
                 history=result.get("training_history", []) if isinstance(result, dict) else [],
             )
+        except TrainingCancelledError as exc:
+            finalize_training_job(job_id, status="cancelled", error=str(exc))
         except Exception as exc:
             finalize_training_job(job_id, status="failed", error=str(exc))
 

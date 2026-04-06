@@ -6,6 +6,8 @@ import sys
 import os
 import time
 import struct
+import json
+import tempfile
 import numpy as np
 
 # Ensure we can import sibling packages
@@ -16,6 +18,7 @@ if src_dir not in sys.path:
 
 from src.acquisition.lsl_streams import LSLStreamer, LSL_AVAILABLE
 from src.utils.config import config_manager
+from src.utils.paths import get_runtime_state_dir
 
 class StreamManagerApp:
     def __init__(self, root):
@@ -33,6 +36,8 @@ class StreamManagerApp:
         self.raw_clients = []
         self.client_socket = None
         self.packet_count = 0
+        self.status_path = get_runtime_state_dir() / "stream_manager_status.json"
+        self._last_status_write_error = 0.0
         
         # LSL
         self.lsl_stream = None
@@ -89,6 +94,56 @@ class StreamManagerApp:
         
         # Auto-Start Server for Pipeline Compatibility
         self.start_server()
+
+    def _write_runtime_status(self):
+        payload = {
+            "running": bool(self.is_running),
+            "raw_ingress_client_count": len(self.raw_clients),
+            "packet_count": self.packet_count,
+            "updated_at": time.time(),
+        }
+        temp_path = None
+        try:
+            self.status_path.parent.mkdir(parents=True, exist_ok=True)
+            fd, temp_name = tempfile.mkstemp(
+                prefix=f"{self.status_path.stem}_",
+                suffix=".tmp",
+                dir=self.status_path.parent,
+            )
+            temp_path = temp_name
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                json.dump(payload, handle, indent=2)
+                handle.flush()
+                os.fsync(handle.fileno())
+
+            for _ in range(5):
+                try:
+                    os.replace(temp_path, self.status_path)
+                    temp_path = None
+                    return
+                except PermissionError:
+                    time.sleep(0.05)
+                except FileNotFoundError:
+                    temp_path = None
+                    return
+                except Exception:
+                    raise
+
+            now = time.time()
+            if now - self._last_status_write_error >= 5:
+                self._last_status_write_error = now
+                self.log("Status write skipped: runtime status file is temporarily busy.")
+        except Exception as exc:
+            now = time.time()
+            if now - self._last_status_write_error >= 5:
+                self._last_status_write_error = now
+                self.log(f"Status write error: {exc}")
+        finally:
+            if temp_path:
+                try:
+                    os.remove(temp_path)
+                except OSError:
+                    pass
 
     @staticmethod
     def get_local_ip():
@@ -174,6 +229,7 @@ class StreamManagerApp:
             return
 
         self.is_running = True
+        self._write_runtime_status()
         self.btn_start.config(state="disabled")
         self.btn_stop.config(state="normal")
         self.status_var.set(f"Listening on Ports 6000, 6001, 6002...")
@@ -202,6 +258,7 @@ class StreamManagerApp:
         self.server_socket_raw = None
         self.server_socket_proc = None
         self.server_socket_events = None
+        self._write_runtime_status()
 
         self.status_var.set("Stopped")
         self.connection_var.set("No Client Connected")
@@ -234,6 +291,7 @@ class StreamManagerApp:
                         t = threading.Thread(target=self._handle_client, args=(conn, addr), daemon=True)
                         t.start()
                         self.raw_clients.append((conn, addr))
+                        self._write_runtime_status()
                         self.root.after_idle(lambda: self.connection_var.set(f"Connected (Raw): {len(self.raw_clients)} clients"))
                         
                     elif name == "Processed":
@@ -333,6 +391,8 @@ class StreamManagerApp:
                             if self.packet_count % 2560 == 0:
                                 self.log(f"P: {counter} | {ch0_uv:.2f} uV (Batched)") 
                             self.packet_count += 1
+                            if self.packet_count % 32 == 0:
+                                self._write_runtime_status()
                             
                         # Consume packet
                         buffer = buffer[8:]
@@ -354,6 +414,7 @@ class StreamManagerApp:
             conn.close()
             # Remove from list
             self.raw_clients = [c for c in self.raw_clients if c[1] != addr]
+            self._write_runtime_status()
             self.root.after_idle(lambda: self.connection_var.set(f"Connected (Raw): {len(self.raw_clients)} clients"))
             self.log(f"Raw Client disconnected: {addr}")
 

@@ -1,5 +1,7 @@
 import os
 import sys
+import json
+import shutil
 from pathlib import Path
 
 # Try to find the project root dynamically, or fallback to the current file's ancestor
@@ -19,6 +21,7 @@ def get_project_root():
     
 PROJECT_ROOT = get_project_root()
 FRONTEND_DIR = PROJECT_ROOT / "frontend"
+DATA_DIR = PROJECT_ROOT / "data"
 
 def get_base_data_dir() -> Path:
     """
@@ -58,6 +61,46 @@ def get_models_dir(sensor_type: str) -> Path:
     return path
 
 def get_config_dir() -> Path:
-    path = PROJECT_ROOT / "config"
+    path = DATA_DIR / "config"
     path.mkdir(parents=True, exist_ok=True)
     return path
+
+def get_runtime_state_dir() -> Path:
+    path = DATA_DIR / "runtime"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _json_copy_if_exists(candidates: list[Path], destination: Path) -> bool:
+    for candidate in candidates:
+        try:
+            if candidate.exists() and candidate.is_file():
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(candidate, destination)
+                return True
+        except Exception:
+            continue
+    return False
+
+
+def ensure_runtime_config_files(default_payloads: dict[str, object]) -> Path:
+    config_dir = get_config_dir()
+    legacy_dirs = [
+        PROJECT_ROOT / "config",
+        PROJECT_ROOT / "backend" / "config",
+    ]
+
+    for filename, payload in default_payloads.items():
+        destination = config_dir / filename
+        if destination.exists():
+            continue
+
+        candidates = [legacy_dir / filename for legacy_dir in legacy_dirs]
+        if _json_copy_if_exists(candidates, destination):
+            continue
+
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        with open(destination, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, indent=2)
+
+    return config_dir

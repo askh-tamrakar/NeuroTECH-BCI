@@ -18,6 +18,7 @@ import Pill from './ui/navigation/Pill';
 import { ConnectionButton } from './ui/display/ConnectionButton';
 import Brain3D from './ui/display/Brain3D';
 import MobileNav from './ui/navigation/MobileNav';
+import { deriveApiUrlFromWs, getRuntimeConnection } from '../utils/runtimeConnection';
 
 export default function Dashboard() {
   const { user, logout } = useAuth()
@@ -32,19 +33,23 @@ export default function Dashboard() {
   const wsUrl = settings.general.wsUrl || '';
 
   // These are now just helpers for the Settings View, not the source of truth for the hook
-  const [localWs, setLocalWs] = useState('')
+  const [localWs, setLocalWs] = useState(() => getRuntimeConnection().wsUrl || '')
   const [ngrokWs, setNgrokWs] = useState('wss://squelchingly-thriftier-cecile.ngrok-free.dev')
 
-  const { status, lastMessage, lastConfig, lastEvent, latency, connect, disconnect, sendMessage, currentUrl } = useWebSocket(wsUrl)
+  const { status, connectionStatus, lastMessage, lastConfig, lastEvent, latency, connect, disconnect, sendMessage, currentUrl } = useWebSocket(wsUrl)
   const [authView, setAuthView] = useState(null);
   const isAuthenticated = !!user;
+  const resolvedConnection = getRuntimeConnection();
+  const activeWsUrl = currentUrl || resolvedConnection.wsUrl || wsUrl || '';
+  const apiUrl = connectionStatus?.resolved_api_url || resolvedConnection.apiUrl || settings.general.apiUrl || '';
+  const streamConnected = status === 'streaming' || status === 'connected' || status === 'stream_offline';
 
   // Derived nav colors from current theme
   const navColors = React.useMemo(() => ({
-    base: currentTheme.colors['--accent'],
-    pill: currentTheme.colors['--text'],
-    pillText: currentTheme.colors['--accent'],
-    hoverText: currentTheme.colors['--text']
+    base: currentTheme.navPill,
+    pill: currentTheme.navBase,
+    pillText: currentTheme.navPill,
+    hoverText: currentTheme.navBase
   }), [currentTheme]);
 
   // Pill size calculation
@@ -94,6 +99,12 @@ export default function Dashboard() {
     }
   }, [])
 
+  useEffect(() => {
+    if (!localWs) {
+      setLocalWs(activeWsUrl)
+    }
+  }, [activeWsUrl, localWs])
+
   const handleSignupSuccess = () => {
     setAuthView(null);
   };
@@ -130,10 +141,10 @@ export default function Dashboard() {
                   setTheme(t.id);
                   close?.();
                 }}
-                baseColor={t.colors['--text']}
-                pillColor={t.colors['--accent']}
-                hoveredTextColor={t.colors['--accent']}
-                pillTextColor={t.colors['--text']}
+                baseColor={t.navBase}
+                pillColor={t.navPill}
+                hoveredTextColor={t.navPill}
+                pillTextColor={t.navBase}
               />
             </ScrollStackItem>
           ))}
@@ -205,13 +216,13 @@ export default function Dashboard() {
               <>
                 {showSpacers && <div className="h-[85px] shrink-0" />}
 
-                {currentPage === 'live' && <LiveDashboard wsData={lastMessage} wsConfig={lastConfig} wsEvent={lastEvent} sendMessage={sendMessage} wsUrl={status === 'connected' ? (currentUrl || defaultWsSource) : null} mobileMainView={mobileMainView} setMobileMainView={setMobileMainView} />}
-                {currentPage === 'dino' && <DinoView isConnected={!!lastMessage} wsEvent={lastEvent} isPaused={false} />}
-                {currentPage === 'eeg_dashboard' && <EEGDashboard isConnected={!!lastMessage} wsEvent={lastEvent} wsUrl={status === 'connected' ? (currentUrl || defaultWsSource) : null} />}
+                {currentPage === 'live' && <LiveDashboard wsData={lastMessage} wsConfig={lastConfig} wsEvent={lastEvent} sendMessage={sendMessage} wsUrl={streamConnected ? activeWsUrl : null} mobileMainView={mobileMainView} setMobileMainView={setMobileMainView} />}
+                {currentPage === 'dino' && <DinoView isConnected={streamConnected} wsEvent={lastEvent} isPaused={false} />}
+                {currentPage === 'eeg_dashboard' && <EEGDashboard isConnected={streamConnected} wsEvent={lastEvent} wsUrl={streamConnected ? activeWsUrl : null} />}
                 {currentPage === 'rps' && <RPSGame wsEvent={lastEvent} />}
-                {currentPage === 'lab' && <LabView wsData={lastMessage} wsEvent={lastEvent} config={lastConfig} wsUrl={status === 'connected' ? (currentUrl || defaultWsSource) : null} />}
-                {currentPage === 'servo_claw' && <ServoClawView wsEvent={lastEvent} isConnected={!!lastMessage} />}
-                {currentPage === 'settings' && <SettingsView latency={latency} localWs={localWs} setLocalWs={setLocalWs} ngrokWs={ngrokWs} setNgrokWs={setNgrokWs} activeSection={activeSettingsSection} onSectionChange={setActiveSettingsSection} connect={(url) => { updateDeepSettings('general.wsUrl', url); connect(url); }} />}
+                {currentPage === 'lab' && <LabView wsData={lastMessage} wsEvent={lastEvent} config={lastConfig} wsUrl={streamConnected ? activeWsUrl : null} />}
+                {currentPage === 'servo_claw' && <ServoClawView wsEvent={lastEvent} isConnected={streamConnected} />}
+                {currentPage === 'settings' && <SettingsView latency={latency} connectionState={status} connectionStatus={connectionStatus} apiUrl={apiUrl} localWs={localWs} setLocalWs={setLocalWs} ngrokWs={ngrokWs} setNgrokWs={setNgrokWs} activeSection={activeSettingsSection} onSectionChange={setActiveSettingsSection} connect={(nextWsUrl) => { const nextApiUrl = deriveApiUrlFromWs(nextWsUrl) || apiUrl; updateDeepSettings('general.apiUrl', nextApiUrl); updateDeepSettings('general.wsUrl', nextWsUrl); connect(nextWsUrl); }} />}
 
                 {showSpacers && <div className="h-[35px] shrink-0" />}
               </>

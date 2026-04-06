@@ -8,7 +8,8 @@ import {
     Database, Hand, Eye, Network, Grid3X3, Brain, PieChart,
     RefreshCw, Sliders, ChevronLeft, ChevronRight, Circle,
     ArrowRightFromLine, Info, BookOpen, BrainCircuit,
-    Clock, Activity, Fingerprint, Layers, Timer, Cpu, GitMerge, Search, Zap, GitBranch, MousePointer2
+    Clock, Activity, Fingerprint, Layers, Timer, Cpu, GitMerge,
+    Search, Zap, GitBranch, MousePointer2
 } from 'lucide-react';
 import { soundHandler } from '../../handlers/SoundHandler';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -169,14 +170,8 @@ const SplitAccuracyCard = ({ result, models, selectedModelName, onSelectModel, o
                                     kFolds={params?.k_folds === '' ? '' : (params?.k_folds || 5)}
                                     onFoldChange={(k) => {
                                         const validK = Math.max(1, k);
-                                        const testRatio = params?.test_ratio || 0.15;
-                                        const remaining = Math.max(0, 1.0 - testRatio);
-                                        const valRatio = parseFloat((remaining / validK).toFixed(3));
-                                        const trainRatio = parseFloat((remaining - valRatio).toFixed(3));
                                         onParamsChange({
                                             k_folds: validK,
-                                            val_ratio: valRatio,
-                                            train_ratio: trainRatio
                                         });
                                     }}
                                     verdict={{
@@ -656,8 +651,8 @@ const formatDuration = (seconds) => {
 
 const HyperparametersCard = ({ params, setParamsTab, activeTab, models = [] }) => {
     const [view] = useState('params'); // 'params' or 'runs'
-    const minVal = Math.round((params.train_ratio || 0.7) * 100);
-    const maxVal = Math.round(((params.train_ratio || 0.7) + (params.val_ratio || 0.15)) * 100);
+    const minVal = Math.max(1, Math.round((params.train_ratio || 0.7) * 100));
+    const maxVal = Math.min(99, Math.max(minVal, Math.round(((params.train_ratio || 0.7) + (params.val_ratio || 0.15)) * 100)));
 
     return (
         <div className=" h-full flex flex-col px-2 pt-2 bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-sm relative group/card overflow-hidden">
@@ -699,12 +694,14 @@ const HyperparametersCard = ({ params, setParamsTab, activeTab, models = [] }) =
                             minLimit={1}
                             maxLimit={99}
                             onChange={({ min, max }) => {
-                                const trainRatio = parseFloat((min / 100).toFixed(3));
-                                const valRatio = parseFloat(((max - min) / 100).toFixed(3));
-                                const testRatio = parseFloat(((100 - max) / 100).toFixed(3));
+                                const clampedMin = Math.max(1, min);
+                                const clampedMax = Math.min(99, max);
+                                const trainRatio = parseFloat((clampedMin / 100).toFixed(3));
+                                const valRatio = parseFloat(((clampedMax - clampedMin) / 100).toFixed(3));
+                                const testRatio = parseFloat(((100 - clampedMax) / 100).toFixed(3));
                                 const totalNonTest = trainRatio + valRatio;
                                 const rawK = Math.round(totalNonTest / (valRatio || 0.001));
-                                const k = Math.max(2, Math.min(20, rawK));
+                                const k = Math.max(1, Math.min(20, rawK));
 
                                 setParamsTab({
                                     train_ratio: trainRatio,
@@ -721,7 +718,7 @@ const HyperparametersCard = ({ params, setParamsTab, activeTab, models = [] }) =
                             <span className="text-[14px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em]">Search Resolution</span>
                             <span className="text-[20px] text-[var(--header-text)] font-black font-mono leading-none">{params.search_resolution}</span>
                         </div>
-                        <CustomSlider min={2} max={10} step={1}
+                        <CustomSlider min={1} max={10} step={1}
                             backgroundColor="var(--bg)"
                             value={params.search_resolution} onChange={(value) => setParamsTab({ search_resolution: value })} />
                     </div>
@@ -737,7 +734,7 @@ const HyperparametersCard = ({ params, setParamsTab, activeTab, models = [] }) =
                                         <span >{params.n_estimators_max || 200}</span></div>
                                 </div>
 
-                                <RangeSlider min={5} max={500} step={15}
+                                <RangeSlider min={5} max={500} step={5}
                                     leftColor="var(--muted)" rightColor="var(--muted)"
                                     minValue={params.n_estimators_min || 50} maxValue={params.n_estimators_max || 200} hideLabels={true} compact={true} color="var(--primary)" onChange={(vals) => setParamsTab({ n_estimators_min: vals.min, n_estimators_max: vals.max })} />
                             </div>
@@ -804,6 +801,17 @@ const HyperparametersCard = ({ params, setParamsTab, activeTab, models = [] }) =
 
 const TrainingStatusDashboard = ({ job, countdown, params, selectedHistoryItem, onSelectHistory }) => {
     const latestFold = job?.history?.[job.history.length - 1];
+    const latestCandidateIndex = latestFold?.candidate_index ?? latestFold?.candidate_idx;
+    const currentCandidateFolds = latestCandidateIndex === undefined
+        ? []
+        : (job?.history || []).filter((item) => (item?.candidate_index ?? item?.candidate_idx) === latestCandidateIndex);
+    const candidateComplete = currentCandidateFolds.length > 0 && currentCandidateFolds.length >= Math.max(1, job?.total_folds || 1);
+    const candidateMeanAccuracy = candidateComplete
+        ? currentCandidateFolds.reduce((acc, item) => acc + Number(item?.validation_accuracy ?? item?.accuracy ?? 0), 0) / currentCandidateFolds.length
+        : null;
+    const currentAccuracyText = candidateMeanAccuracy !== null
+        ? `Mean - ${pct(candidateMeanAccuracy)}`
+        : (latestFold ? pct(latestFold.validation_accuracy ?? latestFold.accuracy) : '--');
 
     // Map parameters to icons
     const getParamIcon = (key) => {
@@ -848,7 +856,7 @@ const TrainingStatusDashboard = ({ job, countdown, params, selectedHistoryItem, 
                         </div>
                         <div className="flex items-center gap-3">
                             <div className="text-[24px] font-black text-[var(--text-success)] font-mono leading-none">
-                                {latestFold ? pct(latestFold.accuracy) : '--'}
+                                {currentAccuracyText}
                             </div>
                             <Target size={24} className=" text-[var(--primary)]" />
                         </div>
@@ -968,17 +976,13 @@ const TrainingStatusDashboard = ({ job, countdown, params, selectedHistoryItem, 
     );
 };
 
-const DataInsightCard = ({ result, sensor, params, selectedSessionName, embedded = false, onMatrixToggle }) => {
+const DataInsightCard = ({ result, sensor, params, embedded = false, onMatrixToggle }) => {
     if (!result) return <div className={`p-4 ${card} h-full text-[var(--muted)] flex items-center justify-center italic relative`}>No insight data available yet.</div>;
 
     const v = getVerdict(result.train_accuracy, result.validation_accuracy, result.test_accuracy || result.accuracy);
     const cleanedSessionName = (name) => String(name || '').replace(/^[a-z]+_session_/i, '');
-    const trainedSessionNames = Array.isArray(result?.session_names) && result.session_names.length
-        ? result.session_names
-        : (result?.session_name ? [result.session_name] : []);
-    const trainedSessionLabel = trainedSessionNames.length
-        ? trainedSessionNames.map(cleanedSessionName).join(', ')
-        : cleanedSessionName(selectedSessionName || '--');
+    const trainedSessionNames = Array.isArray(result.session_names) ? result.session_names : (result.session_names ? [result.session_names] : []);
+    const trainedSessionLabel = [...new Set(trainedSessionNames.map(cleanedSessionName))].join(', ') || 'All Available Data';
     const trainedSampleCount = result?.n_samples ?? result?.split_summary?.total_samples ?? '--';
     const groupCount = result?.group_counts ? Object.keys(result.group_counts).length : '--';
     const classLabelSummary = Array.isArray(result?.labels) && result.labels.length ? result.labels.join(', ') : '--';
@@ -1047,7 +1051,13 @@ const DataInsightCard = ({ result, sensor, params, selectedSessionName, embedded
                             </div>
                         </div>
 
-                        <div className="space-y-2 py-2">
+                        <div className="space-y-2 py-0">
+                            <div className='flex flex-row justify-between w-full'>
+                                <div className="text-[14px] uppercase tracking-[0.2em] text-[var(--muted)] mb-0.5 font-black">
+                                    Data Source</div>
+                                <div className="text-[12px] uppercase tracking-[0.2em] text-[var(--muted)] mb-0.5 font-black">
+                                    Samples</div>
+                            </div>
                             <div className="flex flex-row justify-between w-full">
                                 <span className="text-[18px] font-black text-[var(--text)] truncate opacity-90" title={trainedSessionLabel}>{trainedSessionLabel}</span>
 
@@ -1057,16 +1067,16 @@ const DataInsightCard = ({ result, sensor, params, selectedSessionName, embedded
                     </div>
 
                     {/* Verdict Box */}
-                    <div className={`mt-auto border-t ${v.bg} rounded-xl p-3 shadow-inner relative overflow-hidden group`}>
+                    <div className={`mt-0.5 border-t ${v.bg} rounded-xl p-1 shadow-inner relative overflow-hidden group`}>
                         <div className="absolute top-2 right-6 opacity-5 blur-[1px] group-hover:opacity-10 transition-opacity">
                             <Target size={80} color='var(--primary)' />
                         </div>
                         <div className="absolute bottom-[-18px] left-[-14px] opacity-5 blur-[1px] group-hover:opacity-15 transition-opacity">
                             <Target size={90} color='var(--primary)' />
                         </div>
-                        <div className="text-[12px] text-[var(--muted)] uppercase font-black tracking-widest mb-1">Model Suitability</div>
+                        <div className="text-[12px] text-[var(--muted)] uppercase font-black tracking-widest">Model Suitability</div>
                         <div className={`text-[24px] font-black tracking-tight ${v.color}`}>{v.text}</div>
-                        {v.desc && <div className="text-[12px] text-[var(--text)] opacity-80 mt-1 font-medium leading-tight">{v.desc}</div>}
+                        {v.desc && <div className="text-[12px] text-[var(--text)] opacity-80 mt-0.5 font-medium leading-tight">{v.desc}</div>}
                     </div>
                 </div>
 
@@ -1586,7 +1596,9 @@ const DecisionTreeCard = ({ structure, treeIndex, totalTrees, onTreeChange, load
 // // Updated ControlPanel (Added Model Name Input)
 const ControlPanel = ({
     onTrain,
+    onStopTraining,
     loading,
+    trainingActive = false,
     sessions,
     selectedSession,
     onSessionSelect,
@@ -1595,7 +1607,9 @@ const ControlPanel = ({
     setActiveTab,
     modelName,
     setModelName,
-    onSwitchLab
+    onSwitchLab,
+    sessionLocked = false,
+    onModelNameFocus
 }) => (
     <div className="space-y-4">
         {/* Session Select */}
@@ -1645,6 +1659,7 @@ const ControlPanel = ({
                     type="text"
                     value={modelName}
                     onChange={(e) => setModelName(e.target.value)}
+                    onFocus={onModelNameFocus}
                     placeholder={`Name for new ${activeTab} model...`}
                     className="w-full bg-bg text-text border-[2px] border-border rounded-[6px] px-4 py-2 text-[16px] focus:border-primary focus:ring-1 focus:ring-primary/30 transition-all outline-none"
                 />
@@ -1656,13 +1671,14 @@ const ControlPanel = ({
                     className="flex"
                     value={selectedSession || ''}
                     onChange={(val) => onSessionSelect(val)}
+                    disabled={sessionLocked}
                     options={[
                         { value: "", label: "All Available Data" },
                         ...sessions.map(s => ({ value: s.table, label: s.name }))
                     ]}
                     placeholder="Select Session..."
                 />
-                <button onClick={onRefreshSessions} className="p-2.5 border-[2px] border-[var(--border)] rounded-lg hover:bg-[var(--bg)] text-[var(--text)]" title="Refresh Sessions"><RefreshCw className="w-5 h-5" /></button>
+                <button onClick={onRefreshSessions} disabled={sessionLocked} className="p-2.5 border-[2px] border-[var(--border)] rounded-lg hover:bg-[var(--bg)] text-[var(--text)] disabled:opacity-40 disabled:cursor-not-allowed" title="Refresh Sessions"><RefreshCw className="w-5 h-5" /></button>
             </div>
         </div>
 
@@ -1670,18 +1686,17 @@ const ControlPanel = ({
         <div className="grid grid-cols-1 gap-3 overflow-visible">
             {/* Shimmer Effect */}
             <button
-                onClick={onTrain}
-                disabled={loading}
-                className="w-full flex items-center justify-center py-3 bg-primary text-primary-contrast rounded-xl font-bold text-[10px] tracking-[0.15em] transition-all shadow-[0_0_20px_rgba(var(--primary-rgb),0.2)] hover:shadow-[0_0_30px_rgba(var(--primary-rgb),0.4)] hover:scale-[1.05] hover:z-50 active:scale-95 group relative overflow-hidden disabled:opacity-20"
+                onClick={trainingActive ? onStopTraining : onTrain}
+                disabled={loading && !trainingActive}
+                className={`w-full flex items-center justify-center py-3 rounded-xl font-bold text-[10px] tracking-[0.15em] transition-all shadow-[0_0_20px_rgba(var(--primary-rgb),0.2)] hover:shadow-[0_0_30px_rgba(var(--primary-rgb),0.4)] hover:scale-[1.05] hover:z-50 active:scale-95 group relative overflow-hidden disabled:opacity-20 ${trainingActive ? 'bg-red-500 text-white' : 'bg-primary text-primary-contrast'}`}
             >
                 <div className="absolute inset-0 bg-white/30 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000 ease-in-out skew-x-12" />
                 <span className="relative z-10 text-xl gap-4 flex items-center justify-center w-full">
-                    {loading ? 'Training...' : (
+                    {trainingActive ?
                         <>
-                            Train
                             <motion.span
                                 initial={{ rotate: 0 }}
-                                whileHover={{
+                                whileInView={{
                                     rotate: [0, -10, 10, -10, 10, 0],
                                     y: [0, -2, 0]
                                 }}
@@ -1690,9 +1705,26 @@ const ControlPanel = ({
                             >
                                 <Rocket size={34} />
                             </motion.span>
-                            Model
+                            Trainning...
+
                         </>
-                    )}
+                        : loading ? 'Training...' : (
+                            <>
+                                Train
+                                <motion.span
+                                    initial={{ rotate: 0 }}
+                                    whileHover={{
+                                        rotate: [0, -10, 10, -10, 10, 0],
+                                        y: [0, -2, 0]
+                                    }}
+                                    transition={{ duration: 0.5, repeat: Infinity }}
+                                    className="inline-block"
+                                >
+                                    <Rocket size={34} />
+                                </motion.span>
+                                Model
+                            </>
+                        )}
                 </span>
             </button>
         </div>
@@ -1791,6 +1823,18 @@ export default function MLTrainingView({ onSwitchLab }) {
     const activeResult = results[activeTab];
     const activeEvalResult = evalResults[activeTab];
     const activeParams = params[activeTab];
+    const activeWorkspaceResult = activeResult || activeEvalResult;
+    const activeSelectedHyperparameters = activeWorkspaceResult?.hyperparameters?.selected_hyperparameters || {};
+    const totalTreesForView = Math.max(
+        1,
+        Number(
+            activeSelectedHyperparameters?.n_estimators
+            ?? activeWorkspaceResult?.n_estimators
+            ?? activeParams?.n_estimators
+            ?? activeParams?.n_estimators_max
+            ?? 1
+        ) || 1
+    );
     const activeHistory = trainingJob?.history?.length ? trainingJob.history : ((activeResult || activeEvalResult)?.training_history || lastHistory[activeTab] || []);
     const selectedHistoryItem = selectedHistoryItems[activeTab] || activeHistory[activeHistory.length - 1] || null;
     const selectedSessionName = selectedSession
@@ -1846,8 +1890,7 @@ export default function MLTrainingView({ onSwitchLab }) {
         }
 
         setSelectedModels(prev => ({ ...prev, [activeTab]: name }));
-        // Clear previous training result so evaluation shows instead
-        setResults(prev => ({ ...prev, [activeTab]: null }));
+        setEvalResults(prev => ({ ...prev, [activeTab]: null }));
 
         try {
             setEvalLoading(true);
@@ -1857,12 +1900,36 @@ export default function MLTrainingView({ onSwitchLab }) {
                 headers: { 'Content-Type': 'application/json' }
             });
             if (!res.ok) throw new Error("Failed to load model backend");
+            const data = await res.json();
 
             soundHandler.playMLSwitch(); // Play sound on successful model load
 
-            // After loading, trigger eval to refresh UI
+            setResults(prev => ({ ...prev, [activeTab]: { ...data, source: `Trained on: ${data.session_name || data.table_name || 'Saved Dataset'}` } }));
+            setEvalResults(prev => ({ ...prev, [activeTab]: null }));
+            if (data.training_history?.length) {
+                setLastHistory(prev => ({ ...prev, [activeTab]: data.training_history }));
+                setSelectedHistoryItems(prev => ({ ...prev, [activeTab]: data.training_history[data.training_history.length - 1] || null }));
+            }
+            if (data.hyperparameters) {
+                const meta = data.hyperparameters || {};
+                const selectedHyperparameters = meta.selected_hyperparameters || {};
+                setParams(prev => ({
+                    ...prev,
+                    [activeTab]: {
+                        ...prev[activeTab],
+                        ...selectedHyperparameters,
+                        train_ratio: data.train_ratio ?? meta.train_ratio ?? prev[activeTab]?.train_ratio,
+                        val_ratio: data.val_ratio ?? meta.val_ratio ?? prev[activeTab]?.val_ratio,
+                        test_ratio: data.test_ratio ?? meta.test_ratio ?? prev[activeTab]?.test_ratio,
+                        k_folds: data.k_folds ?? meta.k_folds ?? prev[activeTab]?.k_folds,
+                        random_state: meta.random_state ?? prev[activeTab]?.random_state,
+                    }
+                }));
+            }
+            if (data.table_name) {
+                setSelectedSession(data.table_name);
+            }
             setTreeIndex(0);
-            handleEval(name);
         } catch (e) {
             setError(e.message);
         } finally {
@@ -1873,10 +1940,6 @@ export default function MLTrainingView({ onSwitchLab }) {
     useEffect(() => {
         fetchSessions();
         fetchModels();
-        // Initial eval info only if a model is already selected
-        if (selectedModelName) {
-            handleEval();
-        }
     }, [activeTab]); // When tab changes
 
     // --- ROCKY TRAINING SOUND ---
@@ -1892,9 +1955,8 @@ export default function MLTrainingView({ onSwitchLab }) {
 
     // Also re-fetch if session changes? Maybe useful for context, but not critical for model list.
     useEffect(() => {
-        // Reload evaluation only if a model is already selected
-        if (selectedModelName) {
-            handleEval(selectedModelName);
+        if (!selectedModelName) {
+            setEvalResults(prev => ({ ...prev, [activeTab]: null }));
         }
     }, [selectedSession]);
 
@@ -1984,6 +2046,18 @@ export default function MLTrainingView({ onSwitchLab }) {
         setLoading(false);
     }, []);
 
+    const handleStopTraining = async () => {
+        if (!trainingJob?.job_id) return;
+        try {
+            await fetch(buildApiUrl(`/api/train-jobs/${trainingJob.job_id}/cancel`), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+        } catch (e) {
+            console.error('Failed to cancel training job', e);
+        }
+    };
+
     useEffect(() => {
         if (socketRef.current) return;
 
@@ -2067,9 +2141,13 @@ export default function MLTrainingView({ onSwitchLab }) {
             return () => clearInterval(timer);
         }
 
-        if (trainingJob.status === 'failed' || trainingJob.status === 'error') {
+        if (trainingJob.status === 'failed' || trainingJob.status === 'error' || trainingJob.status === 'cancelled') {
             finalizedJobRef.current = trainingJob.job_id;
-            setError(trainingJob.error || 'Training failed');
+            if (trainingJob.status === 'cancelled') {
+                setError(trainingJob.error || 'Training cancelled');
+            } else {
+                setError(trainingJob.error || 'Training failed');
+            }
             clearTrainingJobState();
         }
     }, [trainingJob, activeTab, clearTrainingJobState]);
@@ -2092,7 +2170,7 @@ export default function MLTrainingView({ onSwitchLab }) {
             const modelNameFinal = trainModelNameInput.trim();
 
             const validKForBackend = parseInt(activeParams.k_folds);
-            const enforcedKForBackend = isNaN(validKForBackend) ? 2 : Math.max(2, Math.min(20, validKForBackend));
+            const enforcedKForBackend = isNaN(validKForBackend) ? 1 : Math.max(1, Math.min(20, validKForBackend));
 
             // Force the UI state to snap to the valid k_folds so the input field updates correctly
             setParams(prev => ({ ...prev, [activeTab]: { ...prev[activeTab], k_folds: enforcedKForBackend } }));
@@ -2146,70 +2224,6 @@ export default function MLTrainingView({ onSwitchLab }) {
         }
     };
 
-    const handleEval = async (forceModelName = null) => {
-        // Early return if no model provided and nothing selected
-        if (!forceModelName && !selectedModelName) {
-            setEvalResults(prev => ({ ...prev, [activeTab]: null }));
-            return;
-        }
-        setEvalLoading(true); setError(null);
-
-        try {
-            const endpointMap = {
-                'EMG': buildApiUrl('/api/model/evaluate'),
-                'EOG': buildApiUrl('/api/model/evaluate/eog'),
-                'EEG': buildApiUrl('/api/model/evaluate/eeg')
-            };
-
-            const res = await fetch(endpointMap[activeTab], {
-                method: 'POST',
-                body: JSON.stringify({
-                    table_name: selectedSession || undefined,
-                    model_name: forceModelName || selectedModelName || undefined,
-                    sensor: activeTab
-                }),
-                headers: { 'Content-Type': 'application/json' }
-            });
-            const data = await res.json();
-            if (!res.ok) {
-                return;
-            }
-
-            setEvalResults(prev => ({ ...prev, [activeTab]: { ...data, source: getSourceName(false) } }));
-            if (data.training_history?.length) {
-                setLastHistory(prev => ({ ...prev, [activeTab]: data.training_history }));
-                setSelectedHistoryItems(prev => ({ ...prev, [activeTab]: data.training_history[data.training_history.length - 1] || null }));
-            }
-
-            if (data.hyperparameters) {
-                const meta = data.hyperparameters || {};
-                const selectedHyperparameters = meta.selected_hyperparameters || {};
-                setParams(prev => ({
-                    ...prev,
-                    [activeTab]: {
-                        ...prev[activeTab],
-                        ...selectedHyperparameters,
-                        train_ratio: meta.train_ratio ?? prev[activeTab]?.train_ratio,
-                        val_ratio: meta.val_ratio ?? prev[activeTab]?.val_ratio,
-                        test_ratio: meta.test_ratio ?? prev[activeTab]?.test_ratio,
-                        k_folds: meta.k_folds ?? prev[activeTab]?.k_folds,
-                        random_state: meta.random_state ?? prev[activeTab]?.random_state,
-                    }
-                }));
-            }
-
-            // We NO LONGER auto-select a model if it was null.
-            // Only update selection if explicitly requested via forceModelName
-            if (data.model_name && forceModelName) {
-                setSelectedModels(prev => ({ ...prev, [activeTab]: data.model_name }));
-            }
-        } catch (e) {
-            console.log("Eval check info (ignore if just checking):", e);
-        } finally { setEvalLoading(false); }
-    };
-
-
-
     return (
         <div className="flex-1 flex flex-col h-full overflow-hidden p-4" key={currentThemeId}>
             {/* ERROR DISPLAY */}
@@ -2227,7 +2241,9 @@ export default function MLTrainingView({ onSwitchLab }) {
                         <div className="shrink-0">
                             <ControlPanel
                                 onTrain={handleTrain}
+                                onStopTraining={handleStopTraining}
                                 loading={loading}
+                                trainingActive={!!trainingJob}
                                 evalLoading={evalLoading}
                                 sessions={availableSessions}
                                 selectedSession={selectedSession}
@@ -2237,6 +2253,14 @@ export default function MLTrainingView({ onSwitchLab }) {
                                 activeTab={activeTab}
                                 setActiveTab={setActiveTab}
                                 modelName={trainModelNameInput}
+                                sessionLocked={!!selectedModelName}
+                                onModelNameFocus={() => {
+                                    if (!selectedModelName) return;
+                                    setSelectedModels(prev => ({ ...prev, [activeTab]: null }));
+                                    setResults(prev => ({ ...prev, [activeTab]: null }));
+                                    setEvalResults(prev => ({ ...prev, [activeTab]: null }));
+                                    setTreeIndex(0);
+                                }}
                                 setModelName={(name) => {
                                     setTrainModelNameInput(name);
                                     if (name && name !== '') {
@@ -2273,7 +2297,6 @@ export default function MLTrainingView({ onSwitchLab }) {
                                 onSelectRun={(name) => {
                                     setInsightView('history');
                                     if (name === selectedModelName) {
-                                        handleEval(name);
                                         return;
                                     }
                                     handleLoadModel(name);
@@ -2302,7 +2325,7 @@ export default function MLTrainingView({ onSwitchLab }) {
                                         <DecisionTreeCard
                                             structure={(activeResult || activeEvalResult).tree_structure}
                                             treeIndex={treeIndex}
-                                            totalTrees={activeParams.n_estimators}
+                                            totalTrees={totalTreesForView}
                                             onTreeChange={fetchTree}
                                             loading={loading || treeLoading}
                                             history={activeHistory}
