@@ -1,6 +1,6 @@
 {
   "running": true,
-  "raw_ingress_client_count": 1,
-  "packet_count": 76192,
-  "updated_at": 1775468364.9325445
+  "raw_ingress_client_count": 0,
+  "packet_count": 0,
+  "updated_at": 1775489847.8689837
 }

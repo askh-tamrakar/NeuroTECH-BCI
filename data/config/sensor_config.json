@@ -13,9 +13,9 @@
     }
   },
   "active_models": {
-    "EMG": "Neo",
+    "EMG": "Neptune",
     "EOG": "dino-ml",
-    "EEG": "Neuro"
+    "EEG": "Neo"
   },
   "adc_settings": {
     "resolution_bits": 14,
