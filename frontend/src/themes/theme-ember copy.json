@@ -22,8 +22,6 @@
     "--cloud-day": "#984063",
     "--cloud-night": "#41436A",
     "--sun-day": "#FE9677",
-    "--sun-night": "#F64668",
-    "--moon-day": "#E8EAF6",
     "--moon-night": "#C5CAE9",
     "--sky-day": "#41436A",
     "--sky-night": "#151728",
@@ -49,7 +47,17 @@
     "--graph-line-1": "#F64668",
     "--graph-line-2": "#FE9677",
     "--graph-bg": "#1F2235",
-    "--graph-grid": "#3A3D66",
-    "--graph-text": "#D0D3E2"
+    "--graph-grid": "#8F3550",
+    "--graph-text": "#D0D3E2",
+    "--dino-day": "#984063",
+    "--dino-night": "#984063",
+    "--obstacle-day": "#984063",
+    "--obstacle-night": "#F64668",
+    "--obstacle-border-day": "#F8F7F2",
+    "--obstacle-border-night": "#F8F7F2",
+    "--ground-day": "#2E3050",
+    "--ground-night": "#30335A",
+    "--ground-line-day": "#F64668",
+    "--ground-line-night": "#984063"
   }
 }
