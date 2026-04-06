@@ -22,7 +22,7 @@ export default function SSVEPStimulus({ configs, brightness, refreshRate, runnin
         if (!worker) {
             try {
                 // Adjusting Vite import meta URL relative to this file
-                worker = new Worker(new URL('../../workers/ssvep.worker.js', import.meta.url), { type: 'module' });
+                worker = new Worker(new URL('../../../workers/ssvep.worker.js', import.meta.url), { type: 'module' });
                 workerRef.current = worker;
 
                 const offscreen = canvasRef.current.transferControlToOffscreen();

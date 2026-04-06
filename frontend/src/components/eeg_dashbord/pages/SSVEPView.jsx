@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
 import SSVEPStimulus from './SSVEPStimulus';
-import { soundHandler } from '../../handlers/SoundHandler';
-import { CalibrationApi } from '../../services/calibrationApi';
-import SSVEPSidebar from './sidebar/SSVEPSidebar';
+import { soundHandler } from '../../../handlers/SoundHandler';
+import { CalibrationApi } from '../../../services/calibrationApi';
+import SSVEPSidebar from '../sidebar/SSVEPSidebar';
 import { useSidebar } from './SidebarContext';
 
 const COMMON_KEYS = ['None', 'W', 'A', 'S', 'D', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'Enter', 'Escape', 'P', 'Q', '0', '1', '2', '3'];
@@ -33,7 +33,7 @@ function buildDynamicTargets(refreshRate, previousConfigs = []) {
 }
 
 export default function SSVEPView({ isConnected, wsEvent, onBackToMenu }) {
-    const [showTargets, setShowTargets] = useState(true);
+    const [showTargets, setShowTargets] = useState(false);
     const [brightness, setBrightness] = useState(() => {
         const stored = localStorage.getItem('ssvep_brightness');
         return stored ? parseFloat(stored) : 1.0;

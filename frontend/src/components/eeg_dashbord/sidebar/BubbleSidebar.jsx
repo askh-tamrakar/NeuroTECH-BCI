@@ -1,8 +1,9 @@
 import React from 'react';
 import {
     Settings, Play, Square, Activity, MousePointer2, Zap,
-    History, Menu, ChevronLeft, Gamepad2, Mouse, Trash2, Power
+    History, Menu, ChevronLeft, Gamepad2, Mouse, Trash2, Power, Layers
 } from 'lucide-react';
+import { useSidebar } from '../pages/SidebarContext';
 
 /**
  * BubbleSidebar — page-specific controls sidebar for BubbleGameView.
@@ -18,6 +19,7 @@ const BubbleSidebar = ({
     globalRunning,
     containerRef,
 }) => {
+    const { sidebarMode, setSidebarMode } = useSidebar();
     // ... within the return ...
     const dashOffset = 201 - (Math.min(100, focusScore || 0) / 100) * 201;
 
@@ -31,11 +33,19 @@ const BubbleSidebar = ({
                         BUBBLE GAME
                     </h2>
                 </div>
+                <button
+                    onClick={() => setSidebarMode('main')}
+                    className="nav-controls-toggle"
+                    title="Switch to Navigation"
+                >
+                    <Layers size={14} />
+                    CTRL
+                </button>
             </div>
 
             {/* Global Play/Stop */}
             <div className="shrink-0 mb-1">
-                <button onClick={() => globalRunning ? containerRef.current?.stopGameHandler() : containerRef.current?.startGameHandler()} className={`w-full py-3.5 rounded-xl text-sm font-black uppercase tracking-[3px] transition-all flex items-center justify-center gap-3 border-2 shadow-lg ${globalRunning ? 'bg-red-500/10 border-red-500/40 text-red-500 hover:bg-red-500/20' : 'bg-green-500/10 border-green-500/40 text-green-500 hover:bg-green-500/20'}`}>
+                <button onClick={() => globalRunning ? containerRef.current?.stopGameHandler() : containerRef.current?.startGameHandler()} className={`w-full py-3.5 rounded-xl text-sm font-black uppercase tracking-[3px] transition-all flex items-center justify-center gap-3 border-2 shadow-glow ${globalRunning ? 'bg-red-500/10 border-red-500/40 text-red-500 hover:bg-red-500/20' : 'bg-green-500/10 border-green-500/40 text-green-500 hover:bg-green-500/20'}`}>
                     {globalRunning ? <><Square size={20} /> END SESSION</> : <><Play size={20} /> NEW SESSION</>}
                 </button>
             </div>

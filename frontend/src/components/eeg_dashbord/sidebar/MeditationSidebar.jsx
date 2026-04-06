@@ -3,9 +3,11 @@ import {
     Settings, Play, Square, Activity, Wind, Power, Zap,
     History, Menu, ChevronLeft, Brain, BookOpen, Eye, Grid,
     Music, Volume2, Trophy, Clock, Calendar, CheckSquare,
-    Sparkles, VolumeX
+    Sparkles, VolumeX, Layers
 } from 'lucide-react';
+import { useSidebar } from '../pages/SidebarContext';
 
+const PRESETS = [3, 5, 10, 15];
 const WISDOM = [
     { quote: 'Wherever you are, be there totally.', author: '— Eckhart Tolle' },
     { quote: 'The present moment is the only moment available to us, and it is the door to all moments.', author: '— Thích Nhất Hạnh' },
@@ -15,9 +17,6 @@ const WISDOM = [
     { quote: 'Within you, there is a stillness and a sanctuary.', author: '— Hermann Hesse' },
     { quote: 'Peace comes from within. Do not seek it without.', author: '— Buddha' },
 ];
-
-const PRESETS = [3, 5, 10, 15];
-
 /* ── TRACK ROW sub-component ──────────────────── */
 const TrackRow = ({ m, onToggle, onVol }) => (
     <div className={`flex flex-col gap-2 p-2.5 rounded-lg border transition-all ${m.active ? 'bg-primary/8 border-primary/40' : 'bg-surface/30 border-border/30 hover:border-primary/20'}`}>
@@ -29,10 +28,10 @@ const TrackRow = ({ m, onToggle, onVol }) => (
                 <span className="flex items-end gap-[2px] h-3.5 shrink-0">
                     {m.active ? (
                         <>
-                            <span className="w-[2px] bg-primary rounded-full" style={{ height: '40%',  animation: 'musicbar 0.7s ease-in-out infinite', animationDelay: '0s'   }} />
+                            <span className="w-[2px] bg-primary rounded-full" style={{ height: '40%', animation: 'musicbar 0.7s ease-in-out infinite', animationDelay: '0s' }} />
                             <span className="w-[2px] bg-primary rounded-full" style={{ height: '100%', animation: 'musicbar 0.7s ease-in-out infinite', animationDelay: '0.18s' }} />
-                            <span className="w-[2px] bg-primary rounded-full" style={{ height: '60%',  animation: 'musicbar 0.7s ease-in-out infinite', animationDelay: '0.36s' }} />
-                            <span className="w-[2px] bg-primary rounded-full" style={{ height: '80%',  animation: 'musicbar 0.7s ease-in-out infinite', animationDelay: '0.54s' }} />
+                            <span className="w-[2px] bg-primary rounded-full" style={{ height: '60%', animation: 'musicbar 0.7s ease-in-out infinite', animationDelay: '0.36s' }} />
+                            <span className="w-[2px] bg-primary rounded-full" style={{ height: '80%', animation: 'musicbar 0.7s ease-in-out infinite', animationDelay: '0.54s' }} />
                         </>
                     ) : (
                         <>
@@ -60,9 +59,10 @@ const TrackRow = ({ m, onToggle, onVol }) => (
                 value={Math.round(m.vol * 100)}
                 onChange={e => onVol(m.id, parseInt(e.target.value) / 100)}
                 className={`flex-1 h-1.5 rounded-lg appearance-none cursor-pointer ${m.active ? 'accent-primary' : 'accent-muted'}`}
-                style={{ background: m.active
-                    ? `linear-gradient(to right, var(--primary) 0%, var(--primary) ${Math.round(m.vol*100)}%, rgba(255,255,255,0.1) ${Math.round(m.vol*100)}%, rgba(255,255,255,0.1) 100%)`
-                    : `linear-gradient(to right, var(--muted) 0%, var(--muted) ${Math.round(m.vol*100)}%, rgba(255,255,255,0.07) ${Math.round(m.vol*100)}%, rgba(255,255,255,0.07) 100%)`
+                style={{
+                    background: m.active
+                        ? `linear-gradient(to right, var(--primary) 0%, var(--primary) ${Math.round(m.vol * 100)}%, rgba(255,255,255,0.1) ${Math.round(m.vol * 100)}%, rgba(255,255,255,0.1) 100%)`
+                        : `linear-gradient(to right, var(--muted) 0%, var(--muted) ${Math.round(m.vol * 100)}%, rgba(255,255,255,0.07) ${Math.round(m.vol * 100)}%, rgba(255,255,255,0.07) 100%)`
                 }}
             />
             <span className={`text-[10px] font-black font-mono w-7 text-right shrink-0 ${m.active ? 'text-primary' : 'text-muted/60'}`}>
@@ -79,9 +79,10 @@ const MeditationSidebar = ({
     toggleMusic,
     updateVol,
     masterVol = 1.0,
-    onMasterVol = () => {},
+    onMasterVol = () => { },
     wisdomIdx = 0,
 }) => {
+    const { sidebarMode, setSidebarMode } = useSidebar();
     const wisdom = WISDOM[wisdomIdx] || WISDOM[0];
 
 
@@ -95,13 +96,21 @@ const MeditationSidebar = ({
                         <span style={{ letterSpacing: '2.3px' }}>NEURO TRAINER</span>
                     </h2>
                 </div>
+                <button
+                    onClick={() => setSidebarMode('main')}
+                    className="nav-controls-toggle"
+                    title="Switch to Navigation"
+                >
+                    <Layers size={14} />
+                    CTRL
+                </button>
             </div>
 
             <div className="flex flex-col gap-4 h-full overflow-y-auto [&::-webkit-scrollbar]:hidden pb-10">
 
                 {/* Start Session Button */}
                 <div className="shrink-0">
-                    <button id="med-session-btn" onClick={() => containerRef.current?.sessionBtnHandler()} className="w-full py-4 rounded-xl text-sm font-black uppercase tracking-[3px] transition-all flex items-center justify-center gap-3 border-2 shadow-lg bg-green-500/10 border-green-500/40 text-green-500 hover:bg-green-500/20 shadow-glow">
+                    <button id="med-session-btn" onClick={() => containerRef.current?.sessionBtnHandler()} className="w-full py-4 rounded-xl text-sm font-black uppercase tracking-[3px] transition-all flex items-center justify-center gap-3 border-2 bg-green-500/10 border-green-500/40 text-green-500 hover:bg-green-500/20 shadow-glow">
                         <Play size={20} /> NEW SESSION
                     </button>
                 </div>
@@ -149,7 +158,7 @@ const MeditationSidebar = ({
                             )}
                             {musicState.some(m => m.active) && (
                                 <button
-                                    onClick={() => musicState.filter(m=>m.active).forEach(m => toggleMusic(m.id))}
+                                    onClick={() => musicState.filter(m => m.active).forEach(m => toggleMusic(m.id))}
                                     className="text-[9px] font-black px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 transition-all"
                                 >
                                     STOP ALL
@@ -166,7 +175,7 @@ const MeditationSidebar = ({
                             value={Math.round(masterVol * 100)}
                             onChange={e => onMasterVol(parseInt(e.target.value) / 100)}
                             className="flex-1 h-1.5 rounded-lg appearance-none cursor-pointer"
-                            style={{ background: `linear-gradient(to right, var(--primary) 0%, var(--primary) ${Math.round(masterVol*100)}%, rgba(255,255,255,0.08) ${Math.round(masterVol*100)}%, rgba(255,255,255,0.08) 100%)` }}
+                            style={{ background: `linear-gradient(to right, var(--primary) 0%, var(--primary) ${Math.round(masterVol * 100)}%, rgba(255,255,255,0.08) ${Math.round(masterVol * 100)}%, rgba(255,255,255,0.08) 100%)` }}
                         />
                         <span className="text-[10px] font-black font-mono text-primary w-7 text-right shrink-0">
                             {Math.round(masterVol * 100)}%
