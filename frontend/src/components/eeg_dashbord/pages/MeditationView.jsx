@@ -283,6 +283,12 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
           : hex2rgba(gridCol, 0.8);
         ctx.lineWidth = frac === 1 ? 1.2 : 0.7;
         ctx.stroke();
+
+        // Numeric labels (25, 50, 75, 100)
+        ctx.font = 'bold 9px "Share Tech Mono", monospace';
+        ctx.fillStyle = hex2rgba(primary, 0.7);
+        ctx.textAlign = 'center';
+        ctx.fillText((frac * 100).toFixed(0), cx, cy - R * frac - 3);
       });
 
       // Spokes
@@ -465,6 +471,22 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
 
       const phaseInfo = getPhase();
 
+      // Dominant Wave Calculation
+      const labels = ['Delta', 'Theta', 'Alpha', 'Beta', 'Gamma'];
+      const maxVal = Math.max(...rawBands);
+      const dominantIdx = rawBands.indexOf(maxVal);
+      const dominantWaveName = labels[dominantIdx];
+
+      const dwEl = $('med-dominant-val');
+      if (dwEl) {
+        dwEl.textContent = dominantWaveName.toUpperCase();
+        dwEl.style.fontWeight = '900';
+        // Color coding for dominant wave
+        const colors = [tc('--delta', '#4466ff'), tc('--theta', '#a855f7'), tc('--alpha', '#22c55e'), tc('--beta', '#00f5ff'), tc('--gamma', '#f59e0b')];
+        dwEl.style.color = colors[dominantIdx] || 'var(--primary)';
+        dwEl.style.textShadow = `0 0 10px ${colors[dominantIdx] || 'var(--primary)'}`;
+      }
+
       drawRadar(ctxRadar, rawBands, true);
       updateDOM(phaseInfo);
     }
@@ -614,13 +636,13 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
       const td = $('med-timer-big');
       if (td) { const mm = String(min).padStart(2, '0'); td.textContent = `${mm}:00`; }
       // highlight active preset
-      container.querySelectorAll('.med-preset-btn').forEach(b => {
+      document.querySelectorAll('.med-preset-btn').forEach(b => {
         if (parseInt(b.dataset.min) === min) {
-          b.classList.add('bg-primary', 'text-bg', 'border-primary', 'shadow-glow');
-          b.classList.remove('bg-bg/50', 'text-muted', 'border-border');
+          b.classList.add('bg-yellow-500', 'text-black', 'border-yellow-500', 'shadow-[0_0_10px_rgba(234,179,8,0.5)]');
+          b.classList.remove('bg-bg/50', 'text-muted', 'border-border', 'hover:border-yellow-500', 'bg-primary', 'text-bg', 'border-primary', 'shadow-glow');
         } else {
-          b.classList.remove('bg-primary', 'text-bg', 'border-primary', 'shadow-glow');
-          b.classList.add('bg-bg/50', 'text-muted', 'border-border');
+          b.classList.remove('bg-yellow-500', 'text-black', 'border-yellow-500', 'shadow-[0_0_10px_rgba(234,179,8,0.5)]', 'bg-primary', 'text-bg', 'border-primary', 'shadow-glow');
+          b.classList.add('bg-bg/50', 'text-muted', 'border-border', 'hover:border-yellow-500');
         }
       });
     };
@@ -649,8 +671,12 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
             <div className="med-chart-panel">
               <div className="med-section-header">
                 <span className="med-section-icon">⬡</span>
-                <span className="med-section-title">Brain Activity</span>
-                <span className="med-section-sub"> · {wsEvent?.source_channel !== undefined ? `CH${wsEvent.source_channel}` : 'EEG'} {wsEvent?.preset === 'frontal_fp1' ? '(Fp1)' : (wsEvent?.preset === 'visual_eeg_oz' ? '(Oz)' : '')}</span>
+                <span className="med-section-title" style={{ fontFamily: 'Orbitron, sans-serif', fontSize: '10px', fontWeight: '800', letterSpacing: '3px', color: 'var(--primary)', textShadow: '0 0 12px var(--primary)', textTransform: 'uppercase' }}>Brain Activity</span>
+                <span className="med-section-sub" style={{ fontSize: '8px', letterSpacing: '2px', color: 'var(--muted)', opacity: '.8', marginLeft: '2px' }}> · {wsEvent?.source_channel !== undefined ? `CH${wsEvent.source_channel}` : 'EEG'} {wsEvent?.preset === 'frontal_fp1' ? '(Fp1)' : (wsEvent?.preset === 'visual_eeg_oz' ? '(Oz)' : '')}</span>
+                <div className="ml-auto flex items-center gap-2 pr-2">
+                  <span className="text-[8px] font-black text-[var(--primary)] uppercase tracking-widest opacity-100">Dominant:</span>
+                  <span id="med-dominant-val" className="text-[10px] font-black tracking-[2px] uppercase">Alpha</span>
+                </div>
               </div>
               <div className="med-chart-label">Global EEG Power</div>
               <canvas id="med-radar" className="med-radar-canvas" />
@@ -660,19 +686,19 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
             <div className="med-chart-panel border-l border-border/50">
               <div className="med-section-header">
                 <span className="med-section-icon" style={{ marginLeft: '-2px' }}>◎</span>
-                <span className="med-section-title">Respiration</span>
-                <span className="med-section-sub"> · Focus Bubble</span>
+                <span className="med-section-title" style={{ fontFamily: 'Orbitron, sans-serif', fontSize: '10px', fontWeight: '800', letterSpacing: '3px', color: 'var(--primary)', textShadow: '0 0 12px var(--primary)', textTransform: 'uppercase' }}>Respiration</span>
+                <span className="med-section-sub" style={{ fontSize: '8px', letterSpacing: '2px', color: 'var(--muted)', opacity: '.8', marginLeft: '2px' }}> · Focus Bubble</span>
               </div>
 
               {/* Real-time Metrics Overlays */}
               <div className="absolute top-16 left-4 right-4 flex justify-between z-10 pointer-events-none">
                 <div className="flex flex-col items-center">
-                  <span className="text-[10px] font-bold text-primary/60 tracking-widest uppercase">Focus</span>
-                  <span id="med-focus-val" className="text-2xl font-black text-primary font-mono tabular-nums">0</span>
+                  <span className="text-[10px] font-black text-primary tracking-widest uppercase opacity-100">Focus</span>
+                  <span id="med-focus-val" className="text-2xl font-black text-primary font-mono tabular-nums drop-shadow-glow">0</span>
                 </div>
                 <div className="flex flex-col items-center">
-                  <span className="text-[10px] font-bold text-red-500/60 tracking-widest uppercase">Stress</span>
-                  <span id="med-stress-val" className="text-2xl font-black text-red-500 font-mono tabular-nums">0</span>
+                  <span className="text-[10px] font-black text-red-500 tracking-widest uppercase opacity-100">Stress</span>
+                  <span id="med-stress-val" className="text-2xl font-black text-red-500 font-mono tabular-nums drop-shadow-glow">0</span>
                 </div>
               </div>
 
@@ -696,15 +722,15 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
           {/* Bottom FFT Chart */}
           <div className="med-waves-col" style={{ height: '38%', padding: '15px' }}>
             <div className="flex justify-between items-end mb-2 w-full">
-               <div className="med-wave-label tracking-widest text-[10px] uppercase font-bold text-muted">
+               <div className="med-wave-label tracking-widest text-[10px] uppercase font-black text-muted opacity-100">
                  Power Spectrum (FFT)
                </div>
                <div className="med-calm-bar-wrap shrink-0" style={{ width: '120px' }}>
-                 <span style={{ fontSize: '9px', fontWeight: 'bold' }}>CALM</span>
+                 <span style={{ fontSize: '9px', fontWeight: '900' }}>CALM</span>
                  <div className="med-calm-track">
                    <div className="med-calm-fill" id="med-calm-fill" />
                  </div>
-                 <span className="med-calm-pct" id="med-calm-pct">0%</span>
+                 <span className="med-calm-pct" id="med-calm-pct" style={{ color: 'var(--primary)', fontWeight: '900', width: '28px', opacity: '1' }}>0%</span>
                </div>
             </div>
             
@@ -717,18 +743,18 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
                  return chartData.length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
                         <LineChart data={chartData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
+                            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.15)" vertical={false} />
                             <XAxis
                                 dataKey="freq"
                                 stroke="#9ca3af"
-                                tick={{ fill: '#9ca3af', fontSize: 10 }}
+                                tick={{ fill: '#9ca3af', fontSize: 10, fontWeight: 'bold' }}
                                 tickCount={25}
                                 type="number"
                                 domain={[1, 50]}
                             />
                             <YAxis
                                 stroke="#9ca3af"
-                                tick={{ fill: '#9ca3af', fontSize: 10 }}
+                                tick={{ fill: '#9ca3af', fontSize: 10, fontWeight: 'bold' }}
                                 tickFormatter={(val) => val.toExponential(0)}
                                 width={40}
                             />
