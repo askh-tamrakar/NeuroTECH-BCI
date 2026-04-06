@@ -3,8 +3,8 @@ import {
     SlidersHorizontal, ZoomIn,
     ArrowUpDown, ChevronUp, ChevronDown, ChartSpline, Sigma, ArrowUp, ArrowDown
 } from 'lucide-react';
+import { formatAmplitudeValue } from '../../utils/spectrumFormat';
 import RangeSlider from '../ui/inputs/RangeSlider';
-import { useTheme } from '../../contexts/ThemeContext';
 
 const DEFAULT_PALETTE = [
     '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6',
@@ -81,7 +81,6 @@ const WorkerFFTChart = forwardRef(({
     const [stats, setStats] = useState({ min: 0, max: 0, mean: 0 });
     const [frequencyFrom, setFrequencyFrom] = useState(initialFreqFrom || "");
     const [frequencyTo, setFrequencyTo] = useState(initialFreqTo || "");
-    const { currentTheme } = useTheme() || {};
 
     useEffect(() => {
         setFrequencyFrom(initialFreqFrom ?? "");
@@ -200,9 +199,10 @@ const WorkerFFTChart = forwardRef(({
     }, [config, channelIndex, onStatsChange]);
 
     useEffect(() => {
-        // Extract theme colors from ThemeContext directly to avoid race conditions with DOM vars
-        const gridColor = currentTheme?.colors?.['--graph-grid'] || 'rgba(255, 255, 255, 0.1)';
-        const textColor = currentTheme?.colors?.['--graph-text'] || '#9ca3af';
+        // Extract theme colors from DOM since worker cannot access CSS variables
+        const style = getComputedStyle(document.documentElement);
+        const gridColor = style.getPropertyValue('--graph-grid').trim() || 'rgba(255, 255, 255, 0.1)';
+        const textColor = style.getPropertyValue('--graph-text').trim() || '#9ca3af';
 
         workerRef.current?.postMessage({
             type: 'SET_CONFIG',
@@ -218,7 +218,7 @@ const WorkerFFTChart = forwardRef(({
                 themeGridColor: gridColor
             }
         });
-    }, [config, channelIndex, color, frequencyFrom, frequencyTo, currentZoom, currentManual, currentTheme]);
+    }, [config, channelIndex, color, frequencyFrom, frequencyTo, currentZoom, currentManual]);
 
     useImperativeHandle(ref, () => ({
         addData: (points) => {

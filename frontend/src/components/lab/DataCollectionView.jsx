@@ -19,7 +19,6 @@ import {
     ZoomIn, ArrowUpDown, ArrowDown, ArrowUp, Sigma
 } from 'lucide-react';
 import { soundHandler } from '../../handlers/SoundHandler'
-import { getRuntimeConnection } from '../../utils/runtimeConnection';
 
 // Workers
 import SessionWorker from '../../workers/session.worker.js?worker';
@@ -77,11 +76,7 @@ function isEditableElement(target) {
 export default function DataCollectionView({ wsData, config: initialConfig, wsUrl, onSwitchLab }) {
     const { settings, updateSettings } = useSettings();
     const { currentTheme } = useTheme();
-<<<<<<< HEAD
-    const API_BASE_URL = getRuntimeConnection().apiUrl;
-=======
     const { apiUrl: runtimeApiUrl } = getRuntimeConnection();
->>>>>>> c7bf9055e61ec66fb244ff992eedfd6cca495c42
 
     // Top-level states
     const [activeSensor, setActiveSensor] = useState('EMG'); // 'EMG' | 'EOG' | 'EEG'
@@ -117,6 +112,7 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
     const handleAppendSamplesRef = useRef(null);
     const windowRequestIdRef = useRef(0);
     const pendingWindowRequestsRef = useRef(new Map());
+    const deletedWindowIdsRef = useRef(new Set());
     const batchTransitionLockRef = useRef(false);
 
     // Session Management State (Managed by Worker)
@@ -485,9 +481,11 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
                 case 'REQUEST_SAMPLES':
                     const { id, start, end, delay } = payload;
                     setTimeout(async () => {
+                        if (deletedWindowIdsRef.current.has(id)) return;
                         if (chartRef.current) {
                             try {
                                 const samplesPoints = await chartRef.current.getSamples(start, end);
+                                if (deletedWindowIdsRef.current.has(id)) return;
                                 if (samplesPoints && samplesPoints.length > 0) {
                                     const samples = samplesPoints.map(p => p.value);
                                     const timestamps = samplesPoints.map(p => p.time);
@@ -558,6 +556,9 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
 
             if (type === 'SAVE_WINDOW_PROGRESS') {
                 const result = payload?.result || {};
+                if (deletedWindowIdsRef.current.has(result.id)) {
+                    return;
+                }
                 windowWorkerRef.current?.postMessage({
                     type: 'WINDOW_COLLECTED',
                     payload: {
@@ -578,7 +579,7 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
         };
 
         // Initial Worker Config
-        sessionWorkerRef.current.postMessage({ type: 'INIT', payload: { sensor: activeSensor, isTestMode: mode === 'test', apiBaseUrl: API_BASE_URL } });
+        sessionWorkerRef.current.postMessage({ type: 'INIT', payload: { sensor: activeSensor, isTestMode: mode === 'test' } });
         windowWorkerRef.current.postMessage({
             type: 'INIT',
             payload: {
@@ -925,6 +926,7 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
                 const winId = `eeg-${Date.now()}-${idx}`;
                 const newWindow = {
                     id: winId,
+                    createdAtMs: Date.now(),
                     sensor: activeSensor,
                     startTime: seg.startTime,
                     endTime: seg.endTime,
@@ -1294,10 +1296,37 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
     }, [handleAppendSamples]);
 
     const deleteWindow = useCallback((id) => {
+        deletedWindowIdsRef.current.add(id);
         windowWorkerRef.current?.postMessage({ type: 'DELETE_WINDOW', payload: id });
+        setActiveBatchWindowIds((prev) => prev.filter((windowId) => windowId !== id));
     }, []);
 
+    const deleteLatestWorkingWindow = useCallback(() => {
+        const windows = markedWindowsRef.current || [];
+        const selectLatest = (statuses) => windows
+            .filter((window) => statuses.includes(window.status))
+            .sort((left, right) => {
+                const rightCreated = Number(right.createdAtMs ?? right.startTime ?? 0);
+                const leftCreated = Number(left.createdAtMs ?? left.startTime ?? 0);
+                return rightCreated - leftCreated;
+            })[0] || null;
+
+        const latestCollected = selectLatest(['collected']);
+        if (latestCollected) {
+            deleteWindow(latestCollected.id);
+            return;
+        }
+
+        const latestPending = selectLatest(['pending', 'recording']);
+        if (latestPending) {
+            deleteWindow(latestPending.id);
+        }
+    }, [deleteWindow]);
+
     const handleClearAllWindows = useCallback(() => {
+        markedWindowsRef.current.forEach((window) => {
+            deletedWindowIdsRef.current.add(window.id);
+        });
         windowWorkerRef.current?.postMessage({ type: 'CLEAR_ALL_WINDOWS' });
         setTotalPredictedCount(0);
         setActiveWindow(null);
@@ -1305,7 +1334,7 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
         setCompletedBatchCount(0);
         setCurrentBatchIndex(autoCalibrate ? currentBatchIndexRef.current : 0);
         setIsBatchSaving(false);
-    }, []);
+    }, [autoCalibrate]);
 
     const markMissed = useCallback((id) => {
         setMarkedWindows(prev => prev.map(w => w.id === id ? { ...w, isMissedActual: !w.isMissedActual } : w));
@@ -1325,6 +1354,7 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
 
             const newWindow = {
                 id: Math.random().toString(36).substr(2, 9),
+                createdAtMs: Date.now(),
                 sensor: activeSensor,
                 mode: 'test',
                 startTime: start,
@@ -1420,17 +1450,19 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
 
         setRunInProgress(true);
         try {
-            // Filter windows to only those matching the current target label (per user request)
-            const windowsToCalibrate = markedWindows.filter(w => w.label === targetLabel);
+            const windowsToCalibrate = markedWindows.filter((window) => {
+                if (!window?.features) return false;
+                return ['saved', 'correct'].includes(window.status);
+            });
 
             if (windowsToCalibrate.length === 0) {
-                console.warn('[DataCollectionView] No matching windows for target label:', targetLabel);
+                console.warn('[DataCollectionView] No saved windows available for calibration');
                 setRunInProgress(false);
                 return;
             }
 
             // 1. Call robust calibration endpoint
-            const result = await CalibrationApi.calibrateThresholds(activeSensor, windowsToCalibrate);
+            const result = await CalibrationApi.calibrateThresholds(activeSensor, windowsToCalibrate, sessionName);
             console.log('[DataCollectionView] Calibration result:', result);
 
             // 2. Update config locally
@@ -1438,9 +1470,9 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
             setConfig(refreshedConfig);
 
             if (isAuto || autoCalibrate) {
-                // Auto-mode: Reset progress and samples
+                // Auto-mode: reset visible progress; saved session rows remain on disk
                 handleClearAllWindows();
-                console.log('[DataCollectionView] Auto-calibration complete. Resetting samples.');
+                console.log('[DataCollectionView] Auto-calibration complete. Resetting captures.');
             } else {
                 // Manual mode: Update window statuses to show results
                 if (result.window_results) {
@@ -1461,7 +1493,10 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
                     });
                 }
                 const acc = result.accuracy_after !== undefined ? result.accuracy_after : (result.accuracy || 0);
-                alert(`Calibration Complete! Accuracy: ${(acc * 100).toFixed(1)}%`);
+                const labelSummary = Object.entries(result.samples_per_action || {})
+                    .map(([label, count]) => `${label}: ${count}`)
+                    .join(', ');
+                alert(`Calibration Complete! Accuracy: ${(acc * 100).toFixed(1)}%. Saved to session${sessionName ? ` ${sessionName}` : ''}${labelSummary ? ` | ${labelSummary}` : ''}`);
                 // Reset just like auto mode
                 handleClearAllWindows();
                 setTotalPredictedCount(0);
@@ -1479,13 +1514,13 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
         } finally {
             setRunInProgress(false);
         }
-    }, [markedWindows, activeSensor, autoCalibrate]);
+    }, [markedWindows, activeSensor, autoCalibrate, sessionName, handleClearAllWindows]);
 
     // Auto-Calibration / Auto-Save Trigger
     useEffect(() => {
         if (!autoCalibrate || runInProgress) return;
 
-        // Count valid active samples (ready to save)
+        // Count valid active captures ready to save
         const readyBatchCount = markedWindows.filter(w => w.status === 'collected' && w.label === targetLabel).length;
 
         // Check Limit (Batch Size)
@@ -1592,15 +1627,7 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
                 });
             } else if (code === km.deleteLatest) {
                 e.preventDefault();
-                const windows = markedWindowsRef.current;
-                if (windows.length > 0) {
-                    // Find latest by startTime to be robust against unshift vs push
-                    let latest = windows[0];
-                    for (let i = 1; i < windows.length; i++) {
-                        if (windows[i].startTime > latest.startTime) latest = windows[i];
-                    }
-                    deleteWindow(latest.id);
-                }
+                deleteLatestWorkingWindow();
             } else if (code === km.deleteAll) {
                 e.preventDefault();
                 handleClearAllWindows();
@@ -1674,7 +1701,7 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [isCalibrating, handleStartCalibration, handleStopCalibration, settings?.keymap?.collection, activeSensor, handleAppendSamples, availableLabels, windowDurationOptions, autoCalibrate]);
+    }, [isCalibrating, handleStartCalibration, handleStopCalibration, settings?.keymap?.collection, activeSensor, handleAppendSamples, availableLabels, windowDurationOptions, autoCalibrate, deleteLatestWorkingWindow, handleClearAllWindows]);
 
 
 
@@ -1886,7 +1913,7 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
                                         </button>
                                     </div>
                                     <div className="rounded-lg border border-border/70 bg-surface/60 p-2 text-[11px] leading-relaxed text-muted">
-                                        Collect 30-50 trials per target with {windowDuration} ms windows.
+                                        Collect 30-50 captures per target with {windowDuration} ms windows.
                                     </div>
                                 </div>
                             ) : (
@@ -1899,7 +1926,7 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
                                     />
                                     {activeSensor === 'EMG' && (
                                         <div className="rounded-lg border border-border/70 bg-surface/60 p-2 text-[11px] leading-relaxed text-muted">
-                                            Each EMG sample uses {windowDuration} ms duration. The actual capture burst is derived automatically as {actualCaptureWindowMs} ms and will be sliced into 5 samples with 150 ms stride.
+                                            Each EMG capture uses a {windowDuration} ms analysis window. The full burst lasts {actualCaptureWindowMs} ms and is sliced into 5 saved windows with a 150 ms stride.
                                         </div>
                                     )}
                                 </div>
@@ -1911,11 +1938,11 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
                                     isActive={showWizard}
                                     onClose={() => setShowWizard(false)}
                                     sensor={activeSensor}
-                                    onStartRecording={() => handleStartCalibration(targetLabel)}
+                                    onStartRecording={(label) => handleStartCalibration(label)}
                                     onStopRecording={handleStopCalibration}
                                     setTargetLabel={setTargetLabel}
                                     setAutoLimit={setAutoLimit}
-                                    readyCount={markedWindows.filter(w => w.label === targetLabel).length}
+                                    readyCount={markedWindows.filter(w => w.label === targetLabel && producedStatuses.has(w.status)).length}
                                     isRecording={isCalibrating}
                                     targetCount={autoLimit}
                                     labels={SENSOR_LABELS[activeSensor]}
@@ -2038,7 +2065,7 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
                                     <div className="flex items-center gap-2 ">
                                         <div className="flex items-center gap-1.5 text-muted">
                                             <Target size={18} />
-                                            <span className="text-xs font-bold uppercase tracking-wider">{activeSensor === 'EMG' ? 'Sample' : 'Capture'}</span>
+                                            <span className="text-xs font-bold uppercase tracking-wider">Capture</span>
                                         </div>
                                         <div className="w-[160px]">
                                             <CustomSelect
@@ -2046,7 +2073,7 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
                                                 onChange={(value) => setWindowDuration(Number(value))}
                                                 options={windowDurationOptions.map(v => ({
                                                     value: v,
-                                                    label: activeSensor === 'EMG' ? `${v}ms sample` : `${v}ms`
+                                                    label: activeSensor === 'EMG' ? `${v}ms window` : `${v}ms`
                                                 }))}
                                                 triggerClassName="h-8 px-2.5 !rounded-lg !bg-bg/80 !border-border text-sm font-bold"
                                             />
@@ -2247,7 +2274,7 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
                                             onAutoCalibrateChange={setAutoCalibrate}
                                             onClearSaved={handleAppendSamples}
                                             onDeleteAll={handleClearAllWindows}
-                                            progressMode={autoCalibrate ? 'batches' : 'samples'}
+                                            progressMode={autoCalibrate ? 'batches' : 'captures'}
                                             progressCurrent={autoCalibrate ? completedBatchCount : producedCount}
                                             progressTotal={autoCalibrate ? numBatches : autoLimit}
                                             progressPercent={autoCalibrate ? batchProgressPercent : manualProgressPercent}
@@ -2273,7 +2300,7 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
                             onAutoCalibrateChange={setAutoCalibrate}
                             onClearSaved={handleAppendSamples}
                             onDeleteAll={handleClearAllWindows}
-                            progressMode={autoCalibrate ? 'batches' : 'samples'}
+                            progressMode={autoCalibrate ? 'batches' : 'captures'}
                             progressCurrent={autoCalibrate ? completedBatchCount : producedCount}
                             progressTotal={autoCalibrate ? numBatches : autoLimit}
                             progressPercent={autoCalibrate ? batchProgressPercent : manualProgressPercent}

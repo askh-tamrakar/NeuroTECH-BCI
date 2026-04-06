@@ -103,7 +103,16 @@ export default defineConfig({
         ],
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // 5 MB
         cleanupOutdatedCaches: true,
-        runtimeCaching: []
+        runtimeCaching: [
+          {
+            urlPattern: /^\/api\//,
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'api-cache',
+              networkTimeoutSeconds: 5,
+            }
+          }
+        ]
       },
       devOptions: {
         enabled: false

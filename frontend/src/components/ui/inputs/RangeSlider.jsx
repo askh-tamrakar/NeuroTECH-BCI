@@ -28,11 +28,6 @@ const RangeSlider = ({
     const containerRef = useRef(null);
     const [activeHandle, setActiveHandle] = useState(null); // 'min' or 'max'
 
-    // Compute left/middle/right for output
-    const left = minValue - min;
-    const middle = maxValue - minValue;
-    const right = max - maxValue;
-
     // Clean up handle on global mouse release
     useEffect(() => {
         const handleGlobalUp = () => setActiveHandle(null);
@@ -68,54 +63,41 @@ const RangeSlider = ({
     };
 
     const handlePointerMove = (e) => {
-        if (!activeHandle) return;
+        // MUST stop propagation to prevent parent containers (like FFT Chart) 
+        // from receiving these move events while we are dragging.
         e.stopPropagation();
+
+        if (!activeHandle || e.buttons !== 1) {
+            if (activeHandle) setActiveHandle(null);
+            return;
+        }
 
         const newValue = getValueFromPosition(e.clientX);
 
         if (activeHandle === 'min') {
-            const minGap = Math.max(step, 2); // 2 units minimum distance
-            const effectiveValue = Math.min(newValue, maxValue - minGap);
+            const effectiveValue = Math.min(newValue, maxValue - step);
             if (effectiveValue !== minValue) {
-                onChange({
-                    min: effectiveValue,
-                    max: maxValue,
-                    left: effectiveValue - min,
-                    middle: maxValue - effectiveValue,
-                    right: max - maxValue
-                });
+                onChange({ min: effectiveValue, max: maxValue });
             }
         } else {
-            const minGap = Math.max(step, 2);
-            const effectiveValue = Math.max(newValue, minValue + minGap);
+            const effectiveValue = Math.max(newValue, minValue + step);
             if (effectiveValue !== maxValue) {
-                onChange({
-                    min: minValue,
-                    max: effectiveValue,
-                    left: minValue - min,
-                    middle: effectiveValue - minValue,
-                    right: max - effectiveValue
-                });
+                onChange({ min: minValue, max: effectiveValue });
             }
         }
     };
 
     const handlePointerUp = (e) => {
-        if (!activeHandle) return;
         e.stopPropagation();
-        if (containerRef.current) {
-            containerRef.current.releasePointerCapture(e.pointerId);
+        if (activeHandle) {
+            if (containerRef.current) {
+                containerRef.current.releasePointerCapture(e.pointerId);
+            }
+            if (onFinalChange) {
+                onFinalChange({ min: minValue, max: maxValue });
+            }
+            setActiveHandle(null);
         }
-        if (onFinalChange) {
-            onFinalChange({
-                min: minValue,
-                max: maxValue,
-                left,
-                middle,
-                right
-            });
-        }
-        setActiveHandle(null);
     };
 
     const minPos = getPercentage(minValue);
@@ -165,6 +147,7 @@ const RangeSlider = ({
                         }}
                     />
                 )}
+
                 {/* Middle 'Active Range' Highlight - Exactly between handles */}
                 <div
                     className="absolute h-full rounded-full pointer-events-none"

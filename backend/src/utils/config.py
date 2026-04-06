@@ -6,9 +6,6 @@ Loads and watches multiple configuration JSON files:
 - sensor_config.json (main hardware config)
 - filter_config.json (filter parameters by sensor)
 - calibration_config.json (calibration data by channel)
-- feature_config.json (detector/model config by sensor)
-- detection_state.json (runtime routing state)
-- sensor_presets.json (runtime preset library)
 
 Provides:
 1. ConfigWatcher - Auto-reload on file changes
@@ -18,6 +15,7 @@ Provides:
 
 import json
 import os
+import tempfile
 import threading
 import time
 from pathlib import Path
@@ -27,6 +25,24 @@ import logging
 # Set up logging
 from .logging_cfg import get_logger
 logger = get_logger(__name__)
+
+
+def _atomic_write_json(path: Path, payload: Dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temp_name = tempfile.mkstemp(prefix=f"{path.stem}_", suffix=".tmp", dir=path.parent)
+    temp_path = Path(temp_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, indent=2)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temp_path, path)
+    finally:
+        if temp_path.exists():
+            try:
+                temp_path.unlink()
+            except OSError:
+                pass
 
 
 class ConfigWatcher:
@@ -55,8 +71,22 @@ class ConfigWatcher:
                 logger.warning(f"⚠️ {self.name} file not found: {self.config_path}")
                 return False
 
-            with open(self.config_path, "r", encoding="utf-8") as f:
-                config = json.load(f)
+            config = None
+            last_error = None
+            for attempt in range(2):
+                try:
+                    with open(self.config_path, "r", encoding="utf-8") as f:
+                        config = json.load(f)
+                    break
+                except json.JSONDecodeError as exc:
+                    last_error = exc
+                    if attempt == 0:
+                        time.sleep(0.1)
+                        continue
+                    raise
+
+            if config is None:
+                raise last_error if last_error is not None else ValueError("Config load returned no data")
 
             with self._lock:
                 self._config_cache = config
@@ -166,9 +196,8 @@ class ConfigWriter:
             # Create directory if needed
             self.config_path.parent.mkdir(parents=True, exist_ok=True)
 
-            # Write file
-            with open(self.config_path, "w", encoding="utf-8") as f:
-                json.dump(config, f, indent=2)
+            # Write file atomically so watchers do not see truncated JSON.
+            _atomic_write_json(self.config_path, config)
 
             logger.info(f"💾 {self.name} saved: {self.config_path}")
             return True
@@ -189,7 +218,6 @@ class ConfigManager:
     - sensor_config.json (main config)
     - filter_config.json (filters by sensor)
     - calibration_config.json (calibration by channel)
-    - sensor_presets.json (preset library)
     """
 
     def __init__(self, config_dir: Optional[Path] = None):
@@ -226,12 +254,6 @@ class ConfigManager:
         )
         self.feature_writer = ConfigWriter(
             self.config_dir / "feature_config.json", name="FeatureConfig"
-        )
-        self.sensor_presets = ConfigWatcher(
-            self.config_dir / "sensor_presets.json", name="SensorPresets"
-        )
-        self.sensor_presets_writer = ConfigWriter(
-            self.config_dir / "sensor_presets.json", name="SensorPresets"
         )
 
     # ============== SENSOR CONFIG ==============
@@ -318,14 +340,6 @@ class ConfigManager:
         
         config["active_models"][sensor.upper()] = model_name
         return self.save_sensor_config(config)
-
-    def get_sensor_presets(self) -> Dict[str, Any]:
-        """Return the runtime sensor preset library."""
-        return self.sensor_presets.get_all()
-
-    def save_sensor_presets(self, config: Dict[str, Any]) -> bool:
-        """Persist the runtime sensor preset library."""
-        return self.sensor_presets_writer.save(config, validate=True, backup=True)
 
     def get_config_version_hash(self) -> str:
         """

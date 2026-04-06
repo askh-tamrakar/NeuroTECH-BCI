@@ -123,7 +123,7 @@ const SignalChart = forwardRef(({
             config: {
               timeWindowMs,
               color,
-              themeAxisColor: currentTheme?.colors?.['--muted'] || '#aaaaaa',
+              themeAxisColor: getComputedStyle(document.documentElement).getPropertyValue('--muted').trim() || '#aaaaaa',
               zoom: currentZoom,
               manualRange: autoScaledRange || currentManual,
               showGrid,
@@ -182,8 +182,9 @@ const SignalChart = forwardRef(({
   // Sync Config Updates
   useEffect(() => {
     if (workerRef.current) {
-      const gridColor = currentTheme?.colors?.['--graph-grid'] || 'rgba(255, 255, 255, 0.1)';
-      const textColor = currentTheme?.colors?.['--graph-text'] || '#9ca3af';
+      const style = getComputedStyle(document.documentElement);
+      const gridColor = style.getPropertyValue('--graph-grid').trim() || 'rgba(255, 255, 255, 0.1)';
+      const textColor = style.getPropertyValue('--graph-text').trim() || '#9ca3af';
 
       workerRef.current.postMessage({
         type: 'SET_CONFIG',

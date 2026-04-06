@@ -1,20 +1,21 @@
 {
-  "visual_eeg_oz": {
-    "mode": "visual",
-    "active": "Oz",
-    "reference": "A1",
-    "ground": "A2"
-  },
-  "frontal_fp1": {
-    "mode": "frontal",
-    "active": "FP1",
-    "reference": "A1",
-    "ground": "A2"
-  },
-  "frontal_fp2": {
-    "mode": "frontal",
-    "active": "FP2",
-    "reference": "A1",
-    "ground": "A2"
-  }
+  "presets": [
+    {
+      "id": "default-emg-eog",
+      "name": "Current EMG + EOG",
+      "sampling_rate": 1000,
+      "channel_mapping": {
+        "ch0": {
+          "enabled": true,
+          "sensor": "EMG",
+          "label": "Fp1 / Oz (Ref: A1, A2)"
+        },
+        "ch1": {
+          "enabled": true,
+          "sensor": "EOG",
+          "label": "UNUSED"
+        }
+      }
+    }
+  ]
 }

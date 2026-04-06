@@ -10,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 
 from src.database.db_manager import db_manager
 from src.feature.detectors.rps_detector import RPSDetector
-from src.server.server.config_manager import load_config
+from src.server.server.config_manager import ensure_runtime_config, load_config
 from src.server.server.extensions import socketio
 from src.server.server.lsl_service import broadcast_data, broadcast_events
 from src.server.server.routes.audio_routes import audio_bp
@@ -61,11 +61,13 @@ def _register_socket_handlers():
 
 async def _initialize_runtime():
     _configure_stdout()
+    ensure_runtime_config()
     state.config = load_config()
     state.session = SessionManager()
     state.connected = False
     state.sample_count = 0
     state.clients = 0
+    state.last_sample_ts = 0.0
     state.running = True
     db_manager.initialize_runtime()
     initialize_prediction_store()
@@ -93,6 +95,7 @@ async def _shutdown_runtime():
     state.inlet = None
     state.event_inlet = None
     state.connected = False
+    state.last_sample_ts = 0.0
     socketio.clear_event_loop()
 
 
@@ -165,40 +168,9 @@ def _build_fastapi_app():
 
 
 def create_app():
-<<<<<<< HEAD
-    app = Flask(__name__, 
-                template_folder=str(TEMPLATES_DIR) if TEMPLATES_DIR.exists() else None,
-                static_folder=str(TEMPLATES_DIR) if TEMPLATES_DIR.exists() else None,
-                static_url_path="")
-    
-    CORS(app, resources={r"/*": {"origins": "*"}})
-    
-    # Init SocketIO
-    socketio.init_app(app)
-
-    @socketio.on('connect')
-    def handle_connect():
-        state.clients += 1
-
-    @socketio.on('disconnect')
-    def handle_disconnect():
-        state.clients = max(0, state.clients - 1)
-    
-    @socketio.on('ping')
-    def handle_ping():
-        from flask_socketio import emit
-        emit('pong')
-    
-    # Encoding fix
-    try:
-        if hasattr(sys.stdout, 'reconfigure'):
-            sys.stdout.reconfigure(encoding='utf-8')
-    except: pass
-=======
     _register_socket_handlers()
     fastapi_app = _build_fastapi_app()
     return socketio.create_asgi_app(other_asgi_app=fastapi_app)
->>>>>>> c7bf9055e61ec66fb244ff992eedfd6cca495c42
 
 
 def start_background_threads():

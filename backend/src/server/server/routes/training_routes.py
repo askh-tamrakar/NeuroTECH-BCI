@@ -6,7 +6,12 @@ import pandas as pd
 from fastapi import APIRouter, Body
 from fastapi.responses import JSONResponse
 from src.server.server.state import state
-from src.server.server.config_manager import load_config, save_config
+from src.server.server.config_manager import (
+    load_calibration_config,
+    load_config,
+    save_calibration_config,
+    save_config,
+)
 from src.server.server.extensions import socketio
 from src.database.db_manager import db_manager
 from src.server.server.lsl_service import extract_emg_features, extract_emg_features as extract_features_for_sensor
@@ -19,30 +24,59 @@ from scipy import stats as scipy_stats
 # Imports for ML logic
 from src.learning.emg_trainer import (
     train_emg_model,
-    evaluate_saved_model, list_saved_models as list_saved_emg_models, 
+    list_saved_models as list_saved_emg_models, 
     delete_model as delete_emg_model, 
     load_model as load_emg_model, 
     get_model_tree_structure
 )
 from src.learning.eog_trainer import (
     train_eog_model, 
-    evaluate_saved_eog_model, 
     list_saved_models as list_saved_eog_models, 
     delete_model as delete_eog_model, 
     load_model as load_eog_model
 )
-from src.learning.eeg_lda_trainer import train_eeg_lda_model, evaluate_eeg_lda_model
+from src.learning.eeg_lda_trainer import train_eeg_lda_model
 from src.config.window_config import SESSION_CONFIG
 from src.feature.extractors.rps_extractor import EMG_BASE_FEATURES, EMG_FEATURE_COLUMNS
 from src.server.server.services.training_job_service import (
     create_training_job as _create_training_job,
     job_snapshot as _job_snapshot,
+    request_training_job_cancel as _request_training_job_cancel,
     run_training_job as _run_training_job,
 )
 
 training_bp = APIRouter()
 EMG_BURST_WINDOWS = 5
 EMG_BURST_STRIDE_MS = 150.0
+
+
+def _persist_calibration_summary(sensor: str, result: dict, windows: list[dict], session_name: str | None = None):
+    calibration_cfg = load_calibration_config()
+    sensor_key = str(sensor).upper()
+    now_iso = time.strftime("%Y-%m-%dT%H:%M:%S")
+
+    windows_per_label = {}
+    for window in windows:
+        action = window.get("action") or window.get("label")
+        if not action:
+            continue
+        windows_per_label[action] = windows_per_label.get(action, 0) + 1
+
+    sensor_history = calibration_cfg.get(sensor_key, {})
+    sensor_history.update({
+        "sensor": sensor_key,
+        "calibrated": True,
+        "last_calibrated_at": now_iso,
+        "session_name": session_name,
+        "window_count": int(len(windows)),
+        "windows_per_label": windows_per_label,
+        "recommended_windows_per_label": result.get("recommended_samples"),
+        "accuracy_before": result.get("accuracy_before"),
+        "accuracy_after": result.get("accuracy_after"),
+        "updated_thresholds": result.get("updated_thresholds", {}),
+    })
+    calibration_cfg[sensor_key] = sensor_history
+    save_calibration_config(calibration_cfg)
 
 
 def _json(payload, status_code: int = 200):
@@ -323,35 +357,13 @@ def api_get_training_job(job_id):
     return job
 
 
-@training_bp.post('/api/model/evaluate')
-def api_eval_emg(payload: dict | None = Body(default=None)):
-    params = payload or {}
-    table_name = params.get('table_name') or 'emg_windows'
-    model_name = params.get('model_name')
-    res = evaluate_saved_model(sensor='EMG', table_name=table_name, model_name=model_name)
-    if "error" in res:
-        return res
-    return res
+@training_bp.post('/api/train-jobs/{job_id}/cancel')
+def api_cancel_training_job(job_id):
+    job = _request_training_job_cancel(job_id)
+    if not job:
+        return _json({"error": "Training job not found"}, 404)
+    return job
 
-@training_bp.post('/api/model/evaluate/eog')
-def api_eval_eog(payload: dict | None = Body(default=None)):
-    params = payload or {}
-    table_name = params.get('table_name') or 'eog_windows'
-    model_name = params.get('model_name')
-    res = evaluate_saved_eog_model(table_name=table_name, model_name=model_name)
-    if "error" in res:
-        return res
-    return res
-
-@training_bp.post('/api/model/evaluate/eeg')
-def api_eval_eeg(payload: dict | None = Body(default=None)):
-    params = payload or {}
-    table_name = params.get('table_name') or 'eeg_windows'
-    model_name = params.get('model_name')
-    res = evaluate_eeg_lda_model(table_name=table_name, model_name=model_name)
-    if "error" in res:
-        return res
-    return res
 
 @training_bp.get('/api/models/emg')
 def api_list_emg_models():
@@ -776,9 +788,6 @@ def api_save_windows_batch(payload: dict | None = Body(default=None)):
         shared_sensor = payload.get('sensor')
         shared_session_name = payload.get('session_name') or payload.get('sessionName')
         shared_mode = payload.get('mode')
-        shared_trial_id = None
-        if str(shared_sensor or '').upper() in {'EMG', 'EEG'}:
-            shared_trial_id = payload.get('trial_id') or payload.get('trial_group_id') or get_next_trial_id()
 
         results = []
         saved_count = 0
@@ -792,8 +801,6 @@ def api_save_windows_batch(payload: dict | None = Body(default=None)):
                 window_payload['session_name'] = shared_session_name
             if shared_mode and not window_payload.get('mode'):
                 window_payload['mode'] = shared_mode
-            if shared_trial_id and not (window_payload.get('trial_id') or window_payload.get('trial_group_id')):
-                window_payload['trial_id'] = shared_trial_id
 
             response = _save_window_payload(window_payload)
             if isinstance(response, tuple):
@@ -832,8 +839,9 @@ def api_calibrate(payload: dict | None = Body(default=None)):
         if not payload:
             return _json({"error": "No payload provided"}, 400)
         
-        sensor = payload.get('sensor')
+        sensor = str(payload.get('sensor', '')).upper()
         windows = payload.get('windows', [])
+        session_name = payload.get('session_name') or payload.get('sessionName')
         
         if not sensor or not windows:
             return _json({"error": "Missing sensor or windows"}, 400)
@@ -948,6 +956,8 @@ def api_calibrate(payload: dict | None = Body(default=None)):
             "recommended_samples": recommended_samples,
             "config_saved": save_success
         }
+
+        _persist_calibration_summary(sensor, result, windows, session_name=session_name)
         
         _safe_socket_emit('config_updated', {"sensor": sensor})
         

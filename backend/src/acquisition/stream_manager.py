@@ -129,8 +129,6 @@ class StreamManagerApp:
                 except Exception:
                     raise
 
-            # On Windows the destination file can be momentarily locked by a reader.
-            # Keeping the previous status file is better than spamming noisy errors.
             now = time.time()
             if now - self._last_status_write_error >= 5:
                 self._last_status_write_error = now

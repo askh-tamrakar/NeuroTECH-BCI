@@ -14,96 +14,96 @@
   },
   "EEG": {
     "target_freqs": [
-      3.5,
-      3.94,
-      5.25,
-      6.3,
-      7,
-      7.88
+      3.72,
+      4.19,
+      5.58,
+      6.7,
+      7.44,
+      8.38
     ],
     "targets": [
       {
-        "controlType": "Keyboard",
-        "divisor": 18,
-        "enabled": true,
-        "freq": 3.5,
         "id": 0,
-        "isManual": false,
+        "freq": 3.72,
         "label": "Target 1",
         "mappedKey": "W",
         "mappedMouse": "Left Click",
-        "source": "dynamic"
+        "enabled": true,
+        "controlType": "Keyboard",
+        "divisor": 18,
+        "source": "dynamic",
+        "isManual": false
       },
       {
-        "controlType": "Keyboard",
-        "divisor": 16,
-        "enabled": true,
-        "freq": 3.94,
         "id": 1,
-        "isManual": false,
+        "freq": 4.19,
         "label": "Target 2",
         "mappedKey": "A",
         "mappedMouse": "None",
-        "source": "dynamic"
+        "enabled": true,
+        "controlType": "Keyboard",
+        "divisor": 16,
+        "source": "dynamic",
+        "isManual": false
       },
       {
-        "controlType": "Keyboard",
-        "divisor": 12,
-        "enabled": true,
-        "freq": 5.25,
         "id": 2,
-        "isManual": false,
+        "freq": 5.58,
         "label": "Target 3",
         "mappedKey": "S",
         "mappedMouse": "None",
-        "source": "dynamic"
+        "enabled": true,
+        "controlType": "Keyboard",
+        "divisor": 12,
+        "source": "dynamic",
+        "isManual": false
       },
       {
-        "controlType": "Keyboard",
-        "divisor": 10,
-        "enabled": true,
-        "freq": 6.3,
         "id": 3,
-        "isManual": false,
+        "freq": 6.7,
         "label": "Target 4",
         "mappedKey": "D",
         "mappedMouse": "None",
-        "source": "dynamic"
+        "enabled": true,
+        "controlType": "Keyboard",
+        "divisor": 10,
+        "source": "dynamic",
+        "isManual": false
       },
       {
-        "controlType": "Keyboard",
-        "divisor": 9,
-        "enabled": true,
-        "freq": 7,
         "id": 4,
-        "isManual": false,
+        "freq": 7.44,
         "label": "Target 5",
         "mappedKey": "Space",
         "mappedMouse": "None",
-        "source": "dynamic"
+        "enabled": true,
+        "controlType": "Keyboard",
+        "divisor": 9,
+        "source": "dynamic",
+        "isManual": false
       },
       {
-        "controlType": "Keyboard",
-        "divisor": 8,
-        "enabled": true,
-        "freq": 7.88,
         "id": 5,
-        "isManual": false,
+        "freq": 8.38,
         "label": "Target 6",
         "mappedKey": "W",
         "mappedMouse": "None",
-        "source": "dynamic"
+        "enabled": true,
+        "controlType": "Keyboard",
+        "divisor": 8,
+        "source": "dynamic",
+        "isManual": false
       }
     ],
     "rest_threshold": 0.6,
     "window_len_sec": 1.5,
     "ratio_threshold": 1.2,
-    "classifier": "fbcca",
+    "classifier": "lda",
     "num_harmonics": 4,
     "step_sec": 0.25,
     "smoothing_windows": 7,
-    "refresh_rate": 63,
-    "use_ml_pipeline": false
+    "refresh_rate": 67,
+    "use_ml_pipeline": true
   },
   "EOG": {
     "detection_method": "ML",
@@ -219,44 +219,6 @@
       "timestamp": [
         1596924158.1718078,
         1951796193.3210986
-      ]
-    },
-    "Rock": {
-      "amplitude": [
-        4.020154147334397,
-        36.88031663894653
-      ],
-      "asymmetry": [
-        0.245199408795865,
-        1.437371130316054
-      ],
-      "duration_ms": [
-        805.5,
-        984.5000000000001
-      ],
-      "fall_time_ms": [
-        349.2,
-        677
-      ],
-      "kurtosis": [
-        -0.6588878922688091,
-        4.872981411385962
-      ],
-      "peak_count": [
-        0,
-        0
-      ],
-      "rise_time_ms": [
-        166,
-        557.7
-      ],
-      "skewness": [
-        -0.715108871687172,
-        0.22840416935791408
-      ],
-      "timestamp": [
-        1597598491.6340024,
-        1952620378.6637807
       ]
     }
   },

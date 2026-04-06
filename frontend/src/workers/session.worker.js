@@ -15,7 +15,6 @@ self.onmessage = async function (e) {
         case 'INIT':
             activeSensor = payload.sensor || activeSensor;
             isTestMode = payload.isTestMode !== undefined ? payload.isTestMode : isTestMode;
-            apiBaseUrl = payload.apiBaseUrl || apiBaseUrl;
             await fetchSessions();
             break;
         case 'SET_SENSOR':

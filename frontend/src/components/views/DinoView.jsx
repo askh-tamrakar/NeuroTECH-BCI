@@ -45,10 +45,6 @@ const resolveColorVar = (styles, initialProp, fallbackProp1, fallbackProp2) => {
 };
 
 export default function DinoView({ isConnected, wsEvent, isPaused }) {
-<<<<<<< HEAD
-    const API_BASE_URL = buildApiUrl('');
-=======
->>>>>>> c7bf9055e61ec66fb244ff992eedfd6cca495c42
     const normalizeModelName = useCallback((name) => String(name || '').toLowerCase().replace(/[^a-z0-9]/g, ''), []);
 
     const togglePrediction = useCallback((active) => {
@@ -931,7 +927,7 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
 
         try {
             setFeedbackSaving(true)
-            await fetch(buildApiUrl('/api/eog/feedback'), {
+            const response = await fetch(buildApiUrl('/api/eog/feedback'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -941,6 +937,9 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
                     features: feedbackPrompt.features,
                 })
             })
+            if (!response.ok) {
+                throw new Error(`EOG feedback failed (${response.status})`)
+            }
         } catch (error) {
             console.error("Failed to save EOG feedback:", error)
         } finally {
@@ -1043,7 +1042,7 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
                                             <span className={isNewJumpRecord ? 'record-glow' : ''}>
                                                 <Counter value={bestCactusJump} fontSize="1.6rem" places={[100, 10, 1]} className="stat-counter-primary-light" style={{ lineHeight: 1 }} />
                                             </span>
-                                            <span className='stat-row-centered stat-info'> <ChevronLeft />  HIGHEST</span>
+                                            <span className='stat-row-centered stat-info'> <ChevronLeft />  BEST</span>
                                         </div>
                                     </div>
                                 </div>
@@ -1055,13 +1054,13 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
                                     {/* Right Center: Score & Best Score */}
                                     <div className="stat-group-center">
                                         <div className="stat-row-centered">
-                                            <span className='stat-row-centered stat-info'>HIGHEST <ChevronRight /></span>
+                                            <span className='stat-row-centered stat-info'>BEST <ChevronRight /></span>
                                             <span className={isNewScoreRecord ? 'record-glow' : ''}>
                                                 <Counter value={Math.floor(highScore / 10)} fontSize="1.6rem" places={[10000, 1000, 100, 10, 1]} className="stat-counter-primary-light" style={{ lineHeight: 1 }} />
                                             </span>
                                             <Target size={34} className="text-primary/40 mx-2" />
                                             <Counter value={Math.floor(score / 10)} fontSize="1.6rem" places={[10000, 1000, 100, 10, 1]} className="stat-counter-primary-light" style={{ lineHeight: 1 }} />
-                                            <span className='stat-row-centered stat-info'> <ChevronLeft />  RUN</span>
+                                            <span className='stat-row-centered stat-info'> <ChevronLeft />  SCORE</span>
                                         </div>
                                     </div>
 
@@ -1526,4 +1525,3 @@ const SettingSelect = ({ label, value, options, onChange }) => (
         </div>
     </div>
 )
-import { buildApiUrl } from '../../utils/runtimeConnection';

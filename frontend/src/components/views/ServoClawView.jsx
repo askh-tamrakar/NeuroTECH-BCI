@@ -20,10 +20,6 @@ export default function ServoClawView({ wsEvent, isConnected }) {
     // Data for models and config
     const [models, setModels] = useState({ eog: [], emg: [] });
     const [eegConfig, setEegConfig] = useState({ rest_threshold: 0.6, ratio_threshold: 1.2 });
-<<<<<<< HEAD
-    const API_BASE_URL = buildApiUrl('');
-=======
->>>>>>> c7bf9055e61ec66fb244ff992eedfd6cca495c42
 
     // Fetch initial models and config
     React.useEffect(() => {
@@ -544,4 +540,3 @@ export default function ServoClawView({ wsEvent, isConnected }) {
         </div>
     );
 }
-import { buildApiUrl } from '../../utils/runtimeConnection';

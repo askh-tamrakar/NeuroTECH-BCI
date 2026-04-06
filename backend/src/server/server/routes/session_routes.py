@@ -8,7 +8,6 @@ from src.server.server.state import state
 from src.database.db_manager import db_manager
 from src.config.window_config import SESSION_CONFIG, get_window_samples
 from src.feature.extractors.rps_extractor import EMG_FEATURE_COLUMNS
-from src.utils.trial_utils import get_next_trial_id
 # from src.server.server.lsl_service import extract_emg_features # If needed for saving EMG buffer
 # Import extract_emg_features from lsl_service to avoid duplication if possible, 
 # but lsl_service.py has it.
@@ -66,31 +65,6 @@ def _resolve_sampling_rate():
     return float((state.config or {}).get('sampling_rate') or state.sr or SESSION_CONFIG["sampling_rate"])
 
 
-def _resolve_eeg_target_frequency(label_value, target_freqs=None):
-    cfg = state.config or {}
-    eeg_cfg = cfg.get('features', {}).get('EEG', {})
-    target_freqs = [float(freq) for freq in (target_freqs or eeg_cfg.get('target_freqs', [8, 9, 12, 14.4, 16, 18]))]
-
-    if label_value in (None, "", "Rest", "rest", 0, "0"):
-        return 0.0
-
-    try:
-        label_int = int(label_value)
-    except Exception:
-        label_str = str(label_value).strip().lower()
-        if label_str.startswith('target '):
-            try:
-                label_int = int(label_str.split()[-1])
-            except Exception:
-                return 0.0
-        else:
-            return 0.0
-
-    if 0 < label_int <= len(target_freqs):
-        return float(target_freqs[label_int - 1])
-    return 0.0
-
-
 def _normalize_collection_context(sensor_type, payload=None):
     payload = payload or {}
     sensor = str(sensor_type).upper()
@@ -123,7 +97,7 @@ def _normalize_collection_context(sensor_type, payload=None):
         else:
             stride_ms = window_ms
 
-    context = {
+    return {
         "mode": payload.get('mode', 'collection'),
         "label": payload.get('class_label') or payload.get('label'),
         "session_name": payload.get('session_name', 'Manual_Windows'),
@@ -136,9 +110,6 @@ def _normalize_collection_context(sensor_type, payload=None):
         "channel_index": int(payload.get('channel_index', payload.get('channel', 0)) or 0),
         "target_frequency": float(payload.get('target_frequency') or payload.get('targetFrequency') or 0),
     }
-    if sensor in {'EMG', 'EEG'}:
-        context["trial_id"] = payload.get('trial_id') or payload.get('trial_group_id') or get_next_trial_id()
-    return context
 
 @session_bp.get('/api/sessions/{sensor_type}')
 def api_list_sessions(sensor_type):
@@ -321,7 +292,6 @@ def api_emg_stop():
         session_id = str(uuid.uuid4())
         data_store = state.session.data_store['EMG']
         collection_context = state.session.get_collection_context('EMG') or {}
-        trial_id = str(collection_context.get('trial_id') or get_next_trial_id())
         sr = state.sr or SESSION_CONFIG["sampling_rate"]
         window_ms = float(collection_context.get('window_duration_ms') or SESSION_CONFIG["window_ms"])
         overlap = float(collection_context.get('overlap') or SESSION_CONFIG["overlap"])
@@ -498,18 +468,7 @@ def api_eog_stop():
     try:
         session_id = str(uuid.uuid4())
         data_store = state.session.data_store['EOG']
-        collection_context = state.session.get_collection_context('EOG') or {}
-        sr = state.sr or 1000
         saved_count = 0
-
-        db_manager.save_session_metadata('EOG', target_table, {
-            "sensor": "EOG",
-            "table_name": target_table,
-            "session_name": state.session.current_session_name,
-            "sampling_rate": float(sr),
-            "overlap": 0.0,
-            "source": "backend_session_buffer",
-        })
         
         for label_str, samples in data_store.items():
             if len(samples) < 50:
@@ -545,11 +504,9 @@ def api_eog_stop():
 
         print(f"💾 Saved {saved_count} EOG windows to {target_table}")
         state.session.reset_recording_state()
-        state.session.stop_collection_context('EOG')
         
     except Exception as e:
         print(f"❌ Error processing EOG session: {e}")
-        state.session.stop_collection_context('EOG')
 
     return {"status": "stopped", "saved_windows": saved_count if 'saved_count' in locals() else 0}
 
@@ -598,8 +555,6 @@ def api_eeg_stop():
     try:
         session_id = str(uuid.uuid4())
         data_store = state.session.data_store['EEG']
-        collection_context = state.session.get_collection_context('EEG') or {}
-        trial_id = str(collection_context.get('trial_id') or get_next_trial_id())
         saved_count = 0
         eeg_cfg = (state.config or {}).get('features', {}).get('EEG', {})
         channel_mapping = (state.config or {}).get('channel_mapping', {})
@@ -613,18 +568,6 @@ def api_eeg_stop():
                 except Exception:
                     eeg_channel_index = 0
                 break
-
-        db_manager.save_session_metadata('EEG', target_table, {
-            "sensor": "EEG",
-            "table_name": target_table,
-            "session_name": state.session.current_session_name,
-            "sampling_rate": float(sr),
-            "window_ms": float((window_size / sr) * 1000.0),
-            "stride_ms": float((step_size / sr) * 1000.0),
-            "channel_index": int(eeg_channel_index),
-            "target_frequencies": target_freqs,
-            "source": "backend_session_buffer",
-        })
         
         for label_str, samples in data_store.items():
             if len(samples) < 50:
@@ -671,11 +614,9 @@ def api_eeg_stop():
 
         print(f"💾 Saved {saved_count} EEG windows to {target_table}")
         state.session.reset_recording_state()
-        state.session.stop_collection_context('EEG')
         
     except Exception as e:
         print(f"❌ Error processing EEG session: {e}")
-        state.session.stop_collection_context('EEG')
 
     return {"status": "stopped", "saved_windows": saved_count if 'saved_count' in locals() else 0}
 

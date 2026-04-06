@@ -119,19 +119,23 @@ def _load_table(sensor: str, table_name: str):
 
 
 def _resolve_split_configuration(train_split, val_split, test_split, n_folds):
-    test_ratio = min(max(_safe_float(test_split, 0.15), 0.0), 0.5)
+    test_ratio = min(max(_safe_float(test_split, 0.15), 0.01), 0.5)
     remaining = max(0.01, 1.0 - test_ratio)
-    requested_folds = int(max(2, min(15, int(n_folds or 2))))
+    requested_folds = int(max(1, min(15, int(n_folds or 1))))
 
-    val_ratio = remaining / requested_folds
-    train_ratio = remaining - val_ratio
+    if requested_folds <= 1:
+        val_ratio = 0.0
+        train_ratio = remaining
+    else:
+        val_ratio = remaining / requested_folds
+        train_ratio = remaining - val_ratio
 
     return {
         "requested": {
             "train_ratio": _safe_float(train_split, 0.7),
             "val_ratio": _safe_float(val_split, 0.15),
             "test_ratio": _safe_float(test_split, 0.15),
-            "k_folds": int(n_folds or 2),
+            "k_folds": int(n_folds or 1),
         },
         "resolved": {
             "train_ratio": round(train_ratio, 6),
@@ -205,6 +209,10 @@ def _split_train_and_test(df: pd.DataFrame, group_col: str, test_ratio: float):
 
 
 def _build_folds(train_df: pd.DataFrame, group_col: str, resolved_folds: int):
+    if resolved_folds <= 1:
+        all_indices = np.arange(len(train_df))
+        return [(all_indices, np.array([], dtype=int))]
+
     groups = train_df[group_col].astype(str)
     unique_groups = groups.unique()
     if len(unique_groups) >= resolved_folds:
@@ -376,6 +384,7 @@ def _build_result_payload(sensor: str, model_name: str, metadata: dict, evaluati
         "visualization": metadata.get("visualization"),
         "artifact_path": metadata.get("artifact_path"),
         "created_at": metadata.get("created_at"),
+        "table_name": metadata.get("table_name"),
     }
     if evaluation_table:
         payload["evaluation_table"] = evaluation_table
@@ -415,9 +424,13 @@ def _fit_random_forest(sensor: str, train_df: pd.DataFrame, test_df: pd.DataFram
             fold_val = train_df.iloc[val_idx].copy()
             scaler = StandardScaler()
             x_train = scaler.fit_transform(fold_train[feature_cols].fillna(0.0))
-            x_val = scaler.transform(fold_val[feature_cols].fillna(0.0))
             y_train = fold_train['label'].astype(int)
-            y_val = fold_val['label'].astype(int)
+            if len(fold_val) == 0:
+                x_val = x_train
+                y_val = y_train
+            else:
+                x_val = scaler.transform(fold_val[feature_cols].fillna(0.0))
+                y_val = fold_val['label'].astype(int)
 
             model = RandomForestClassifier(
                 n_estimators=int(candidate_params.get("n_estimators", 100)),
@@ -643,7 +656,11 @@ def load_model(sensor, model_name):
     ACTIVE_MODEL_NAMES[sensor] = model_name
     from src.utils.config import config_manager
     config_manager.set_active_model(sensor, model_name)
-    return {"status": "success", "model_name": model_name}
+    metadata = _read_metadata(sensor, model_name)
+    payload = _build_result_payload(sensor, model_name, metadata)
+    payload["status"] = "success"
+    payload["loaded"] = True
+    return payload
 
 
 def evaluate_saved_model(sensor='EMG', table_name=None, model_name=None):

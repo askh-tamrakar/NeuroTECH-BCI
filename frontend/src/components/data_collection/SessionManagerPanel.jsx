@@ -38,32 +38,7 @@ export default function SessionManagerPanel({
 
         const map = SENSOR_LABEL_MAP[sensor] || {};
         const num = Number(val);
-        if (sensor === 'EEG' && Number.isFinite(num) && num > 0) {
-            return map[num] !== undefined ? map[num] : `Target ${num}`;
-        }
         return map[num] !== undefined ? map[num] : val;
-    };
-
-    const FEATURE_COLUMN_PRIORITY = {
-        EMG: [
-            'trial_id',
-            'channel_index',
-            'sample_count',
-            'window_ms',
-            'sampling_rate',
-            'session_window_ms',
-            'session_overlap',
-            'session_stride_ms',
-            'gap_ms'
-        ],
-        EEG: [
-            'target_frequency',
-            'trial_id',
-            'channel_index',
-            'sample_count',
-            'window_ms'
-        ],
-        EOG: []
     };
 
     const [newSessionInput, setNewSessionInput] = useState("");
@@ -172,23 +147,6 @@ export default function SessionManagerPanel({
         estimateSize: () => 36, // approx row height
         overscan: 10,
     });
-
-    const orderedFeatureKeys = useMemo(() => {
-        if (!(rows.length > 0 && rows[0].features) || Array.isArray(rows[0].features)) {
-            return [];
-        }
-
-        const baseKeys = Object.keys(rows[0].features);
-        const priority = FEATURE_COLUMN_PRIORITY[activeSensor] || [];
-        const priorityIndex = new Map(priority.map((key, index) => [key, index]));
-
-        return [...baseKeys].sort((a, b) => {
-            const aPriority = priorityIndex.has(a) ? priorityIndex.get(a) : Number.MAX_SAFE_INTEGER;
-            const bPriority = priorityIndex.has(b) ? priorityIndex.get(b) : Number.MAX_SAFE_INTEGER;
-            if (aPriority !== bPriority) return aPriority - bPriority;
-            return baseKeys.indexOf(a) - baseKeys.indexOf(b);
-        });
-    }, [rows, activeSensor]);
 
     // Helper to get full table name from the current short name
     const fullCurrentSessionName = useMemo(() => {
@@ -497,7 +455,7 @@ export default function SessionManagerPanel({
                                         )}
                                         {/* Dynamic Feature Headers */}
                                         {rows.length > 0 && rows[0].features && !Array.isArray(rows[0].features) ? (
-                                            orderedFeatureKeys.map(key => (
+                                            Object.keys(rows[0].features).map(key => (
                                                 <th key={key} className="px-3 py-1.5 text-xs font-bold text-primary uppercase border-b border-[var(--section-border)]">
                                                     {key}
                                                 </th>
@@ -540,7 +498,7 @@ export default function SessionManagerPanel({
                                                 )}
 
                                                 {rows.length > 0 && rows[0].features && !Array.isArray(rows[0].features) ? (
-                                                    orderedFeatureKeys.map(key => (
+                                                    Object.keys(rows[0].features).map(key => (
                                                         <td key={key} className="px-3 py-1.5 text-muted font-mono">
                                                             {(typeof row.features[key] === 'number') ? row.features[key].toFixed(2) : row.features[key]}
                                                         </td>

@@ -112,14 +112,9 @@ COMPACT_EEG_SESSION_COLUMN_DEFS = {
     "peak_freq": "REAL NOT NULL DEFAULT 0",
     "metadata_json": "TEXT DEFAULT ''",
     "session_id": "TEXT",
-    "trial_id": "TEXT DEFAULT ''",
     "timestamp": "REAL",
     "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
 }
-
-EMG_REQUIRED_SESSION_COLUMNS = {"class_label", "trial_id"}
-EEG_REQUIRED_SESSION_COLUMNS = {"class_label", "trial_id", "target_frequency"}
-EOG_FORBIDDEN_SESSION_COLUMNS = {"trial_group_id", "trial_id"}
 
 class DatabaseManager:
     def __init__(self):
@@ -233,14 +228,11 @@ class DatabaseManager:
                 source TEXT DEFAULT 'manual',
                 corrected_label INTEGER,
                 session_id TEXT,
-                trial_id TEXT DEFAULT '',
                 timestamp REAL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
-        cursor.execute(f"PRAGMA table_info({table_name})")
-        if "class_label" in {row[1] for row in cursor.fetchall()}:
-            cursor.execute(f'CREATE INDEX IF NOT EXISTS idx_{table_name}_class_label ON {table_name}(class_label)')
+        cursor.execute(f'CREATE INDEX IF NOT EXISTS idx_{table_name}_label ON {table_name}(label)')
 
     def _create_emg_session_table(self, cursor, table_name):
         columns_sql = ",\n                ".join(
@@ -251,7 +243,7 @@ class DatabaseManager:
                 {columns_sql}
             )
         ''')
-        cursor.execute(f'CREATE INDEX IF NOT EXISTS idx_{table_name}_class_label ON {table_name}(class_label)')
+        cursor.execute(f'CREATE INDEX IF NOT EXISTS idx_{table_name}_label ON {table_name}(label)')
 
     def _create_eog_table(self, cursor, table_name):
         cursor.execute(f'''
@@ -327,14 +319,11 @@ class DatabaseManager:
                 window_ms REAL DEFAULT 0,
                 metadata_json TEXT DEFAULT '',
                 session_id TEXT,
-                trial_id TEXT DEFAULT '',
                 timestamp REAL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
-        cursor.execute(f"PRAGMA table_info({table_name})")
-        if "class_label" in {row[1] for row in cursor.fetchall()}:
-            cursor.execute(f'CREATE INDEX IF NOT EXISTS idx_{table_name}_class_label ON {table_name}(class_label)')
+        cursor.execute(f'CREATE INDEX IF NOT EXISTS idx_{table_name}_label ON {table_name}(label)')
 
     def _create_eeg_session_table(self, cursor, table_name):
         columns_sql = ",\n                ".join(
@@ -371,37 +360,6 @@ class DatabaseManager:
             if column_name not in existing:
                 cursor.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}")
 
-    def _table_columns(self, conn, table_name: str) -> set[str]:
-        cursor = conn.cursor()
-        cursor.execute(f"PRAGMA table_info({table_name})")
-        return {row[1] for row in cursor.fetchall()}
-
-    def _resolve_label_column(self, sensor: str, columns: set[str]) -> str:
-        sensor = str(sensor).upper()
-        if sensor in {"EMG", "EEG"} and "class_label" in columns:
-            return "class_label"
-        return "label"
-
-    def _resolve_trial_column(self, sensor: str, columns: set[str]) -> str | None:
-        sensor = str(sensor).upper()
-        if sensor in {"EMG", "EEG"}:
-            if "trial_id" in columns:
-                return "trial_id"
-            if "trial_group_id" in columns:
-                return "trial_group_id"
-        return None
-
-    def _session_table_is_supported(self, conn, sensor: str, table_name: str) -> bool:
-        columns = self._table_columns(conn, table_name)
-        sensor = str(sensor).upper()
-        if sensor == "EMG":
-            return EMG_REQUIRED_SESSION_COLUMNS.issubset(columns)
-        if sensor == "EEG":
-            return EEG_REQUIRED_SESSION_COLUMNS.issubset(columns)
-        if sensor == "EOG":
-            return not any(column in columns for column in EOG_FORBIDDEN_SESSION_COLUMNS)
-        return True
-
     def _ensure_emg_columns(self, conn, table_name: str):
         self._ensure_columns(conn, table_name, {
             "trial": "TEXT DEFAULT ''",
@@ -432,8 +390,6 @@ class DatabaseManager:
             "confidence": "REAL DEFAULT 0",
             "source": "TEXT DEFAULT 'manual'",
             "corrected_label": "INTEGER",
-            "class_label": "INTEGER",
-            "trial_id": "TEXT DEFAULT ''",
         })
         # Create index after ensuring column exists
         cursor = conn.cursor()
@@ -492,8 +448,6 @@ class DatabaseManager:
             "sample_count": "INTEGER DEFAULT 0",
             "window_ms": "REAL DEFAULT 0",
             "metadata_json": "TEXT DEFAULT ''",
-            "class_label": "INTEGER",
-            "trial_id": "TEXT DEFAULT ''",
         })
         cursor = conn.cursor()
         cursor.execute(f'CREATE INDEX IF NOT EXISTS idx_{table_name}_label ON {table_name}(label)')
@@ -719,13 +673,9 @@ class DatabaseManager:
         cursor = conn.cursor()
         prefix = f"{sensor.lower()}_session_"
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE ?", (f"{prefix}%",))
-        rows = [
-            row[0]
-            for row in cursor.fetchall()
-            if self._session_table_is_supported(conn, sensor, row[0])
-        ]
+        rows = cursor.fetchall()
         conn.close()
-        return rows
+        return [r[0] for r in rows]
 
     # --- Session Management ---
     def delete_session_table(self, sensor_type: str, session_name: str) -> bool:
@@ -854,7 +804,7 @@ class DatabaseManager:
                 self.save_session_metadata(sensor, target_table, {
                     "sensor": sensor,
                     "table_name": target_table,
-                    "storage_format": "compact_emg_v2",
+                    "storage_format": "compact_emg_v1",
                     "feature_columns": COMPACT_EMG_FEATURE_COLUMNS,
                     "merged_from": source_tables,
                     "source_metadata": [meta for meta in merged_sources if meta],
@@ -885,14 +835,12 @@ class DatabaseManager:
             conn = self.connect(sensor)
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
-            columns = self._table_columns(conn, session_name)
-            label_column = self._resolve_label_column(sensor, columns)
 
             # Build WHERE clause
             where_clauses = []
             params = []
             if label_filter is not None:
-                where_clauses.append(f"{label_column} = ?")
+                where_clauses.append("label = ?")
                 params.append(label_filter)
             if row_from is not None:
                 where_clauses.append("id >= ?")
@@ -918,11 +866,10 @@ class DatabaseManager:
             allowed_sort = {'id', 'label', 'timestamp', 'created_at'}
             if sort_by not in allowed_sort:
                 sort_by = 'id'
-            sort_column = label_column if sort_by == 'label' else sort_by
             
             order = 'DESC' if order.upper() == 'DESC' else 'ASC'
             
-            query = f"SELECT * FROM {session_name}{where_stmt} ORDER BY {sort_column} {order}"
+            query = f"SELECT * FROM {session_name}{where_stmt} ORDER BY {sort_by} {order}"
             
             if limit is not None:
                 query += " LIMIT ? OFFSET ?"
@@ -938,13 +885,13 @@ class DatabaseManager:
                 r_dict = dict(row)
                 item = {
                     "id": r_dict.get('id'),
-                    "label": r_dict.get(label_column, r_dict.get('label')),
+                    "label": r_dict.get('label'),
                     "timestamp": r_dict.get('timestamp')
                 }
                 
                 # Collect remaining columns as features for display
                 excluded = {
-                    'id', 'label', 'class_label', 'session_id', 'timestamp', 'created_at', 'metadata_json',
+                    'id', 'label', 'session_id', 'timestamp', 'created_at', 'metadata_json',
                     'confidence', 'source', 'corrected_label'
                 }
                 features = {k: v for k, v in r_dict.items() if k not in excluded}
@@ -1177,8 +1124,7 @@ class DatabaseManager:
         try:
             conn = self.connect('EMG')
             cursor = conn.cursor()
-            label_column = self._resolve_label_column('EMG', self._table_columns(conn, table_name))
-            cursor.execute(f'SELECT {label_column}, COUNT(*) FROM {table_name} GROUP BY {label_column}')
+            cursor.execute(f'SELECT label, COUNT(*) FROM {table_name} GROUP BY label')
             rows = cursor.fetchall()
             counts = { "0": 0, "1": 0, "2": 0, "3": 0 }
             for l, c in rows: counts[str(l)] = c
@@ -1354,8 +1300,7 @@ class DatabaseManager:
         try:
             conn = self.connect('EEG')
             cursor = conn.cursor()
-            label_column = self._resolve_label_column('EEG', self._table_columns(conn, table_name))
-            cursor.execute(f'SELECT {label_column}, COUNT(*) FROM {table_name} GROUP BY {label_column}')
+            cursor.execute(f'SELECT label, COUNT(*) FROM {table_name} GROUP BY label')
             rows = cursor.fetchall()
             counts = {"0": 0, "1": 0, "2": 0, "3": 0, "4": 0, "5": 0, "6": 0}
             for l, c in rows: counts[str(l)] = c

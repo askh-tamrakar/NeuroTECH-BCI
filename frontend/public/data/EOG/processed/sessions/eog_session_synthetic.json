@@ -1,8 +1,0 @@
-{
-  "sensor": "EOG",
-  "table_name": "eog_session_synthetic",
-  "created_at": "2026-04-01T18:04:07Z",
-  "sample_count": 10000,
-  "type": "synthetic",
-  "storage_format": "eog_v1"
-}

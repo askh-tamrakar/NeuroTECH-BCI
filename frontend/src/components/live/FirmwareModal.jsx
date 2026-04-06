@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Copy, Download, Check, Cpu, Calendar, Info, Code, Zap, Loader2 } from 'lucide-react';
-import { createPortal } from 'react-dom';
 
 const SyntaxHighlighted = ({ content }) => {
   const lines = content.split('\n');
@@ -32,20 +31,6 @@ const SyntaxHighlighted = ({ content }) => {
     </pre>
   );
 };
-
-const Backdrop = React.memo(({ onClose }) => (
-  <motion.div
-    initial={{ opacity: 0 }}
-    animate={{ opacity: 1 }}
-    exit={{ opacity: 0 }}
-    onClick={onClose}
-    className="absolute inset-0 bg-black/60 transform-gpu"
-    style={{ 
-      willChange: 'opacity',
-      backfaceVisibility: 'hidden'
-    }}
-  />
-));
 
 export default function FirmwareModal({ isOpen, onClose }) {
   const [firmwareList, setFirmwareList] = useState([]);
@@ -115,17 +100,56 @@ export default function FirmwareModal({ isOpen, onClose }) {
     URL.revokeObjectURL(url);
   };
 
-  return createPortal(
+  return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 font-['Inter'] isolation-isolate">
-          <Backdrop onClose={onClose} />
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 font-['Inter']">
+          <style>{`
+            .fw-scroll::-webkit-scrollbar {
+              width: 8px;
+              height: 8px;
+            }
+            .fw-scroll::-webkit-scrollbar-track {
+              background: rgba(0, 0, 0, 0.4);
+            }
+            .fw-scroll::-webkit-scrollbar-thumb {
+              background: rgba(255, 255, 255, 0.15);
+              border-radius: 4px;
+              border: 1px solid rgba(0, 0, 0, 0.2);
+            }
+            .fw-scroll::-webkit-scrollbar-thumb:hover {
+              background: rgba(255, 255, 255, 0.3);
+            }
+            .fw-scroll::-webkit-scrollbar-corner {
+              background: transparent;
+            }
+
+            .sidebar-scroll::-webkit-scrollbar {
+              width: 5px;
+            }
+            .sidebar-scroll::-webkit-scrollbar-track {
+              background: transparent;
+            }
+            .sidebar-scroll::-webkit-scrollbar-thumb {
+              background: rgba(255, 255, 255, 0.2);
+              border-radius: 10px;
+            }
+            .sidebar-scroll::-webkit-scrollbar-thumb:hover {
+              background: rgba(255, 255, 255, 0.4);
+            }
+          `}</style>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={onClose}
+            className="absolute inset-0 bg-black/80 backdrop-blur-xl"
+          />
 
           <motion.div
             initial={{ scale: 0.95, opacity: 0, y: 30 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
             exit={{ scale: 0.95, opacity: 0, y: 30 }}
-            transition={{ type: 'spring', damping: 25, stiffness: 300 }}
             className="relative w-full max-w-5xl h-[85vh] border border-border/20 rounded-[2.5rem] shadow-[0_40px_100px_rgba(0,0,0,0.7)] overflow-hidden flex flex-col"
             style={{
               background: 'linear-gradient(135deg, rgba(5,5,10,1) 0%, rgba(15,15,20,1) 50%, rgba(5,5,10,1) 100%)',
@@ -142,7 +166,7 @@ export default function FirmwareModal({ isOpen, onClose }) {
             <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-primary/40 to-transparent opacity-30" />
 
             {/* Header */}
-            <div className="p-6 border-b border-border/10 flex items-center justify-between bg-black/40">
+            <div className="p-6 border-b border-border/10 flex items-center justify-between bg-black/10 backdrop-blur-md">
               <div className="flex items-center gap-6">
                 <div className="p-3 bg-primary/20 rounded-xl shadow-[0_0_20px_rgba(var(--primary-rgb),0.2)] border border-primary/30">
                   <Cpu className="text-primary" size={28} />
@@ -164,6 +188,7 @@ export default function FirmwareModal({ isOpen, onClose }) {
             </div>
 
             <div className="flex flex-1 overflow-hidden">
+              {/* Sidebar */}
               <div className="w-[280px] border-r border-border/10 bg-black/20 p-5 flex flex-col gap-6 overflow-hidden">
                 <div className="space-y-2 flex-1 overflow-y-auto sidebar-scroll">
                   <div className="flex items-center justify-between mb-2">
@@ -196,6 +221,7 @@ export default function FirmwareModal({ isOpen, onClose }) {
                   )}
                 </div>
 
+                {/* Meta Info in Sidebar */}
                 {selectedFw && !manifestLoading && (
                   <div className="pt-4 border-t border-border/10 space-y-3">
                     <div className="flex items-center justify-between">
@@ -210,6 +236,7 @@ export default function FirmwareModal({ isOpen, onClose }) {
                 )}
               </div>
 
+              {/* Content area */}
               <div className="flex-1 p-6 flex flex-col bg-black/10 relative overflow-hidden">
                 {selectedFw ? (
                   <motion.div
@@ -251,7 +278,8 @@ export default function FirmwareModal({ isOpen, onClose }) {
             </div>
 
             {/* Footer */}
-            <div className="px-8 py-5 bg-black/40 border-t border-border/10 flex items-center justify-between gap-6">
+            <div className="px-8 py-5 bg-black/20 border-t border-border/10 flex items-center justify-between gap-6 backdrop-blur-md">
+              {/* Briefing Box */}
               {selectedFw ? (
                 <motion.div
                   initial={{ opacity: 0, y: 10 }}
@@ -293,7 +321,6 @@ export default function FirmwareModal({ isOpen, onClose }) {
           </motion.div>
         </div>
       )}
-    </AnimatePresence>,
-    document.body
+    </AnimatePresence>
   );
 }

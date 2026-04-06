@@ -8,6 +8,14 @@ import random
 import threading
 import queue
 from pathlib import Path
+
+# --- Path Bootstrapping ---
+# Add the 'backend' directory to sys.path to support 'src' imports when run directly
+backend_root = Path(__file__).resolve().parents[2]
+if str(backend_root) not in sys.path:
+    sys.path.insert(0, str(backend_root))
+# --------------------------
+
 from datetime import datetime
 from PySide6 import QtCore, QtWidgets, QtGui
 import pyqtgraph as pg

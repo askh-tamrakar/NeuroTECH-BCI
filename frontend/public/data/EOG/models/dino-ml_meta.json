@@ -1,0 +1,1 @@
+{"n_estimators": 50, "max_depth": 4, "min_impurity_decrease": 0.0, "test_size": 0.1, "table_name": "eog_session_Dino_Lucifer", "created_at": "2026-02-28T02:06:16.012369", "accuracy": 1.0}

@@ -8,7 +8,8 @@ import {
     Database, Hand, Eye, Network, Grid3X3, Brain, PieChart,
     RefreshCw, Sliders, ChevronLeft, ChevronRight, Circle,
     ArrowRightFromLine, Info, BookOpen, BrainCircuit,
-    Clock, Activity, Fingerprint, Layers, Timer, Cpu, GitMerge, Search, Zap, GitBranch, MousePointer2
+    Clock, Activity, Fingerprint, Layers, Timer, Cpu, GitMerge,
+    Search, Zap, GitBranch, MousePointer2
 } from 'lucide-react';
 import { soundHandler } from '../../handlers/SoundHandler';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -34,43 +35,59 @@ const renderCustomNodeElement = ({ nodeDatum, toggleNode }) => (
 
 // --- NEW/UPDATED COMPONENTS ---
 
-const ModelIdBadge = ({ model, size = 'sm', isActive = false }) => {
+const ModelIdBadge = ({ model, size = 'sm', isActive = false, className = '' }) => {
     const candidateIdx = model.candidate_index ?? model.candidate_idx ?? 0;
     const foldIdx = model.fold_index ?? model.fold_idx ?? 0;
     const displayCandidateIdx = candidateIdx + 1;
     const hasIndices = (model.candidate_index !== undefined || model.candidate_idx !== undefined);
     const preferredId = model.best_fold_id || model.model_id || model.id;
 
-    const mutedColor = 'text-[var(--text)]';
-    const primaryColor = 'text-[var(--graph-line-1)]';
+    const sizeMap = {
+        'xs': 'text-[12px]',
+        'sm': 'text-[15px]',
+        'md': 'text-[18px]',
+        'lg': 'text-[20px]',
+        'xl': 'text-[24px]',
+        'huge': 'text-[38px]',
+    };
+
+    const sizeClass = sizeMap[size] || (size.startsWith('text-') ? size : `text-${size}`);
+    const mutedColor = isActive ? 'text-[var(--text)]' : 'text-[var(--text)]';
+    const primaryColor = isActive ? 'text-[var(--primary)]' : 'text-[var(--graph-line-1)]';
 
     if (!hasIndices && !preferredId) {
-        return <span className={`opacity-40 italic ${size === 'sm' ? 'text-[10px]' : 'text-[12px]'}`}>ID UNKNOWN</span>;
+        return <span className={`opacity-40 italic ${sizeClass} ${className}`}>ID UNKNOWN</span>;
     }
 
-    // If we have a formatted model_id but no indices, try to parse it or just show it
-    if (!hasIndices && preferredId) {
-        const id = preferredId;
-        const match = String(id).match(/^([C-Z])([0-9A-F]{2})F([0-9A-F]+)$/i);
-        if (match) {
-            return (
-                <span className={`font-mono font-black ${size === 'sm' ? 'text-[10px]' : 'text-[14px]'}`}>
-                    <span className={mutedColor}>{match[1].toUpperCase()}</span>
-                    <span className={primaryColor}>{match[2].toUpperCase()}</span>
-                    <span className={`${mutedColor} ml-0.5`}>F</span>
-                    <span className={primaryColor}>{match[3].toUpperCase()}</span>
-                </span>
-            );
+    const renderContent = () => {
+        if (!hasIndices && preferredId) {
+            const match = String(preferredId).match(/^([C-Z])([0-9A-F]{2})F([0-9A-F]+)$/i);
+            if (match) {
+                return (
+                    <>
+                        <span className={mutedColor}>{match[1].toUpperCase()}</span>
+                        <span className={primaryColor}>{match[2].toUpperCase()}</span>
+                        <span className={`${mutedColor} ml-0.5`}>F</span>
+                        <span className={primaryColor}>{match[3].toUpperCase()}</span>
+                    </>
+                );
+            }
+            return preferredId;
         }
-        return <span className={`font-mono font-black ${size === 'sm' ? 'text-[10px]' : 'text-[14px]'}`}>{id}</span>;
-    }
+
+        return (
+            <>
+                <span className={mutedColor}>C</span>
+                <span className={primaryColor}>{(displayCandidateIdx).toString(16).toUpperCase().padStart(2, '0')}</span>
+                <span className={`${mutedColor} ml-0.5`}>F</span>
+                <span className={primaryColor}>{Number(foldIdx).toString(16).toUpperCase()}</span>
+            </>
+        );
+    };
 
     return (
-        <span className={`font-mono font-black ${size === 'sm' ? 'text-[10px]' : 'text-[14px]'}`}>
-            <span className={mutedColor}>C</span>
-            <span className={primaryColor}>{(displayCandidateIdx).toString(16).toUpperCase().padStart(2, '0')}</span>
-            <span className={`${mutedColor} ml-0.5`}>F</span>
-            <span className={primaryColor}>{Number(foldIdx).toString(16).toUpperCase()}</span>
+        <span className={`font-mono font-black ${sizeClass} ${className}`}>
+            {renderContent()}
         </span>
     );
 };
@@ -97,13 +114,13 @@ const SavedModelsList = ({ models, selectedModelName, onSelect, onDelete }) => (
                     >
                         <div className="min-w-0">
                             <span className='flex flex-row items-center'>
-                                <BrainCircuit size={24} className={`mr-2 ${selectedModelName === m.name ? 'text-primary/90' : 'text-text/50'}`} />
+                                <BrainCircuit size={24} className={`mr-2 ${selectedModelName === m.name ? 'text-primary/90' : 'text-text/70'}`} />
                                 <div className='flex flex-col items-start'>
-                                    <div className={`text-[16px] font-medium truncate ${selectedModelName === m.name ? 'text-primary' : 'text-[var(--text)]'}`}>
+                                    <div className={`truncate ${selectedModelName === m.name ? 'text-[var(--text)] text-[19px] font-black' : 'text-primary/75 text-[17px] font-bold'}`}>
                                         {m.name}
                                     </div>
-                                    <div className="text-[12px] text-[var(--muted)] font-mono uppercase tracking-wider truncate opacity-70">
-                                        <ModelIdBadge model={m} size='lg' />
+                                    <div className="text-[16px] text-[var(--muted)] font-mono uppercase tracking-[0.1em] truncate opacity-90">
+                                        <ModelIdBadge model={m} size='sm' isActive={selectedModelName === m.name} />
                                     </div>
                                 </div>
                             </span>
@@ -169,14 +186,8 @@ const SplitAccuracyCard = ({ result, models, selectedModelName, onSelectModel, o
                                     kFolds={params?.k_folds === '' ? '' : (params?.k_folds || 5)}
                                     onFoldChange={(k) => {
                                         const validK = Math.max(1, k);
-                                        const testRatio = params?.test_ratio || 0.15;
-                                        const remaining = Math.max(0, 1.0 - testRatio);
-                                        const valRatio = parseFloat((remaining / validK).toFixed(3));
-                                        const trainRatio = parseFloat((remaining - valRatio).toFixed(3));
                                         onParamsChange({
                                             k_folds: validK,
-                                            val_ratio: valRatio,
-                                            train_ratio: trainRatio
                                         });
                                     }}
                                     verdict={{
@@ -363,7 +374,7 @@ const FeatureInsightCard = ({ importances, featureOrder, sensor }) => {
                                         <div className="flex-1 h-2 bg-[var(--bg)] rounded-full mx-2 overflow-hidden border border-[var(--border)]/50">
                                             <div className="h-full bg-[var(--primary)] group-hover:bg-[var(--accent)] transition-all shadow-[0_0_8px_var(--primary)]" style={{ width: `${Math.min(100, Math.max(0, imp * 100))}%` }}></div>
                                         </div>
-                                        <span className="text-[14px] w-12 text-right font-black">{(imp * 100).toFixed(1)}%</span>
+                                        <span className="text-[14px] w-16 text-right font-black">{(imp * 100).toFixed(1)}%</span>
                                     </li>
                                 )) : (
                                     <div className="flex flex-col items-center justify-center h-full opacity-30 italic text-sm">No importance data available</div>
@@ -466,7 +477,96 @@ const formatFixedFive = (value) => {
     return Number.isFinite(numeric) ? numeric.toFixed(5) : '--';
 };
 
-const HistoryList = ({ history = [], selectedId, onSelect, emptyText = 'No training history available.', decimalCandidateDisplay = false }) => {
+const historyValidationAccuracy = (item) => Number(item?.validation_accuracy ?? item?.accuracy ?? -1);
+const historyTrainAccuracy = (item) => Number(item?.train_accuracy ?? -1);
+const historyTestAccuracy = (item) => Number(item?.test_accuracy ?? item?.accuracy ?? -1);
+const historyModelIdValue = (item) => String(historyId(item) || '').toUpperCase();
+const historyBestScore = (item) => {
+    const testScore = historyTestAccuracy(item);
+    if (Number.isFinite(testScore) && testScore >= 0) return testScore;
+    const validationScore = historyValidationAccuracy(item);
+    if (Number.isFinite(validationScore) && validationScore >= 0) return validationScore;
+    return historyTrainAccuracy(item);
+};
+const historyAccuracyStrings = (item) => {
+    const values = [historyValidationAccuracy(item), historyTestAccuracy(item), historyTrainAccuracy(item)]
+        .filter((value) => Number.isFinite(value) && value >= 0);
+    return values.flatMap((value) => {
+        const percent = value * 100;
+        return [
+            pct(value).toLowerCase(),
+            value.toFixed(5),
+            value.toFixed(3),
+            percent.toFixed(2),
+            percent.toFixed(1),
+            String(Math.round(percent))
+        ];
+    });
+};
+
+const historySortOptions = [
+    { value: 'candidate', label: 'Candidate' },
+    { value: 'fold', label: 'Fold' },
+    { value: 'validation_accuracy', label: 'Validation' },
+    { value: 'train_accuracy', label: 'Train' },
+    { value: 'model_id', label: 'Model ID' },
+    { value: 'candidate_mean', label: 'Cand Mean' },
+    { value: 'best_model', label: 'Best Model' },
+    { value: 'test_accuracy', label: 'Test' },
+];
+
+const compareValues = (left, right, direction = 'asc') => {
+    const multiplier = direction === 'desc' ? -1 : 1;
+    if (typeof left === 'string' || typeof right === 'string') {
+        return String(left).localeCompare(String(right)) * multiplier;
+    }
+    return ((Number(left) || 0) - (Number(right) || 0)) * multiplier;
+};
+
+const itemSortValue = (item, sortField) => {
+    switch (sortField) {
+        case 'fold':
+            return historyFold(item);
+        case 'validation_accuracy':
+            return historyValidationAccuracy(item);
+        case 'train_accuracy':
+            return historyTrainAccuracy(item);
+        case 'model_id':
+            return historyModelIdValue(item);
+        case 'test_accuracy':
+            return historyTestAccuracy(item);
+        case 'best_model':
+            return historyBestScore(item);
+        case 'candidate':
+        default:
+            return historyCandidate(item);
+    }
+};
+
+const groupSortMetric = (group, sortField, sortedFolds) => {
+    switch (sortField) {
+        case 'candidate':
+            return group.idx;
+        case 'fold':
+            return historyFold(sortedFolds[0]);
+        case 'validation_accuracy':
+            return Math.max(...sortedFolds.map((item) => historyValidationAccuracy(item)));
+        case 'train_accuracy':
+            return Math.max(...sortedFolds.map((item) => historyTrainAccuracy(item)));
+        case 'model_id':
+            return historyModelIdValue(sortedFolds[0]);
+        case 'candidate_mean':
+            return group.candidateMean;
+        case 'best_model':
+            return group.bestModelScore;
+        case 'test_accuracy':
+            return Math.max(...sortedFolds.map((item) => historyTestAccuracy(item)));
+        default:
+            return itemSortValue(sortedFolds[0], sortField);
+    }
+};
+
+const HistoryList = ({ history = [], selectedId, onSelect, emptyText = 'No training history available.', decimalCandidateDisplay = false, sortField = 'candidate', sortDirection = 'asc' }) => {
     const grouped = useMemo(() => {
         const groups = {};
         history.forEach((item) => {
@@ -475,9 +575,26 @@ const HistoryList = ({ history = [], selectedId, onSelect, emptyText = 'No train
             groups[key].folds.push(item);
         });
         return Object.values(groups)
-            .sort((a, b) => a.idx - b.idx)
-            .map(group => ({ ...group, folds: group.folds.sort((a, b) => historyFold(a) - historyFold(b)) }));
-    }, [history]);
+            .map((group) => {
+                const folds = [...group.folds].sort((a, b) => {
+                    const primary = compareValues(itemSortValue(a, sortField), itemSortValue(b, sortField), sortDirection);
+                    if (primary !== 0) return primary;
+                    return compareValues(historyFold(a), historyFold(b), 'asc');
+                });
+                const candidateMean = folds.length
+                    ? folds.reduce((acc, item) => acc + historyValidationAccuracy(item), 0) / folds.length
+                    : -1;
+                const bestModelScore = folds.length ? Math.max(...folds.map((item) => historyBestScore(item))) : -1;
+                const decoratedGroup = { ...group, folds, candidateMean, bestModelScore };
+                const groupSortValue = groupSortMetric(decoratedGroup, sortField, folds);
+                return { ...decoratedGroup, groupSortValue };
+            })
+            .sort((a, b) => {
+                const primary = compareValues(a.groupSortValue, b.groupSortValue, sortDirection);
+                if (primary !== 0) return primary;
+                return compareValues(a.idx, b.idx, 'asc');
+            });
+    }, [history, sortField, sortDirection]);
 
     if (!grouped.length) {
         return <div className="flex h-full items-center justify-center text-sm italic text-[var(--muted)] opacity-60">{emptyText}</div>;
@@ -489,15 +606,13 @@ const HistoryList = ({ history = [], selectedId, onSelect, emptyText = 'No train
                 <div key={cand.idx} className="p-3 rounded-xl bg-[var(--bg)]/50 border border-[var(--border)]">
                     <div className="flex items-center justify-between mb-2">
                         <div>
-                            <div className="text-[10px] font-black text-[var(--muted)] uppercase tracking-[0.18em]">
+                            <div className="text-[14px] font-black text-[var(--muted)] uppercase tracking-[0.18em]">
                                 Candidate {decimalCandidateDisplay ? formatCandidateDecimal(cand.idx) : cand.idx}
                             </div>
-                            <div className="text-[10px] text-[var(--text)] font-mono truncate">
-                                {Object.entries(cand.params).map(([k, v]) => `${k}: ${v}`).join(' | ') || 'No hyperparameters recorded'}
-                            </div>
+
                         </div>
-                        <div className="text-xs font-black text-[var(--primary)]">
-                            {Math.round((cand.folds.reduce((acc, fold) => acc + (fold.accuracy || 0), 0) / cand.folds.length) * 100)}%
+                        <div className="text-[16px] font-black text-[var(--primary)]">
+                            {Number.isFinite(cand.candidateMean) && cand.candidateMean >= 0 ? `${Math.round(cand.candidateMean * 100)}%` : '--'}
                         </div>
                     </div>
                     <div className="flex flex-wrap gap-2">
@@ -508,15 +623,85 @@ const HistoryList = ({ history = [], selectedId, onSelect, emptyText = 'No train
                                 <button
                                     key={id}
                                     onClick={() => onSelect?.(item)}
-                                    className={`px-2 py-1 rounded-md border transition-all ${isActive ? 'bg-[var(--primary)] border-[var(--primary)] shadow-sm' : 'bg-[var(--surface)] border-[var(--border)] hover:border-[var(--primary)]/50'}`}
+                                    className={`px-3 py-1.5 rounded-md border transition-all ${isActive ? 'bg-[var(--surface)] border-[var(--primary)] ring-1 ring-[var(--primary)]/20 shadow-sm' : 'bg-[var(--surface)] border-[var(--border)] hover:border-[var(--primary)]/50'}`}
                                 >
-                                    <ModelIdBadge model={item} isActive={isActive} />
+                                    <ModelIdBadge model={item} isActive={isActive} size="sm" />
                                 </button>
                             );
                         })}
                     </div>
                 </div>
             ))}
+        </div>
+    );
+};
+
+const SearchableHistoryList = ({ history = [], selectedId, onSelect, decimalCandidateDisplay = false, placeholder = "FIND MODEL OR CANDIDATE" }) => {
+    const [searchQuery, setSearchQuery] = useState('');
+    const [sortField, setSortField] = useState('candidate');
+    const [sortDirection, setSortDirection] = useState('asc');
+    const filteredHistory = useMemo(() => {
+        if (!searchQuery.trim()) return history;
+        const q = searchQuery.toLowerCase();
+        const numeric = parseInt(q, 10);
+        const candidateDecimal = !Number.isNaN(numeric) ? formatCandidateDecimal(numeric) : null;
+        const isBestQuery = q.includes('best');
+        const allowAccuracyMatch = q.includes('%') || q.includes('.');
+        const bestItem = history.reduce((best, item) => {
+            if (!best) return item;
+            return historyBestScore(item) > historyBestScore(best) ? item : best;
+        }, null);
+        const bestCandidate = bestItem ? historyCandidate(bestItem) : null;
+        const bestId = bestItem ? historyId(bestItem) : null;
+
+        return history.filter(item => {
+            const id = historyId(item).toLowerCase();
+            const matchesLiteral = id.includes(q);
+            const decimalCandidate = formatCandidateDecimal(historyCandidate(item));
+            const matchesCandidate = candidateDecimal ? decimalCandidate === candidateDecimal || decimalCandidate.includes(candidateDecimal) : false;
+            const matchesBest = isBestQuery ? historyId(item) === bestId || historyCandidate(item) === bestCandidate : false;
+            const matchesAccuracy = allowAccuracyMatch ? historyAccuracyStrings(item).some((value) => value.includes(q)) : false;
+            return matchesLiteral || matchesCandidate || matchesBest || matchesAccuracy;
+        });
+    }, [history, searchQuery]);
+
+    return (
+        <div className="flex flex-col h-full overflow-hidden mt-1 ">
+            <div className="flex flex-row items-center gap-2 mb-2">
+                <CustomSelect
+                    value={sortField}
+                    onChange={setSortField}
+                    options={historySortOptions}
+                    triggerClassName="h-9 px-3 !rounded-lg !bg-[var(--surface)] !border-[var(--border)] text-[12px] font-black uppercase tracking-wider min-w-[120px]"
+                />
+                <button
+                    type="button"
+                    onClick={() => setSortDirection((prev) => prev === 'asc' ? 'desc' : 'asc')}
+                    className="px-3 h-9 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[12px] font-black uppercase tracking-wider text-[var(--text)] hover:border-[var(--primary)] transition-all min-w-[60px]"
+                >
+                    {sortDirection === 'asc' ? 'Asc' : 'Desc'}
+                </button>
+                <div className="relative flex-2">
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--primary)] " />
+                    <input
+                        type="text"
+                        placeholder={placeholder}
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full h-9 bg-[var(--surface)] border border-[var(--border)] rounded-lg pl-9 pr-3 text-[12px] font-mono font-black tracking-widest text-[var(--text)] focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)]/30 outline-none transition-all uppercase placeholder:opacity-50"
+                    />
+                </div>
+            </div>
+            <div className="flex-1 overflow-y-auto [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                <HistoryList
+                    history={filteredHistory}
+                    selectedId={selectedId}
+                    onSelect={onSelect}
+                    decimalCandidateDisplay={decimalCandidateDisplay}
+                    sortField={sortField}
+                    sortDirection={sortDirection}
+                />
+            </div>
         </div>
     );
 };
@@ -528,78 +713,86 @@ const HistoryDetailCard = ({ item, decimalCandidateDisplay = false }) => {
 
     const params = historyParams(item);
     return (
-        <div className="h-full p-4 rounded-xl bg-[var(--bg)]/40 border border-[var(--border)] space-y-3 overflow-y-auto [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+        <div className="h-full p-4 rounded-xl bg-[var(--bg)]/40 border border-[var(--border)] space-y-4 overflow-y-auto [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
             <div className="flex items-center justify-between">
                 <div>
-                    <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--muted)] font-black">Model ID</div>
-                    <div className="text-2xl mt-1">
-                        <ModelIdBadge model={item} size="lg" />
+                    <div className="text-[16px] uppercase tracking-[0.18em] text-[var(--muted)] font-black">Model ID</div>
+                    <div className="text-[36px] mt-1 leading-none">
+                        <ModelIdBadge model={item} size="huge" />
                     </div>
                 </div>
                 <div className="text-right">
-                    <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--muted)] font-black">Validation</div>
-                    <div className="text-xl font-black text-[var(--text)]">{pct(item.validation_accuracy ?? item.accuracy)}</div>
+                    <div className="text-[16px] uppercase tracking-[0.18em] text-[var(--muted)] font-black">Validation</div>
+                    <div className="text-[38px] font-black text-[var(--text)] leading-none">{pct(item.validation_accuracy ?? item.accuracy)}</div>
                 </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
                 <div className="p-3 rounded-lg border border-[var(--border)] bg-[var(--surface)]">
-                    <div className="text-[10px] uppercase text-[var(--muted)] font-black mb-1">Candidate / Fold</div>
-                    <div className="text-sm font-mono text-[var(--text)]">
+                    <div className="text-[12px] uppercase text-[var(--muted)] font-black mb-1">Candidate / Fold</div>
+                    <div className="text-[16px] font-mono font-bold text-[var(--text)]">
                         {decimalCandidateDisplay ? formatCandidateDecimal(historyCandidate(item)) : historyCandidate(item)} / {historyFold(item)}
                     </div>
                 </div>
                 <div className="p-3 rounded-lg border border-[var(--border)] bg-[var(--surface)]">
-                    <div className="text-[10px] uppercase text-[var(--muted)] font-black mb-1">Train Accuracy</div>
-                    <div className="text-sm font-mono text-[var(--text)]">{pct(item.train_accuracy)}</div>
+                    <div className="text-[12px] uppercase text-[var(--muted)] font-black mb-1">Train Accuracy</div>
+                    <div className="text-[16px] font-mono font-bold text-[var(--text)]">{pct(item.train_accuracy)}</div>
                 </div>
                 <div className="p-3 rounded-lg border border-[var(--border)] bg-[var(--surface)]">
-                    <div className="text-[10px] uppercase text-[var(--muted)] font-black mb-1">Train Samples</div>
-                    <div className="text-sm font-mono text-[var(--text)]">{item.n_train_samples ?? '--'}</div>
+                    <div className="text-[12px] uppercase text-[var(--muted)] font-black mb-1">Train Samples</div>
+                    <div className="text-[16px] font-mono font-bold text-[var(--text)]">{item.n_train_samples ?? '--'}</div>
                 </div>
                 <div className="p-3 rounded-lg border border-[var(--border)] bg-[var(--surface)]">
-                    <div className="text-[10px] uppercase text-[var(--muted)] font-black mb-1">Validation Samples</div>
-                    <div className="text-sm font-mono text-[var(--text)]">{item.n_validation_samples ?? '--'}</div>
+                    <div className="text-[12px] uppercase text-[var(--muted)] font-black mb-1">Validation Samples</div>
+                    <div className="text-[16px] font-mono font-bold text-[var(--text)]">{item.n_validation_samples ?? '--'}</div>
                 </div>
             </div>
             <div className="p-3 rounded-lg border border-[var(--border)] bg-[var(--surface)]">
-                <div className="text-[10px] uppercase text-[var(--muted)] font-black mb-2">Hyperparameters</div>
+                <div className="text-[12px] uppercase text-[var(--muted)] font-black mb-2">Hyperparameters</div>
                 <div className="grid grid-cols-2 gap-2">
                     {Object.entries(params).map(([key, value]) => (
-                        <div key={key} className="rounded-md bg-[var(--bg)] px-2 py-1 border border-[var(--border)]">
-                            <div className="text-[9px] uppercase text-[var(--muted)] font-black">{key}</div>
-                            <div className="text-[11px] font-mono text-[var(--text)] truncate">{String(value)}</div>
+                        <div key={key} className="rounded-md bg-[var(--bg)] px-2 py-1.5 border border-[var(--border)]">
+                            <div className="text-[12px] uppercase text-[var(--muted)] font-black mb-0.5">{key}</div>
+                            <div className="text-[14px] font-mono font-bold text-[var(--text)] truncate">{String(value)}</div>
                         </div>
                     ))}
                 </div>
             </div>
             <div className="p-3 rounded-lg border border-[var(--border)] bg-[var(--surface)]">
-                <div className="text-[10px] uppercase text-[var(--muted)] font-black mb-1">Saved Artifact</div>
-                <div className="text-[11px] font-mono text-[var(--primary)] break-all">{item.artifact_path || '--'}</div>
+                <div className="text-[12px] uppercase text-[var(--muted)] font-black mb-1">Saved Artifact</div>
+                <div className="text-[13px] font-mono text-[var(--primary)] break-all font-bold opacity-90">{item.artifact_path || '--'}</div>
             </div>
         </div>
     );
 };
 
-const TrainingHistoryCard = ({ title = 'Training History', history = [], selectedItem, onSelectItem, detailLabel = 'Model Detail', decimalCandidateDisplay = false }) => (
-    <div className={`${card} h-full flex flex-col overflow-hidden`}>
-        <div className="p-3 border-b border-[var(--border)] flex items-center justify-between shrink-0">
-            <div className="flex items-center gap-2">
-                <ListOrdered className="w-4 h-4 text-[var(--primary)]" />
-                <span className="text-xs font-black text-[var(--muted)] uppercase tracking-[0.2em]">{title}</span>
+const TrainingHistoryCard = ({ title = 'Training History', history = [], selectedItem, onSelectItem, decimalCandidateDisplay = false }) => {
+    return (
+        <div className={`${card} h-full flex flex-col overflow-hidden`}>
+            <div className="p-3 border-b border-[var(--border)] flex items-center justify-between shrink-0">
+                <div className="flex items-center gap-2">
+                    <ListOrdered className="w-5 h-5 text-[var(--primary)]" />
+                    <span className="text-[18px] font-black text-[var(--muted)] uppercase tracking-[0.2em]">{title}</span>
+                </div>
+                <span className="text-[15px] text-[var(--muted)] font-bold">{history.length} Models</span>
             </div>
-            <span className="text-[10px] text-[var(--muted)] font-bold">{history.length} Models</span>
+            <div className="flex-1 min-h-0 grid grid-cols-12 gap-4 p-3 ">
+                <div className="col-span-12 lg:col-span-7 h-full min-h-0">
+                    <SearchableHistoryList
+                        history={history}
+                        selectedId={historyId(selectedItem)}
+                        onSelect={onSelectItem}
+                        decimalCandidateDisplay={decimalCandidateDisplay}
+                    />
+                </div>
+                <div className="col-span-12 lg:col-span-5 min-h-0 flex flex-col">
+                    <div className="flex-1 min-h-0">
+                        <HistoryDetailCard item={selectedItem} decimalCandidateDisplay={decimalCandidateDisplay} />
+                    </div>
+                </div>
+            </div>
         </div>
-        <div className="flex-1 min-h-0 grid grid-cols-12 gap-3 p-3">
-            <div className="col-span-12 lg:col-span-7 overflow-y-auto pr-1 [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-                <HistoryList history={history} selectedId={historyId(selectedItem)} onSelect={onSelectItem} decimalCandidateDisplay={decimalCandidateDisplay} />
-            </div>
-            <div className="col-span-12 lg:col-span-5 min-h-0">
-                <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--muted)] font-black mb-2">{detailLabel}</div>
-                <HistoryDetailCard item={selectedItem} decimalCandidateDisplay={decimalCandidateDisplay} />
-            </div>
-        </div>
-    </div>
-);
+    );
+};
 
 const formatDuration = (seconds) => {
     if (seconds === undefined || seconds === null || Number.isNaN(Number(seconds))) return '--';
@@ -612,8 +805,8 @@ const formatDuration = (seconds) => {
 
 const HyperparametersCard = ({ params, setParamsTab, activeTab, models = [] }) => {
     const [view] = useState('params'); // 'params' or 'runs'
-    const minVal = Math.round((params.train_ratio || 0.7) * 100);
-    const maxVal = Math.round(((params.train_ratio || 0.7) + (params.val_ratio || 0.15)) * 100);
+    const minVal = Math.max(1, Math.round((params.train_ratio || 0.7) * 100));
+    const maxVal = Math.min(99, Math.max(minVal, Math.round(((params.train_ratio || 0.7) + (params.val_ratio || 0.15)) * 100)));
 
     return (
         <div className=" h-full flex flex-col px-2 pt-2 bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-sm relative group/card overflow-hidden">
@@ -635,8 +828,8 @@ const HyperparametersCard = ({ params, setParamsTab, activeTab, models = [] }) =
 
                     <div className="p-0 border-0 bg-transparent">
                         <div className="flex justify-between items-center mb-1 px-1">
-                            <span className="text-[12px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em]"> Data Partition </span>
-                            <div className="flex items-center gap-2 font-mono font-black text-[18px]">
+                            <span className="text-[14px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em]"> Data Partition </span>
+                            <div className="flex items-center gap-2 font-mono font-black text-[20px]">
                                 <span className="text-[var(--text)]">{Math.round(params.train_ratio * 100)}%</span>
                                 <span className="text-[var(--muted)] opacity-30">/</span>
                                 <span className="text-[var(--muted)]">{Math.round(params.val_ratio * 100)}%</span>
@@ -655,12 +848,14 @@ const HyperparametersCard = ({ params, setParamsTab, activeTab, models = [] }) =
                             minLimit={1}
                             maxLimit={99}
                             onChange={({ min, max }) => {
-                                const trainRatio = parseFloat((min / 100).toFixed(3));
-                                const valRatio = parseFloat(((max - min) / 100).toFixed(3));
-                                const testRatio = parseFloat(((100 - max) / 100).toFixed(3));
+                                const clampedMin = Math.max(1, min);
+                                const clampedMax = Math.min(99, max);
+                                const trainRatio = parseFloat((clampedMin / 100).toFixed(3));
+                                const valRatio = parseFloat(((clampedMax - clampedMin) / 100).toFixed(3));
+                                const testRatio = parseFloat(((100 - clampedMax) / 100).toFixed(3));
                                 const totalNonTest = trainRatio + valRatio;
                                 const rawK = Math.round(totalNonTest / (valRatio || 0.001));
-                                const k = Math.max(2, Math.min(20, rawK));
+                                const k = Math.max(1, Math.min(20, rawK));
 
                                 setParamsTab({
                                     train_ratio: trainRatio,
@@ -674,10 +869,10 @@ const HyperparametersCard = ({ params, setParamsTab, activeTab, models = [] }) =
 
                     <div className="p-0 border-0 bg-transparent">
                         <div className="flex justify-between items-center mb-1 px-1">
-                            <span className="text-[12px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em]">Search Resolution</span>
+                            <span className="text-[14px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em]">Search Resolution</span>
                             <span className="text-[18px] text-[var(--header-text)] font-black font-mono leading-none">{params.search_resolution}</span>
                         </div>
-                        <CustomSlider min={2} max={10} step={1}
+                        <CustomSlider min={1} max={10} step={1}
                             backgroundColor="var(--bg)"
                             value={params.search_resolution} onChange={(value) => setParamsTab({ search_resolution: value })} />
                     </div>
@@ -686,21 +881,21 @@ const HyperparametersCard = ({ params, setParamsTab, activeTab, models = [] }) =
                         <div className="grid grid-cols-2 gap-1 pb-2">
                             <div className="col-span-2 p-0 border-0 bg-transparent">
                                 <div className="flex justify-between items-end mb-2 px-1">
-                                    <span className="text-[12px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em]">Estimators Range</span>
+                                    <span className="text-[14px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em]">Estimators Range</span>
                                     <div className="flex items-center gap-2 text-[18px] font-black font-mono text-[var(--header-text)]">
                                         <span >{params.n_estimators_min || 50}</span>
                                         <span className="text-[var(--muted)]">-</span>
                                         <span >{params.n_estimators_max || 200}</span></div>
                                 </div>
 
-                                <RangeSlider min={5} max={500} step={15}
+                                <RangeSlider min={5} max={500} step={5}
                                     leftColor="var(--muted)" rightColor="var(--muted)"
                                     minValue={params.n_estimators_min || 50} maxValue={params.n_estimators_max || 200} hideLabels={true} compact={true} color="var(--primary)" onChange={(vals) => setParamsTab({ n_estimators_min: vals.min, n_estimators_max: vals.max })} />
                             </div>
 
                             <div className="p-0 border-0 bg-transparent">
                                 <div className="flex justify-between items-end mb-2 px-1">
-                                    <span className="text-[12px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em]">Max Depth</span>
+                                    <span className="text-[14px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em]">Max Depth</span>
                                     <div className="flex items-center gap-1 font-mono text-[16px] text-[var(--header-text)] font-black">{params.max_depth_min || 5} - {params.max_depth_max || 15}</div>
                                 </div>
 
@@ -708,9 +903,9 @@ const HyperparametersCard = ({ params, setParamsTab, activeTab, models = [] }) =
                                     leftColor="var(--muted)" rightColor="var(--muted)" minValue={params.max_depth_min || 5} maxValue={params.max_depth_max || 15} hideLabels={true} compact={true} color="var(--primary)" onChange={(vals) => setParamsTab({ max_depth_min: vals.min, max_depth_max: vals.max })} />
                             </div>
 
-                            <div className="p-0 border-0 bg-transparent">
+                            <div className="pb-0 border-0 bg-transparent">
                                 <div className="flex justify-between items-end mb-2 px-1">
-                                    <span className="text-[12px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em]">Impurity</span>
+                                    <span className="text-[14px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em]">Impurity</span>
                                     <div className="text-[16px] font-mono text-[var(--header-text)] font-black truncate">{params.min_impurity_decrease_min || 0} - {params.min_impurity_decrease_max || 0.05}</div>
                                 </div>
                                 <RangeSlider min={0} max={0.1} step={0.005}
@@ -718,20 +913,20 @@ const HyperparametersCard = ({ params, setParamsTab, activeTab, models = [] }) =
                             </div>
 
                             <div className="p-0 border-0 bg-transparent">
-                                <div className="text-[12px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em] mb-1.5 px-1">Criterion</div>
+                                <div className="text-[14px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em] mb-1.5 px-1">Criterion</div>
                                 <CustomSelect className='font-bold text-[var(--header-text)]' direction="up" value={params.criterion || 'gini'} onChange={(value) => setParamsTab({ criterion: value })} options={[{ value: 'gini', label: 'Gini' }, { value: 'entropy', label: 'Entropy' }, { value: 'gini,entropy', label: 'Both' }]} />
                             </div>
 
                             <div className="p-0 border-0 bg-transparent">
-                                <div className="text-[12px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em] mb-1.5 px-1">Features</div>
+                                <div className="text-[14px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em] mb-1.5 px-1">Features</div>
                                 <CustomSelect className='font-bold text-[var(--header-text)]' direction="up" value={params.max_features || 'sqrt'} onChange={(value) => setParamsTab({ max_features: value })} options={[{ value: 'sqrt', label: 'Sqrt' }, { value: 'log2', label: 'Log2' }, { value: 'None', label: 'None' }, { value: 'sqrt,log2', label: 'Both' }]} />
                             </div>
                         </div>
                     ) : (
-                        <div className="space-y-[10px]">
+                        <div className="space-y-[2px]">
                             <div className="p-0 border-0 bg-transparent">
                                 <div className="flex justify-between items-end px-1 mb-2">
-                                    <span className="text-[12px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em]">LDA Tolerance Range</span>
+                                    <span className="text-[14px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em]">LDA Tolerance Range</span>
                                     <div className="flex items-center gap-1 text-[18px] font-black font-mono text-[var(--header-text)]">
                                         {params.tol_min || 0.0001} - {params.tol_max || 0.01}
                                     </div>
@@ -740,13 +935,13 @@ const HyperparametersCard = ({ params, setParamsTab, activeTab, models = [] }) =
                                     leftColor="var(--muted)" rightColor="var(--muted)" minValue={params.tol_min || 0.0001} maxValue={params.tol_max || 0.01} hideLabels={true} compact={true} color="var(--primary)" onChange={(vals) => setParamsTab({ tol_min: vals.min, tol_max: vals.max })} />
                             </div>
 
-                            <div className="grid grid-cols-2 gap-3">
+                            <div className="grid grid-cols-2 gap-1">
                                 <div className="p-0 border-0 bg-transparent">
-                                    <div className="text-[12px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em] mb-1.5 px-1">Solver</div>
+                                    <div className="text-[14px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em] mb-1.5 px-1">Solver</div>
                                     <CustomSelect className='font-bold text-[var(--header-text)]' direction="up" value={params.solver || 'svd'} onChange={(value) => setParamsTab({ solver: value })} options={[{ value: 'svd', label: 'SVD' }, { value: 'lsqr', label: 'LSQR' }, { value: 'eigen', label: 'Eigen' }, { value: 'svd,lsqr,eigen', label: 'All' }]} />
                                 </div>
                                 <div className="p-0 border-0 bg-transparent">
-                                    <div className="text-[12px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em] mb-1.5 px-1">Shrinkage</div>
+                                    <div className="text-[14px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em] mb-1.5 px-1">Shrinkage</div>
                                     <CustomSelect className='font-bold text-[var(--header-text)]' direction="up" value={params.shrinkage || 'auto'} onChange={(value) => setParamsTab({ shrinkage: value })} options={[{ value: 'auto', label: 'Auto' }, { value: 'none', label: 'None' }, { value: 'auto,none', label: 'Both' }]} />
                                 </div>
                             </div>
@@ -760,6 +955,17 @@ const HyperparametersCard = ({ params, setParamsTab, activeTab, models = [] }) =
 
 const TrainingStatusDashboard = ({ job, countdown, params, selectedHistoryItem, onSelectHistory }) => {
     const latestFold = job?.history?.[job.history.length - 1];
+    const latestCandidateIndex = latestFold?.candidate_index ?? latestFold?.candidate_idx;
+    const currentCandidateFolds = latestCandidateIndex === undefined
+        ? []
+        : (job?.history || []).filter((item) => (item?.candidate_index ?? item?.candidate_idx) === latestCandidateIndex);
+    const candidateComplete = currentCandidateFolds.length > 0 && currentCandidateFolds.length >= Math.max(1, job?.total_folds || 1);
+    const candidateMeanAccuracy = candidateComplete
+        ? currentCandidateFolds.reduce((acc, item) => acc + Number(item?.validation_accuracy ?? item?.accuracy ?? 0), 0) / currentCandidateFolds.length
+        : null;
+    const currentAccuracyText = candidateMeanAccuracy !== null
+        ? `Mean - ${pct(candidateMeanAccuracy)}`
+        : (latestFold ? pct(latestFold.validation_accuracy ?? latestFold.accuracy) : '--');
 
     // Map parameters to icons
     const getParamIcon = (key) => {
@@ -804,7 +1010,7 @@ const TrainingStatusDashboard = ({ job, countdown, params, selectedHistoryItem, 
                         </div>
                         <div className="flex items-center gap-3">
                             <div className="text-[24px] font-black text-[var(--text-success)] font-mono leading-none">
-                                {latestFold ? pct(latestFold.accuracy) : '--'}
+                                {currentAccuracyText}
                             </div>
                             <Target size={24} className=" text-[var(--primary)]" />
                         </div>
@@ -848,12 +1054,7 @@ const TrainingStatusDashboard = ({ job, countdown, params, selectedHistoryItem, 
                                     </div>
                                     <span className='text-[24px] font-black font-mono leading-none'>
                                         {latestFold ? (
-                                            <span className='text-[24px] font-black font-mono leading-none'>
-                                                <span className="text-[var(--muted)]">C</span>
-                                                <span className="text-[var(--primary)]">{((latestFold.candidate_index ?? latestFold.candidate_idx ?? 0) + 1).toString(16).toUpperCase().padStart(2, '0')}</span>
-                                                <span className="text-[var(--muted)]">F</span>
-                                                <span className="text-[var(--primary)]">{Number(latestFold.fold_index ?? latestFold.fold_idx ?? 0).toString(16).toUpperCase()}</span>
-                                            </span>
+                                            <ModelIdBadge model={latestFold} size="xl" />
                                         ) : '--'}
                                     </span>
                                 </div>
@@ -924,17 +1125,13 @@ const TrainingStatusDashboard = ({ job, countdown, params, selectedHistoryItem, 
     );
 };
 
-const DataInsightCard = ({ result, sensor, params, selectedSessionName, embedded = false, onMatrixToggle }) => {
+const DataInsightCard = ({ result, sensor, params, embedded = false, onMatrixToggle }) => {
     if (!result) return <div className={`p-4 ${card} h-full text-[var(--muted)] flex items-center justify-center italic relative`}>No insight data available yet.</div>;
 
     const v = getVerdict(result.train_accuracy, result.validation_accuracy, result.test_accuracy || result.accuracy);
     const cleanedSessionName = (name) => String(name || '').replace(/^[a-z]+_session_/i, '');
-    const trainedSessionNames = Array.isArray(result?.session_names) && result.session_names.length
-        ? result.session_names
-        : (result?.session_name ? [result.session_name] : []);
-    const trainedSessionLabel = trainedSessionNames.length
-        ? trainedSessionNames.map(cleanedSessionName).join(', ')
-        : cleanedSessionName(selectedSessionName || '--');
+    const trainedSessionNames = Array.isArray(result.session_names) ? result.session_names : (result.session_names ? [result.session_names] : []);
+    const trainedSessionLabel = [...new Set(trainedSessionNames.map(cleanedSessionName))].join(', ') || 'All Available Data';
     const trainedSampleCount = result?.n_samples ?? result?.split_summary?.total_samples ?? '--';
     const groupCount = result?.group_counts ? Object.keys(result.group_counts).length : '--';
     const classLabelSummary = Array.isArray(result?.labels) && result.labels.length ? result.labels.join(', ') : '--';
@@ -945,10 +1142,16 @@ const DataInsightCard = ({ result, sensor, params, selectedSessionName, embedded
         </div>
     );
 
-    // Calculate split ratios
-    const trainPct = Math.round((params?.train_ratio || 0.7) * 100);
-    const valPct = Math.round((params?.val_ratio || 0.15) * 100);
-    const testPct = Math.round((params?.test_ratio || 0.15) * 100);
+    // Calculate split ratios from actual sample counts used at training time
+    const summary = result?.split_summary || {};
+    const trS = summary.train_samples || 0;
+    const vaS = summary.val_samples || 0;
+    const teS = summary.test_samples || 0;
+    const totalS = trS + vaS + teS;
+
+    const trainPct = totalS > 0 ? Math.round((trS / totalS) * 100) : (Math.round((result?.train_ratio || 0.7) * 100));
+    const valPct = totalS > 0 ? Math.round((vaS / totalS) * 100) : (Math.round((result?.val_ratio || 0.15) * 100));
+    const testPct = totalS > 0 ? Math.round((teS / totalS) * 100) : (Math.round((result?.test_ratio || 0.15) * 100));
 
     return (
         <div className={`${embedded ? 'h-full' : 'pt-2 px-2 pb-0 card'} overflow-hidden flex flex-col relative group/insight`}>
@@ -997,7 +1200,13 @@ const DataInsightCard = ({ result, sensor, params, selectedSessionName, embedded
                             </div>
                         </div>
 
-                        <div className="space-y-2 py-2">
+                        <div className="space-y-2 py-0">
+                            <div className='flex flex-row justify-between w-full'>
+                                <div className="text-[14px] uppercase tracking-[0.2em] text-[var(--muted)] mb-0.5 font-black">
+                                    Data Source</div>
+                                <div className="text-[12px] uppercase tracking-[0.2em] text-[var(--muted)] mb-0.5 font-black">
+                                    Samples</div>
+                            </div>
                             <div className="flex flex-row justify-between w-full">
                                 <span className="text-[18px] font-black text-[var(--text)] truncate opacity-90" title={trainedSessionLabel}>{trainedSessionLabel}</span>
 
@@ -1007,26 +1216,27 @@ const DataInsightCard = ({ result, sensor, params, selectedSessionName, embedded
                     </div>
 
                     {/* Verdict Box */}
-                    <div className={`mt-auto border-t ${v.bg} rounded-xl p-3 shadow-inner relative overflow-hidden group`}>
+                    <div className={`mt-0.5 border-t ${v.bg} rounded-xl p-1 shadow-inner relative overflow-hidden group`}>
                         <div className="absolute top-2 right-6 opacity-5 blur-[1px] group-hover:opacity-10 transition-opacity">
                             <Target size={80} color='var(--primary)' />
                         </div>
                         <div className="absolute bottom-[-18px] left-[-14px] opacity-5 blur-[1px] group-hover:opacity-15 transition-opacity">
                             <Target size={90} color='var(--primary)' />
                         </div>
-                        <div className="text-[12px] text-[var(--muted)] uppercase font-black tracking-widest mb-1">Model Suitability</div>
+                        <div className="text-[12px] text-[var(--muted)] uppercase font-black tracking-widest">Model Suitability</div>
                         <div className={`text-[24px] font-black tracking-tight ${v.color}`}>{v.text}</div>
-                        {v.desc && <div className="text-[12px] text-[var(--text)] opacity-80 mt-1 font-medium leading-tight">{v.desc}</div>}
+                        {v.desc && <div className="text-[12px] text-[var(--text)] opacity-80 mt-0.5 font-medium leading-tight">{v.desc}</div>}
                     </div>
                 </div>
 
                 {/* Column 2: Performance Analyzer */}
                 <div className='border-x border-[var(--border)] px-4'>
-                    <div className="flex-1 space-y-0.5 [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                    <div className="flex-1 space-y-0.4 [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
                         <div className="text-[14px] uppercase text-[var(--primary)] font-black tracking-widest border-b border-[var(--border)] pb-2">Performance Metrics</div>
                         {mRow('Mean CV Score', result.mean_accuracy || result.cv_mean, true, true)}
                         {mRow('Validation Acc', result.validation_accuracy, true, true)}
                         {mRow('Training Acc', result.train_accuracy, true, true)}
+                        {mRow('Test Acc', result.test_accuracy, true, true)}
                         {mRow('Fold Variance', formatFixedFive(result.fold_std ?? result.cv_std), false, true)}
                         {mRow('Accuracy Gap', (result.train_accuracy && result.validation_accuracy) ? (result.train_accuracy - result.validation_accuracy).toFixed(3) : '--', false, true)}
                         {mRow('Worst Fold', result.fold_min || result.cv_min, true, true)}
@@ -1050,7 +1260,6 @@ const DataInsightCard = ({ result, sensor, params, selectedSessionName, embedded
                         {mRow('Val Samples', result.split_summary?.val_samples || '--', false, true)}
                         {mRow('Test Samples', result.split_summary?.test_samples ?? '--', false, true)}
                         {mRow('Class Groups', groupCount, false, true)}
-                        {mRow('Classes', classLabelSummary, false, false)}
                     </div>
                 </div>
             </div>
@@ -1119,12 +1328,13 @@ const EEGLDAVisualizationCard = ({ result, history = [], selectedItem, onSelectI
                     >
                         {view === 'history' ? (
                             <div className="h-full grid grid-cols-12 gap-3 p-2 pt-4">
-                                <div className="col-span-12 lg:col-span-7 overflow-y-auto pr-1 [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-                                    <HistoryList history={history} selectedId={historyId(selectedItem)} onSelect={onSelectItem} />
+                                <div className="col-span-12 lg:col-span-7 h-full min-h-0">
+                                    <SearchableHistoryList history={history} selectedId={historyId(selectedItem)} onSelect={onSelectItem} />
                                 </div>
-                                <div className="col-span-12 lg:col-span-5 min-h-0">
-                                    <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--muted)] font-black mb-2">Saved Fold Detail</div>
-                                    <HistoryDetailCard item={selectedItem} />
+                                <div className="col-span-12 lg:col-span-5 min-h-0 flex flex-col">
+                                    <div className="flex-1 min-h-0">
+                                        <HistoryDetailCard item={selectedItem} />
+                                    </div>
                                 </div>
                             </div>
                         ) : view === 'data' ? (
@@ -1490,12 +1700,13 @@ const DecisionTreeCard = ({ structure, treeIndex, totalTrees, onTreeChange, load
                             transition={{ duration: 0.3 }}
                             className="h-full grid grid-cols-12 gap-3 p-4 pt-16"
                         >
-                            <div className="col-span-12 lg:col-span-7 overflow-y-auto pr-1 [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-                                <HistoryList history={history} selectedId={historyId(selectedItem)} onSelect={onSelectItem} />
+                            <div className="col-span-12 lg:col-span-7 h-full min-h-0">
+                                <SearchableHistoryList history={history} selectedId={historyId(selectedItem)} onSelect={onSelectItem} />
                             </div>
-                            <div className="col-span-12 lg:col-span-5 min-h-0">
-                                <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--muted)] font-black mb-2">Model Detail</div>
-                                <HistoryDetailCard item={selectedItem} />
+                            <div className="col-span-12 lg:col-span-5 min-h-0 flex flex-col">
+                                <div className="flex-1 min-h-0">
+                                    <HistoryDetailCard item={selectedItem} />
+                                </div>
                             </div>
                         </motion.div>
                     ) : (
@@ -1532,7 +1743,9 @@ const DecisionTreeCard = ({ structure, treeIndex, totalTrees, onTreeChange, load
 // // Updated ControlPanel (Added Model Name Input)
 const ControlPanel = ({
     onTrain,
+    onStopTraining,
     loading,
+    trainingActive = false,
     sessions,
     selectedSession,
     onSessionSelect,
@@ -1541,7 +1754,9 @@ const ControlPanel = ({
     setActiveTab,
     modelName,
     setModelName,
-    onSwitchLab
+    onSwitchLab,
+    sessionLocked = false,
+    onModelNameFocus
 }) => (
     <div className="space-y-4">
         {/* Session Select */}
@@ -1591,6 +1806,7 @@ const ControlPanel = ({
                     type="text"
                     value={modelName}
                     onChange={(e) => setModelName(e.target.value)}
+                    onFocus={onModelNameFocus}
                     placeholder={`Name for new ${activeTab} model...`}
                     className="w-full bg-bg text-text border-[2px] border-border rounded-[6px] px-4 py-2 text-[16px] focus:border-primary focus:ring-1 focus:ring-primary/30 transition-all outline-none"
                 />
@@ -1602,13 +1818,14 @@ const ControlPanel = ({
                     className="flex"
                     value={selectedSession || ''}
                     onChange={(val) => onSessionSelect(val)}
+                    disabled={sessionLocked}
                     options={[
                         { value: "", label: "All Available Data" },
                         ...sessions.map(s => ({ value: s.table, label: s.name }))
                     ]}
                     placeholder="Select Session..."
                 />
-                <button onClick={onRefreshSessions} className="p-2.5 border-[2px] border-[var(--border)] rounded-lg hover:bg-[var(--bg)] text-[var(--text)]" title="Refresh Sessions"><RefreshCw className="w-5 h-5" /></button>
+                <button onClick={onRefreshSessions} disabled={sessionLocked} className="p-2.5 border-[2px] border-[var(--border)] rounded-lg hover:bg-[var(--bg)] text-[var(--text)] disabled:opacity-40 disabled:cursor-not-allowed" title="Refresh Sessions"><RefreshCw className="w-5 h-5" /></button>
             </div>
         </div>
 
@@ -1616,18 +1833,17 @@ const ControlPanel = ({
         <div className="grid grid-cols-1 gap-3 overflow-visible">
             {/* Shimmer Effect */}
             <button
-                onClick={onTrain}
-                disabled={loading}
-                className="w-full flex items-center justify-center py-3 bg-primary text-primary-contrast rounded-xl font-bold text-[10px] tracking-[0.15em] transition-all shadow-[0_0_20px_rgba(var(--primary-rgb),0.2)] hover:shadow-[0_0_30px_rgba(var(--primary-rgb),0.4)] hover:scale-[1.05] hover:z-50 active:scale-95 group relative overflow-hidden disabled:opacity-20"
+                onClick={trainingActive ? onStopTraining : onTrain}
+                disabled={loading && !trainingActive}
+                className={`w-full flex items-center justify-center py-3 rounded-xl font-bold text-[10px] tracking-[0.15em] transition-all shadow-[0_0_20px_rgba(var(--primary-rgb),0.2)] hover:shadow-[0_0_30px_rgba(var(--primary-rgb),0.4)] hover:scale-[1.05] hover:z-50 active:scale-95 group relative overflow-hidden disabled:opacity-20 ${trainingActive ? 'bg-red-500 text-white' : 'bg-primary text-primary-contrast'}`}
             >
                 <div className="absolute inset-0 bg-white/30 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000 ease-in-out skew-x-12" />
                 <span className="relative z-10 text-xl gap-4 flex items-center justify-center w-full">
-                    {loading ? 'Training...' : (
+                    {trainingActive ?
                         <>
-                            Train
                             <motion.span
                                 initial={{ rotate: 0 }}
-                                whileHover={{
+                                whileInView={{
                                     rotate: [0, -10, 10, -10, 10, 0],
                                     y: [0, -2, 0]
                                 }}
@@ -1636,9 +1852,26 @@ const ControlPanel = ({
                             >
                                 <Rocket size={34} />
                             </motion.span>
-                            Model
+                            Trainning...
+
                         </>
-                    )}
+                        : loading ? 'Training...' : (
+                            <>
+                                Train
+                                <motion.span
+                                    initial={{ rotate: 0 }}
+                                    whileHover={{
+                                        rotate: [0, -10, 10, -10, 10, 0],
+                                        y: [0, -2, 0]
+                                    }}
+                                    transition={{ duration: 0.5, repeat: Infinity }}
+                                    className="inline-block"
+                                >
+                                    <Rocket size={34} />
+                                </motion.span>
+                                Model
+                            </>
+                        )}
                 </span>
             </button>
         </div>
@@ -1737,6 +1970,18 @@ export default function MLTrainingView({ onSwitchLab }) {
     const activeResult = results[activeTab];
     const activeEvalResult = evalResults[activeTab];
     const activeParams = params[activeTab];
+    const activeWorkspaceResult = activeResult || activeEvalResult;
+    const activeSelectedHyperparameters = activeWorkspaceResult?.hyperparameters?.selected_hyperparameters || {};
+    const totalTreesForView = Math.max(
+        1,
+        Number(
+            activeSelectedHyperparameters?.n_estimators
+            ?? activeWorkspaceResult?.n_estimators
+            ?? activeParams?.n_estimators
+            ?? activeParams?.n_estimators_max
+            ?? 1
+        ) || 1
+    );
     const activeHistory = trainingJob?.history?.length ? trainingJob.history : ((activeResult || activeEvalResult)?.training_history || lastHistory[activeTab] || []);
     const selectedHistoryItem = selectedHistoryItems[activeTab] || activeHistory[activeHistory.length - 1] || null;
     const selectedSessionName = selectedSession
@@ -1792,8 +2037,7 @@ export default function MLTrainingView({ onSwitchLab }) {
         }
 
         setSelectedModels(prev => ({ ...prev, [activeTab]: name }));
-        // Clear previous training result so evaluation shows instead
-        setResults(prev => ({ ...prev, [activeTab]: null }));
+        setEvalResults(prev => ({ ...prev, [activeTab]: null }));
 
         try {
             setEvalLoading(true);
@@ -1803,12 +2047,36 @@ export default function MLTrainingView({ onSwitchLab }) {
                 headers: { 'Content-Type': 'application/json' }
             });
             if (!res.ok) throw new Error("Failed to load model backend");
+            const data = await res.json();
 
             soundHandler.playMLSwitch(); // Play sound on successful model load
 
-            // After loading, trigger eval to refresh UI
+            setResults(prev => ({ ...prev, [activeTab]: { ...data, source: `Trained on: ${data.session_name || data.table_name || 'Saved Dataset'}` } }));
+            setEvalResults(prev => ({ ...prev, [activeTab]: null }));
+            if (data.training_history?.length) {
+                setLastHistory(prev => ({ ...prev, [activeTab]: data.training_history }));
+                setSelectedHistoryItems(prev => ({ ...prev, [activeTab]: data.training_history[data.training_history.length - 1] || null }));
+            }
+            if (data.hyperparameters) {
+                const meta = data.hyperparameters || {};
+                const selectedHyperparameters = meta.selected_hyperparameters || {};
+                setParams(prev => ({
+                    ...prev,
+                    [activeTab]: {
+                        ...prev[activeTab],
+                        ...selectedHyperparameters,
+                        train_ratio: data.train_ratio ?? meta.train_ratio ?? prev[activeTab]?.train_ratio,
+                        val_ratio: data.val_ratio ?? meta.val_ratio ?? prev[activeTab]?.val_ratio,
+                        test_ratio: data.test_ratio ?? meta.test_ratio ?? prev[activeTab]?.test_ratio,
+                        k_folds: data.k_folds ?? meta.k_folds ?? prev[activeTab]?.k_folds,
+                        random_state: meta.random_state ?? prev[activeTab]?.random_state,
+                    }
+                }));
+            }
+            if (data.table_name) {
+                setSelectedSession(data.table_name);
+            }
             setTreeIndex(0);
-            handleEval(name);
         } catch (e) {
             setError(e.message);
         } finally {
@@ -1819,10 +2087,6 @@ export default function MLTrainingView({ onSwitchLab }) {
     useEffect(() => {
         fetchSessions();
         fetchModels();
-        // Initial eval info only if a model is already selected
-        if (selectedModelName) {
-            handleEval();
-        }
     }, [activeTab]); // When tab changes
 
     // --- ROCKY TRAINING SOUND ---
@@ -1838,9 +2102,8 @@ export default function MLTrainingView({ onSwitchLab }) {
 
     // Also re-fetch if session changes? Maybe useful for context, but not critical for model list.
     useEffect(() => {
-        // Reload evaluation only if a model is already selected
-        if (selectedModelName) {
-            handleEval(selectedModelName);
+        if (!selectedModelName) {
+            setEvalResults(prev => ({ ...prev, [activeTab]: null }));
         }
     }, [selectedSession]);
 
@@ -1930,6 +2193,18 @@ export default function MLTrainingView({ onSwitchLab }) {
         setLoading(false);
     }, []);
 
+    const handleStopTraining = async () => {
+        if (!trainingJob?.job_id) return;
+        try {
+            await fetch(buildApiUrl(`/api/train-jobs/${trainingJob.job_id}/cancel`), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+        } catch (e) {
+            console.error('Failed to cancel training job', e);
+        }
+    };
+
     useEffect(() => {
         if (socketRef.current) return;
 
@@ -2013,9 +2288,13 @@ export default function MLTrainingView({ onSwitchLab }) {
             return () => clearInterval(timer);
         }
 
-        if (trainingJob.status === 'failed' || trainingJob.status === 'error') {
+        if (trainingJob.status === 'failed' || trainingJob.status === 'error' || trainingJob.status === 'cancelled') {
             finalizedJobRef.current = trainingJob.job_id;
-            setError(trainingJob.error || 'Training failed');
+            if (trainingJob.status === 'cancelled') {
+                setError(trainingJob.error || 'Training cancelled');
+            } else {
+                setError(trainingJob.error || 'Training failed');
+            }
             clearTrainingJobState();
         }
     }, [trainingJob, activeTab, clearTrainingJobState]);
@@ -2038,7 +2317,7 @@ export default function MLTrainingView({ onSwitchLab }) {
             const modelNameFinal = trainModelNameInput.trim();
 
             const validKForBackend = parseInt(activeParams.k_folds);
-            const enforcedKForBackend = isNaN(validKForBackend) ? 2 : Math.max(2, Math.min(20, validKForBackend));
+            const enforcedKForBackend = isNaN(validKForBackend) ? 1 : Math.max(1, Math.min(20, validKForBackend));
 
             // Force the UI state to snap to the valid k_folds so the input field updates correctly
             setParams(prev => ({ ...prev, [activeTab]: { ...prev[activeTab], k_folds: enforcedKForBackend } }));
@@ -2092,70 +2371,6 @@ export default function MLTrainingView({ onSwitchLab }) {
         }
     };
 
-    const handleEval = async (forceModelName = null) => {
-        // Early return if no model provided and nothing selected
-        if (!forceModelName && !selectedModelName) {
-            setEvalResults(prev => ({ ...prev, [activeTab]: null }));
-            return;
-        }
-        setEvalLoading(true); setError(null);
-
-        try {
-            const endpointMap = {
-                'EMG': buildApiUrl('/api/model/evaluate'),
-                'EOG': buildApiUrl('/api/model/evaluate/eog'),
-                'EEG': buildApiUrl('/api/model/evaluate/eeg')
-            };
-
-            const res = await fetch(endpointMap[activeTab], {
-                method: 'POST',
-                body: JSON.stringify({
-                    table_name: selectedSession || undefined,
-                    model_name: forceModelName || selectedModelName || undefined,
-                    sensor: activeTab
-                }),
-                headers: { 'Content-Type': 'application/json' }
-            });
-            const data = await res.json();
-            if (!res.ok) {
-                return;
-            }
-
-            setEvalResults(prev => ({ ...prev, [activeTab]: { ...data, source: getSourceName(false) } }));
-            if (data.training_history?.length) {
-                setLastHistory(prev => ({ ...prev, [activeTab]: data.training_history }));
-                setSelectedHistoryItems(prev => ({ ...prev, [activeTab]: data.training_history[data.training_history.length - 1] || null }));
-            }
-
-            if (data.hyperparameters) {
-                const meta = data.hyperparameters || {};
-                const selectedHyperparameters = meta.selected_hyperparameters || {};
-                setParams(prev => ({
-                    ...prev,
-                    [activeTab]: {
-                        ...prev[activeTab],
-                        ...selectedHyperparameters,
-                        train_ratio: meta.train_ratio ?? prev[activeTab]?.train_ratio,
-                        val_ratio: meta.val_ratio ?? prev[activeTab]?.val_ratio,
-                        test_ratio: meta.test_ratio ?? prev[activeTab]?.test_ratio,
-                        k_folds: meta.k_folds ?? prev[activeTab]?.k_folds,
-                        random_state: meta.random_state ?? prev[activeTab]?.random_state,
-                    }
-                }));
-            }
-
-            // We NO LONGER auto-select a model if it was null.
-            // Only update selection if explicitly requested via forceModelName
-            if (data.model_name && forceModelName) {
-                setSelectedModels(prev => ({ ...prev, [activeTab]: data.model_name }));
-            }
-        } catch (e) {
-            console.log("Eval check info (ignore if just checking):", e);
-        } finally { setEvalLoading(false); }
-    };
-
-
-
     return (
         <div className="flex-1 flex flex-col h-full overflow-hidden p-4" key={currentThemeId}>
             {/* ERROR DISPLAY */}
@@ -2173,7 +2388,9 @@ export default function MLTrainingView({ onSwitchLab }) {
                         <div className="shrink-0">
                             <ControlPanel
                                 onTrain={handleTrain}
+                                onStopTraining={handleStopTraining}
                                 loading={loading}
+                                trainingActive={!!trainingJob}
                                 evalLoading={evalLoading}
                                 sessions={availableSessions}
                                 selectedSession={selectedSession}
@@ -2183,6 +2400,14 @@ export default function MLTrainingView({ onSwitchLab }) {
                                 activeTab={activeTab}
                                 setActiveTab={setActiveTab}
                                 modelName={trainModelNameInput}
+                                sessionLocked={!!selectedModelName}
+                                onModelNameFocus={() => {
+                                    if (!selectedModelName) return;
+                                    setSelectedModels(prev => ({ ...prev, [activeTab]: null }));
+                                    setResults(prev => ({ ...prev, [activeTab]: null }));
+                                    setEvalResults(prev => ({ ...prev, [activeTab]: null }));
+                                    setTreeIndex(0);
+                                }}
                                 setModelName={(name) => {
                                     setTrainModelNameInput(name);
                                     if (name && name !== '') {
@@ -2219,7 +2444,6 @@ export default function MLTrainingView({ onSwitchLab }) {
                                 onSelectRun={(name) => {
                                     setInsightView('history');
                                     if (name === selectedModelName) {
-                                        handleEval(name);
                                         return;
                                     }
                                     handleLoadModel(name);
@@ -2248,7 +2472,7 @@ export default function MLTrainingView({ onSwitchLab }) {
                                         <DecisionTreeCard
                                             structure={(activeResult || activeEvalResult).tree_structure}
                                             treeIndex={treeIndex}
-                                            totalTrees={activeParams.n_estimators}
+                                            totalTrees={totalTreesForView}
                                             onTreeChange={fetchTree}
                                             loading={loading || treeLoading}
                                             history={activeHistory}
@@ -2339,4 +2563,3 @@ export default function MLTrainingView({ onSwitchLab }) {
     );
 }
 
-import { buildApiUrl } from '../../utils/runtimeConnection';

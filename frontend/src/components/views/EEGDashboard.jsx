@@ -1,5 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
 import { Activity, Music, Wind, Eye, Grid, MonitorPlay, Layers } from 'lucide-react';
 import '../../styles/views/EEGDashboard.css';
 
@@ -11,10 +10,10 @@ import { SidebarProvider, useSidebar } from '../eeg_dashbord/pages/SidebarContex
 import MainSidebar from '../eeg_dashbord/sidebar/MainSidebar';
 
 const OVERVIEW_APPS = [
-  { id: 'music', title: 'Music Control', icon: Music, desc: 'Control playback using frontal lobe focus states.', path: 'music' },
-  { id: 'meditation', title: 'Meditation Trainer', icon: Wind, desc: 'Guided neurofeedback breathing sessions.', path: 'meditation' },
-  { id: 'bubble', title: 'Bubble Game', icon: Activity, desc: 'Interactive peak wave game.', path: 'bubble_game' },
-  { id: 'ssvep', title: 'SSVEP Interface', icon: Eye, desc: 'Visual cortex stimulation via flickering targets.', path: 'ssvep' },
+  { id: 'music', title: 'Music Control', icon: Music, desc: 'Control playback using frontal lobe focus states.' },
+  { id: 'meditation', title: 'Meditation Trainer', icon: Wind, desc: 'Guided neurofeedback breathing sessions.' },
+  { id: 'bubble', title: 'Bubble Game', icon: Activity, desc: 'Interactive peak wave game.' },
+  { id: 'ssvep', title: 'SSVEP Interface', icon: Eye, desc: 'Visual cortex stimulation via flickering targets.' },
 ];
 
 const OverviewGrid = ({ onSelect }) => (
@@ -87,7 +86,7 @@ const EEGDashboardContent = ({ wsEvent, isConnected, wsUrl }) => {
     switch (currentView) {
       case "overview": return <OverviewGrid onSelect={handleSelectView} />;
       case "music": return <MusicView result={eegResult} onNavigate={handleSelectView} onBackToMenu={handleBackToMenu} />;
-      case "meditation": return <MeditationView result={eegResult} currentView={currentView} onNavigate={handleSelectView} onBackToMenu={handleBackToMenu} />;
+      case "meditation": return <MeditationView result={eegResult} wsEvent={wsEvent} wsUrl={wsUrl} currentView={currentView} onNavigate={handleSelectView} onBackToMenu={handleBackToMenu} />;
       case "bubble": return <BubbleGameView result={eegResult} isConnected={isConnected} onBackToMenu={handleBackToMenu} onNavigate={handleSelectView} />;
       case "ssvep": return <SSVEPView isConnected={isConnected} wsEvent={wsEvent} onBackToMenu={handleBackToMenu} onNavigate={handleSelectView} />;
       default: return <OverviewGrid onSelect={handleSelectView} />;
@@ -106,12 +105,12 @@ const EEGDashboardContent = ({ wsEvent, isConnected, wsUrl }) => {
         {/* Sidebar content — flex-1 allows it to grow and inner panel handles scroll */}
         <div className="sidebar-wrapper flex-1 min-h-0">
           {/* Global Navigation Panel */}
-          <div className={`sidebar-panel ${sidebarMode === 'main' ? 'sidebar-active' : 'sidebar-hidden'}`}>
+          <div className={`sidebar-panel scrollbar-hide ${sidebarMode === 'main' ? 'sidebar-active' : 'sidebar-hidden'}`}>
             <MainSidebar currentView={currentView} onSelect={handleSelectView} />
           </div>
 
           {/* Page-Specific Sidebar Panel (Empty for overview) */}
-          <div className={`sidebar-panel ${sidebarMode === 'page' ? 'sidebar-active' : 'sidebar-hidden'}`}>
+          <div className={`sidebar-panel scrollbar-hide ${sidebarMode === 'page' ? 'sidebar-active' : 'sidebar-hidden'}`}>
             <div className="h-full">
               {sidebarSlot || (
                 <div className="flex flex-col items-center justify-center h-full opacity-40 text-center px-6">

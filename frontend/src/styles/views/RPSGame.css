@@ -5,6 +5,8 @@
   align-items: flex-start;
   justify-content: center;
   gap: 2rem;
+  padding-bottom: 2rem;
+  padding-top: 1rem;
   color: var(--text);
   position: relative;
   width: 100%;

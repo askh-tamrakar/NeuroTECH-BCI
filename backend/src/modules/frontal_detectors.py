@@ -91,11 +91,38 @@ def detect_meditation_metrics(feature_vector):
         breathing_guide = "Focus on your breath to relax"
         trend = "Active mind"
 
+    delta = _safe(feature_vector, 0)
+    theta = _safe(feature_vector, 1)
+    alpha = _safe(feature_vector, 2)
+    beta = _safe(feature_vector, 3)
+    gamma = _safe(feature_vector, 4)
+
+    total_tab = theta + alpha + beta + 1e-6
+    p_theta = theta / total_tab
+    p_alpha = alpha / total_tab
+    p_beta = beta / total_tab
+
+    total_all = delta + theta + alpha + beta + gamma + 1e-6
+    # Smoothed radar representations that prevent huge delta from squashing other bands visually
+    radar_bands = [
+        int(14 + (delta / total_all) * 10),
+        int(18 + (score / 100.0) * 15 + p_theta * 10),
+        int(22 + (score / 100.0) * 22 + p_alpha * 10),
+        int(max(8, 28 - (score / 100.0) * 20 + p_beta * 10)),
+        int(8 + (gamma / total_all) * 10)
+    ]
+
     return {
         "meditation_score": score,
         "calmness_meter": score,
         "breathing_guide": breathing_guide,
-        "relaxation_trend": trend
+        "relaxation_trend": trend,
+        "band_mix": {
+            "theta": p_theta,
+            "alpha": p_alpha,
+            "beta": p_beta
+        },
+        "radar_bands": radar_bands
     }
 
 

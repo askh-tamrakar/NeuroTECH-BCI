@@ -1,28 +1,9 @@
-import React, { useEffect, Suspense, lazy } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import React, { useEffect } from 'react';
 import { AuthProvider } from './contexts/AuthContext'
 import { useAuth } from './contexts/AuthContext'
 import LoginPage from './components/auth/LoginPage'
 import Dashboard from './components/Dashboard'
 import { soundHandler } from './handlers/SoundHandler';
-import { LoadingIndicator } from './components/application/loading-indicator/loading-indicator';
-
-// Lazy load views for better performance
-const DinoView = lazy(() => import('./components/views/DinoView'));
-
-function ProtectedRoute({ children }) {
-  const { user, loading } = useAuth();
-  
-  if (loading) return (
-    <div className="min-h-screen flex items-center justify-center bg-bg">
-      <LoadingIndicator size="lg" label="Authenticating..." />
-    </div>
-  );
-  
-  if (!user) return <Navigate to="/auth" replace />;
-  
-  return children;
-}
 
 function AppContent() {
   const { user, loading } = useAuth()
@@ -30,46 +11,28 @@ function AppContent() {
   // Global sound listener
   useEffect(() => {
     const handleGlobalClick = () => {
+      // Only play if interaction happens, AudioContext resumes on first click
       soundHandler.resume();
       soundHandler.playClick();
     };
+
+    // We can attach to window for general clicks, but maybe too noisy?
+    // Let's attach to buttons and interactive elements via delegation if possible, 
+    // or just play on any click for now as requested "soothing click sound on mouse click".
     window.addEventListener('click', handleGlobalClick);
+
     return () => window.removeEventListener('click', handleGlobalClick);
   }, []);
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-bg">
-        <LoadingIndicator size="lg" label="Neural Link Initializing..." />
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-2xl">Loading...</div>
       </div>
     )
   }
 
-  return (
-    <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center bg-bg">
-        <LoadingIndicator size="lg" label="Streamlining Neural Data..." />
-      </div>
-    }>
-      <Routes>
-        <Route path="/auth" element={!user ? <LoginPage /> : <Navigate to="/dashboard/terminal" replace />} />
-        
-        <Route path="/dashboard/*" element={
-          <ProtectedRoute>
-            <Dashboard />
-          </ProtectedRoute>
-        } />
-
-        <Route path="/dino" element={<Navigate to="/dashboard/dino" replace />} />
-
-        {/* Redirect directly to dashboard if logged in, else auth */}
-        <Route path="/" element={<Navigate to={user ? "/dashboard/terminal" : "/auth"} replace />} />
-        
-        {/* Fallback */}
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </Suspense>
-  )
+  return user ? <Dashboard /> : <LoginPage />
 }
 
 import CursorHandler from './components/ui/overlays/CursorHandler';
@@ -90,4 +53,3 @@ export default function App() {
     </>
   )
 }
-
