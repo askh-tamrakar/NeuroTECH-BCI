@@ -105,12 +105,12 @@ const EEGDashboardContent = ({ wsEvent, isConnected, wsUrl }) => {
         {/* Sidebar content — flex-1 allows it to grow and inner panel handles scroll */}
         <div className="sidebar-wrapper flex-1 min-h-0">
           {/* Global Navigation Panel */}
-          <div className={`sidebar-panel ${sidebarMode === 'main' ? 'sidebar-active' : 'sidebar-hidden'}`}>
+          <div className={`sidebar-panel scrollbar-hide ${sidebarMode === 'main' ? 'sidebar-active' : 'sidebar-hidden'}`}>
             <MainSidebar currentView={currentView} onSelect={handleSelectView} />
           </div>
 
           {/* Page-Specific Sidebar Panel (Empty for overview) */}
-          <div className={`sidebar-panel ${sidebarMode === 'page' ? 'sidebar-active' : 'sidebar-hidden'}`}>
+          <div className={`sidebar-panel scrollbar-hide ${sidebarMode === 'page' ? 'sidebar-active' : 'sidebar-hidden'}`}>
             <div className="h-full">
               {sidebarSlot || (
                 <div className="flex flex-col items-center justify-center h-full opacity-40 text-center px-6">

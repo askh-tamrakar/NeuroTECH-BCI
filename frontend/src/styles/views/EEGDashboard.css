@@ -318,23 +318,6 @@
   /* Allow the active panel to scroll its content */
   overflow-y: auto;
   overflow-x: hidden;
-  /* Custom thin scrollbar */
-  scrollbar-width: thin;
-  scrollbar-color: rgba(var(--primary-rgb, 0,245,255), 0.25) transparent;
-}
-
-.sidebar-active::-webkit-scrollbar {
-  width: 4px;
-}
-.sidebar-active::-webkit-scrollbar-track {
-  background: transparent;
-}
-.sidebar-active::-webkit-scrollbar-thumb {
-  background: rgba(var(--primary-rgb, 0,245,255), 0.25);
-  border-radius: 4px;
-}
-.sidebar-active::-webkit-scrollbar-thumb:hover {
-  background: rgba(var(--primary-rgb, 0,245,255), 0.5);
 }
 
 .sidebar-hidden {

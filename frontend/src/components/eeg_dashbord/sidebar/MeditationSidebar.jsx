@@ -87,7 +87,7 @@ const MeditationSidebar = ({
 
 
     return (
-        <div className="flex-grow flex flex-col p-4 gap-4 font-mono transition-opacity duration-300 w-full shrink-0">
+        <div className="flex-grow flex flex-col p-4 gap-4 font-mono transition-opacity duration-300 w-full shrink-0 overflow-hidden">
             {/* Header */}
             <div className="flex items-center justify-between shrink-0 mb-1">
                 <div>
@@ -106,7 +106,7 @@ const MeditationSidebar = ({
                 </button>
             </div>
 
-            <div className="flex flex-col gap-4 h-full overflow-y-auto [&::-webkit-scrollbar]:hidden pb-10">
+            <div className="flex flex-col gap-4 h-full overflow-y-auto scrollbar-hide pb-10">
 
                 {/* Start Session Button */}
                 <div className="shrink-0">

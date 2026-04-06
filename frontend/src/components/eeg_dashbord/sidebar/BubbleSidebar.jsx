@@ -24,7 +24,7 @@ const BubbleSidebar = ({
     const dashOffset = 201 - (Math.min(100, focusScore || 0) / 100) * 201;
 
     return (
-        <div className="flex-grow flex flex-col p-4 gap-4 font-mono transition-opacity duration-300 w-full shrink-0">
+        <div className="flex-grow flex flex-col p-4 gap-4 font-mono transition-opacity duration-300 w-full shrink-0 overflow-y-auto scrollbar-hide">
             {/* Header */}
             <div className="flex items-center justify-between shrink-0 mb-1">
                 <div>
@@ -134,7 +134,7 @@ const BubbleSidebar = ({
                         <Trash2 size={12} />
                     </button>
                 </h4>
-                <div id="session-history" className="flex-grow overflow-y-auto pr-1 [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:bg-[var(--primary)]/20 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-[var(--primary)]/40 flex flex-col gap-2">
+                <div id="session-history" className="flex-grow overflow-y-auto pr-1 scrollbar-hide flex flex-col gap-2">
                     {/* populated by JavaScript */}
                 </div>
             </div>
