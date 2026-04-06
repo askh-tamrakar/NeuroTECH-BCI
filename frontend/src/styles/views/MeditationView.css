@@ -206,3 +206,16 @@ input[type=range].accent-primary::-webkit-slider-runnable-track {
   0%, 100% { transform: scaleY(0.4); opacity: 0.6; }
   50%       { transform: scaleY(1.0); opacity: 1.0; }
 }
+
+/* ── DOMINANT WAVE INDICATOR ─────────────────── */
+#med-dominant-val {
+  font-family: 'Orbitron', sans-serif;
+  text-shadow: 0 0 10px currentColor;
+  transition: all 0.3s ease;
+  animation: dominantPulse 2s infinite ease-in-out;
+}
+
+@keyframes dominantPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.85; transform: scale(1.02); }
+}
