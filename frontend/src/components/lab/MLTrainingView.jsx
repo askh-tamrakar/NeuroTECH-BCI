@@ -54,7 +54,7 @@ const ModelIdBadge = ({ model, size = 'sm', isActive = false }) => {
         const match = String(id).match(/^([C-Z])([0-9A-F]{2})F([0-9A-F]+)$/i);
         if (match) {
             return (
-                <span className={`font-mono font-black ${size === 'sm' ? 'text-[10px]' : 'text-[14px]'}`}>
+                <span className={`font-mono font-black ${size === 'sm' ? 'text-[15px]' : 'text-[20px]'}`}>
                     <span className={mutedColor}>{match[1].toUpperCase()}</span>
                     <span className={primaryColor}>{match[2].toUpperCase()}</span>
                     <span className={`${mutedColor} ml-0.5`}>F</span>
@@ -62,11 +62,11 @@ const ModelIdBadge = ({ model, size = 'sm', isActive = false }) => {
                 </span>
             );
         }
-        return <span className={`font-mono font-black ${size === 'sm' ? 'text-[10px]' : 'text-[14px]'}`}>{id}</span>;
+        return <span className={`font-mono font-black ${size === 'sm' ? 'text-[15px]' : 'text-[20px]'}`}>{id}</span>;
     }
 
     return (
-        <span className={`font-mono font-black ${size === 'sm' ? 'text-[10px]' : 'text-[14px]'}`}>
+        <span className={`font-mono font-black ${size === 'sm' ? 'text-[15px]' : 'text-[20px]'}`}>
             <span className={mutedColor}>C</span>
             <span className={primaryColor}>{(displayCandidateIdx).toString(16).toUpperCase().padStart(2, '0')}</span>
             <span className={`${mutedColor} ml-0.5`}>F</span>
@@ -363,7 +363,7 @@ const FeatureInsightCard = ({ importances, featureOrder, sensor }) => {
                                         <div className="flex-1 h-2 bg-[var(--bg)] rounded-full mx-2 overflow-hidden border border-[var(--border)]/50">
                                             <div className="h-full bg-[var(--primary)] group-hover:bg-[var(--accent)] transition-all shadow-[0_0_8px_var(--primary)]" style={{ width: `${Math.min(100, Math.max(0, imp * 100))}%` }}></div>
                                         </div>
-                                        <span className="text-[14px] w-12 text-right font-black">{(imp * 100).toFixed(1)}%</span>
+                                        <span className="text-[14px] w-16 text-right font-black">{(imp * 100).toFixed(1)}%</span>
                                     </li>
                                 )) : (
                                     <div className="flex flex-col items-center justify-center h-full opacity-30 italic text-sm">No importance data available</div>
@@ -489,14 +489,12 @@ const HistoryList = ({ history = [], selectedId, onSelect, emptyText = 'No train
                 <div key={cand.idx} className="p-3 rounded-xl bg-[var(--bg)]/50 border border-[var(--border)]">
                     <div className="flex items-center justify-between mb-2">
                         <div>
-                            <div className="text-[10px] font-black text-[var(--muted)] uppercase tracking-[0.18em]">
+                            <div className="text-[14px] font-black text-[var(--muted)] uppercase tracking-[0.18em]">
                                 Candidate {decimalCandidateDisplay ? formatCandidateDecimal(cand.idx) : cand.idx}
                             </div>
-                            <div className="text-[10px] text-[var(--text)] font-mono truncate">
-                                {Object.entries(cand.params).map(([k, v]) => `${k}: ${v}`).join(' | ') || 'No hyperparameters recorded'}
-                            </div>
+
                         </div>
-                        <div className="text-xs font-black text-[var(--primary)]">
+                        <div className="text-[16px] font-black text-[var(--primary)]">
                             {Math.round((cand.folds.reduce((acc, fold) => acc + (fold.accuracy || 0), 0) / cand.folds.length) * 100)}%
                         </div>
                     </div>
@@ -508,7 +506,7 @@ const HistoryList = ({ history = [], selectedId, onSelect, emptyText = 'No train
                                 <button
                                     key={id}
                                     onClick={() => onSelect?.(item)}
-                                    className={`px-2 py-1 rounded-md border transition-all ${isActive ? 'bg-[var(--primary)] border-[var(--primary)] shadow-sm' : 'bg-[var(--surface)] border-[var(--border)] hover:border-[var(--primary)]/50'}`}
+                                    className={`px-3 py-1.5 rounded-md border transition-all ${isActive ? 'bg-[var(--primary)] border-[var(--primary)] shadow-sm' : 'bg-[var(--surface)] border-[var(--border)] hover:border-[var(--primary)]/50'}`}
                                 >
                                     <ModelIdBadge model={item} isActive={isActive} />
                                 </button>
@@ -521,6 +519,43 @@ const HistoryList = ({ history = [], selectedId, onSelect, emptyText = 'No train
     );
 };
 
+const SearchableHistoryList = ({ history = [], selectedId, onSelect, decimalCandidateDisplay = false, placeholder = "FIND MODEL BY ID" }) => {
+    const [searchQuery, setSearchQuery] = useState('');
+    const filteredHistory = useMemo(() => {
+        if (!searchQuery.trim()) return history;
+        const q = searchQuery.toLowerCase();
+        // Smarter Hex-aware filtering: convert numeric decimal to hex for matching model IDs
+        const numeric = parseInt(q);
+        const hexMatch = !isNaN(numeric) && numeric > 0 ? numeric.toString(16).toUpperCase().padStart(2, '0') : null;
+
+        return history.filter(item => {
+            const id = historyId(item).toLowerCase();
+            const matchesLiteral = id.includes(q);
+            const matchesHex = hexMatch ? id.includes(hexMatch.toLowerCase()) : false;
+            return matchesLiteral || matchesHex;
+        });
+    }, [history, searchQuery]);
+
+    return (
+        <div className="flex flex-col h-full overflow-hidden">
+            <div className="relative mb-4 shrink-0">
+                <div className="absolute inset-0 bg-[var(--primary)]/5 blur-sm rounded-lg -m-1 pointer-events-none opacity-50" />
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--primary)] " />
+                <input
+                    type="text"
+                    placeholder={placeholder}
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-lg pl-9 pr-3 py-2.5 text-[12px] font-mono font-black tracking-widest text-[var(--text)] focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)]/30 outline-none transition-all uppercase placeholder:opacity-50"
+                />
+            </div>
+            <div className="flex-1 overflow-y-auto pr-1 [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                <HistoryList history={filteredHistory} selectedId={selectedId} onSelect={onSelect} decimalCandidateDisplay={decimalCandidateDisplay} />
+            </div>
+        </div>
+    );
+};
+
 const HistoryDetailCard = ({ item, decimalCandidateDisplay = false }) => {
     if (!item) {
         return <div className="flex h-full items-center justify-center text-sm italic text-[var(--muted)] opacity-60">Click a model ID like C01F1 to inspect it.</div>;
@@ -528,78 +563,87 @@ const HistoryDetailCard = ({ item, decimalCandidateDisplay = false }) => {
 
     const params = historyParams(item);
     return (
-        <div className="h-full p-4 rounded-xl bg-[var(--bg)]/40 border border-[var(--border)] space-y-3 overflow-y-auto [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+        <div className="h-full p-4 rounded-xl bg-[var(--bg)]/40 border border-[var(--border)] space-y-4 overflow-y-auto [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
             <div className="flex items-center justify-between">
                 <div>
-                    <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--muted)] font-black">Model ID</div>
+                    <div className="text-[12px] uppercase tracking-[0.18em] text-[var(--muted)] font-black">Model ID</div>
                     <div className="text-2xl mt-1">
                         <ModelIdBadge model={item} size="lg" />
                     </div>
                 </div>
                 <div className="text-right">
-                    <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--muted)] font-black">Validation</div>
-                    <div className="text-xl font-black text-[var(--text)]">{pct(item.validation_accuracy ?? item.accuracy)}</div>
+                    <div className="text-[12px] uppercase tracking-[0.18em] text-[var(--muted)] font-black">Validation</div>
+                    <div className="text-2xl font-black text-[var(--text)]">{pct(item.validation_accuracy ?? item.accuracy)}</div>
                 </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
                 <div className="p-3 rounded-lg border border-[var(--border)] bg-[var(--surface)]">
-                    <div className="text-[10px] uppercase text-[var(--muted)] font-black mb-1">Candidate / Fold</div>
-                    <div className="text-sm font-mono text-[var(--text)]">
+                    <div className="text-[12px] uppercase text-[var(--muted)] font-black mb-1">Candidate / Fold</div>
+                    <div className="text-[16px] font-mono font-bold text-[var(--text)]">
                         {decimalCandidateDisplay ? formatCandidateDecimal(historyCandidate(item)) : historyCandidate(item)} / {historyFold(item)}
                     </div>
                 </div>
                 <div className="p-3 rounded-lg border border-[var(--border)] bg-[var(--surface)]">
-                    <div className="text-[10px] uppercase text-[var(--muted)] font-black mb-1">Train Accuracy</div>
-                    <div className="text-sm font-mono text-[var(--text)]">{pct(item.train_accuracy)}</div>
+                    <div className="text-[12px] uppercase text-[var(--muted)] font-black mb-1">Train Accuracy</div>
+                    <div className="text-[16px] font-mono font-bold text-[var(--text)]">{pct(item.train_accuracy)}</div>
                 </div>
                 <div className="p-3 rounded-lg border border-[var(--border)] bg-[var(--surface)]">
-                    <div className="text-[10px] uppercase text-[var(--muted)] font-black mb-1">Train Samples</div>
-                    <div className="text-sm font-mono text-[var(--text)]">{item.n_train_samples ?? '--'}</div>
+                    <div className="text-[12px] uppercase text-[var(--muted)] font-black mb-1">Train Samples</div>
+                    <div className="text-[16px] font-mono font-bold text-[var(--text)]">{item.n_train_samples ?? '--'}</div>
                 </div>
                 <div className="p-3 rounded-lg border border-[var(--border)] bg-[var(--surface)]">
-                    <div className="text-[10px] uppercase text-[var(--muted)] font-black mb-1">Validation Samples</div>
-                    <div className="text-sm font-mono text-[var(--text)]">{item.n_validation_samples ?? '--'}</div>
+                    <div className="text-[12px] uppercase text-[var(--muted)] font-black mb-1">Validation Samples</div>
+                    <div className="text-[16px] font-mono font-bold text-[var(--text)]">{item.n_validation_samples ?? '--'}</div>
                 </div>
             </div>
             <div className="p-3 rounded-lg border border-[var(--border)] bg-[var(--surface)]">
-                <div className="text-[10px] uppercase text-[var(--muted)] font-black mb-2">Hyperparameters</div>
+                <div className="text-[12px] uppercase text-[var(--muted)] font-black mb-2">Hyperparameters</div>
                 <div className="grid grid-cols-2 gap-2">
                     {Object.entries(params).map(([key, value]) => (
-                        <div key={key} className="rounded-md bg-[var(--bg)] px-2 py-1 border border-[var(--border)]">
-                            <div className="text-[9px] uppercase text-[var(--muted)] font-black">{key}</div>
-                            <div className="text-[11px] font-mono text-[var(--text)] truncate">{String(value)}</div>
+                        <div key={key} className="rounded-md bg-[var(--bg)] px-2 py-1.5 border border-[var(--border)]">
+                            <div className="text-[12px] uppercase text-[var(--muted)] font-black mb-0.5">{key}</div>
+                            <div className="text-[14px] font-mono font-bold text-[var(--text)] truncate">{String(value)}</div>
                         </div>
                     ))}
                 </div>
             </div>
             <div className="p-3 rounded-lg border border-[var(--border)] bg-[var(--surface)]">
-                <div className="text-[10px] uppercase text-[var(--muted)] font-black mb-1">Saved Artifact</div>
-                <div className="text-[11px] font-mono text-[var(--primary)] break-all">{item.artifact_path || '--'}</div>
+                <div className="text-[12px] uppercase text-[var(--muted)] font-black mb-1">Saved Artifact</div>
+                <div className="text-[13px] font-mono text-[var(--primary)] break-all font-bold opacity-90">{item.artifact_path || '--'}</div>
             </div>
         </div>
     );
 };
 
-const TrainingHistoryCard = ({ title = 'Training History', history = [], selectedItem, onSelectItem, detailLabel = 'Model Detail', decimalCandidateDisplay = false }) => (
-    <div className={`${card} h-full flex flex-col overflow-hidden`}>
-        <div className="p-3 border-b border-[var(--border)] flex items-center justify-between shrink-0">
-            <div className="flex items-center gap-2">
-                <ListOrdered className="w-4 h-4 text-[var(--primary)]" />
-                <span className="text-xs font-black text-[var(--muted)] uppercase tracking-[0.2em]">{title}</span>
+const TrainingHistoryCard = ({ title = 'Training History', history = [], selectedItem, onSelectItem, detailLabel = 'Model Detail', decimalCandidateDisplay = false }) => {
+    return (
+        <div className={`${card} h-full flex flex-col overflow-hidden`}>
+            <div className="p-3 border-b border-[var(--border)] flex items-center justify-between shrink-0">
+                <div className="flex items-center gap-2">
+                    <ListOrdered className="w-5 h-5 text-[var(--primary)]" />
+                    <span className="text-[18px] font-black text-[var(--muted)] uppercase tracking-[0.2em]">{title}</span>
+                </div>
+                <span className="text-[15px] text-[var(--muted)] font-bold">{history.length} Models</span>
             </div>
-            <span className="text-[10px] text-[var(--muted)] font-bold">{history.length} Models</span>
+            <div className="flex-1 min-h-0 grid grid-cols-12 gap-4 p-3 ">
+                <div className="col-span-12 lg:col-span-7 h-full min-h-0">
+                    <SearchableHistoryList
+                        history={history}
+                        selectedId={historyId(selectedItem)}
+                        onSelect={onSelectItem}
+                        decimalCandidateDisplay={decimalCandidateDisplay}
+                    />
+                </div>
+                <div className="col-span-12 lg:col-span-5 min-h-0 flex flex-col">
+                    <div className="text-[16px] uppercase tracking-[0.18em] text-[var(--muted)] font-black mb-2 shrink-0">{detailLabel}</div>
+                    <div className="flex-1 min-h-0">
+                        <HistoryDetailCard item={selectedItem} decimalCandidateDisplay={decimalCandidateDisplay} />
+                    </div>
+                </div>
+            </div>
         </div>
-        <div className="flex-1 min-h-0 grid grid-cols-12 gap-3 p-3">
-            <div className="col-span-12 lg:col-span-7 overflow-y-auto pr-1 [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-                <HistoryList history={history} selectedId={historyId(selectedItem)} onSelect={onSelectItem} decimalCandidateDisplay={decimalCandidateDisplay} />
-            </div>
-            <div className="col-span-12 lg:col-span-5 min-h-0">
-                <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--muted)] font-black mb-2">{detailLabel}</div>
-                <HistoryDetailCard item={selectedItem} decimalCandidateDisplay={decimalCandidateDisplay} />
-            </div>
-        </div>
-    </div>
-);
+    );
+};
 
 const formatDuration = (seconds) => {
     if (seconds === undefined || seconds === null || Number.isNaN(Number(seconds))) return '--';
@@ -635,8 +679,8 @@ const HyperparametersCard = ({ params, setParamsTab, activeTab, models = [] }) =
 
                     <div className="p-0 border-0 bg-transparent">
                         <div className="flex justify-between items-center mb-1 px-1">
-                            <span className="text-[12px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em]"> Data Partition </span>
-                            <div className="flex items-center gap-2 font-mono font-black text-[18px]">
+                            <span className="text-[14px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em]"> Data Partition </span>
+                            <div className="flex items-center gap-2 font-mono font-black text-[20px]">
                                 <span className="text-[var(--text)]">{Math.round(params.train_ratio * 100)}%</span>
                                 <span className="text-[var(--muted)] opacity-30">/</span>
                                 <span className="text-[var(--muted)]">{Math.round(params.val_ratio * 100)}%</span>
@@ -674,8 +718,8 @@ const HyperparametersCard = ({ params, setParamsTab, activeTab, models = [] }) =
 
                     <div className="p-0 border-0 bg-transparent">
                         <div className="flex justify-between items-center mb-1 px-1">
-                            <span className="text-[12px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em]">Search Resolution</span>
-                            <span className="text-[18px] text-[var(--header-text)] font-black font-mono leading-none">{params.search_resolution}</span>
+                            <span className="text-[14px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em]">Search Resolution</span>
+                            <span className="text-[20px] text-[var(--header-text)] font-black font-mono leading-none">{params.search_resolution}</span>
                         </div>
                         <CustomSlider min={2} max={10} step={1}
                             backgroundColor="var(--bg)"
@@ -686,8 +730,8 @@ const HyperparametersCard = ({ params, setParamsTab, activeTab, models = [] }) =
                         <div className="grid grid-cols-2 gap-1 pb-2">
                             <div className="col-span-2 p-0 border-0 bg-transparent">
                                 <div className="flex justify-between items-end mb-2 px-1">
-                                    <span className="text-[12px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em]">Estimators Range</span>
-                                    <div className="flex items-center gap-2 text-[18px] font-black font-mono text-[var(--header-text)]">
+                                    <span className="text-[14px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em]">Estimators Range</span>
+                                    <div className="flex items-center gap-2 text-[20px] font-black font-mono text-[var(--header-text)]">
                                         <span >{params.n_estimators_min || 50}</span>
                                         <span className="text-[var(--muted)]">-</span>
                                         <span >{params.n_estimators_max || 200}</span></div>
@@ -700,8 +744,8 @@ const HyperparametersCard = ({ params, setParamsTab, activeTab, models = [] }) =
 
                             <div className="p-0 border-0 bg-transparent">
                                 <div className="flex justify-between items-end mb-2 px-1">
-                                    <span className="text-[12px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em]">Max Depth</span>
-                                    <div className="flex items-center gap-1 font-mono text-[16px] text-[var(--header-text)] font-black">{params.max_depth_min || 5} - {params.max_depth_max || 15}</div>
+                                    <span className="text-[14px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em]">Max Depth</span>
+                                    <div className="flex items-center gap-1 font-mono text-[18px] text-[var(--header-text)] font-black">{params.max_depth_min || 5} - {params.max_depth_max || 15}</div>
                                 </div>
 
                                 <RangeSlider min={2} max={30} step={1}
@@ -710,20 +754,20 @@ const HyperparametersCard = ({ params, setParamsTab, activeTab, models = [] }) =
 
                             <div className="p-0 border-0 bg-transparent">
                                 <div className="flex justify-between items-end mb-2 px-1">
-                                    <span className="text-[12px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em]">Impurity</span>
-                                    <div className="text-[16px] font-mono text-[var(--header-text)] font-black truncate">{params.min_impurity_decrease_min || 0} - {params.min_impurity_decrease_max || 0.05}</div>
+                                    <span className="text-[14px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em]">Impurity</span>
+                                    <div className="text-[18px] font-mono text-[var(--header-text)] font-black truncate">{params.min_impurity_decrease_min || 0} - {params.min_impurity_decrease_max || 0.05}</div>
                                 </div>
                                 <RangeSlider min={0} max={0.1} step={0.005}
                                     leftColor="var(--muted)" rightColor="var(--muted)" minValue={params.min_impurity_decrease_min || 0} maxValue={params.min_impurity_decrease_max || 0.05} hideLabels={true} compact={true} color="var(--primary)" onChange={(vals) => setParamsTab({ min_impurity_decrease_min: vals.min, min_impurity_decrease_max: vals.max })} />
                             </div>
 
                             <div className="p-0 border-0 bg-transparent">
-                                <div className="text-[12px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em] mb-1.5 px-1">Criterion</div>
+                                <div className="text-[14px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em] mb-1.5 px-1">Criterion</div>
                                 <CustomSelect className='font-bold text-[var(--header-text)]' direction="up" value={params.criterion || 'gini'} onChange={(value) => setParamsTab({ criterion: value })} options={[{ value: 'gini', label: 'Gini' }, { value: 'entropy', label: 'Entropy' }, { value: 'gini,entropy', label: 'Both' }]} />
                             </div>
 
                             <div className="p-0 border-0 bg-transparent">
-                                <div className="text-[12px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em] mb-1.5 px-1">Features</div>
+                                <div className="text-[14px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em] mb-1.5 px-1">Features</div>
                                 <CustomSelect className='font-bold text-[var(--header-text)]' direction="up" value={params.max_features || 'sqrt'} onChange={(value) => setParamsTab({ max_features: value })} options={[{ value: 'sqrt', label: 'Sqrt' }, { value: 'log2', label: 'Log2' }, { value: 'None', label: 'None' }, { value: 'sqrt,log2', label: 'Both' }]} />
                             </div>
                         </div>
@@ -731,8 +775,8 @@ const HyperparametersCard = ({ params, setParamsTab, activeTab, models = [] }) =
                         <div className="space-y-[10px]">
                             <div className="p-0 border-0 bg-transparent">
                                 <div className="flex justify-between items-end px-1 mb-2">
-                                    <span className="text-[12px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em]">LDA Tolerance Range</span>
-                                    <div className="flex items-center gap-1 text-[18px] font-black font-mono text-[var(--header-text)]">
+                                    <span className="text-[14px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em]">LDA Tolerance Range</span>
+                                    <div className="flex items-center gap-1 text-[20px] font-black font-mono text-[var(--header-text)]">
                                         {params.tol_min || 0.0001} - {params.tol_max || 0.01}
                                     </div>
                                 </div>
@@ -742,11 +786,11 @@ const HyperparametersCard = ({ params, setParamsTab, activeTab, models = [] }) =
 
                             <div className="grid grid-cols-2 gap-3">
                                 <div className="p-0 border-0 bg-transparent">
-                                    <div className="text-[12px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em] mb-1.5 px-1">Solver</div>
+                                    <div className="text-[14px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em] mb-1.5 px-1">Solver</div>
                                     <CustomSelect className='font-bold text-[var(--header-text)]' direction="up" value={params.solver || 'svd'} onChange={(value) => setParamsTab({ solver: value })} options={[{ value: 'svd', label: 'SVD' }, { value: 'lsqr', label: 'LSQR' }, { value: 'eigen', label: 'Eigen' }, { value: 'svd,lsqr,eigen', label: 'All' }]} />
                                 </div>
                                 <div className="p-0 border-0 bg-transparent">
-                                    <div className="text-[12px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em] mb-1.5 px-1">Shrinkage</div>
+                                    <div className="text-[14px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em] mb-1.5 px-1">Shrinkage</div>
                                     <CustomSelect className='font-bold text-[var(--header-text)]' direction="up" value={params.shrinkage || 'auto'} onChange={(value) => setParamsTab({ shrinkage: value })} options={[{ value: 'auto', label: 'Auto' }, { value: 'none', label: 'None' }, { value: 'auto,none', label: 'Both' }]} />
                                 </div>
                             </div>
@@ -945,10 +989,16 @@ const DataInsightCard = ({ result, sensor, params, selectedSessionName, embedded
         </div>
     );
 
-    // Calculate split ratios
-    const trainPct = Math.round((params?.train_ratio || 0.7) * 100);
-    const valPct = Math.round((params?.val_ratio || 0.15) * 100);
-    const testPct = Math.round((params?.test_ratio || 0.15) * 100);
+    // Calculate split ratios from actual sample counts used at training time
+    const summary = result?.split_summary || {};
+    const trS = summary.train_samples || 0;
+    const vaS = summary.val_samples || 0;
+    const teS = summary.test_samples || 0;
+    const totalS = trS + vaS + teS;
+
+    const trainPct = totalS > 0 ? Math.round((trS / totalS) * 100) : (Math.round((result?.train_ratio || 0.7) * 100));
+    const valPct = totalS > 0 ? Math.round((vaS / totalS) * 100) : (Math.round((result?.val_ratio || 0.15) * 100));
+    const testPct = totalS > 0 ? Math.round((teS / totalS) * 100) : (Math.round((result?.test_ratio || 0.15) * 100));
 
     return (
         <div className={`${embedded ? 'h-full' : 'pt-2 px-2 pb-0 card'} overflow-hidden flex flex-col relative group/insight`}>
@@ -1022,11 +1072,12 @@ const DataInsightCard = ({ result, sensor, params, selectedSessionName, embedded
 
                 {/* Column 2: Performance Analyzer */}
                 <div className='border-x border-[var(--border)] px-4'>
-                    <div className="flex-1 space-y-0.5 [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                    <div className="flex-1 space-y-0.4 [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
                         <div className="text-[14px] uppercase text-[var(--primary)] font-black tracking-widest border-b border-[var(--border)] pb-2">Performance Metrics</div>
                         {mRow('Mean CV Score', result.mean_accuracy || result.cv_mean, true, true)}
                         {mRow('Validation Acc', result.validation_accuracy, true, true)}
                         {mRow('Training Acc', result.train_accuracy, true, true)}
+                        {mRow('Test Acc', result.test_accuracy, true, true)}
                         {mRow('Fold Variance', formatFixedFive(result.fold_std ?? result.cv_std), false, true)}
                         {mRow('Accuracy Gap', (result.train_accuracy && result.validation_accuracy) ? (result.train_accuracy - result.validation_accuracy).toFixed(3) : '--', false, true)}
                         {mRow('Worst Fold', result.fold_min || result.cv_min, true, true)}
@@ -1050,7 +1101,6 @@ const DataInsightCard = ({ result, sensor, params, selectedSessionName, embedded
                         {mRow('Val Samples', result.split_summary?.val_samples || '--', false, true)}
                         {mRow('Test Samples', result.split_summary?.test_samples ?? '--', false, true)}
                         {mRow('Class Groups', groupCount, false, true)}
-                        {mRow('Classes', classLabelSummary, false, false)}
                     </div>
                 </div>
             </div>
@@ -1119,12 +1169,14 @@ const EEGLDAVisualizationCard = ({ result, history = [], selectedItem, onSelectI
                     >
                         {view === 'history' ? (
                             <div className="h-full grid grid-cols-12 gap-3 p-2 pt-4">
-                                <div className="col-span-12 lg:col-span-7 overflow-y-auto pr-1 [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-                                    <HistoryList history={history} selectedId={historyId(selectedItem)} onSelect={onSelectItem} />
+                                <div className="col-span-12 lg:col-span-7 h-full min-h-0">
+                                    <SearchableHistoryList history={history} selectedId={historyId(selectedItem)} onSelect={onSelectItem} />
                                 </div>
-                                <div className="col-span-12 lg:col-span-5 min-h-0">
-                                    <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--muted)] font-black mb-2">Saved Fold Detail</div>
-                                    <HistoryDetailCard item={selectedItem} />
+                                <div className="col-span-12 lg:col-span-5 min-h-0 flex flex-col">
+                                    <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--muted)] font-black mb-2 shrink-0">Saved Fold Detail</div>
+                                    <div className="flex-1 min-h-0">
+                                        <HistoryDetailCard item={selectedItem} />
+                                    </div>
                                 </div>
                             </div>
                         ) : view === 'data' ? (
@@ -1490,12 +1542,14 @@ const DecisionTreeCard = ({ structure, treeIndex, totalTrees, onTreeChange, load
                             transition={{ duration: 0.3 }}
                             className="h-full grid grid-cols-12 gap-3 p-4 pt-16"
                         >
-                            <div className="col-span-12 lg:col-span-7 overflow-y-auto pr-1 [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-                                <HistoryList history={history} selectedId={historyId(selectedItem)} onSelect={onSelectItem} />
+                            <div className="col-span-12 lg:col-span-7 h-full min-h-0">
+                                <SearchableHistoryList history={history} selectedId={historyId(selectedItem)} onSelect={onSelectItem} />
                             </div>
-                            <div className="col-span-12 lg:col-span-5 min-h-0">
-                                <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--muted)] font-black mb-2">Model Detail</div>
-                                <HistoryDetailCard item={selectedItem} />
+                            <div className="col-span-12 lg:col-span-5 min-h-0 flex flex-col">
+                                <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--muted)] font-black mb-2 shrink-0">Model Detail</div>
+                                <div className="flex-1 min-h-0">
+                                    <HistoryDetailCard item={selectedItem} />
+                                </div>
                             </div>
                         </motion.div>
                     ) : (
