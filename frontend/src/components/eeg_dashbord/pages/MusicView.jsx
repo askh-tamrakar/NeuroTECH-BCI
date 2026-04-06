@@ -78,72 +78,73 @@ const MusicView = ({ result, onNavigate }) => {
     }
   }, [isMuted]);
 
-  // Visualizer Loop
+  // Visualizer Loop (Terrain Mesh Waves)
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
+    let offset = 0;
 
     const render = () => {
       const freqData = musicHandler.getFrequencyData();
       const width = canvas.width;
       const height = canvas.height;
-      const centerX = width / 2;
-      const centerY = height / 2;
-      const radius = Math.min(width, height) * 0.25;
 
       ctx.clearRect(0, 0, width, height);
 
-      // Background Pulse
-      const avgFreq = freqData.length > 0 ? freqData.reduce((a, b) => a + b, 0) / freqData.length : 0;
-      const pulseScale = 1 + (avgFreq / 512);
+      // Draw dense mountain lines from back to front
+      const lineCount = 40; 
+      const stepY = height / (lineCount * 1.8);
+      const startY = height * 0.95;
 
-      const gradient = ctx.createRadialGradient(centerX, centerY, radius * 0.5, centerX, centerY, radius * 2);
-      gradient.addColorStop(0, 'transparent');
-      gradient.addColorStop(0.5, `${stateTheme.primary}10`);
-      gradient.addColorStop(1, 'transparent');
+      ctx.lineWidth = 1.0;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
 
-      ctx.fillStyle = gradient;
-      ctx.beginPath();
-      ctx.arc(centerX, centerY, radius * pulseScale * 1.5, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Audio Particles / Bars
-      const barCount = 64;
-      for (let i = 0; i < barCount; i++) {
-        const angle = (i / barCount) * Math.PI * 2;
-        const val = freqData[i % freqData.length] || 0;
-        const barHeight = (val / 255) * radius * 0.8;
-
-        const x1 = centerX + Math.cos(angle) * radius;
-        const y1 = centerY + Math.sin(angle) * radius;
-        const x2 = centerX + Math.cos(angle) * (radius + barHeight);
-        const y2 = centerY + Math.sin(angle) * (radius + barHeight);
-
-        ctx.strokeStyle = i % 2 === 0 ? stateTheme.primary : stateTheme.secondary;
-        ctx.lineWidth = 4;
-        ctx.lineCap = 'round';
+      for (let i = lineCount; i >= 0; i--) {
+        const z = i / lineCount;
+        const yBase = startY - (z * height * 0.6);
+        const alpha = (1 - z) * 0.8;
+        
+        ctx.strokeStyle = `rgba(0, 229, 255, ${alpha})`;
+        // Create a fill for the mountain face
+        ctx.fillStyle = `rgba(10, 26, 31, ${alpha * 0.8})`; 
+        
         ctx.beginPath();
-        ctx.moveTo(x1, y1);
-        ctx.lineTo(x2, y2);
-        ctx.stroke();
 
-        // Add a small glow at the tip
-        ctx.fillStyle = stateTheme.accent;
-        ctx.beginPath();
-        ctx.arc(x2, y2, 2, 0, Math.PI * 2);
+        const segmentCount = 60;
+        const segmentWidth = width / segmentCount;
+
+        for (let j = 0; j <= segmentCount; j++) {
+          const x = j * segmentWidth;
+          
+          // Audio influence
+          const binIdx = Math.floor((j / segmentCount) * (freqData.length * 0.4));
+          const val = freqData[binIdx] || 0;
+          
+          // Complex Wave: Frequency + Multi-frequency Sine + Offset
+          const audioPeak = (val / 255) * 120 * (1 - z);
+          const noise = Math.sin(j * 0.15 + (offset * (1 + z)) + (i * 0.5)) * 25 * (1 - z);
+          const noise2 = Math.cos(j * 0.05 - (offset * 0.5)) * 10 * (1 - z);
+          
+          const y = yBase - audioPeak - noise - noise2;
+
+          if (j === 0) {
+            ctx.moveTo(x, y);
+          } else {
+            ctx.lineTo(x, y);
+          }
+        }
+
+        // Close the path to fill the mountain floor
+        ctx.lineTo(width, height);
+        ctx.lineTo(0, height);
+        ctx.closePath();
         ctx.fill();
+        ctx.stroke();
       }
 
-      // Center Disk
-      ctx.shadowBlur = 20;
-      ctx.shadowColor = stateTheme.glow;
-      ctx.fillStyle = stateTheme.primary;
-      ctx.beginPath();
-      ctx.arc(centerX, centerY, radius * 0.8, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.shadowBlur = 0;
-
+      offset += 0.015;
       animationRef.current = requestAnimationFrame(render);
     };
 
@@ -152,57 +153,28 @@ const MusicView = ({ result, onNavigate }) => {
   }, [stateTheme]);
 
   return (
-    <div className="w-full h-full flex bg-[var(--bg)] overflow-hidden relative select-none">
+    <div className="music-view-container select-none">
+      {/* ── BACKGROUND ELEMENTS ── */}
+      <div className="music-halo-arc" />
+      <div className="music-mesh-surface" />
 
-      {/* ── MAIN CONTENT AREA ── */}
-      <div className="flex-grow flex flex-col items-center justify-center relative transition-all duration-300">
-
-        <div className="eeg-view-header">
-          <div className="eeg-view-icon" style={{ background: `${stateTheme.primary}20`, borderColor: stateTheme.primary }}>
-            <Music size={24} color={stateTheme.primary} />
-          </div>
-          <h2 className="eeg-view-title" style={{ backgroundImage: `linear-gradient(135deg, ${stateTheme.primary}, ${stateTheme.secondary})` }}>
-            Neural Audio Synergy
-          </h2>
-        </div>
-
-        <div className="eeg-status-box" style={{ borderColor: `${stateTheme.primary}40`, background: 'rgba(0,0,0,0.4)', position: 'relative', overflow: 'hidden', width: 'min(90%, 800px)', height: 'min(70vh, 500px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-
-          <canvas
-            ref={canvasRef}
-            width={600}
-            height={400}
-            style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', opacity: 0.8 }}
-          />
-
-          <div style={{ zIndex: 10, textAlign: 'center' }}>
-            <h3 style={{ color: stateTheme.accent, fontSize: '1rem', textTransform: 'uppercase', letterSpacing: '4px', margin: '0 0 10px', opacity: 0.8 }}>
-              Detected Resonance
-            </h3>
-            <div className="eeg-score-display pulse-glow" style={{ color: '#fff', textShadow: `0 0 20px ${stateTheme.glow}`, margin: '10px 0' }}>
-              {result?.state || 'Awaiting Signal...'}
-            </div>
-
-            <div className="eeg-progress-track" style={{ maxWidth: '240px', margin: '10px auto 40px', background: 'rgba(255,255,255,0.05)' }}>
-              <div className="eeg-progress-fill pulse-glow" style={{ width: result ? '100%' : '0%', background: `linear-gradient(90deg, ${stateTheme.primary}, ${stateTheme.secondary})` }}></div>
-            </div>
-
-            <div className="eeg-meta-text" style={{
-              display: 'inline-flex', alignItems: 'center', gap: '12px',
-              color: '#fff', background: 'rgba(255,255,255,0.05)',
-              padding: '12px 24px', borderRadius: '100px',
-              border: '1px solid rgba(255,255,255,0.1)',
-              backdropFilter: 'blur(10px)'
-            }}>
-              {result?.action?.includes('tempo') ? <FastForward size={20} color={stateTheme.secondary} /> :
-                result?.action?.includes('volume') ? <Activity size={20} color={stateTheme.primary} /> : <Headphones size={20} color={stateTheme.accent} />}
-              <span style={{ fontSize: '0.9rem', letterSpacing: '1px', fontWeight: 500 }}>
-                {result?.action || 'Monitoring Auditory Cortex...'}
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
+      {/* ── REAL-TIME CANVAS VISUALIZER (MOUNTAIN MESH) ── */}
+      <canvas
+        ref={canvasRef}
+        width={1600}
+        height={1000}
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          pointerEvents: 'none',
+          zIndex: 2,
+          opacity: 0.9,
+          maskImage: 'radial-gradient(ellipse at bottom, black 60%, transparent 95%)'
+        }}
+      />
     </div>
   );
 };
