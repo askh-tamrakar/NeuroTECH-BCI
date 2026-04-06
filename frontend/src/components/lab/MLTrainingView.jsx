@@ -35,43 +35,59 @@ const renderCustomNodeElement = ({ nodeDatum, toggleNode }) => (
 
 // --- NEW/UPDATED COMPONENTS ---
 
-const ModelIdBadge = ({ model, size = 'sm', isActive = false }) => {
+const ModelIdBadge = ({ model, size = 'sm', isActive = false, className = '' }) => {
     const candidateIdx = model.candidate_index ?? model.candidate_idx ?? 0;
     const foldIdx = model.fold_index ?? model.fold_idx ?? 0;
     const displayCandidateIdx = candidateIdx + 1;
     const hasIndices = (model.candidate_index !== undefined || model.candidate_idx !== undefined);
     const preferredId = model.best_fold_id || model.model_id || model.id;
 
+    const sizeMap = {
+        'xs': 'text-[12px]',
+        'sm': 'text-[15px]',
+        'md': 'text-[18px]',
+        'lg': 'text-[20px]',
+        'xl': 'text-[24px]',
+        'huge': 'text-[38px]',
+    };
+
+    const sizeClass = sizeMap[size] || (size.startsWith('text-') ? size : `text-${size}`);
     const mutedColor = isActive ? 'text-[var(--text)]' : 'text-[var(--text)]';
     const primaryColor = isActive ? 'text-[var(--primary)]' : 'text-[var(--graph-line-1)]';
 
     if (!hasIndices && !preferredId) {
-        return <span className={`opacity-40 italic ${size === 'sm' ? 'text-[10px]' : 'text-[12px]'}`}>ID UNKNOWN</span>;
+        return <span className={`opacity-40 italic ${sizeClass} ${className}`}>ID UNKNOWN</span>;
     }
 
-    // If we have a formatted model_id but no indices, try to parse it or just show it
-    if (!hasIndices && preferredId) {
-        const id = preferredId;
-        const match = String(id).match(/^([C-Z])([0-9A-F]{2})F([0-9A-F]+)$/i);
-        if (match) {
-            return (
-                <span className={`font-mono font-black ${size === 'sm' ? 'text-[15px]' : 'text-[20px]'}`}>
-                    <span className={mutedColor}>{match[1].toUpperCase()}</span>
-                    <span className={primaryColor}>{match[2].toUpperCase()}</span>
-                    <span className={`${mutedColor} ml-0.5`}>F</span>
-                    <span className={primaryColor}>{match[3].toUpperCase()}</span>
-                </span>
-            );
+    const renderContent = () => {
+        if (!hasIndices && preferredId) {
+            const match = String(preferredId).match(/^([C-Z])([0-9A-F]{2})F([0-9A-F]+)$/i);
+            if (match) {
+                return (
+                    <>
+                        <span className={mutedColor}>{match[1].toUpperCase()}</span>
+                        <span className={primaryColor}>{match[2].toUpperCase()}</span>
+                        <span className={`${mutedColor} ml-0.5`}>F</span>
+                        <span className={primaryColor}>{match[3].toUpperCase()}</span>
+                    </>
+                );
+            }
+            return preferredId;
         }
-        return <span className={`font-mono font-black ${size === 'sm' ? 'text-[15px]' : 'text-[20px]'}`}>{id}</span>;
-    }
+
+        return (
+            <>
+                <span className={mutedColor}>C</span>
+                <span className={primaryColor}>{(displayCandidateIdx).toString(16).toUpperCase().padStart(2, '0')}</span>
+                <span className={`${mutedColor} ml-0.5`}>F</span>
+                <span className={primaryColor}>{Number(foldIdx).toString(16).toUpperCase()}</span>
+            </>
+        );
+    };
 
     return (
-        <span className={`font-mono font-black ${size === 'sm' ? 'text-[15px]' : 'text-[20px]'}`}>
-            <span className={mutedColor}>C</span>
-            <span className={primaryColor}>{(displayCandidateIdx).toString(16).toUpperCase().padStart(2, '0')}</span>
-            <span className={`${mutedColor} ml-0.5`}>F</span>
-            <span className={primaryColor}>{Number(foldIdx).toString(16).toUpperCase()}</span>
+        <span className={`font-mono font-black ${sizeClass} ${className}`}>
+            {renderContent()}
         </span>
     );
 };
@@ -98,12 +114,12 @@ const SavedModelsList = ({ models, selectedModelName, onSelect, onDelete }) => (
                     >
                         <div className="min-w-0">
                             <span className='flex flex-row items-center'>
-                                <BrainCircuit size={24} className={`mr-2 ${selectedModelName === m.name ? 'text-primary/90' : 'text-text/50'}`} />
+                                <BrainCircuit size={24} className={`mr-2 ${selectedModelName === m.name ? 'text-primary/90' : 'text-text/70'}`} />
                                 <div className='flex flex-col items-start'>
-                                    <div className={`text-[18px] font-black truncate ${selectedModelName === m.name ? 'text-primary' : 'text-[var(--text)]'}`}>
+                                    <div className={`truncate ${selectedModelName === m.name ? 'text-[var(--text)] text-[19px] font-black' : 'text-primary/75 text-[17px] font-bold'}`}>
                                         {m.name}
                                     </div>
-                                    <div className="text-[10px] text-[var(--muted)] font-mono uppercase tracking-[0.18em] truncate opacity-90">
+                                    <div className="text-[16px] text-[var(--muted)] font-mono uppercase tracking-[0.1em] truncate opacity-90">
                                         <ModelIdBadge model={m} size='sm' isActive={selectedModelName === m.name} />
                                     </div>
                                 </div>
@@ -650,34 +666,33 @@ const SearchableHistoryList = ({ history = [], selectedId, onSelect, decimalCand
     }, [history, searchQuery]);
 
     return (
-        <div className="flex flex-col h-full overflow-hidden">
-            <div className="relative mb-4 shrink-0">
-                <div className="absolute inset-0 bg-[var(--primary)]/5 blur-sm rounded-lg -m-1 pointer-events-none opacity-50" />
-                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--primary)] " />
-                <input
-                    type="text"
-                    placeholder={placeholder}
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-lg pl-9 pr-3 py-2.5 text-[12px] font-mono font-black tracking-widest text-[var(--text)] focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)]/30 outline-none transition-all uppercase placeholder:opacity-50"
-                />
-            </div>
-            <div className="mb-3 grid grid-cols-[1fr_auto] gap-2 shrink-0">
+        <div className="flex flex-col h-full overflow-hidden mt-1 ">
+            <div className="flex flex-row items-center gap-2 mb-2">
                 <CustomSelect
                     value={sortField}
                     onChange={setSortField}
                     options={historySortOptions}
-                    triggerClassName="h-9 px-3 !rounded-lg !bg-[var(--surface)] !border-[var(--border)] text-[12px] font-black uppercase tracking-wider"
+                    triggerClassName="h-9 px-3 !rounded-lg !bg-[var(--surface)] !border-[var(--border)] text-[12px] font-black uppercase tracking-wider min-w-[120px]"
                 />
                 <button
                     type="button"
                     onClick={() => setSortDirection((prev) => prev === 'asc' ? 'desc' : 'asc')}
-                    className="px-3 h-9 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[12px] font-black uppercase tracking-wider text-[var(--text)] hover:border-[var(--primary)]"
+                    className="px-3 h-9 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[12px] font-black uppercase tracking-wider text-[var(--text)] hover:border-[var(--primary)] transition-all min-w-[60px]"
                 >
                     {sortDirection === 'asc' ? 'Asc' : 'Desc'}
                 </button>
+                <div className="relative flex-2">
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--primary)] " />
+                    <input
+                        type="text"
+                        placeholder={placeholder}
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full h-9 bg-[var(--surface)] border border-[var(--border)] rounded-lg pl-9 pr-3 text-[12px] font-mono font-black tracking-widest text-[var(--text)] focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)]/30 outline-none transition-all uppercase placeholder:opacity-50"
+                    />
+                </div>
             </div>
-            <div className="flex-1 overflow-y-auto pr-1 [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+            <div className="flex-1 overflow-y-auto [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
                 <HistoryList
                     history={filteredHistory}
                     selectedId={selectedId}
@@ -702,8 +717,8 @@ const HistoryDetailCard = ({ item, decimalCandidateDisplay = false }) => {
             <div className="flex items-center justify-between">
                 <div>
                     <div className="text-[16px] uppercase tracking-[0.18em] text-[var(--muted)] font-black">Model ID</div>
-                    <div className="text-[38px] mt-1 leading-none">
-                        <ModelIdBadge model={item} size="lg" />
+                    <div className="text-[36px] mt-1 leading-none">
+                        <ModelIdBadge model={item} size="huge" />
                     </div>
                 </div>
                 <div className="text-right">
@@ -1039,12 +1054,7 @@ const TrainingStatusDashboard = ({ job, countdown, params, selectedHistoryItem, 
                                     </div>
                                     <span className='text-[24px] font-black font-mono leading-none'>
                                         {latestFold ? (
-                                            <span className='text-[24px] font-black font-mono leading-none'>
-                                                <span className="text-[var(--muted)]">C</span>
-                                                <span className="text-[var(--primary)]">{((latestFold.candidate_index ?? latestFold.candidate_idx ?? 0) + 1).toString(16).toUpperCase().padStart(2, '0')}</span>
-                                                <span className="text-[var(--muted)]">F</span>
-                                                <span className="text-[var(--primary)]">{Number(latestFold.fold_index ?? latestFold.fold_idx ?? 0).toString(16).toUpperCase()}</span>
-                                            </span>
+                                            <ModelIdBadge model={latestFold} size="xl" />
                                         ) : '--'}
                                     </span>
                                 </div>

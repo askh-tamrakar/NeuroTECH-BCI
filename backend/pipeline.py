@@ -19,6 +19,10 @@ except Exception:
     pass
 
 
+STDOUT_LOCK = threading.RLock()
+PROMPT_ACTIVE = False
+
+
 def get_local_ips():
     """Returns a list of all non-loopback IPv4 addresses."""
     ips = []
@@ -90,7 +94,17 @@ def get_timestamp():
 
 def log_system(msg, icon=Theme.SYS):
     icon_prefix = f"{icon}".center(17)
-    print(f"{get_timestamp()}{icon_prefix}{Theme.BOLD}{msg}{Theme.RESET}")
+    with STDOUT_LOCK:
+        if PROMPT_ACTIVE:
+            sys.stdout.write("\r")
+        print(f"{get_timestamp()}{icon_prefix}{Theme.BOLD}{msg}{Theme.RESET}")
+        if PROMPT_ACTIVE:
+            sys.stdout.write(runtime_prompt())
+            sys.stdout.flush()
+
+
+def runtime_prompt() -> str:
+    return "NeuroTECH Pipeline Load >>> "
 
 
 ALLOWLIST = [
@@ -155,7 +169,29 @@ class BlockRuntime:
 
 
 def create_parser():
-    parser = argparse.ArgumentParser(description="NeuroTECH System Orchestrator")
+    parser = argparse.ArgumentParser(
+        description="NeuroTECH Pipeline Orchestrator",
+        formatter_class=argparse.RawTextHelpFormatter,
+        epilog=(
+            "Blocks:\n"
+            "  stream, filter, feature, server, actuator, hid, servo, frontend,\n"
+            "  neurobench, lab, ssvep\n"
+            "\n"
+            "Examples:\n"
+            "  python pipeline.py\n"
+            "  python pipeline.py -n\n"
+            "  python pipeline.py --blocks stream,filter,feature,server\n"
+            "  python pipeline.py -d --blocks frontend,server\n"
+            "\n"
+            "Runtime commands after startup:\n"
+            "  blocks       List all blocks and aliases\n"
+            "  status       Show running block status\n"
+            "  watch        Watch all registered block files and reload changed blocks only\n"
+            "  watch off    Stop global watch mode\n"
+            "  rl <block>   Reload only the selected block or alias\n"
+            "  exit         Shut down the full pipeline cleanly\n"
+        ),
+    )
     parser.add_argument("-b", "--build", action="store_true", help="Build frontend and start on port 5005")
     parser.add_argument("-d", "--dev", action="store_true", help="Start React dev server")
     parser.add_argument("-r", "--remote", action="store_true", help="Serve remotely (no local frontend)")
@@ -532,7 +568,13 @@ def log_process(runtime: BlockRuntime, verbose: bool):
             msg_lower = msg.lower()
             is_important = any(pattern in msg_lower for pattern in ALLOWLIST) or any(sym in msg for sym in SYMBOLS)
             if verbose or is_important:
-                print(f"{get_timestamp()}{prefix} {msg}")
+                with STDOUT_LOCK:
+                    if PROMPT_ACTIVE:
+                        sys.stdout.write("\r")
+                    print(f"{get_timestamp()}{prefix} {msg}")
+                    if PROMPT_ACTIVE:
+                        sys.stdout.write(runtime_prompt())
+                        sys.stdout.flush()
 
             if spec.ready_pattern and not runtime.ready_event.is_set() and spec.ready_pattern in msg:
                 ready_msg = spec.success_msg if spec.success_msg else f"{spec.name} is READY"
@@ -562,11 +604,12 @@ class PipelineOrchestrator:
     def print_banner(self):
         banner = r"""
 
-     _   _                      _____         _
-    | \ | | ___ _   _ _ __ ___|_   _|__  ___| |__
-    |  \| |/ _ \ | | | '__/ _ \ | |/ _ \/ __| '_ \
-    | |\  |  __/ |_| | | | (_) || |  __/ (__| | | |
-    |_| \_|\___|\__,_|_|  \___/ |_|\___|\___|_| |_|
+     ███╗   ██╗ ███████╗ ██╗   ██╗ ██████╗   ██████╗  ████████╗ ███████╗  ██████╗ ██╗  ██╗
+     ████╗  ██║ ██╔════╝ ██║   ██║ ██╔══██╗ ██╔═══██╗ ╚══██╔══╝ ██╔════╝ ██╔════╝ ██║  ██║
+     ██╔██╗ ██║ █████╗   ██║   ██║ ██████╔╝ ██║   ██║    ██║    █████╗   ██║      ███████║
+     ██║╚██╗██║ ██╔══╝   ██║   ██║ ██╔══██╗ ██║   ██║    ██║    ██╔══╝   ██║      ██╔══██║
+     ██║ ╚████║ ███████╗ ╚██████╔╝ ██║  ██║ ╚██████╔╝    ██║    ███████╗ ╚██████╗ ██║  ██║
+     ╚═╝  ╚═══╝ ╚══════╝  ╚═════╝  ╚═╝  ╚═╝  ╚═════╝     ╚═╝    ╚══════╝  ╚═════╝ ╚═╝  ╚═╝
         """
         print(f"\n{Theme.HEADER}{Theme.BOLD}")
         print("=" * 88)
@@ -575,16 +618,23 @@ class PipelineOrchestrator:
         print("=" * 88 + f"{Theme.RESET}")
         print(f"  {Theme.DIM}Mode: {'Development' if self.args.dev else 'Production'}")
         if self.args.remote:
-            print(f"  {Theme.BOLD}{Theme.WARNING}REMOTE MODE ACTIVE: Local frontend suppressed.{Theme.RESET}")
+            print(f"  {Theme.BOLD}{Theme.WARNING}► REMOTE MODE ACTIVE: Local frontend suppressed.{Theme.RESET}")
 
         ips = get_local_ips()
         preferred_ip = choose_preferred_ip(ips)
         port = 5005
-        print(f"  {Theme.BOLD}{Theme.OKGREEN}Backend Connectivity Options:{Theme.RESET}")
+        print(f"  {Theme.BOLD}{Theme.OKGREEN}► Backend Connectivity Options:{Theme.RESET}")
         print(f"      - Dashboard/API: http://{preferred_ip}:{port}")
         print(f"        WebSocket: ws://{preferred_ip}:{port}")
         print(f"        Raw ingress: {preferred_ip}:6000")
         print(f"        Relay/actuation: {preferred_ip}:6002")
+        print(
+            f"  {Theme.BOLD}{Theme.OKCYAN}► NeuroTECH Pipeline Load >>> "
+            f"{Theme.OKGREEN}blocks{Theme.RESET}{Theme.DIM} | "
+            f"{Theme.OKCYAN}status{Theme.RESET}{Theme.DIM} | "
+            f"{Theme.WARNING}watch{Theme.RESET}{Theme.DIM} | "
+            f"{Theme.FAIL}rl <block>{Theme.RESET}"
+        )
         print()
 
     def prepare_frontend(self):
@@ -785,12 +835,19 @@ class PipelineOrchestrator:
             time.sleep(1.0)
 
     def command_loop(self):
+        global PROMPT_ACTIVE
         while not self.stop_event.is_set():
             try:
-                raw = input().strip()
+                with STDOUT_LOCK:
+                    PROMPT_ACTIVE = True
+                raw = input(runtime_prompt()).strip()
+                with STDOUT_LOCK:
+                    PROMPT_ACTIVE = False
             except EOFError:
                 return
             except Exception:
+                with STDOUT_LOCK:
+                    PROMPT_ACTIVE = False
                 time.sleep(0.25)
                 continue
 
@@ -835,7 +892,12 @@ class PipelineOrchestrator:
             self.reload_blocks(block_ids, reason="manual")
             return
 
-        log_system(f"Unknown command '{raw}'. Try: blocks, status, watch, watch off, rl <block>.", icon=Theme.WARN)
+        if cmd == "exit":
+            log_system("Exit command received. Shutting down pipeline...", icon=Theme.WARN)
+            self.shutdown()
+            return
+
+        log_system(f"Unknown command '{raw}'. Try: blocks, status, watch, watch off, rl <block>, exit.", icon=Theme.WARN)
 
     def resolve_command_block(self, token: str) -> list[str]:
         resolved = []
