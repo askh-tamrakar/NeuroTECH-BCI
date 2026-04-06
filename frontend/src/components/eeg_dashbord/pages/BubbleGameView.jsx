@@ -33,19 +33,25 @@ const BubbleGameView = ({ result, isConnected, onBackToMenu }) => {
 
   const { setSidebarSlot, setSidebarMode } = useSidebar();
 
-  // Break the loop: SidebarSlot should only be set once or on static dependency changes.
-  // We use a separate state/ref for the sidebar if needed, but for now, we'll just stabilize the call.
-  // Break the loop: SidebarSlot should only be set once during initialization.
+  // Update the sidebar slot whenever the game state changes
   useEffect(() => {
     setSidebarSlot(
       <BubbleSidebar
         onBackToMenu={onBackToMenu}
+        mouseMode={mouseMode}
         setMouseMode={setMouseMode}
+        difficulty={difficulty}
         setDifficulty={setDifficulty}
+        realTimeFreq={realTimeFreq}
+        focusScore={focusScore}
+        globalRunning={globalRunning}
+        containerRef={containerRef}
       />
     );
     setSidebarMode('page');
-  }, []); // Run once on mount
+    // Important: Clear the slot on unmount to avoid ghost sidebars
+    return () => setSidebarSlot(null);
+  }, [onBackToMenu, mouseMode, difficulty, realTimeFreq, focusScore, globalRunning, setSidebarSlot, setSidebarMode]);
 
   useEffect(() => { themeRef.current = currentTheme; }, [currentTheme]);
   useEffect(() => { resultRef.current = result; }, [result]);
@@ -155,22 +161,20 @@ const BubbleGameView = ({ result, isConnected, onBackToMenu }) => {
         const event = resultRef.current;
         if (!event) return;
 
-        // DEBUG: See what we are getting
-        if (window._debugEEG) console.log('BubbleGame EEG Event:', event);
-
-        // Extract features from multiple potential formats (ModeManager result vs Prediction event)
+        // Correct extraction logic for the current backend format
         const features = event.features || event.output?.features || event.band_powers ? {
           alpha_rel: event.features?.alpha_rel || (event.band_powers ? event.band_powers[2] / 100 : 0),
           theta_rel: event.features?.theta_rel || (event.band_powers ? event.band_powers[1] / 100 : 0),
           beta_rel: event.features?.beta_rel || (event.band_powers ? event.band_powers[3] / 100 : 0),
+          rest_ratio: event.features?.rest_ratio || (event.meditation_score ? event.meditation_score / 100 : 0)
         } : {};
+        
         const ch = event.source_channel !== undefined ? `ch${event.source_channel}` : (event.channel || 'ch0');
         const currentCh = activeChannelRef.current;
 
-        // Skip if targeting a specific channel that doesn't match
-        // For 1-channel setup, both Fp1 and Oz map to ch0
-        if ((currentCh === 'Fp1' || currentCh === 'Oz' || currentCh === 'F1') && ch !== 'ch0') return;
-        if (currentCh === 'F2' && ch !== 'ch1') return;
+        // Support channel selection
+        if (currentCh === 'Fp1' || currentCh === 'ch0') { if (ch !== 'ch0' && ch !== 'Fp1') return; }
+        if (currentCh === 'Oz' || currentCh === 'ch1') { if (ch !== 'ch1' && ch !== 'Oz') return; }
 
         let val = 0;
         const alpha = features.alpha_rel ?? 0;
@@ -180,15 +184,15 @@ const BubbleGameView = ({ result, isConnected, onBackToMenu }) => {
         if (currentCh === 'alpha') val = alpha * 100;
         else if (currentCh === 'theta') val = theta * 100;
         else if (currentCh === 'beta') val = beta * 100;
+        else if (event.meditation_score !== undefined) val = event.meditation_score;
         else {
-          // Default Attention/Focus logic: Beta / (Theta + Alpha)
-          // Normalizes to 0-100 roughly, focus starts around 0.4 ratio (20%)
+          // Default Focus logic: Beta / (Theta + Alpha)
           const ratio = beta / (theta + alpha + 0.01);
-          val = ratio * 50;
+          val = Math.min(100, ratio * 50);
         }
 
-        // Fallback to legacy band_powers if features are missing
-        if (val === 0 && event.band_powers && event.band_powers.length >= 4) {
+        // Final sanity check for raw band powers
+        if (!val && event.band_powers && event.band_powers.length >= 4) {
           const bp = event.band_powers;
           const sum = bp.reduce((a, b) => a + b, 0);
           if (sum > 0) {
