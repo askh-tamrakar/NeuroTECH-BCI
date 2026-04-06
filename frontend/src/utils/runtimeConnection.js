@@ -119,10 +119,10 @@ export function getRuntimeConnection() {
     if (!apiUrl && wsUrl) apiUrl = deriveApiUrlFromWs(wsUrl);
     if (!wsUrl && apiUrl) wsUrl = deriveWsUrlFromApi(apiUrl);
 
-    if (shouldUsePageOrigin(apiUrl, pageOrigin)) {
+    if (shouldUsePageOrigin(apiUrl, pageOrigin) || (isLoopbackUrl(apiUrl) && isLoopbackUrl(pageOrigin))) {
         apiUrl = pageOrigin;
     }
-    if (shouldUsePageOrigin(wsUrl, pageOrigin)) {
+    if (shouldUsePageOrigin(wsUrl, pageOrigin) || (isLoopbackUrl(wsUrl) && isLoopbackUrl(pageOrigin))) {
         wsUrl = deriveWsUrlFromApi(pageOrigin);
     }
 
