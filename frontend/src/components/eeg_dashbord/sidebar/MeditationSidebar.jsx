@@ -139,7 +139,7 @@ const MeditationSidebar = ({
                     </div>
                     <div className="grid grid-cols-4 gap-1.5">
                         {PRESETS.map(min => (
-                            <button key={min} className={`med-preset-btn py-1.5 rounded-md border transition-all font-mono text-[10px] tracking-wider ${min === 5 ? 'bg-primary text-bg border-primary shadow-glow' : 'bg-surface/50 border-border text-muted hover:border-primary'}`} data-min={min} onClick={() => containerRef.current?.presetHandler(min)}>{min}M</button>
+                            <button key={min} className={`med-preset-btn py-1.5 rounded-md border transition-all font-mono text-[10px] tracking-wider ${min === 5 ? 'bg-yellow-500 text-black border-yellow-500 shadow-[0_0_10px_rgba(234,179,8,0.5)]' : 'bg-surface/50 border-border text-muted hover:border-yellow-500'}`} data-min={min} onClick={() => containerRef.current?.presetHandler(min)}>{min}M</button>
                         ))}
                     </div>
                 </div>
@@ -201,47 +201,6 @@ const MeditationSidebar = ({
                             <TrackRow key={m.id} m={m} onToggle={toggleMusic} onVol={updateVol} />
                         ))}
                     </div>
-                </div>
-
-
-                {/* Performance */}
-                <div className="bg-bg/50 border border-primary/20 rounded-xl p-3 shrink-0 flex flex-col gap-3">
-                    <h4 className="text-[10px] font-bold text-muted/80 uppercase tracking-widest flex items-center gap-2">
-                        <Trophy size={14} /> Performance
-                    </h4>
-                    <div className="grid grid-cols-2 gap-2">
-                        <div className="bg-surface/30 p-2.5 rounded-lg border border-border/50 flex flex-col items-center">
-                            <span className="text-[10px] text-muted uppercase tracking-tighter mb-1">STREAK</span>
-                            <span className="text-xl font-black text-orange-500">🔥 {stats.streak}D</span>
-                        </div>
-                        <div className="bg-surface/30 p-2.5 rounded-lg border border-border/50 flex flex-col items-center">
-                            <span className="text-[10px] text-muted uppercase tracking-tighter mb-1">TOTAL</span>
-                            <span className="text-xl font-black text-primary">{stats.totalMin}M</span>
-                        </div>
-                    </div>
-                    <div className="p-2.5 bg-surface/30 border border-border/50 rounded-lg">
-                        <div className="flex justify-between items-center mb-1.5">
-                            <span className="text-[10px] font-bold text-muted">LEVEL {Math.floor(stats.xp / 1000) + 1}</span>
-                            <span className="text-[10px] font-mono text-primary">{stats.xp % 1000}/1000 XP</span>
-                        </div>
-                        <div className="w-full h-1.5 bg-border rounded-full overflow-hidden">
-                            <div className="h-full bg-gradient-to-r from-primary to-blue-400" style={{ width: `${(stats.xp % 1000) / 10}%` }} />
-                        </div>
-                    </div>
-                    {stats.sessions.length > 0 && (
-                        <div className="mt-2 space-y-1.5">
-                            <span className="text-[9px] font-black text-muted uppercase tracking-widest block mb-2">RECENT SESSIONS</span>
-                            {stats.sessions.slice(0, 3).map((s, idx) => (
-                                <div key={idx} className="flex items-center justify-between text-[10px] bg-bg/30 p-1.5 rounded border border-border/40">
-                                    <div className="flex gap-2 items-center">
-                                        <Calendar size={10} className="text-primary" />
-                                        <span className="font-bold opacity-80">{s.duration}</span>
-                                    </div>
-                                    <span className="font-mono text-primary font-black">{s.avgCalm}% CALM</span>
-                                </div>
-                            ))}
-                        </div>
-                    )}
                 </div>
 
                 {/* Daily Wisdom */}

@@ -614,13 +614,13 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
       const td = $('med-timer-big');
       if (td) { const mm = String(min).padStart(2, '0'); td.textContent = `${mm}:00`; }
       // highlight active preset
-      container.querySelectorAll('.med-preset-btn').forEach(b => {
+      document.querySelectorAll('.med-preset-btn').forEach(b => {
         if (parseInt(b.dataset.min) === min) {
-          b.classList.add('bg-primary', 'text-bg', 'border-primary', 'shadow-glow');
-          b.classList.remove('bg-bg/50', 'text-muted', 'border-border');
+          b.classList.add('bg-yellow-500', 'text-black', 'border-yellow-500', 'shadow-[0_0_10px_rgba(234,179,8,0.5)]');
+          b.classList.remove('bg-bg/50', 'text-muted', 'border-border', 'hover:border-yellow-500', 'bg-primary', 'text-bg', 'border-primary', 'shadow-glow');
         } else {
-          b.classList.remove('bg-primary', 'text-bg', 'border-primary', 'shadow-glow');
-          b.classList.add('bg-bg/50', 'text-muted', 'border-border');
+          b.classList.remove('bg-yellow-500', 'text-black', 'border-yellow-500', 'shadow-[0_0_10px_rgba(234,179,8,0.5)]', 'bg-primary', 'text-bg', 'border-primary', 'shadow-glow');
+          b.classList.add('bg-bg/50', 'text-muted', 'border-border', 'hover:border-yellow-500');
         }
       });
     };
