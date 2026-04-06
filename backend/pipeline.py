@@ -30,6 +30,26 @@ def get_local_ips():
     except: pass
     return list(set(ips))
 
+
+def choose_preferred_ip(ips):
+    def score(ip):
+        if not ip or ip.startswith("127."):
+            return -100
+        if ip.startswith("169.254."):
+            return -50
+        if ip.startswith("172.30."):
+            return 5
+        if ip.startswith("10.") or ip.startswith("192.168.") or ip.startswith("172.16."):
+            return 100
+        if ip.startswith("172."):
+            return 80
+        return 60
+
+    candidates = [ip for ip in ips if ip and not ip.startswith("127.")]
+    if not candidates:
+        return "127.0.0.1"
+    return sorted(candidates, key=score, reverse=True)[0]
+
 # Visual Theme & Formatting
 class Theme:
     HEADER = "\033[95m"
@@ -208,10 +228,13 @@ def main():
         print(f"  {Theme.BOLD}{Theme.WARNING}► REMOTE MODE ACTIVE: Local frontend suppressed.{Theme.RESET}")
         
     ips = get_local_ips()
+    preferred_ip = choose_preferred_ip(ips)
     port = 5005 # API/WS port
     print(f"  {Theme.BOLD}{Theme.OKGREEN}► Backend Connectivity Options:{Theme.RESET}")
-    for ip in ips:
-        print(f"      - http://{ip}:{port}")
+    print(f"      - Dashboard/API: http://{preferred_ip}:{port}")
+    print(f"        WebSocket: ws://{preferred_ip}:{port}")
+    print(f"        Raw ingress: {preferred_ip}:6000")
+    print(f"        Relay/actuation: {preferred_ip}:6002")
     print()
 
     frontend_dir = (Path(__file__).parent.parent / "frontend").resolve()

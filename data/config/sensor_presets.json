@@ -1,0 +1,21 @@
+{
+  "presets": [
+    {
+      "id": "default-emg-eog",
+      "name": "Current EMG + EOG",
+      "sampling_rate": 1000,
+      "channel_mapping": {
+        "ch0": {
+          "enabled": true,
+          "sensor": "EMG",
+          "label": "Fp1 / Oz (Ref: A1, A2)"
+        },
+        "ch1": {
+          "enabled": true,
+          "sensor": "EOG",
+          "label": "UNUSED"
+        }
+      }
+    }
+  ]
+}

@@ -10,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 
 from src.database.db_manager import db_manager
 from src.feature.detectors.rps_detector import RPSDetector
-from src.server.server.config_manager import load_config
+from src.server.server.config_manager import ensure_runtime_config, load_config
 from src.server.server.extensions import socketio
 from src.server.server.lsl_service import broadcast_data, broadcast_events
 from src.server.server.routes.audio_routes import audio_bp
@@ -61,11 +61,13 @@ def _register_socket_handlers():
 
 async def _initialize_runtime():
     _configure_stdout()
+    ensure_runtime_config()
     state.config = load_config()
     state.session = SessionManager()
     state.connected = False
     state.sample_count = 0
     state.clients = 0
+    state.last_sample_ts = 0.0
     state.running = True
     db_manager.initialize_runtime()
     initialize_prediction_store()
@@ -93,6 +95,7 @@ async def _shutdown_runtime():
     state.inlet = None
     state.event_inlet = None
     state.connected = False
+    state.last_sample_ts = 0.0
     socketio.clear_event_loop()
 
 

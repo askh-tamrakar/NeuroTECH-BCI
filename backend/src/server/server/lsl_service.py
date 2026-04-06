@@ -221,6 +221,7 @@ async def broadcast_data(socketio):
                             "sample_count": state.sample_count,
                         }
                     )
+                    state.last_sample_ts = time.time()
 
                     try:
                         mode_channel_idx = 0
