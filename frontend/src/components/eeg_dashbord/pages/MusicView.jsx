@@ -1,16 +1,15 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Music, Volume2, VolumeX, Pause, Play, Headphones, FastForward, Activity } from 'lucide-react';
-import '../../styles/views/MusicView.css';
-import MusicSidebar from './sidebar/MusicSidebar';
+import '../../../styles/views/MusicView.css';
+import MusicSidebar from '../sidebar/MusicSidebar';
 import { useSidebar } from './SidebarContext';
-import { musicHandler } from '../../handlers/MusicHandler';
+import { musicHandler } from '../../../handlers/MusicHandler';
 
 const MusicView = ({ result, onNavigate }) => {
   const canvasRef = useRef(null);
   const animationRef = useRef(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
-  const [showSidebar, setShowSidebar] = useState(true);
 
   // State-to-Color Mapping for Visuals
   const stateTheme = useMemo(() => {

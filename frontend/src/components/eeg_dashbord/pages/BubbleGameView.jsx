@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { Settings, Play, Square, Activity, MousePointer2, Zap, History, Menu, ChevronLeft, ChevronUp, Power, ChevronDown, Gamepad2, Mouse, Trash2 } from 'lucide-react';
-import { useTheme } from '../../contexts/ThemeContext';
-import '../../styles/views/BubbleGameView.css';
-import BubbleSidebar from './sidebar/BubbleSidebar';
+import { useTheme } from '../../../contexts/ThemeContext';
+import '../../../styles/views/BubbleGameView.css';
+import BubbleSidebar from '../sidebar/BubbleSidebar';
 import { useSidebar } from './SidebarContext';
 
 const BubbleGameView = ({ result, isConnected, onBackToMenu }) => {
@@ -81,7 +81,7 @@ const BubbleGameView = ({ result, isConnected, onBackToMenu }) => {
     let bubblesPopped = 0, bubblesMissed = 0;
     let sessionStart = 0;
     let peakBands = [0, 0, 0, 0, 0];
-    
+
     // Ensure we are in 'ws' mode if connected
     if (isConnectedRef.current) eegMode = 'ws';
     const ctx = canvas.getContext('2d');
@@ -147,7 +147,7 @@ const BubbleGameView = ({ result, isConnected, onBackToMenu }) => {
       const indicator = $('conn-indicator');
       if (indicator) indicator.className = 'w-2 h-2 rounded-full bg-green-500 shadow-[0_0_8px_#22c55e]';
       const label = $('conn-label'); if (label) label.textContent = 'CONNECTED';
-      
+
       if (simInterval) clearInterval(simInterval);
       if (fetchInterval) clearInterval(fetchInterval);
 
@@ -160,9 +160,9 @@ const BubbleGameView = ({ result, isConnected, onBackToMenu }) => {
 
         // Extract features from multiple potential formats (ModeManager result vs Prediction event)
         const features = event.features || event.output?.features || event.band_powers ? {
-             alpha_rel: event.features?.alpha_rel || (event.band_powers ? event.band_powers[2]/100 : 0),
-             theta_rel: event.features?.theta_rel || (event.band_powers ? event.band_powers[1]/100 : 0),
-             beta_rel: event.features?.beta_rel || (event.band_powers ? event.band_powers[3]/100 : 0),
+          alpha_rel: event.features?.alpha_rel || (event.band_powers ? event.band_powers[2] / 100 : 0),
+          theta_rel: event.features?.theta_rel || (event.band_powers ? event.band_powers[1] / 100 : 0),
+          beta_rel: event.features?.beta_rel || (event.band_powers ? event.band_powers[3] / 100 : 0),
         } : {};
         const ch = event.source_channel !== undefined ? `ch${event.source_channel}` : (event.channel || 'ch0');
         const currentCh = activeChannelRef.current;
@@ -184,7 +184,7 @@ const BubbleGameView = ({ result, isConnected, onBackToMenu }) => {
           // Default Attention/Focus logic: Beta / (Theta + Alpha)
           // Normalizes to 0-100 roughly, focus starts around 0.4 ratio (20%)
           const ratio = beta / (theta + alpha + 0.01);
-          val = ratio * 50; 
+          val = ratio * 50;
         }
 
         // Fallback to legacy band_powers if features are missing
@@ -652,9 +652,9 @@ const BubbleGameView = ({ result, isConnected, onBackToMenu }) => {
             </div>
             <div className="flex gap-2 flex-wrap mt-2">
               {['Fp1', 'Oz', 'attention', 'alpha', 'theta', 'beta'].map(ch => (
-                <span 
-                  key={ch} 
-                  className={`ch-tag text-[9px] tracking-widest px-2 py-1 border border-[var(--primary)]/20 rounded cursor-pointer transition-colors select-none ${ch === activeChannel ? 'active bg-[var(--primary)]/15 border-[var(--primary)] text-white' : 'hover:bg-[var(--primary)]/5'}`} 
+                <span
+                  key={ch}
+                  className={`ch-tag text-[9px] tracking-widest px-2 py-1 border border-[var(--primary)]/20 rounded cursor-pointer transition-colors select-none ${ch === activeChannel ? 'active bg-[var(--primary)]/15 border-[var(--primary)] text-white' : 'hover:bg-[var(--primary)]/5'}`}
                   onClick={() => setActiveChannel(ch)}
                 >
                   {ch === 'attention' ? 'ATTN' : ch.toUpperCase()}

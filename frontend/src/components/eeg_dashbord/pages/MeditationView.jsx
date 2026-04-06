@@ -1,20 +1,20 @@
 import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
-import { useTheme } from '../../contexts/ThemeContext';
+import { useTheme } from '../../../contexts/ThemeContext';
 import { Settings, Play, Square, Activity, Wind, Power, Zap, History, Menu, ChevronLeft, ChevronRight, Brain, BookOpen, Eye, Grid, Music, Volume2, Trophy, Clock, Calendar, CheckSquare, Sparkles, VolumeX } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import '../../styles/views/MeditationView.css';
-import MeditationSidebar from './sidebar/MeditationSidebar';
+import '../../../styles/views/MeditationView.css';
+import MeditationSidebar from '../sidebar/MeditationSidebar';
 import { useSidebar } from './SidebarContext';
 
 /* ── REAL SOUNDSCAPE TRACKS ────────────────────── */
 const TRACKS = [
-  { id: 'stress_melt',   label: 'Singing Bowl Waves',  file: '/Resources/eeg_music/meditativetiger-stress-melt-gentle-singing-bowl-waves-489168.mp3', category: 'meditation' },
-  { id: 'nature_calm',   label: 'Nature Calm',          file: '/Resources/eeg_music/andriig-nature-calm-music-507173.mp3',                              category: 'meditation' },
-  { id: 'xylophone',    label: 'Xylophone & Forest',   file: '/Resources/eeg_music/mandakimdk-xylophone-and-forest-307174.mp3',                        category: 'meditation' },
-  { id: 'soft_calm',    label: 'Soft Calm Background', file: '/Resources/eeg_music/krasnoshchok-background-music-soft-calm-404429.mp3',                category: 'focus'     },
-  { id: 'dark_ambient', label: 'Dark Desolation',      file: '/Resources/eeg_music/aberrantrealities-dark-desolation-ambience-219091.mp3',             category: 'focus'     },
-  { id: 'funk_rock',    label: 'Funk Rock',             file: '/Resources/eeg_music/kandlaker-funk-rock-2-226325.mp3',                                  category: 'focus'     },
-  { id: 'countdown',    label: 'Countdown',             file: '/Resources/eeg_music/kaden_cook-countdown-219722.mp3',                                   category: 'focus'     },
+  { id: 'stress_melt', label: 'Singing Bowl Waves', file: '/Resources/eeg_music/meditativetiger-stress-melt-gentle-singing-bowl-waves-489168.mp3', category: 'meditation' },
+  { id: 'nature_calm', label: 'Nature Calm', file: '/Resources/eeg_music/andriig-nature-calm-music-507173.mp3', category: 'meditation' },
+  { id: 'xylophone', label: 'Xylophone & Forest', file: '/Resources/eeg_music/mandakimdk-xylophone-and-forest-307174.mp3', category: 'meditation' },
+  { id: 'soft_calm', label: 'Soft Calm Background', file: '/Resources/eeg_music/krasnoshchok-background-music-soft-calm-404429.mp3', category: 'focus' },
+  { id: 'dark_ambient', label: 'Dark Desolation', file: '/Resources/eeg_music/aberrantrealities-dark-desolation-ambience-219091.mp3', category: 'focus' },
+  { id: 'funk_rock', label: 'Funk Rock', file: '/Resources/eeg_music/kandlaker-funk-rock-2-226325.mp3', category: 'focus' },
+  { id: 'countdown', label: 'Countdown', file: '/Resources/eeg_music/kaden_cook-countdown-219722.mp3', category: 'focus' },
 ];
 
 /* ── DAILY WISDOM QUOTES ───────────────────────── */
@@ -47,8 +47,6 @@ const MeditationView = ({ result, currentView, onNavigate }) => {
   const themeRef = useRef(currentTheme);
 
   const [wisdomIdx] = useState(() => Math.floor(Math.random() * WISDOM.length));
-  const [showSidebar, setShowSidebar] = useState(true);
-  const [sidebarTab, setSidebarTab] = useState('controls');
 
   /* ── MUSIC MIXER STATE ─────────────────────── */
   const [musicState, setMusicState] = useState(

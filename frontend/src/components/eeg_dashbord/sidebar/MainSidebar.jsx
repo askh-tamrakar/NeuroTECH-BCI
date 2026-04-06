@@ -1,7 +1,10 @@
 import React from 'react';
-import { Activity, Music, Wind, Eye, Grid } from 'lucide-react';
+import { Activity, Music, Wind, Eye, Grid, Layers } from 'lucide-react';
+import { useSidebar } from '../pages/SidebarContext';
 
 const MainSidebar = ({ currentView, onSelect }) => {
+    const { sidebarMode, setSidebarMode } = useSidebar();
+
     const btn = (view, Icon, label) => (
         <button
             className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold text-sm border ${currentView === view
@@ -16,9 +19,21 @@ const MainSidebar = ({ currentView, onSelect }) => {
 
     return (
         <div className="flex flex-col h-full w-full p-4 font-mono transition-opacity duration-300">
-            <h2 className="text-base font-black mb-6 text-[var(--primary)] tracking-[4px] px-2 uppercase">
-                Global Navigator
-            </h2>
+            <div className="flex items-center justify-between mb-6 px-2">
+                <h2 className="text-base font-black text-[var(--primary)] tracking-[4px] uppercase">
+                    Navigator
+                </h2>
+                {currentView !== 'overview' && (
+                    <button
+                        onClick={() => setSidebarMode('page')}
+                        className="nav-controls-toggle"
+                        title="Switch to Controls"
+                    >
+                        <Layers size={14} />
+                        NAV
+                    </button>
+                )}
+            </div>
 
             <div className="flex flex-col gap-1.5 flex-grow overflow-y-auto [&::-webkit-scrollbar]:hidden">
                 <p className="text-[9px] font-black text-[var(--muted)] uppercase tracking-[3px] px-2 mb-1">

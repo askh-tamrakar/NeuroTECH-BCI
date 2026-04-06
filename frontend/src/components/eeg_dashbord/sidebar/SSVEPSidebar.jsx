@@ -2,12 +2,13 @@ import React from 'react';
 import {
     Settings, Play, Square, Activity, MousePointer2, Keyboard,
     Sun, Monitor, Power, Zap, Trash2, History, Target, Menu,
-    ChevronLeft, Brain, Eye, Radio, Wind, ChevronRight
+    ChevronLeft, Brain, Eye, Radio, Wind, ChevronRight, Layers
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import CustomNumberInput from '../../ui/inputs/CustomNumberInput';
 import CustomSelect from '../../ui/inputs/CustomSelect';
 import CustomSlider from '../../ui/inputs/CustomSlider';
+import { useSidebar } from '../pages/SidebarContext';
 
 const COMMON_KEYS = ['None', 'W', 'A', 'S', 'D', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'Enter', 'Escape', 'P', 'Q', '0', '1', '2', '3'];
 const MOUSE_ACTIONS = ['None', 'Left Click', 'Right Click', 'Double Click', 'Scroll Up', 'Scroll Down'];
@@ -35,6 +36,8 @@ const SSVEPSidebar = ({
     openDropdownId, setOpenDropdownId,
     isConnected,
 }) => {
+    const { sidebarMode, setSidebarMode } = useSidebar();
+
     return (
         <div className="flex-grow flex flex-col overflow-hidden p-4 gap-3 font-mono transition-opacity duration-300 w-full shrink-0">
 
@@ -47,6 +50,14 @@ const SSVEPSidebar = ({
                     </h2>
                     <p className="text-xs text-[var(--muted)]">Neurofeedback Stimulation</p>
                 </div>
+                <button
+                    onClick={() => setSidebarMode('main')}
+                    className="nav-controls-toggle"
+                    title="Switch to Navigation"
+                >
+                    <Layers size={14} />
+                    CTRL
+                </button>
             </div>
 
             {/* ML Pipeline Toggle */}
@@ -279,8 +290,8 @@ const SSVEPSidebar = ({
             <div className="flex items-center justify-between mt-auto pt-4 border-t border-[var(--border)]/30">
                 <span className="text-[10px] font-black uppercase tracking-widest text-[var(--muted)]">Sensor Integrity</span>
                 <div className={`flex items-center gap-2 px-3 py-1 rounded-full border ${isConnected ? 'bg-green-500/10 border-green-500/30 text-green-500' : 'bg-red-500/10 border-red-500/30 text-red-500'}`}>
-                   <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
-                   <span className="text-[9px] font-black tracking-tighter">{isConnected ? 'SECURE' : 'OFFLINE'}</span>
+                    <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
+                    <span className="text-[9px] font-black tracking-tighter">{isConnected ? 'SECURE' : 'OFFLINE'}</span>
                 </div>
             </div>
 

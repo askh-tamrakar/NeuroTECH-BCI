@@ -1,11 +1,14 @@
 import React from 'react';
-import { Music, Activity, Wind, Eye, Grid, ChevronLeft, Menu, Play, Pause, Volume2, VolumeX, Headphones, FastForward } from 'lucide-react';
+import { Music, Activity, Wind, Eye, Grid, ChevronLeft, Menu, Play, Pause, Volume2, VolumeX, Headphones, FastForward, Layers } from 'lucide-react';
+import { useSidebar } from '../pages/SidebarContext';
 
-const MusicSidebar = ({ 
-    isPlaying, togglePlayback, 
-    isMuted, setIsMuted, 
-    result, stateTheme 
+const MusicSidebar = ({
+    isPlaying, togglePlayback,
+    isMuted, setIsMuted,
+    result, stateTheme
 }) => {
+    const { sidebarMode, setSidebarMode } = useSidebar();
+
     return (
         <div className="flex-grow flex flex-col p-4 font-mono transition-opacity duration-300 w-full shrink-0">
             {/* Page Header */}
@@ -23,19 +26,27 @@ const MusicSidebar = ({
                         </p>
                     </div>
                 </div>
+                <button
+                    onClick={() => setSidebarMode('main')}
+                    className="nav-controls-toggle"
+                    title="Switch to Navigation"
+                >
+                    <Layers size={14} />
+                    CTRL
+                </button>
             </div>
 
             {/* Playback Controls */}
-            <div className="bg-[var(--bg)]/50 border border-[var(--primary)]/20 rounded-2xl p-4 mb-4 flex flex-col gap-4 shadow-xl">
+            <div className="bg-[var(--bg)]/50 border border-[var(--primary)]/20 rounded-2xl p-4 mb-4 flex flex-col gap-4 shadow-glow">
                 <h4 className="text-[10px] font-black text-[var(--muted)] uppercase tracking-[3px] border-b border-[var(--border)]/50 pb-2">
                     Active Session
                 </h4>
-                
+
                 <div className="flex items-center justify-center gap-4">
                     <button
                         onClick={togglePlayback}
-                        className="w-14 h-14 rounded-full flex items-center justify-center transition-all hover:scale-110 active:scale-95 shadow-lg"
-                        style={{ 
+                        className="w-14 h-14 rounded-full flex items-center justify-center transition-all hover:scale-110 active:scale-95 shadow-glow"
+                        style={{
                             background: `linear-gradient(135deg, ${stateTheme.primary}, ${stateTheme.secondary})`,
                             boxShadow: `0 8px 20px ${stateTheme.glow}`
                         }}
@@ -61,12 +72,12 @@ const MusicSidebar = ({
 
             {/* Neural Insights */}
             <div className="bg-[var(--bg)]/40 border border-[var(--border)] rounded-xl p-4 mb-4">
-                 <h4 className="text-[10px] font-black text-[var(--muted)] uppercase tracking-[3px] mb-3">
+                <h4 className="text-[10px] font-black text-[var(--muted)] uppercase tracking-[3px] mb-3">
                     Neural Insight
                 </h4>
                 <div className="flex items-center gap-3 p-3 bg-white/5 rounded-lg border border-white/5">
                     {result?.action?.includes('tempo') ? <FastForward size={18} className="text-[var(--primary)]" /> :
-                     result?.action?.includes('volume') ? <Activity size={18} className="text-[var(--primary)]" /> : <Headphones size={18} className="text-[var(--primary)]" />}
+                        result?.action?.includes('volume') ? <Activity size={18} className="text-[var(--primary)]" /> : <Headphones size={18} className="text-[var(--primary)]" />}
                     <span className="text-[11px] font-medium text-white/80 leading-snug">
                         {result?.action || 'Monitoring Auditory Cortex...'}
                     </span>

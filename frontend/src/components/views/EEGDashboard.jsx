@@ -2,11 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { Activity, Music, Wind, Eye, Grid, MonitorPlay, Layers } from 'lucide-react';
 import '../../styles/views/EEGDashboard.css';
 
-import SSVEPView from '../eeg_dashbord/SSVEPView';
-import MusicView from '../eeg_dashbord/MusicView';
-import MeditationView from '../eeg_dashbord/MeditationView';
-import BubbleGameView from '../eeg_dashbord/BubbleGameView';
-import { SidebarProvider, useSidebar } from '../eeg_dashbord/SidebarContext';
+import SSVEPView from '../eeg_dashbord/pages/SSVEPView';
+import MusicView from '../eeg_dashbord/pages/MusicView';
+import MeditationView from '../eeg_dashbord/pages/MeditationView';
+import BubbleGameView from '../eeg_dashbord/pages/BubbleGameView';
+import { SidebarProvider, useSidebar } from '../eeg_dashbord/pages/SidebarContext';
 import MainSidebar from '../eeg_dashbord/sidebar/MainSidebar';
 
 const OVERVIEW_APPS = [
@@ -62,7 +62,7 @@ const EEGDashboardContent = ({ wsEvent, isConnected, wsUrl }) => {
       // Priority 1: Direct mode manager output
       if (wsEvent.event === 'eeg_mode_result') {
         setEegResult(wsEvent.output || wsEvent);
-      } 
+      }
       // Priority 2: Feature Router predictions (F1/F2)
       else if (wsEvent.event === 'eeg_prediction' || wsEvent.output?.event === 'eeg_prediction') {
         setEegResult(wsEvent.output || wsEvent);
@@ -101,22 +101,6 @@ const EEGDashboardContent = ({ wsEvent, isConnected, wsUrl }) => {
 
       {/* ── DUAL SIDEBAR SYSTEM ── */}
       <div className="w-[18rem] bg-[var(--surface)] border-r border-[var(--border)] shrink-0 flex flex-col h-full z-20 relative transition-all duration-500">
-
-        {/* LabVIEW-style Toggle Button — always a fixed header row */}
-        <div className="shrink-0 flex items-center justify-end px-4 pt-3 pb-2 border-b border-[var(--border)]/30">
-          {isFullContainer ? (
-            <button
-              onClick={() => setSidebarMode(sidebarMode === 'main' ? 'page' : 'main')}
-              className="nav-controls-toggle"
-              title="Switch Navigation / Controls"
-            >
-              <Layers size={14} />
-              {sidebarMode === 'main' ? 'NAV' : 'CTRL'}
-            </button>
-          ) : (
-            <span className="text-[9px] font-black tracking-[3px] uppercase text-[var(--muted)]/40 pr-1">EEG Suite</span>
-          )}
-        </div>
 
         {/* Sidebar content — flex-1 allows it to grow and inner panel handles scroll */}
         <div className="sidebar-wrapper flex-1 min-h-0">
