@@ -23,6 +23,29 @@ def _error_response(error: str, status_code: int = 500, **extra):
     return JSONResponse({"error": error, **extra}, status_code=status_code)
 
 
+def _normalize_emg_label(label):
+    normalized = str(label or "").strip().lower()
+    mapping = {
+        "rest": ("Rest", 0),
+        "rock": ("Rock", 1),
+        "paper": ("Paper", 2),
+        "scissors": ("Scissors", 3),
+    }
+    return mapping.get(normalized, (str(label or "Rest"), 0))
+
+
+def _normalize_eog_label(label):
+    normalized = str(label or "").strip().lower()
+    mapping = {
+        "rest": ("Rest", 0),
+        "singleblink": ("SingleBlink", 1),
+        "single_blink": ("SingleBlink", 1),
+        "doubleblink": ("DoubleBlink", 2),
+        "double_blink": ("DoubleBlink", 2),
+    }
+    return mapping.get(normalized, (str(label or "Rest"), 0))
+
+
 @prediction_bp.post("/api/servo/manual")
 def manual_servo_override(payload: dict | None = Body(default=None)):
     try:
@@ -90,22 +113,23 @@ def get_history():
 def save_emg_feedback(payload: dict | None = Body(default=None)):
     try:
         payload = payload or {}
-        prediction = payload.get("prediction")
-        corrected_label = payload.get("corrected_label") or prediction
+        prediction_raw = payload.get("prediction")
+        corrected_label_raw = payload.get("corrected_label") or prediction_raw
         features = payload.get("features") or {}
         confidence = float(payload.get("confidence", 0.0) or 0.0)
 
-        if not corrected_label or not features:
+        if not corrected_label_raw or not features:
             return _error_response("prediction/corrected_label and features are required", 400)
 
-        label_map = {"Rest": 0, "Rock": 1, "Paper": 2, "Scissors": 3}
-        save_label = label_map.get(str(corrected_label), 0)
-        corrected_int = label_map.get(str(corrected_label), 0)
+        prediction, prediction_int = _normalize_emg_label(prediction_raw)
+        corrected_label, corrected_int = _normalize_emg_label(corrected_label_raw)
+        save_label = corrected_int
 
         save_features = dict(features)
         save_features["timestamp"] = time.time()
         save_features["confidence"] = confidence
         save_features["source"] = "feedback"
+        save_features["predicted_label"] = prediction_int
         save_features["corrected_label"] = corrected_int if corrected_label != prediction else None
 
         db_manager.insert_emg_window(
@@ -132,22 +156,23 @@ def save_emg_feedback(payload: dict | None = Body(default=None)):
 def save_eog_feedback(payload: dict | None = Body(default=None)):
     try:
         payload = payload or {}
-        prediction = payload.get("prediction")
-        corrected_label = payload.get("corrected_label") or prediction
+        prediction_raw = payload.get("prediction")
+        corrected_label_raw = payload.get("corrected_label") or prediction_raw
         features = payload.get("features") or {}
         confidence = float(payload.get("confidence", 0.0) or 0.0)
 
-        if not corrected_label or not features:
+        if not corrected_label_raw or not features:
             return _error_response("prediction/corrected_label and features are required", 400)
 
-        label_map = {"Rest": 0, "SingleBlink": 1, "DoubleBlink": 2}
-        save_label = label_map.get(str(corrected_label), 0)
-        corrected_int = label_map.get(str(corrected_label), 0)
+        prediction, prediction_int = _normalize_eog_label(prediction_raw)
+        corrected_label, corrected_int = _normalize_eog_label(corrected_label_raw)
+        save_label = corrected_int
 
         save_features = dict(features)
         save_features["timestamp"] = time.time()
         save_features["confidence"] = confidence
         save_features["source"] = "feedback"
+        save_features["predicted_label"] = prediction_int
         save_features["corrected_label"] = corrected_int if corrected_label != prediction else None
 
         db_manager.insert_eog_window(

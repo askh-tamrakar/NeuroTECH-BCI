@@ -17,6 +17,7 @@ let currentBatchIndex = 0;
 
 let windowTimer = null;
 let markedWindows = [];
+let deletedWindowIds = new Set();
 let latestSignalTime = Date.now();
 const MAX_WINDOWS = 2000;
 const PREVIEW_POINTS = 72;
@@ -68,10 +69,12 @@ self.onmessage = function (e) {
             handleWindowCollected(payload);
             break;
         case 'DELETE_WINDOW':
+            deletedWindowIds.add(payload);
             markedWindows = markedWindows.filter(w => w.id !== payload);
             notifyWindowsUpdate();
             break;
         case 'CLEAR_ALL_WINDOWS':
+            markedWindows.forEach((window) => deletedWindowIds.add(window.id));
             markedWindows = [];
             notifyWindowsUpdate();
             break;
@@ -131,6 +134,7 @@ function startAutoWindowing(options = {}) {
 
         const newWindow = {
             id: Math.random().toString(36).substr(2, 9),
+            createdAtMs: Date.now(),
             sensor: activeSensor,
             mode: mode === 'collection' ? 'collection' : 'test',
             startTime: start,
@@ -143,6 +147,7 @@ function startAutoWindowing(options = {}) {
             batchIndex: currentBatchIndex
         };
 
+        deletedWindowIds.delete(newWindow.id);
         markedWindows = [...markedWindows, newWindow].slice(-MAX_WINDOWS);
         notifyWindowsUpdate();
 
@@ -183,6 +188,9 @@ function getLabelForWindow() {
 }
 
 function handleWindowCollected(collectedWindow) {
+    if (deletedWindowIds.has(collectedWindow.id)) {
+        return;
+    }
     const nextWindow = mergeWindow(collectedWindow);
     const existingIndex = markedWindows.findIndex((window) => window.id === nextWindow.id);
 

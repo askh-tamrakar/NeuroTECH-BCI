@@ -6,7 +6,12 @@ import pandas as pd
 from fastapi import APIRouter, Body
 from fastapi.responses import JSONResponse
 from src.server.server.state import state
-from src.server.server.config_manager import load_config, save_config
+from src.server.server.config_manager import (
+    load_calibration_config,
+    load_config,
+    save_calibration_config,
+    save_config,
+)
 from src.server.server.extensions import socketio
 from src.database.db_manager import db_manager
 from src.server.server.lsl_service import extract_emg_features, extract_emg_features as extract_features_for_sensor
@@ -43,6 +48,35 @@ from src.server.server.services.training_job_service import (
 training_bp = APIRouter()
 EMG_BURST_WINDOWS = 5
 EMG_BURST_STRIDE_MS = 150.0
+
+
+def _persist_calibration_summary(sensor: str, result: dict, windows: list[dict], session_name: str | None = None):
+    calibration_cfg = load_calibration_config()
+    sensor_key = str(sensor).upper()
+    now_iso = time.strftime("%Y-%m-%dT%H:%M:%S")
+
+    windows_per_label = {}
+    for window in windows:
+        action = window.get("action") or window.get("label")
+        if not action:
+            continue
+        windows_per_label[action] = windows_per_label.get(action, 0) + 1
+
+    sensor_history = calibration_cfg.get(sensor_key, {})
+    sensor_history.update({
+        "sensor": sensor_key,
+        "calibrated": True,
+        "last_calibrated_at": now_iso,
+        "session_name": session_name,
+        "window_count": int(len(windows)),
+        "windows_per_label": windows_per_label,
+        "recommended_windows_per_label": result.get("recommended_samples"),
+        "accuracy_before": result.get("accuracy_before"),
+        "accuracy_after": result.get("accuracy_after"),
+        "updated_thresholds": result.get("updated_thresholds", {}),
+    })
+    calibration_cfg[sensor_key] = sensor_history
+    save_calibration_config(calibration_cfg)
 
 
 def _json(payload, status_code: int = 200):
@@ -805,8 +839,9 @@ def api_calibrate(payload: dict | None = Body(default=None)):
         if not payload:
             return _json({"error": "No payload provided"}, 400)
         
-        sensor = payload.get('sensor')
+        sensor = str(payload.get('sensor', '')).upper()
         windows = payload.get('windows', [])
+        session_name = payload.get('session_name') or payload.get('sessionName')
         
         if not sensor or not windows:
             return _json({"error": "Missing sensor or windows"}, 400)
@@ -921,6 +956,8 @@ def api_calibrate(payload: dict | None = Body(default=None)):
             "recommended_samples": recommended_samples,
             "config_saved": save_success
         }
+
+        _persist_calibration_summary(sensor, result, windows, session_name=session_name)
         
         _safe_socket_emit('config_updated', {"sensor": sensor})
         

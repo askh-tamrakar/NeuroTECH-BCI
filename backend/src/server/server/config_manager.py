@@ -99,6 +99,31 @@ def build_default_calibration_config() -> dict:
     return {}
 
 
+def load_calibration_config() -> dict:
+    ensure_runtime_config()
+    try:
+        if CALIBRATION_CONFIG_PATH.exists():
+            with open(CALIBRATION_CONFIG_PATH, "r") as f:
+                data = json.load(f)
+                if isinstance(data, dict):
+                    return data
+    except Exception as exc:
+        print(f"Warning: error loading calibration config: {exc}")
+    return build_default_calibration_config()
+
+
+def save_calibration_config(config: dict) -> bool:
+    try:
+        ensure_runtime_config()
+        CALIBRATION_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with open(CALIBRATION_CONFIG_PATH, "w") as f:
+            json.dump(config if isinstance(config, dict) else {}, f, indent=2)
+        return True
+    except Exception as exc:
+        print(f"Error saving calibration config: {exc}")
+        return False
+
+
 def build_default_detection_config() -> dict:
     return {"active": False, "target": None}
 

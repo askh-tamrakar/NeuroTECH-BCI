@@ -327,7 +327,8 @@ const RPSGame = ({ wsEvent }) => {
             confidence: detectedEvent.confidence || 0,
             features: detectedEvent.features || null
         } : null);
-        setFeedbackPending(Boolean(!manualMode && detectedEvent?.features));
+        const hasFeedback = Boolean(!manualMode && detectedEvent?.features);
+        setFeedbackPending(hasFeedback);
         setShowCorrectionPicker(false);
 
         // Log manual gesture for UI
@@ -350,7 +351,7 @@ const RPSGame = ({ wsEvent }) => {
 
         setGameState('revealed');
 
-        if (!feedbackPending && !(detectedEvent?.features && !manualMode)) {
+        if (!hasFeedback) {
             startResetCountdown();
         }
     };
@@ -371,7 +372,7 @@ const RPSGame = ({ wsEvent }) => {
 
         try {
             setFeedbackSaving(true);
-            await fetch(buildApiUrl('/api/emg/feedback'), {
+            const response = await fetch(buildApiUrl('/api/emg/feedback'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -381,6 +382,9 @@ const RPSGame = ({ wsEvent }) => {
                     features: lastDetectionMeta.features,
                 })
             });
+            if (!response.ok) {
+                throw new Error(`EMG feedback failed (${response.status})`);
+            }
         } catch (err) {
             console.error("Failed to save EMG feedback:", err);
         } finally {
@@ -567,9 +571,50 @@ const RPSGame = ({ wsEvent }) => {
                         )}
                     </div>
 
-                    {/* Title on right */}
+                    {/* Title and feedback on right */}
                     <div className="w-1/3 flex justify-end">
-                        <div className="rps-title text-right m-0 whitespace-nowrap">NEURO RPS</div>
+                        <div className="flex flex-col items-end gap-2">
+                            <div className="rps-title text-right m-0 whitespace-nowrap">NEURO RPS</div>
+                            {feedbackPending && lastDetectionMeta && (
+                                <div className="w-full min-w-[260px] max-w-[360px] flex flex-col items-end gap-3 bg-surface/80 border border-border rounded-2xl px-4 py-3 shadow-xl animate-in fade-in duration-300">
+                                    <div className="text-xs font-bold uppercase tracking-widest text-muted">Detection Feedback</div>
+                                    <div className="text-sm text-text text-right">
+                                        Detected: <span className="font-black text-primary">{lastDetectionMeta.prediction}</span>
+                                    </div>
+                                    {!showCorrectionPicker ? (
+                                        <div className="flex gap-2">
+                                            <button
+                                                onClick={() => submitFeedback()}
+                                                disabled={feedbackSaving}
+                                                className="px-4 py-2 rounded-xl bg-green-500/10 border border-green-500/30 text-green-400 font-bold hover:bg-green-500/20 transition-colors"
+                                            >
+                                                YES
+                                            </button>
+                                            <button
+                                                onClick={() => setShowCorrectionPicker(true)}
+                                                disabled={feedbackSaving}
+                                                className="px-4 py-2 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 font-bold hover:bg-red-500/20 transition-colors"
+                                            >
+                                                NO
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <div className="flex flex-wrap items-center justify-end gap-2">
+                                            {MOVES.map((move) => (
+                                                <button
+                                                    key={move}
+                                                    onClick={() => submitFeedback(move)}
+                                                    disabled={feedbackSaving}
+                                                    className="px-3 py-2 rounded-xl bg-primary/10 border border-primary/30 text-primary font-bold hover:bg-primary/20 transition-colors"
+                                                >
+                                                    {move}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
 
@@ -609,45 +654,6 @@ const RPSGame = ({ wsEvent }) => {
                         {renderCard('computer', computerMove, gameState !== 'waiting')}
                     </div>
 
-                    {feedbackPending && lastDetectionMeta && (
-                        <div className="mt-6 flex flex-col items-center gap-3 bg-surface/70 border border-border rounded-2xl px-5 py-4 shadow-xl animate-in fade-in duration-300">
-                            <div className="text-sm font-bold uppercase tracking-widest text-muted">Detection Feedback</div>
-                            <div className="text-base text-text text-center">
-                                Detected: <span className="font-black text-primary">{lastDetectionMeta.prediction}</span>
-                            </div>
-                            {!showCorrectionPicker ? (
-                                <div className="flex gap-3">
-                                    <button
-                                        onClick={() => submitFeedback()}
-                                        disabled={feedbackSaving}
-                                        className="px-4 py-2 rounded-xl bg-green-500/10 border border-green-500/30 text-green-400 font-bold hover:bg-green-500/20 transition-colors"
-                                    >
-                                        YES
-                                    </button>
-                                    <button
-                                        onClick={() => setShowCorrectionPicker(true)}
-                                        disabled={feedbackSaving}
-                                        className="px-4 py-2 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 font-bold hover:bg-red-500/20 transition-colors"
-                                    >
-                                        NO
-                                    </button>
-                                </div>
-                            ) : (
-                                <div className="flex flex-wrap items-center justify-center gap-2">
-                                    {MOVES.map((move) => (
-                                        <button
-                                            key={move}
-                                            onClick={() => submitFeedback(move)}
-                                            disabled={feedbackSaving}
-                                            className="px-3 py-2 rounded-xl bg-primary/10 border border-primary/30 text-primary font-bold hover:bg-primary/20 transition-colors"
-                                        >
-                                            {move}
-                                        </button>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    )}
                 </div>
             </div>
 

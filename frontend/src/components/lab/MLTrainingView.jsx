@@ -42,8 +42,8 @@ const ModelIdBadge = ({ model, size = 'sm', isActive = false }) => {
     const hasIndices = (model.candidate_index !== undefined || model.candidate_idx !== undefined);
     const preferredId = model.best_fold_id || model.model_id || model.id;
 
-    const mutedColor = 'text-[var(--text)]';
-    const primaryColor = 'text-[var(--graph-line-1)]';
+    const mutedColor = isActive ? 'text-[var(--text)]' : 'text-[var(--text)]';
+    const primaryColor = isActive ? 'text-[var(--primary)]' : 'text-[var(--graph-line-1)]';
 
     if (!hasIndices && !preferredId) {
         return <span className={`opacity-40 italic ${size === 'sm' ? 'text-[10px]' : 'text-[12px]'}`}>ID UNKNOWN</span>;
@@ -100,11 +100,11 @@ const SavedModelsList = ({ models, selectedModelName, onSelect, onDelete }) => (
                             <span className='flex flex-row items-center'>
                                 <BrainCircuit size={24} className={`mr-2 ${selectedModelName === m.name ? 'text-primary/90' : 'text-text/50'}`} />
                                 <div className='flex flex-col items-start'>
-                                    <div className={`text-[16px] font-medium truncate ${selectedModelName === m.name ? 'text-primary' : 'text-[var(--text)]'}`}>
+                                    <div className={`text-[18px] font-black truncate ${selectedModelName === m.name ? 'text-primary' : 'text-[var(--text)]'}`}>
                                         {m.name}
                                     </div>
-                                    <div className="text-[12px] text-[var(--muted)] font-mono uppercase tracking-wider truncate opacity-70">
-                                        <ModelIdBadge model={m} size='lg' />
+                                    <div className="text-[10px] text-[var(--muted)] font-mono uppercase tracking-[0.18em] truncate opacity-90">
+                                        <ModelIdBadge model={m} size='sm' isActive={selectedModelName === m.name} />
                                     </div>
                                 </div>
                             </span>
@@ -461,7 +461,96 @@ const formatFixedFive = (value) => {
     return Number.isFinite(numeric) ? numeric.toFixed(5) : '--';
 };
 
-const HistoryList = ({ history = [], selectedId, onSelect, emptyText = 'No training history available.', decimalCandidateDisplay = false }) => {
+const historyValidationAccuracy = (item) => Number(item?.validation_accuracy ?? item?.accuracy ?? -1);
+const historyTrainAccuracy = (item) => Number(item?.train_accuracy ?? -1);
+const historyTestAccuracy = (item) => Number(item?.test_accuracy ?? item?.accuracy ?? -1);
+const historyModelIdValue = (item) => String(historyId(item) || '').toUpperCase();
+const historyBestScore = (item) => {
+    const testScore = historyTestAccuracy(item);
+    if (Number.isFinite(testScore) && testScore >= 0) return testScore;
+    const validationScore = historyValidationAccuracy(item);
+    if (Number.isFinite(validationScore) && validationScore >= 0) return validationScore;
+    return historyTrainAccuracy(item);
+};
+const historyAccuracyStrings = (item) => {
+    const values = [historyValidationAccuracy(item), historyTestAccuracy(item), historyTrainAccuracy(item)]
+        .filter((value) => Number.isFinite(value) && value >= 0);
+    return values.flatMap((value) => {
+        const percent = value * 100;
+        return [
+            pct(value).toLowerCase(),
+            value.toFixed(5),
+            value.toFixed(3),
+            percent.toFixed(2),
+            percent.toFixed(1),
+            String(Math.round(percent))
+        ];
+    });
+};
+
+const historySortOptions = [
+    { value: 'candidate', label: 'Candidate' },
+    { value: 'fold', label: 'Fold' },
+    { value: 'validation_accuracy', label: 'Validation' },
+    { value: 'train_accuracy', label: 'Train' },
+    { value: 'model_id', label: 'Model ID' },
+    { value: 'candidate_mean', label: 'Cand Mean' },
+    { value: 'best_model', label: 'Best Model' },
+    { value: 'test_accuracy', label: 'Test' },
+];
+
+const compareValues = (left, right, direction = 'asc') => {
+    const multiplier = direction === 'desc' ? -1 : 1;
+    if (typeof left === 'string' || typeof right === 'string') {
+        return String(left).localeCompare(String(right)) * multiplier;
+    }
+    return ((Number(left) || 0) - (Number(right) || 0)) * multiplier;
+};
+
+const itemSortValue = (item, sortField) => {
+    switch (sortField) {
+        case 'fold':
+            return historyFold(item);
+        case 'validation_accuracy':
+            return historyValidationAccuracy(item);
+        case 'train_accuracy':
+            return historyTrainAccuracy(item);
+        case 'model_id':
+            return historyModelIdValue(item);
+        case 'test_accuracy':
+            return historyTestAccuracy(item);
+        case 'best_model':
+            return historyBestScore(item);
+        case 'candidate':
+        default:
+            return historyCandidate(item);
+    }
+};
+
+const groupSortMetric = (group, sortField, sortedFolds) => {
+    switch (sortField) {
+        case 'candidate':
+            return group.idx;
+        case 'fold':
+            return historyFold(sortedFolds[0]);
+        case 'validation_accuracy':
+            return Math.max(...sortedFolds.map((item) => historyValidationAccuracy(item)));
+        case 'train_accuracy':
+            return Math.max(...sortedFolds.map((item) => historyTrainAccuracy(item)));
+        case 'model_id':
+            return historyModelIdValue(sortedFolds[0]);
+        case 'candidate_mean':
+            return group.candidateMean;
+        case 'best_model':
+            return group.bestModelScore;
+        case 'test_accuracy':
+            return Math.max(...sortedFolds.map((item) => historyTestAccuracy(item)));
+        default:
+            return itemSortValue(sortedFolds[0], sortField);
+    }
+};
+
+const HistoryList = ({ history = [], selectedId, onSelect, emptyText = 'No training history available.', decimalCandidateDisplay = false, sortField = 'candidate', sortDirection = 'asc' }) => {
     const grouped = useMemo(() => {
         const groups = {};
         history.forEach((item) => {
@@ -470,9 +559,26 @@ const HistoryList = ({ history = [], selectedId, onSelect, emptyText = 'No train
             groups[key].folds.push(item);
         });
         return Object.values(groups)
-            .sort((a, b) => a.idx - b.idx)
-            .map(group => ({ ...group, folds: group.folds.sort((a, b) => historyFold(a) - historyFold(b)) }));
-    }, [history]);
+            .map((group) => {
+                const folds = [...group.folds].sort((a, b) => {
+                    const primary = compareValues(itemSortValue(a, sortField), itemSortValue(b, sortField), sortDirection);
+                    if (primary !== 0) return primary;
+                    return compareValues(historyFold(a), historyFold(b), 'asc');
+                });
+                const candidateMean = folds.length
+                    ? folds.reduce((acc, item) => acc + historyValidationAccuracy(item), 0) / folds.length
+                    : -1;
+                const bestModelScore = folds.length ? Math.max(...folds.map((item) => historyBestScore(item))) : -1;
+                const decoratedGroup = { ...group, folds, candidateMean, bestModelScore };
+                const groupSortValue = groupSortMetric(decoratedGroup, sortField, folds);
+                return { ...decoratedGroup, groupSortValue };
+            })
+            .sort((a, b) => {
+                const primary = compareValues(a.groupSortValue, b.groupSortValue, sortDirection);
+                if (primary !== 0) return primary;
+                return compareValues(a.idx, b.idx, 'asc');
+            });
+    }, [history, sortField, sortDirection]);
 
     if (!grouped.length) {
         return <div className="flex h-full items-center justify-center text-sm italic text-[var(--muted)] opacity-60">{emptyText}</div>;
@@ -490,7 +596,7 @@ const HistoryList = ({ history = [], selectedId, onSelect, emptyText = 'No train
 
                         </div>
                         <div className="text-[16px] font-black text-[var(--primary)]">
-                            {Math.round((cand.folds.reduce((acc, fold) => acc + (fold.accuracy || 0), 0) / cand.folds.length) * 100)}%
+                            {Number.isFinite(cand.candidateMean) && cand.candidateMean >= 0 ? `${Math.round(cand.candidateMean * 100)}%` : '--'}
                         </div>
                     </div>
                     <div className="flex flex-wrap gap-2">
@@ -501,9 +607,9 @@ const HistoryList = ({ history = [], selectedId, onSelect, emptyText = 'No train
                                 <button
                                     key={id}
                                     onClick={() => onSelect?.(item)}
-                                    className={`px-3 py-1.5 rounded-md border transition-all ${isActive ? 'bg-[var(--primary)] border-[var(--primary)] shadow-sm' : 'bg-[var(--surface)] border-[var(--border)] hover:border-[var(--primary)]/50'}`}
+                                    className={`px-3 py-1.5 rounded-md border transition-all ${isActive ? 'bg-[var(--surface)] border-[var(--primary)] ring-1 ring-[var(--primary)]/20 shadow-sm' : 'bg-[var(--surface)] border-[var(--border)] hover:border-[var(--primary)]/50'}`}
                                 >
-                                    <ModelIdBadge model={item} isActive={isActive} />
+                                    <ModelIdBadge model={item} isActive={isActive} size="sm" />
                                 </button>
                             );
                         })}
@@ -514,20 +620,32 @@ const HistoryList = ({ history = [], selectedId, onSelect, emptyText = 'No train
     );
 };
 
-const SearchableHistoryList = ({ history = [], selectedId, onSelect, decimalCandidateDisplay = false, placeholder = "FIND MODEL BY ID" }) => {
+const SearchableHistoryList = ({ history = [], selectedId, onSelect, decimalCandidateDisplay = false, placeholder = "FIND MODEL OR CANDIDATE" }) => {
     const [searchQuery, setSearchQuery] = useState('');
+    const [sortField, setSortField] = useState('candidate');
+    const [sortDirection, setSortDirection] = useState('asc');
     const filteredHistory = useMemo(() => {
         if (!searchQuery.trim()) return history;
         const q = searchQuery.toLowerCase();
-        // Smarter Hex-aware filtering: convert numeric decimal to hex for matching model IDs
-        const numeric = parseInt(q);
-        const hexMatch = !isNaN(numeric) && numeric > 0 ? numeric.toString(16).toUpperCase().padStart(2, '0') : null;
+        const numeric = parseInt(q, 10);
+        const candidateDecimal = !Number.isNaN(numeric) ? formatCandidateDecimal(numeric) : null;
+        const isBestQuery = q.includes('best');
+        const allowAccuracyMatch = q.includes('%') || q.includes('.');
+        const bestItem = history.reduce((best, item) => {
+            if (!best) return item;
+            return historyBestScore(item) > historyBestScore(best) ? item : best;
+        }, null);
+        const bestCandidate = bestItem ? historyCandidate(bestItem) : null;
+        const bestId = bestItem ? historyId(bestItem) : null;
 
         return history.filter(item => {
             const id = historyId(item).toLowerCase();
             const matchesLiteral = id.includes(q);
-            const matchesHex = hexMatch ? id.includes(hexMatch.toLowerCase()) : false;
-            return matchesLiteral || matchesHex;
+            const decimalCandidate = formatCandidateDecimal(historyCandidate(item));
+            const matchesCandidate = candidateDecimal ? decimalCandidate === candidateDecimal || decimalCandidate.includes(candidateDecimal) : false;
+            const matchesBest = isBestQuery ? historyId(item) === bestId || historyCandidate(item) === bestCandidate : false;
+            const matchesAccuracy = allowAccuracyMatch ? historyAccuracyStrings(item).some((value) => value.includes(q)) : false;
+            return matchesLiteral || matchesCandidate || matchesBest || matchesAccuracy;
         });
     }, [history, searchQuery]);
 
@@ -544,8 +662,30 @@ const SearchableHistoryList = ({ history = [], selectedId, onSelect, decimalCand
                     className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-lg pl-9 pr-3 py-2.5 text-[12px] font-mono font-black tracking-widest text-[var(--text)] focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)]/30 outline-none transition-all uppercase placeholder:opacity-50"
                 />
             </div>
+            <div className="mb-3 grid grid-cols-[1fr_auto] gap-2 shrink-0">
+                <CustomSelect
+                    value={sortField}
+                    onChange={setSortField}
+                    options={historySortOptions}
+                    triggerClassName="h-9 px-3 !rounded-lg !bg-[var(--surface)] !border-[var(--border)] text-[12px] font-black uppercase tracking-wider"
+                />
+                <button
+                    type="button"
+                    onClick={() => setSortDirection((prev) => prev === 'asc' ? 'desc' : 'asc')}
+                    className="px-3 h-9 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[12px] font-black uppercase tracking-wider text-[var(--text)] hover:border-[var(--primary)]"
+                >
+                    {sortDirection === 'asc' ? 'Asc' : 'Desc'}
+                </button>
+            </div>
             <div className="flex-1 overflow-y-auto pr-1 [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-                <HistoryList history={filteredHistory} selectedId={selectedId} onSelect={onSelect} decimalCandidateDisplay={decimalCandidateDisplay} />
+                <HistoryList
+                    history={filteredHistory}
+                    selectedId={selectedId}
+                    onSelect={onSelect}
+                    decimalCandidateDisplay={decimalCandidateDisplay}
+                    sortField={sortField}
+                    sortDirection={sortDirection}
+                />
             </div>
         </div>
     );
@@ -561,14 +701,14 @@ const HistoryDetailCard = ({ item, decimalCandidateDisplay = false }) => {
         <div className="h-full p-4 rounded-xl bg-[var(--bg)]/40 border border-[var(--border)] space-y-4 overflow-y-auto [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
             <div className="flex items-center justify-between">
                 <div>
-                    <div className="text-[12px] uppercase tracking-[0.18em] text-[var(--muted)] font-black">Model ID</div>
-                    <div className="text-2xl mt-1">
+                    <div className="text-[16px] uppercase tracking-[0.18em] text-[var(--muted)] font-black">Model ID</div>
+                    <div className="text-[38px] mt-1 leading-none">
                         <ModelIdBadge model={item} size="lg" />
                     </div>
                 </div>
                 <div className="text-right">
-                    <div className="text-[12px] uppercase tracking-[0.18em] text-[var(--muted)] font-black">Validation</div>
-                    <div className="text-2xl font-black text-[var(--text)]">{pct(item.validation_accuracy ?? item.accuracy)}</div>
+                    <div className="text-[16px] uppercase tracking-[0.18em] text-[var(--muted)] font-black">Validation</div>
+                    <div className="text-[38px] font-black text-[var(--text)] leading-none">{pct(item.validation_accuracy ?? item.accuracy)}</div>
                 </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -610,7 +750,7 @@ const HistoryDetailCard = ({ item, decimalCandidateDisplay = false }) => {
     );
 };
 
-const TrainingHistoryCard = ({ title = 'Training History', history = [], selectedItem, onSelectItem, detailLabel = 'Model Detail', decimalCandidateDisplay = false }) => {
+const TrainingHistoryCard = ({ title = 'Training History', history = [], selectedItem, onSelectItem, decimalCandidateDisplay = false }) => {
     return (
         <div className={`${card} h-full flex flex-col overflow-hidden`}>
             <div className="p-3 border-b border-[var(--border)] flex items-center justify-between shrink-0">
@@ -630,7 +770,6 @@ const TrainingHistoryCard = ({ title = 'Training History', history = [], selecte
                     />
                 </div>
                 <div className="col-span-12 lg:col-span-5 min-h-0 flex flex-col">
-                    <div className="text-[16px] uppercase tracking-[0.18em] text-[var(--muted)] font-black mb-2 shrink-0">{detailLabel}</div>
                     <div className="flex-1 min-h-0">
                         <HistoryDetailCard item={selectedItem} decimalCandidateDisplay={decimalCandidateDisplay} />
                     </div>
@@ -716,7 +855,7 @@ const HyperparametersCard = ({ params, setParamsTab, activeTab, models = [] }) =
                     <div className="p-0 border-0 bg-transparent">
                         <div className="flex justify-between items-center mb-1 px-1">
                             <span className="text-[14px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em]">Search Resolution</span>
-                            <span className="text-[20px] text-[var(--header-text)] font-black font-mono leading-none">{params.search_resolution}</span>
+                            <span className="text-[18px] text-[var(--header-text)] font-black font-mono leading-none">{params.search_resolution}</span>
                         </div>
                         <CustomSlider min={1} max={10} step={1}
                             backgroundColor="var(--bg)"
@@ -728,7 +867,7 @@ const HyperparametersCard = ({ params, setParamsTab, activeTab, models = [] }) =
                             <div className="col-span-2 p-0 border-0 bg-transparent">
                                 <div className="flex justify-between items-end mb-2 px-1">
                                     <span className="text-[14px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em]">Estimators Range</span>
-                                    <div className="flex items-center gap-2 text-[20px] font-black font-mono text-[var(--header-text)]">
+                                    <div className="flex items-center gap-2 text-[18px] font-black font-mono text-[var(--header-text)]">
                                         <span >{params.n_estimators_min || 50}</span>
                                         <span className="text-[var(--muted)]">-</span>
                                         <span >{params.n_estimators_max || 200}</span></div>
@@ -742,17 +881,17 @@ const HyperparametersCard = ({ params, setParamsTab, activeTab, models = [] }) =
                             <div className="p-0 border-0 bg-transparent">
                                 <div className="flex justify-between items-end mb-2 px-1">
                                     <span className="text-[14px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em]">Max Depth</span>
-                                    <div className="flex items-center gap-1 font-mono text-[18px] text-[var(--header-text)] font-black">{params.max_depth_min || 5} - {params.max_depth_max || 15}</div>
+                                    <div className="flex items-center gap-1 font-mono text-[16px] text-[var(--header-text)] font-black">{params.max_depth_min || 5} - {params.max_depth_max || 15}</div>
                                 </div>
 
                                 <RangeSlider min={2} max={30} step={1}
                                     leftColor="var(--muted)" rightColor="var(--muted)" minValue={params.max_depth_min || 5} maxValue={params.max_depth_max || 15} hideLabels={true} compact={true} color="var(--primary)" onChange={(vals) => setParamsTab({ max_depth_min: vals.min, max_depth_max: vals.max })} />
                             </div>
 
-                            <div className="p-0 border-0 bg-transparent">
+                            <div className="pb-0 border-0 bg-transparent">
                                 <div className="flex justify-between items-end mb-2 px-1">
                                     <span className="text-[14px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em]">Impurity</span>
-                                    <div className="text-[18px] font-mono text-[var(--header-text)] font-black truncate">{params.min_impurity_decrease_min || 0} - {params.min_impurity_decrease_max || 0.05}</div>
+                                    <div className="text-[16px] font-mono text-[var(--header-text)] font-black truncate">{params.min_impurity_decrease_min || 0} - {params.min_impurity_decrease_max || 0.05}</div>
                                 </div>
                                 <RangeSlider min={0} max={0.1} step={0.005}
                                     leftColor="var(--muted)" rightColor="var(--muted)" minValue={params.min_impurity_decrease_min || 0} maxValue={params.min_impurity_decrease_max || 0.05} hideLabels={true} compact={true} color="var(--primary)" onChange={(vals) => setParamsTab({ min_impurity_decrease_min: vals.min, min_impurity_decrease_max: vals.max })} />
@@ -769,11 +908,11 @@ const HyperparametersCard = ({ params, setParamsTab, activeTab, models = [] }) =
                             </div>
                         </div>
                     ) : (
-                        <div className="space-y-[10px]">
+                        <div className="space-y-[2px]">
                             <div className="p-0 border-0 bg-transparent">
                                 <div className="flex justify-between items-end px-1 mb-2">
                                     <span className="text-[14px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em]">LDA Tolerance Range</span>
-                                    <div className="flex items-center gap-1 text-[20px] font-black font-mono text-[var(--header-text)]">
+                                    <div className="flex items-center gap-1 text-[18px] font-black font-mono text-[var(--header-text)]">
                                         {params.tol_min || 0.0001} - {params.tol_max || 0.01}
                                     </div>
                                 </div>
@@ -781,7 +920,7 @@ const HyperparametersCard = ({ params, setParamsTab, activeTab, models = [] }) =
                                     leftColor="var(--muted)" rightColor="var(--muted)" minValue={params.tol_min || 0.0001} maxValue={params.tol_max || 0.01} hideLabels={true} compact={true} color="var(--primary)" onChange={(vals) => setParamsTab({ tol_min: vals.min, tol_max: vals.max })} />
                             </div>
 
-                            <div className="grid grid-cols-2 gap-3">
+                            <div className="grid grid-cols-2 gap-1">
                                 <div className="p-0 border-0 bg-transparent">
                                     <div className="text-[14px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em] mb-1.5 px-1">Solver</div>
                                     <CustomSelect className='font-bold text-[var(--header-text)]' direction="up" value={params.solver || 'svd'} onChange={(value) => setParamsTab({ solver: value })} options={[{ value: 'svd', label: 'SVD' }, { value: 'lsqr', label: 'LSQR' }, { value: 'eigen', label: 'Eigen' }, { value: 'svd,lsqr,eigen', label: 'All' }]} />
@@ -1183,7 +1322,6 @@ const EEGLDAVisualizationCard = ({ result, history = [], selectedItem, onSelectI
                                     <SearchableHistoryList history={history} selectedId={historyId(selectedItem)} onSelect={onSelectItem} />
                                 </div>
                                 <div className="col-span-12 lg:col-span-5 min-h-0 flex flex-col">
-                                    <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--muted)] font-black mb-2 shrink-0">Saved Fold Detail</div>
                                     <div className="flex-1 min-h-0">
                                         <HistoryDetailCard item={selectedItem} />
                                     </div>
@@ -1556,7 +1694,6 @@ const DecisionTreeCard = ({ structure, treeIndex, totalTrees, onTreeChange, load
                                 <SearchableHistoryList history={history} selectedId={historyId(selectedItem)} onSelect={onSelectItem} />
                             </div>
                             <div className="col-span-12 lg:col-span-5 min-h-0 flex flex-col">
-                                <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--muted)] font-black mb-2 shrink-0">Model Detail</div>
                                 <div className="flex-1 min-h-0">
                                     <HistoryDetailCard item={selectedItem} />
                                 </div>

@@ -49,7 +49,7 @@ export default function AutoCalibrationWizard({
                 cSetTargetLabel(target);
                 cSetAutoLimit(cTargetCount);
                 setTimeout(() => {
-                    cOnStartRecording();
+                    cOnStartRecording(target);
                     setStep('recording');
                     soundHandler.playRPSStart(); // generic start sound
                 }, 100);
@@ -113,7 +113,7 @@ export default function AutoCalibrationWizard({
                                 <Target size={inline ? 20 : 32} />
                             </div>
                             <p className={`${inline ? 'text-[11px] leading-tight' : 'text-lg'} text-text text-left max-w-[160px]`}>
-                                Record exactly <strong>{targetCount} samples</strong> for each gesture.
+                                Record exactly <strong>{targetCount} captures</strong> for each gesture.
                             </p>
                         </div>
                         <div className={`grid ${inline ? 'grid-cols-2 gap-x-2 gap-y-2 mt-4' : 'flex flex-wrap justify-center gap-1.5 mt-2'}`}>
@@ -192,7 +192,7 @@ export default function AutoCalibrationWizard({
                         </div>
                         <div>
                             <h2 className={`${inline ? 'text-lg' : 'text-3xl'} font-black text-white mb-1`}>Complete!</h2>
-                            <p className="text-muted text-xs">Collected {targetCount} windows.</p>
+                            <p className="text-muted text-xs">Collected {targetCount} captures per gesture.</p>
                         </div>
                         <div className={`flex gap-2 w-full mt-4`}>
                             <button

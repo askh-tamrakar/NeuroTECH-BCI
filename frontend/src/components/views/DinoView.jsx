@@ -927,7 +927,7 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
 
         try {
             setFeedbackSaving(true)
-            await fetch(buildApiUrl('/api/eog/feedback'), {
+            const response = await fetch(buildApiUrl('/api/eog/feedback'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -937,6 +937,9 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
                     features: feedbackPrompt.features,
                 })
             })
+            if (!response.ok) {
+                throw new Error(`EOG feedback failed (${response.status})`)
+            }
         } catch (error) {
             console.error("Failed to save EOG feedback:", error)
         } finally {

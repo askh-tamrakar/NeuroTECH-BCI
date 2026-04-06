@@ -69,6 +69,7 @@ const Sparkline = React.memo(({ data, color = '#10b981' }) => {
 const WindowRow = React.memo(({ win, onDelete }) => {
     const tone = useMemo(() => getWindowTone(win.status), [win.status]);
     const duration = useMemo(() => (win.endTime - win.startTime).toFixed(0), [win.startTime, win.endTime]);
+    const canDelete = !['saved', 'correct'].includes(win.status);
 
     return (
         <div className={`py-1 px-2 flex flex-col gap-0 rounded-lg border transition-all group hover:translate-x-1 animate-in slide-in-from-right-4 fade-in duration-300 ${tone.card}`}>
@@ -102,13 +103,15 @@ const WindowRow = React.memo(({ win, onDelete }) => {
                 </div>
 
                 <div className="flex gap-1 opacity-100">
-                    <button
-                        onClick={(e) => { e.stopPropagation(); onDelete?.(win.id); }}
-                        className="p-1 hover:bg-red-500/10 rounded text-red-400 text-xs transition-colors"
-                        title="Delete window"
-                    >
-                        <Trash2 size={16} />
-                    </button>
+                    {canDelete && (
+                        <button
+                            onClick={(e) => { e.stopPropagation(); onDelete?.(win.id); }}
+                            className="p-1 hover:bg-red-500/10 rounded text-red-400 text-xs transition-colors"
+                            title="Delete window"
+                        >
+                            <Trash2 size={16} />
+                        </button>
+                    )}
                 </div>
             </div>
         </div>
@@ -133,7 +136,7 @@ function WindowListPanel({
     onAutoCalibrateChange,
     onClearSaved,
     onDeleteAll,
-    progressMode = 'samples',
+    progressMode = 'captures',
     progressCurrent = 0,
     progressTotal = 1,
     progressPercent = 0,
@@ -153,7 +156,7 @@ function WindowListPanel({
     const targetCount = Math.max(1, autoCalibrate ? (batchSize * numBatches) : (autoLimit || 30));
     const statsTotal = processedCount + recordingCount + savedCount;
     const progress = Math.min(100, Number(progressPercent) || 0);
-    const progressLabel = progressMode === 'batches' ? 'Batches' : 'Samples';
+    const progressLabel = progressMode === 'batches' ? 'Batches' : 'Captures';
     const progressValueText = progressMode === 'batches'
         ? `${Math.min(progressCurrent, progressTotal)} / ${Math.max(1, progressTotal)}`
         : `${Math.min(progressCurrent, progressTotal)} / ${Math.max(1, progressTotal)}`;
@@ -168,12 +171,12 @@ function WindowListPanel({
                 <div className="flex justify-between items-center">
                     <div className="font-bold text-[var(--title)] flex items-center text-[20px] gap-2">
                         <Activity className="text-[var(--primary)] animate-pulse" size={24} />
-                        Collected Windows
+                        Collected Captures
                     </div>
 
                     <div className="flex items-center gap-2">
                         <div className="flex items-center gap-1.5 px-2 py-1 bg-[var(--bg)] border border-[var(--border)] rounded shadow-sm">
-                            <span className="text-[12px] font-bold text-[var(--text-secondary)] uppercase">Limit:</span>
+                            <span className="text-[12px] font-bold text-[var(--text-secondary)] uppercase">Target:</span>
                             <span className="text-sm font-mono font-bold text-[var(--primary)]" title="Calculated: Batch Size × Batches">
                                 {targetCount}
                             </span>
@@ -201,7 +204,7 @@ function WindowListPanel({
                         <button
                             onClick={onDeleteAll}
                             className="p-1 hover:bg-red-500/10 text-muted hover:text-red-500 rounded transition all"
-                            title="Clear All"
+                            title="Delete Latest Unsaved"
                         >
                             <Trash2 size={20} />
                         </button>
@@ -220,7 +223,7 @@ function WindowListPanel({
                 {reversedWindows.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-40 text-muted italic opacity-50 space-y-2">
                         <ListX size={60} strokeWidth={1.5} />
-                        <span className="text-2xl">No windows collected yet</span>
+                        <span className="text-2xl">No captures collected yet</span>
                     </div>
                 ) : (
                     reversedWindows.map((win) => (
@@ -239,7 +242,7 @@ function WindowListPanel({
                             : 'bg-emerald-500 text-white hover:opacity-90 shadow-glow'
                             }`}
                     >
-                        Save Windows
+                        Save Captures
                     </button>
 
                     {autoCalibrate ? (

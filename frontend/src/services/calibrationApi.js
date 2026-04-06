@@ -134,7 +134,7 @@ export const CalibrationApi = {
      * @param {CalibrationWindow[]} windows - All collected windows with features
      * @returns {Promise<Object>} Calibration results with updated thresholds and accuracy
      */
-    async calibrateThresholds(sensorType, windows) {
+    async calibrateThresholds(sensorType, windows, sessionName = null) {
         console.log(`[CalibrationApi] Calibrating thresholds for ${sensorType} with ${windows.length} windows`);
 
         try {
@@ -150,7 +150,8 @@ export const CalibrationApi = {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     sensor: sensorType,
-                    windows: windowsPayload
+                    windows: windowsPayload,
+                    session_name: sessionName
                 })
             });
 

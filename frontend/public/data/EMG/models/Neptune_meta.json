@@ -59,7 +59,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C01F1.joblib",
-      "created_at": "2026-04-06T21:24:09.716825"
+      "created_at": "2026-04-06T21:26:43.190819"
     },
     {
       "id": "C01F2",
@@ -84,7 +84,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C01F2.joblib",
-      "created_at": "2026-04-06T21:24:09.903210"
+      "created_at": "2026-04-06T21:26:43.341514"
     },
     {
       "id": "C01F3",
@@ -109,7 +109,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C01F3.joblib",
-      "created_at": "2026-04-06T21:24:10.089611"
+      "created_at": "2026-04-06T21:26:43.493518"
     },
     {
       "id": "C01F4",
@@ -134,7 +134,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C01F4.joblib",
-      "created_at": "2026-04-06T21:24:10.278228"
+      "created_at": "2026-04-06T21:26:43.647124"
     },
     {
       "id": "C01F5",
@@ -159,7 +159,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C01F5.joblib",
-      "created_at": "2026-04-06T21:24:10.475988"
+      "created_at": "2026-04-06T21:26:43.801019"
     },
     {
       "id": "C02F1",
@@ -184,7 +184,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C02F1.joblib",
-      "created_at": "2026-04-06T21:24:10.653749"
+      "created_at": "2026-04-06T21:26:43.951787"
     },
     {
       "id": "C02F2",
@@ -209,7 +209,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C02F2.joblib",
-      "created_at": "2026-04-06T21:24:10.837827"
+      "created_at": "2026-04-06T21:26:44.101108"
     },
     {
       "id": "C02F3",
@@ -234,7 +234,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C02F3.joblib",
-      "created_at": "2026-04-06T21:24:11.030000"
+      "created_at": "2026-04-06T21:26:44.474272"
     },
     {
       "id": "C02F4",
@@ -259,7 +259,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C02F4.joblib",
-      "created_at": "2026-04-06T21:24:11.217336"
+      "created_at": "2026-04-06T21:26:44.631961"
     },
     {
       "id": "C02F5",
@@ -284,7 +284,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C02F5.joblib",
-      "created_at": "2026-04-06T21:24:11.408737"
+      "created_at": "2026-04-06T21:26:44.786041"
     },
     {
       "id": "C03F1",
@@ -309,7 +309,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C03F1.joblib",
-      "created_at": "2026-04-06T21:24:11.606007"
+      "created_at": "2026-04-06T21:26:44.934151"
     },
     {
       "id": "C03F2",
@@ -334,7 +334,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C03F2.joblib",
-      "created_at": "2026-04-06T21:24:11.796383"
+      "created_at": "2026-04-06T21:26:45.080490"
     },
     {
       "id": "C03F3",
@@ -359,7 +359,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C03F3.joblib",
-      "created_at": "2026-04-06T21:24:12.000280"
+      "created_at": "2026-04-06T21:26:45.226989"
     },
     {
       "id": "C03F4",
@@ -384,7 +384,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C03F4.joblib",
-      "created_at": "2026-04-06T21:24:12.197148"
+      "created_at": "2026-04-06T21:26:45.385181"
     },
     {
       "id": "C03F5",
@@ -409,7 +409,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C03F5.joblib",
-      "created_at": "2026-04-06T21:24:12.405768"
+      "created_at": "2026-04-06T21:26:45.535157"
     },
     {
       "id": "C04F1",
@@ -434,7 +434,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C04F1.joblib",
-      "created_at": "2026-04-06T21:24:12.614372"
+      "created_at": "2026-04-06T21:26:45.700852"
     },
     {
       "id": "C04F2",
@@ -459,7 +459,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C04F2.joblib",
-      "created_at": "2026-04-06T21:24:12.951614"
+      "created_at": "2026-04-06T21:26:45.866597"
     },
     {
       "id": "C04F3",
@@ -484,7 +484,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C04F3.joblib",
-      "created_at": "2026-04-06T21:24:13.148660"
+      "created_at": "2026-04-06T21:26:46.030666"
     },
     {
       "id": "C04F4",
@@ -509,7 +509,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C04F4.joblib",
-      "created_at": "2026-04-06T21:24:13.374561"
+      "created_at": "2026-04-06T21:26:46.197182"
     },
     {
       "id": "C04F5",
@@ -534,7 +534,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C04F5.joblib",
-      "created_at": "2026-04-06T21:24:13.552911"
+      "created_at": "2026-04-06T21:26:46.413886"
     },
     {
       "id": "C05F1",
@@ -559,7 +559,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C05F1.joblib",
-      "created_at": "2026-04-06T21:24:13.715545"
+      "created_at": "2026-04-06T21:26:46.581185"
     },
     {
       "id": "C05F2",
@@ -584,7 +584,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C05F2.joblib",
-      "created_at": "2026-04-06T21:24:13.888232"
+      "created_at": "2026-04-06T21:26:46.747484"
     },
     {
       "id": "C05F3",
@@ -609,7 +609,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C05F3.joblib",
-      "created_at": "2026-04-06T21:24:14.067539"
+      "created_at": "2026-04-06T21:26:46.918428"
     },
     {
       "id": "C05F4",
@@ -634,7 +634,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C05F4.joblib",
-      "created_at": "2026-04-06T21:24:14.235320"
+      "created_at": "2026-04-06T21:26:47.085393"
     },
     {
       "id": "C05F5",
@@ -659,7 +659,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C05F5.joblib",
-      "created_at": "2026-04-06T21:24:14.400024"
+      "created_at": "2026-04-06T21:26:47.246896"
     },
     {
       "id": "C06F1",
@@ -684,7 +684,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C06F1.joblib",
-      "created_at": "2026-04-06T21:24:14.558566"
+      "created_at": "2026-04-06T21:26:47.413206"
     },
     {
       "id": "C06F2",
@@ -709,7 +709,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C06F2.joblib",
-      "created_at": "2026-04-06T21:24:14.738820"
+      "created_at": "2026-04-06T21:26:47.610924"
     },
     {
       "id": "C06F3",
@@ -734,7 +734,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C06F3.joblib",
-      "created_at": "2026-04-06T21:24:14.956666"
+      "created_at": "2026-04-06T21:26:47.795308"
     },
     {
       "id": "C06F4",
@@ -759,7 +759,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C06F4.joblib",
-      "created_at": "2026-04-06T21:24:15.169742"
+      "created_at": "2026-04-06T21:26:47.970040"
     },
     {
       "id": "C06F5",
@@ -784,7 +784,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C06F5.joblib",
-      "created_at": "2026-04-06T21:24:15.434980"
+      "created_at": "2026-04-06T21:26:48.159981"
     },
     {
       "id": "C07F1",
@@ -809,7 +809,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C07F1.joblib",
-      "created_at": "2026-04-06T21:24:15.774208"
+      "created_at": "2026-04-06T21:26:48.405457"
     },
     {
       "id": "C07F2",
@@ -834,7 +834,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C07F2.joblib",
-      "created_at": "2026-04-06T21:24:16.089959"
+      "created_at": "2026-04-06T21:26:48.601243"
     },
     {
       "id": "C07F3",
@@ -859,7 +859,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C07F3.joblib",
-      "created_at": "2026-04-06T21:24:16.491757"
+      "created_at": "2026-04-06T21:26:48.762005"
     },
     {
       "id": "C07F4",
@@ -884,7 +884,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C07F4.joblib",
-      "created_at": "2026-04-06T21:24:16.801294"
+      "created_at": "2026-04-06T21:26:48.922408"
     },
     {
       "id": "C07F5",
@@ -909,7 +909,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C07F5.joblib",
-      "created_at": "2026-04-06T21:24:17.091774"
+      "created_at": "2026-04-06T21:26:49.081082"
     },
     {
       "id": "C08F1",
@@ -934,7 +934,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C08F1.joblib",
-      "created_at": "2026-04-06T21:24:17.374989"
+      "created_at": "2026-04-06T21:26:49.233284"
     },
     {
       "id": "C08F2",
@@ -959,7 +959,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C08F2.joblib",
-      "created_at": "2026-04-06T21:24:17.643280"
+      "created_at": "2026-04-06T21:26:49.385128"
     },
     {
       "id": "C08F3",
@@ -984,7 +984,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C08F3.joblib",
-      "created_at": "2026-04-06T21:24:17.943489"
+      "created_at": "2026-04-06T21:26:49.540050"
     },
     {
       "id": "C08F4",
@@ -1009,7 +1009,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C08F4.joblib",
-      "created_at": "2026-04-06T21:24:18.232968"
+      "created_at": "2026-04-06T21:26:49.731149"
     },
     {
       "id": "C08F5",
@@ -1034,7 +1034,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C08F5.joblib",
-      "created_at": "2026-04-06T21:24:18.495641"
+      "created_at": "2026-04-06T21:26:49.935382"
     },
     {
       "id": "C09F1",
@@ -1059,7 +1059,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C09F1.joblib",
-      "created_at": "2026-04-06T21:24:18.768969"
+      "created_at": "2026-04-06T21:26:50.122724"
     },
     {
       "id": "C09F2",
@@ -1084,7 +1084,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C09F2.joblib",
-      "created_at": "2026-04-06T21:24:19.020191"
+      "created_at": "2026-04-06T21:26:50.325566"
     },
     {
       "id": "C09F3",
@@ -1109,7 +1109,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C09F3.joblib",
-      "created_at": "2026-04-06T21:24:19.378574"
+      "created_at": "2026-04-06T21:26:50.517506"
     },
     {
       "id": "C09F4",
@@ -1134,7 +1134,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C09F4.joblib",
-      "created_at": "2026-04-06T21:24:19.663376"
+      "created_at": "2026-04-06T21:26:50.743505"
     },
     {
       "id": "C09F5",
@@ -1159,7 +1159,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C09F5.joblib",
-      "created_at": "2026-04-06T21:24:19.939786"
+      "created_at": "2026-04-06T21:26:51.000800"
     },
     {
       "id": "C0AF1",
@@ -1184,7 +1184,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C0AF1.joblib",
-      "created_at": "2026-04-06T21:24:20.451319"
+      "created_at": "2026-04-06T21:26:51.503473"
     },
     {
       "id": "C0AF2",
@@ -1209,7 +1209,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C0AF2.joblib",
-      "created_at": "2026-04-06T21:24:20.965150"
+      "created_at": "2026-04-06T21:26:51.989996"
     },
     {
       "id": "C0AF3",
@@ -1234,7 +1234,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C0AF3.joblib",
-      "created_at": "2026-04-06T21:24:21.425220"
+      "created_at": "2026-04-06T21:26:52.487857"
     },
     {
       "id": "C0AF4",
@@ -1259,7 +1259,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C0AF4.joblib",
-      "created_at": "2026-04-06T21:24:22.048543"
+      "created_at": "2026-04-06T21:26:53.019677"
     },
     {
       "id": "C0AF5",
@@ -1284,7 +1284,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C0AF5.joblib",
-      "created_at": "2026-04-06T21:24:22.718783"
+      "created_at": "2026-04-06T21:26:53.533388"
     },
     {
       "id": "C0BF1",
@@ -1309,7 +1309,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C0BF1.joblib",
-      "created_at": "2026-04-06T21:24:23.320076"
+      "created_at": "2026-04-06T21:26:54.122933"
     },
     {
       "id": "C0BF2",
@@ -1334,7 +1334,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C0BF2.joblib",
-      "created_at": "2026-04-06T21:24:23.777435"
+      "created_at": "2026-04-06T21:26:54.667057"
     },
     {
       "id": "C0BF3",
@@ -1359,7 +1359,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C0BF3.joblib",
-      "created_at": "2026-04-06T21:24:24.185702"
+      "created_at": "2026-04-06T21:26:55.158376"
     },
     {
       "id": "C0BF4",
@@ -1384,7 +1384,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C0BF4.joblib",
-      "created_at": "2026-04-06T21:24:24.585942"
+      "created_at": "2026-04-06T21:26:55.678277"
     },
     {
       "id": "C0BF5",
@@ -1409,7 +1409,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C0BF5.joblib",
-      "created_at": "2026-04-06T21:24:24.977147"
+      "created_at": "2026-04-06T21:26:56.189906"
     },
     {
       "id": "C0CF1",
@@ -1434,7 +1434,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C0CF1.joblib",
-      "created_at": "2026-04-06T21:24:25.419427"
+      "created_at": "2026-04-06T21:26:56.715647"
     },
     {
       "id": "C0CF2",
@@ -1459,7 +1459,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C0CF2.joblib",
-      "created_at": "2026-04-06T21:24:25.773529"
+      "created_at": "2026-04-06T21:26:57.796333"
     },
     {
       "id": "C0CF3",
@@ -1484,7 +1484,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C0CF3.joblib",
-      "created_at": "2026-04-06T21:24:26.145923"
+      "created_at": "2026-04-06T21:26:58.687095"
     },
     {
       "id": "C0CF4",
@@ -1509,7 +1509,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C0CF4.joblib",
-      "created_at": "2026-04-06T21:24:26.501262"
+      "created_at": "2026-04-06T21:26:59.479454"
     },
     {
       "id": "C0CF5",
@@ -1534,7 +1534,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C0CF5.joblib",
-      "created_at": "2026-04-06T21:24:26.857645"
+      "created_at": "2026-04-06T21:27:00.024689"
     },
     {
       "id": "C0DF1",
@@ -1559,7 +1559,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C0DF1.joblib",
-      "created_at": "2026-04-06T21:24:27.255057"
+      "created_at": "2026-04-06T21:27:00.845737"
     },
     {
       "id": "C0DF2",
@@ -1584,7 +1584,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C0DF2.joblib",
-      "created_at": "2026-04-06T21:24:27.658751"
+      "created_at": "2026-04-06T21:27:01.363157"
     },
     {
       "id": "C0DF3",
@@ -1609,7 +1609,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C0DF3.joblib",
-      "created_at": "2026-04-06T21:24:28.071483"
+      "created_at": "2026-04-06T21:27:01.880596"
     },
     {
       "id": "C0DF4",
@@ -1634,7 +1634,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C0DF4.joblib",
-      "created_at": "2026-04-06T21:24:28.483119"
+      "created_at": "2026-04-06T21:27:02.373052"
     },
     {
       "id": "C0DF5",
@@ -1659,7 +1659,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C0DF5.joblib",
-      "created_at": "2026-04-06T21:24:28.873879"
+      "created_at": "2026-04-06T21:27:02.865648"
     },
     {
       "id": "C0EF1",
@@ -1684,7 +1684,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C0EF1.joblib",
-      "created_at": "2026-04-06T21:24:29.271012"
+      "created_at": "2026-04-06T21:27:03.401518"
     },
     {
       "id": "C0EF2",
@@ -1709,7 +1709,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C0EF2.joblib",
-      "created_at": "2026-04-06T21:24:29.710066"
+      "created_at": "2026-04-06T21:27:03.961592"
     },
     {
       "id": "C0EF3",
@@ -1734,7 +1734,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C0EF3.joblib",
-      "created_at": "2026-04-06T21:24:30.095211"
+      "created_at": "2026-04-06T21:27:04.467656"
     },
     {
       "id": "C0EF4",
@@ -1759,7 +1759,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C0EF4.joblib",
-      "created_at": "2026-04-06T21:24:30.497014"
+      "created_at": "2026-04-06T21:27:04.963279"
     },
     {
       "id": "C0EF5",
@@ -1784,7 +1784,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C0EF5.joblib",
-      "created_at": "2026-04-06T21:24:30.891614"
+      "created_at": "2026-04-06T21:27:05.446096"
     },
     {
       "id": "C0FF1",
@@ -1809,7 +1809,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C0FF1.joblib",
-      "created_at": "2026-04-06T21:24:31.308804"
+      "created_at": "2026-04-06T21:27:05.909918"
     },
     {
       "id": "C0FF2",
@@ -1834,7 +1834,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C0FF2.joblib",
-      "created_at": "2026-04-06T21:24:31.690507"
+      "created_at": "2026-04-06T21:27:06.380137"
     },
     {
       "id": "C0FF3",
@@ -1859,7 +1859,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C0FF3.joblib",
-      "created_at": "2026-04-06T21:24:32.255130"
+      "created_at": "2026-04-06T21:27:06.901912"
     },
     {
       "id": "C0FF4",
@@ -1884,7 +1884,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C0FF4.joblib",
-      "created_at": "2026-04-06T21:24:32.689590"
+      "created_at": "2026-04-06T21:27:08.115461"
     },
     {
       "id": "C0FF5",
@@ -1909,7 +1909,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C0FF5.joblib",
-      "created_at": "2026-04-06T21:24:33.052261"
+      "created_at": "2026-04-06T21:27:09.647835"
     },
     {
       "id": "C10F1",
@@ -1934,7 +1934,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C10F1.joblib",
-      "created_at": "2026-04-06T21:24:33.430367"
+      "created_at": "2026-04-06T21:27:10.200530"
     },
     {
       "id": "C10F2",
@@ -1959,7 +1959,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C10F2.joblib",
-      "created_at": "2026-04-06T21:24:33.833575"
+      "created_at": "2026-04-06T21:27:10.734971"
     },
     {
       "id": "C10F3",
@@ -1984,7 +1984,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C10F3.joblib",
-      "created_at": "2026-04-06T21:24:34.215880"
+      "created_at": "2026-04-06T21:27:11.241816"
     },
     {
       "id": "C10F4",
@@ -2009,7 +2009,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C10F4.joblib",
-      "created_at": "2026-04-06T21:24:34.633476"
+      "created_at": "2026-04-06T21:27:11.958222"
     },
     {
       "id": "C10F5",
@@ -2034,7 +2034,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C10F5.joblib",
-      "created_at": "2026-04-06T21:24:35.016017"
+      "created_at": "2026-04-06T21:27:12.546575"
     },
     {
       "id": "C11F1",
@@ -2059,7 +2059,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C11F1.joblib",
-      "created_at": "2026-04-06T21:24:35.380257"
+      "created_at": "2026-04-06T21:27:13.035651"
     },
     {
       "id": "C11F2",
@@ -2084,7 +2084,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C11F2.joblib",
-      "created_at": "2026-04-06T21:24:35.755331"
+      "created_at": "2026-04-06T21:27:13.533948"
     },
     {
       "id": "C11F3",
@@ -2109,7 +2109,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C11F3.joblib",
-      "created_at": "2026-04-06T21:24:36.115710"
+      "created_at": "2026-04-06T21:27:14.020513"
     },
     {
       "id": "C11F4",
@@ -2134,7 +2134,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C11F4.joblib",
-      "created_at": "2026-04-06T21:24:36.489827"
+      "created_at": "2026-04-06T21:27:14.528928"
     },
     {
       "id": "C11F5",
@@ -2159,7 +2159,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C11F5.joblib",
-      "created_at": "2026-04-06T21:24:36.860816"
+      "created_at": "2026-04-06T21:27:15.057350"
     },
     {
       "id": "C12F1",
@@ -2184,7 +2184,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C12F1.joblib",
-      "created_at": "2026-04-06T21:24:37.223647"
+      "created_at": "2026-04-06T21:27:15.553224"
     },
     {
       "id": "C12F2",
@@ -2209,7 +2209,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C12F2.joblib",
-      "created_at": "2026-04-06T21:24:37.580399"
+      "created_at": "2026-04-06T21:27:16.051764"
     },
     {
       "id": "C12F3",
@@ -2234,7 +2234,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C12F3.joblib",
-      "created_at": "2026-04-06T21:24:37.930200"
+      "created_at": "2026-04-06T21:27:16.548771"
     },
     {
       "id": "C12F4",
@@ -2259,7 +2259,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C12F4.joblib",
-      "created_at": "2026-04-06T21:24:38.285096"
+      "created_at": "2026-04-06T21:27:17.085865"
     },
     {
       "id": "C12F5",
@@ -2284,7 +2284,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C12F5.joblib",
-      "created_at": "2026-04-06T21:24:38.656697"
+      "created_at": "2026-04-06T21:27:17.615682"
     },
     {
       "id": "C13F1",
@@ -2309,7 +2309,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C13F1.joblib",
-      "created_at": "2026-04-06T21:24:39.213663"
+      "created_at": "2026-04-06T21:27:18.333099"
     },
     {
       "id": "C13F2",
@@ -2334,7 +2334,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C13F2.joblib",
-      "created_at": "2026-04-06T21:24:39.740478"
+      "created_at": "2026-04-06T21:27:19.065813"
     },
     {
       "id": "C13F3",
@@ -2359,7 +2359,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C13F3.joblib",
-      "created_at": "2026-04-06T21:24:40.280257"
+      "created_at": "2026-04-06T21:27:19.791573"
     },
     {
       "id": "C13F4",
@@ -2384,7 +2384,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C13F4.joblib",
-      "created_at": "2026-04-06T21:24:40.840207"
+      "created_at": "2026-04-06T21:27:20.686119"
     },
     {
       "id": "C13F5",
@@ -2409,7 +2409,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C13F5.joblib",
-      "created_at": "2026-04-06T21:24:41.395135"
+      "created_at": "2026-04-06T21:27:21.569045"
     },
     {
       "id": "C14F1",
@@ -2434,7 +2434,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C14F1.joblib",
-      "created_at": "2026-04-06T21:24:41.980263"
+      "created_at": "2026-04-06T21:27:22.296705"
     },
     {
       "id": "C14F2",
@@ -2459,7 +2459,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C14F2.joblib",
-      "created_at": "2026-04-06T21:24:42.534139"
+      "created_at": "2026-04-06T21:27:22.990100"
     },
     {
       "id": "C14F3",
@@ -2484,7 +2484,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C14F3.joblib",
-      "created_at": "2026-04-06T21:24:43.124625"
+      "created_at": "2026-04-06T21:27:23.618119"
     },
     {
       "id": "C14F4",
@@ -2509,7 +2509,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C14F4.joblib",
-      "created_at": "2026-04-06T21:24:43.665864"
+      "created_at": "2026-04-06T21:27:24.256942"
     },
     {
       "id": "C14F5",
@@ -2534,7 +2534,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C14F5.joblib",
-      "created_at": "2026-04-06T21:24:44.238005"
+      "created_at": "2026-04-06T21:27:24.918358"
     },
     {
       "id": "C15F1",
@@ -2559,7 +2559,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C15F1.joblib",
-      "created_at": "2026-04-06T21:24:44.812173"
+      "created_at": "2026-04-06T21:27:25.566385"
     },
     {
       "id": "C15F2",
@@ -2584,7 +2584,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C15F2.joblib",
-      "created_at": "2026-04-06T21:24:45.335685"
+      "created_at": "2026-04-06T21:27:26.201303"
     },
     {
       "id": "C15F3",
@@ -2609,7 +2609,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C15F3.joblib",
-      "created_at": "2026-04-06T21:24:45.980441"
+      "created_at": "2026-04-06T21:27:26.811599"
     },
     {
       "id": "C15F4",
@@ -2634,7 +2634,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C15F4.joblib",
-      "created_at": "2026-04-06T21:24:46.617962"
+      "created_at": "2026-04-06T21:27:27.471992"
     },
     {
       "id": "C15F5",
@@ -2659,7 +2659,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C15F5.joblib",
-      "created_at": "2026-04-06T21:24:47.185800"
+      "created_at": "2026-04-06T21:27:28.055226"
     },
     {
       "id": "C16F1",
@@ -2684,7 +2684,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C16F1.joblib",
-      "created_at": "2026-04-06T21:24:47.824342"
+      "created_at": "2026-04-06T21:27:28.734106"
     },
     {
       "id": "C16F2",
@@ -2709,7 +2709,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C16F2.joblib",
-      "created_at": "2026-04-06T21:24:48.640443"
+      "created_at": "2026-04-06T21:27:29.412026"
     },
     {
       "id": "C16F3",
@@ -2734,7 +2734,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C16F3.joblib",
-      "created_at": "2026-04-06T21:24:49.280236"
+      "created_at": "2026-04-06T21:27:30.063320"
     },
     {
       "id": "C16F4",
@@ -2759,7 +2759,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C16F4.joblib",
-      "created_at": "2026-04-06T21:24:49.906037"
+      "created_at": "2026-04-06T21:27:30.716502"
     },
     {
       "id": "C16F5",
@@ -2784,7 +2784,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C16F5.joblib",
-      "created_at": "2026-04-06T21:24:50.533351"
+      "created_at": "2026-04-06T21:27:31.393362"
     },
     {
       "id": "C17F1",
@@ -2809,7 +2809,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C17F1.joblib",
-      "created_at": "2026-04-06T21:24:51.133010"
+      "created_at": "2026-04-06T21:27:32.036624"
     },
     {
       "id": "C17F2",
@@ -2834,7 +2834,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C17F2.joblib",
-      "created_at": "2026-04-06T21:24:51.700967"
+      "created_at": "2026-04-06T21:27:32.670772"
     },
     {
       "id": "C17F3",
@@ -2859,7 +2859,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C17F3.joblib",
-      "created_at": "2026-04-06T21:24:52.284635"
+      "created_at": "2026-04-06T21:27:33.334604"
     },
     {
       "id": "C17F4",
@@ -2884,7 +2884,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C17F4.joblib",
-      "created_at": "2026-04-06T21:24:52.917777"
+      "created_at": "2026-04-06T21:27:34.095214"
     },
     {
       "id": "C17F5",
@@ -2909,7 +2909,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C17F5.joblib",
-      "created_at": "2026-04-06T21:24:53.567026"
+      "created_at": "2026-04-06T21:27:34.819660"
     },
     {
       "id": "C18F1",
@@ -2934,7 +2934,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C18F1.joblib",
-      "created_at": "2026-04-06T21:24:54.159027"
+      "created_at": "2026-04-06T21:27:35.867474"
     },
     {
       "id": "C18F2",
@@ -2959,7 +2959,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C18F2.joblib",
-      "created_at": "2026-04-06T21:24:54.857507"
+      "created_at": "2026-04-06T21:27:36.712232"
     },
     {
       "id": "C18F3",
@@ -2984,7 +2984,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C18F3.joblib",
-      "created_at": "2026-04-06T21:24:55.443728"
+      "created_at": "2026-04-06T21:27:38.263340"
     },
     {
       "id": "C18F4",
@@ -3009,7 +3009,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C18F4.joblib",
-      "created_at": "2026-04-06T21:24:56.045233"
+      "created_at": "2026-04-06T21:27:42.052812"
     },
     {
       "id": "C18F5",
@@ -3034,7 +3034,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C18F5.joblib",
-      "created_at": "2026-04-06T21:24:56.661846"
+      "created_at": "2026-04-06T21:27:43.468568"
     },
     {
       "id": "C19F1",
@@ -3059,7 +3059,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C19F1.joblib",
-      "created_at": "2026-04-06T21:24:57.375159"
+      "created_at": "2026-04-06T21:27:44.684188"
     },
     {
       "id": "C19F2",
@@ -3084,7 +3084,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C19F2.joblib",
-      "created_at": "2026-04-06T21:24:58.009275"
+      "created_at": "2026-04-06T21:27:45.840761"
     },
     {
       "id": "C19F3",
@@ -3109,7 +3109,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C19F3.joblib",
-      "created_at": "2026-04-06T21:24:58.698290"
+      "created_at": "2026-04-06T21:27:46.936067"
     },
     {
       "id": "C19F4",
@@ -3134,7 +3134,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C19F4.joblib",
-      "created_at": "2026-04-06T21:24:59.334969"
+      "created_at": "2026-04-06T21:27:47.919594"
     },
     {
       "id": "C19F5",
@@ -3159,7 +3159,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C19F5.joblib",
-      "created_at": "2026-04-06T21:24:59.948715"
+      "created_at": "2026-04-06T21:27:48.915984"
     },
     {
       "id": "C1AF1",
@@ -3184,7 +3184,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C1AF1.joblib",
-      "created_at": "2026-04-06T21:25:00.554850"
+      "created_at": "2026-04-06T21:27:50.525789"
     },
     {
       "id": "C1AF2",
@@ -3209,7 +3209,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C1AF2.joblib",
-      "created_at": "2026-04-06T21:25:01.126033"
+      "created_at": "2026-04-06T21:27:51.497347"
     },
     {
       "id": "C1AF3",
@@ -3234,7 +3234,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C1AF3.joblib",
-      "created_at": "2026-04-06T21:25:01.755018"
+      "created_at": "2026-04-06T21:27:52.297059"
     },
     {
       "id": "C1AF4",
@@ -3259,7 +3259,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C1AF4.joblib",
-      "created_at": "2026-04-06T21:25:02.371568"
+      "created_at": "2026-04-06T21:27:53.077694"
     },
     {
       "id": "C1AF5",
@@ -3284,7 +3284,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C1AF5.joblib",
-      "created_at": "2026-04-06T21:25:03.023201"
+      "created_at": "2026-04-06T21:27:53.860277"
     },
     {
       "id": "C1BF1",
@@ -3309,7 +3309,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C1BF1.joblib",
-      "created_at": "2026-04-06T21:25:03.660001"
+      "created_at": "2026-04-06T21:27:54.596968"
     },
     {
       "id": "C1BF2",
@@ -3334,7 +3334,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C1BF2.joblib",
-      "created_at": "2026-04-06T21:25:04.287777"
+      "created_at": "2026-04-06T21:27:55.357197"
     },
     {
       "id": "C1BF3",
@@ -3359,7 +3359,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C1BF3.joblib",
-      "created_at": "2026-04-06T21:25:05.018628"
+      "created_at": "2026-04-06T21:27:56.119187"
     },
     {
       "id": "C1BF4",
@@ -3384,7 +3384,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C1BF4.joblib",
-      "created_at": "2026-04-06T21:25:05.606150"
+      "created_at": "2026-04-06T21:27:56.951258"
     },
     {
       "id": "C1BF5",
@@ -3409,7 +3409,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C1BF5.joblib",
-      "created_at": "2026-04-06T21:25:06.254987"
+      "created_at": "2026-04-06T21:27:57.746431"
     }
   ],
   "hyperparameters": {
@@ -4088,6 +4088,6 @@
     ]
   },
   "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\EMG\\models\\Neptune.joblib",
-  "created_at": "2026-04-06T21:25:06.330382",
+  "created_at": "2026-04-06T21:27:57.837442",
   "table_name": "emg_session_Lucifer"
 }
