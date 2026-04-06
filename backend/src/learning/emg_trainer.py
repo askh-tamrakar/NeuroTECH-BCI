@@ -1,8 +1,6 @@
-from __future__ import annotations
-
 import json
 import os
-import time
+from itertools import product
 from datetime import datetime
 from pathlib import Path
 
@@ -11,582 +9,686 @@ import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, confusion_matrix
+from sklearn.model_selection import GroupKFold, train_test_split
 from sklearn.preprocessing import StandardScaler
 
 from src.database.db_manager import db_manager
 from src.feature.extractors.rps_extractor import EMG_FEATURE_COLUMNS
-from src.learning.data_splitter import build_train_val_test_split, iter_cv_folds, load_sensor_dataset, split_summary
 from src.learning.tree_utils import tree_to_json
 from src.utils.paths import get_base_data_dir
 
-
 LABELS_MAP = {
-    "EMG": [0, 1, 2, 3],
-    "EOG": [0, 1, 2],
-    "EEG": [0, 1, 2, 3, 4, 5, 6],
+    'EMG': [0, 1, 2, 3],
+    'EOG': [0, 1, 2],
+    'EEG': [0, 1, 2, 3, 4, 5, 6],
 }
 
 DISPLAY_LABELS = {
-    "EMG": {0: "Rest", 1: "Rock", 2: "Paper", 3: "Scissors"},
-    "EOG": {0: "Rest", 1: "SingleBlink", 2: "DoubleBlink"},
-    "EEG": {0: "Rest", 1: "Target 1", 2: "Target 2", 3: "Target 3", 4: "Target 4", 5: "Target 5", 6: "Target 6"},
+    'EMG': {0: 'Rest', 1: 'Rock', 2: 'Paper', 3: 'Scissors'},
+    'EOG': {0: 'Rest', 1: 'SingleBlink', 2: 'DoubleBlink'},
+    'EEG': {0: 'Rest', 1: 'T1', 2: 'T2', 3: 'T3', 4: 'T4', 5: 'T5', 6: 'T6'},
 }
 
 MODELS_ROOT = get_base_data_dir()
-REJECTED_MODELS_ROOT = Path(__file__).resolve().parents[3] / "rejected_models"
-
-ACTIVE_MODELS = {"EMG": None, "EOG": None, "EEG": None}
-ACTIVE_SCALERS = {"EMG": None, "EOG": None, "EEG": None}
-ACTIVE_MODEL_NAMES = {"EMG": None, "EOG": None, "EEG": None}
-
-LEGACY_EMG_FEATURE_COLUMNS = [
-    "rms", "mav", "var", "wl", "peak", "range", "iemg", "entropy", "energy", "kurtosis", "skewness", "ssc", "wamp"
-]
+REJECTED_MODELS_ROOT = MODELS_ROOT / "rejected_models"
+ACTIVE_MODELS = {'EMG': None, 'EOG': None, 'EEG': None}
+ACTIVE_SCALERS = {'EMG': None, 'EOG': None, 'EEG': None}
+ACTIVE_MODEL_NAMES = {'EMG': None, 'EOG': None, 'EEG': None}
 
 
 def get_feature_cols(sensor):
     sensor = sensor.upper()
-    if sensor == "EMG":
+    if sensor == 'EMG':
         return list(EMG_FEATURE_COLUMNS)
-    if sensor == "EOG":
-        return ["amplitude", "duration_ms", "rise_time_ms", "fall_time_ms", "asymmetry", "peak_count", "kurtosis", "skewness"]
-    if sensor == "EEG":
-        return [
-            "score_1", "score_2", "score_3", "score_4", "score_5", "score_6",
-            "max_score", "second_max_score", "score_ratio", "score_mean", "score_std", "peak_freq",
-        ]
+    if sensor == 'EOG':
+        return ['amplitude', 'duration_ms', 'rise_time_ms', 'fall_time_ms', 'asymmetry', 'peak_count', 'kurtosis', 'skewness']
+    if sensor == 'EEG':
+        return ['score_1', 'score_2', 'score_3', 'score_4', 'score_5', 'score_6', 'max_score', 'second_max_score', 'score_ratio', 'score_mean', 'score_std', 'dominant_freq', 'peak_freq']
     return []
 
 
-def resolve_feature_cols(sensor, model=None, scaler=None):
-    sensor = sensor.upper()
-    feature_cols = get_feature_cols(sensor)
-    if sensor == "EMG":
-        expected = getattr(scaler, "n_features_in_", None)
-        if expected is None and model is not None:
-            expected = getattr(model, "n_features_in_", None)
-        if expected == len(LEGACY_EMG_FEATURE_COLUMNS):
-            return LEGACY_EMG_FEATURE_COLUMNS
-    return feature_cols
+def get_group_column(sensor):
+    return 'serial_id' if sensor.upper() == 'EOG' else 'trial'
 
 
-def get_model_paths(sensor, model_name):
-    clean_name = "".join([c for c in model_name if c.isalnum() or c in ("_", "-")])
+def get_model_paths(sensor, model_id):
     sensor_dir = MODELS_ROOT / sensor.upper() / "models"
     sensor_dir.mkdir(parents=True, exist_ok=True)
-    base = sensor_dir / clean_name
+    base = sensor_dir / model_id
     return {
         "model": base.with_suffix(".joblib"),
-        "scaler": sensor_dir / f"{clean_name}_scaler.joblib",
-        "meta": sensor_dir / f"{clean_name}_meta.json",
+        "scaler": sensor_dir / f"{model_id}_scaler.joblib",
+        "meta": sensor_dir / f"{model_id}_meta.json",
     }
 
 
-def get_rejected_models_root(sensor: str) -> Path:
-    root = REJECTED_MODELS_ROOT / sensor.upper()
-    root.mkdir(parents=True, exist_ok=True)
-    return root
+def get_rejected_model_paths(sensor, model_id):
+    rejected_dir = REJECTED_MODELS_ROOT / sensor.upper()
+    rejected_dir.mkdir(parents=True, exist_ok=True)
+    base = rejected_dir / model_id
+    return {
+        "model": base.with_suffix(".joblib"),
+        "scaler": rejected_dir / f"{model_id}_scaler.joblib",
+        "meta": rejected_dir / f"{model_id}_meta.json",
+    }
 
 
-def create_training_run_dir(sensor: str, model_name: str) -> Path:
-    clean_name = "".join([c for c in model_name if c.isalnum() or c in ("_", "-")]) or sensor.lower()
-    run_dir = get_rejected_models_root(sensor) / f"{clean_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-    run_dir.mkdir(parents=True, exist_ok=True)
-    return run_dir
+def _candidate_prefix(candidate_index: int) -> str:
+    visible_candidate = max(1, int(candidate_index) + 1)
+    return chr(ord('C') + (visible_candidate // 256))
 
 
-def save_candidate_snapshot(run_dir: Path, model_id: str, payload: dict) -> str:
-    path = run_dir / f"{model_id}.joblib"
-    joblib.dump(payload, path)
-    return str(path)
+def generate_model_id(candidate_index: int, fold_index: int) -> str:
+    visible_candidate = max(1, int(candidate_index) + 1)
+    return f"{_candidate_prefix(candidate_index)}{visible_candidate % 256:02X}F{int(fold_index):X}"
 
 
-def _collect_emg_session_profile(df):
+def _normalize_label(sensor: str, value):
+    sensor = sensor.upper()
+    if sensor != 'EEG':
+        try:
+            return int(value)
+        except Exception:
+            return 0
+    raw = str(value).strip().lower()
+    mapping = {
+        'rest': 0, '0': 0,
+        't1': 1, 'target 1': 1, 'concentration': 1, '1': 1,
+        't2': 2, 'target 2': 2, 'relaxation': 2, '2': 2,
+        't3': 3, 'target 3': 3, '3': 3,
+        't4': 4, 'target 4': 4, '4': 4,
+        't5': 5, 'target 5': 5, '5': 5,
+        't6': 6, 'target 6': 6, '6': 6,
+    }
+    return mapping.get(raw, 0)
+
+
+def _safe_float(value, default=0.0):
+    try:
+        return float(value)
+    except Exception:
+        return float(default)
+
+
+def _load_table(sensor: str, table_name: str):
+    conn = db_manager.connect(sensor)
+    try:
+        return pd.read_sql_query(f"SELECT * FROM {table_name}", conn)
+    finally:
+        conn.close()
+
+
+def _resolve_split_configuration(train_split, val_split, test_split, n_folds):
+    test_ratio = min(max(_safe_float(test_split, 0.15), 0.0), 0.5)
+    remaining = max(0.01, 1.0 - test_ratio)
+    requested_folds = int(max(2, min(15, int(n_folds or 2))))
+
+    val_ratio = remaining / requested_folds
+    train_ratio = remaining - val_ratio
+
+    return {
+        "requested": {
+            "train_ratio": _safe_float(train_split, 0.7),
+            "val_ratio": _safe_float(val_split, 0.15),
+            "test_ratio": _safe_float(test_split, 0.15),
+            "k_folds": int(n_folds or 2),
+        },
+        "resolved": {
+            "train_ratio": round(train_ratio, 6),
+            "val_ratio": round(val_ratio, 6),
+            "test_ratio": round(test_ratio, 6),
+            "k_folds": requested_folds,
+        },
+    }
+
+
+def _extract_session_names(df: pd.DataFrame, table_name: str):
+    session_names = set()
+    if 'metadata_json' in df.columns:
+        for raw in df['metadata_json'].fillna(''):
+            if not raw:
+                continue
+            try:
+                parsed = json.loads(raw)
+            except Exception:
+                continue
+            session_name = parsed.get('session_name') or parsed.get('sessionName')
+            if session_name:
+                session_names.add(str(session_name))
+    if table_name and table_name != 'ALL':
+        session_names.add(str(table_name))
+    return sorted(session_names)
+
+
+def _prepare_dataframe(sensor: str, table_name: str):
+    df = _load_table(sensor, table_name)
     if df.empty:
-        return {}
-
-    def normalized_values(primary_column, default_value, fallback_column=None):
-        if primary_column not in df.columns and (not fallback_column or fallback_column not in df.columns):
-            return [default_value]
-        if fallback_column and fallback_column in df.columns:
-            base = pd.to_numeric(df[fallback_column], errors="coerce")
-        else:
-            base = pd.Series([default_value] * len(df))
-        if primary_column in df.columns:
-            series = pd.to_numeric(df[primary_column], errors="coerce")
-            series = series.where(series > 0, base)
-        else:
-            series = base
-        series = series.fillna(default_value).replace(0, default_value)
-        values = sorted({round(float(v), 4) for v in series.tolist()})
-        return values or [default_value]
-
-    return {
-        "window_ms": normalized_values("session_window_ms", 300.0, fallback_column="window_ms"),
-        "sampling_rate": normalized_values("sampling_rate", 1000.0),
-        "stride_ms": normalized_values("session_stride_ms", 300.0),
-    }
-
-
-def _validate_emg_session_profile(df, table_name):
-    profile = _collect_emg_session_profile(df)
-    mixed_fields = {key: values for key, values in profile.items() if len(values) > 1}
-    if mixed_fields:
-        return {"error": f"EMG table {table_name} mixes collection configs. Found {mixed_fields}."}
-    return profile
-
-
-def _filter_emg_training_rows(df, table_name):
-    if df.empty or table_name != "emg_windows":
         return df
-    filtered = df.copy()
-    if "sample_count" in filtered.columns:
-        filtered = filtered.loc[pd.to_numeric(filtered["sample_count"], errors="coerce").fillna(0) > 0]
-    if "session_window_ms" in filtered.columns:
-        filtered = filtered.loc[pd.to_numeric(filtered["session_window_ms"], errors="coerce").fillna(0) > 0]
-    return filtered
+
+    feature_cols = get_feature_cols(sensor)
+    for column in feature_cols:
+        if column not in df.columns:
+            df[column] = 0.0
+    df['label'] = df['label'].apply(lambda value: _normalize_label(sensor, value))
+
+    group_col = get_group_column(sensor)
+    if group_col not in df.columns:
+        fallback_prefix = 'SER' if group_col == 'serial_id' else 'TR'
+        df[group_col] = [f"{fallback_prefix}_{index:06d}" for index in range(len(df))]
+    else:
+        df[group_col] = df[group_col].fillna('')
+        missing_mask = df[group_col].astype(str).str.strip() == ''
+        if missing_mask.any():
+            fallback_prefix = 'SER' if group_col == 'serial_id' else 'TR'
+            fallback_values = [f"{fallback_prefix}_{index:06d}" for index in df.index]
+            df.loc[missing_mask, group_col] = np.array(fallback_values, dtype=object)[missing_mask.to_numpy()]
+
+    return df
 
 
-def _candidate_values(min_value, max_value, exact_value, caster, search_resolution=3):
+def _split_train_and_test(df: pd.DataFrame, group_col: str, test_ratio: float):
+    groups = df[group_col].astype(str)
+    unique_groups = groups.unique()
+    if len(unique_groups) < 3:
+        indices = np.arange(len(df))
+        train_idx, test_idx = train_test_split(indices, test_size=test_ratio, random_state=42, stratify=df['label'] if df['label'].nunique() > 1 else None)
+        return df.iloc[train_idx].copy(), df.iloc[test_idx].copy()
+
+    train_groups, test_groups = train_test_split(unique_groups, test_size=test_ratio, random_state=42)
+    train_df = df[groups.isin(train_groups)].copy()
+    test_df = df[groups.isin(test_groups)].copy()
+    if train_df.empty or test_df.empty:
+        indices = np.arange(len(df))
+        train_idx, test_idx = train_test_split(indices, test_size=test_ratio, random_state=42, stratify=df['label'] if df['label'].nunique() > 1 else None)
+        return df.iloc[train_idx].copy(), df.iloc[test_idx].copy()
+    return train_df, test_df
+
+
+def _build_folds(train_df: pd.DataFrame, group_col: str, resolved_folds: int):
+    groups = train_df[group_col].astype(str)
+    unique_groups = groups.unique()
+    if len(unique_groups) >= resolved_folds:
+        splitter = GroupKFold(n_splits=resolved_folds)
+        return list(splitter.split(train_df, train_df['label'], groups))
+
+    train_ratio = (resolved_folds - 1) / resolved_folds
+    val_ratio = 1 / resolved_folds
+    if len(unique_groups) >= 2:
+        train_groups, val_groups = train_test_split(unique_groups, test_size=val_ratio / max(train_ratio + val_ratio, 1e-9), random_state=42)
+        train_idx = np.flatnonzero(groups.isin(train_groups).to_numpy())
+        val_idx = np.flatnonzero(groups.isin(val_groups).to_numpy())
+    else:
+        row_indices = np.arange(len(train_df))
+        train_idx, val_idx = train_test_split(row_indices, test_size=val_ratio / max(train_ratio + val_ratio, 1e-9), random_state=42)
+    return [(train_idx, val_idx)]
+
+
+def _hyperparameters_for_response(sensor: str, params: dict, resolved_split: dict):
+    selected = dict(params)
+    selected.update(resolved_split)
+    return {
+        "sensor": sensor,
+        "selected_hyperparameters": selected,
+        **resolved_split,
+        "random_state": 42,
+    }
+
+
+def _resolution_count(params: dict) -> int:
+    try:
+        return max(1, int(params.get("search_resolution", 1) or 1))
+    except Exception:
+        return 1
+
+
+def _coalesce_param(params: dict, *keys, default=None):
+    for key in keys:
+        value = params.get(key)
+        if value is not None:
+            return value
+    return default
+
+
+def _candidate_values(min_value, max_value, resolution: int, value_type: str):
     if min_value is None and max_value is None:
-        return [caster(exact_value)]
-    lo = caster(min_value if min_value is not None else exact_value)
-    hi = caster(max_value if max_value is not None else exact_value)
-    if hi < lo:
-        lo, hi = hi, lo
-    if lo == hi:
-        return [lo]
-    
-    # Ensure at least 2 steps (min and max)
-    steps = max(2, int(search_resolution))
-    step_size = (hi - lo) / (steps - 1)
-    
-    values = set()
-    for i in range(steps):
-        val = lo + (step_size * i)
-        if caster is int:
-            values.add(int(round(val)))
+        return [None] if value_type == "optional_int" else [0.0]
+    if max_value is None:
+        max_value = min_value
+    if min_value is None:
+        min_value = max_value
+    if resolution <= 1 or float(min_value) == float(max_value):
+        raw_values = [min_value]
+    else:
+        raw_values = np.linspace(float(min_value), float(max_value), num=resolution).tolist()
+
+    values = []
+    for raw in raw_values:
+        if value_type == "int":
+            casted = int(round(float(raw)))
+        elif value_type == "optional_int":
+            casted = None if raw is None else int(round(float(raw)))
         else:
-            values.add(round(float(val), 6))
-            
-    return sorted(list(values))
+            casted = float(raw)
+        if casted not in values:
+            values.append(casted)
+    return values
 
 
-def _compute_bias_variance(train_accuracy, validation_accuracy, fold_accuracies):
-    fold_accuracies = [float(score) for score in fold_accuracies]
-    fold_std = float(np.std(fold_accuracies)) if fold_accuracies else 0.0
-    train_val_gap = float(train_accuracy - validation_accuracy)
-    bias_indicator = "balanced"
-    variance_indicator = "balanced"
-    if train_accuracy < 0.75 and validation_accuracy < 0.75:
-        bias_indicator = "high"
-    elif train_accuracy < 0.85 and validation_accuracy < 0.85:
-        bias_indicator = "moderate"
-    if train_val_gap > 0.1 or fold_std > 0.08:
-        variance_indicator = "high"
-    elif train_val_gap > 0.05 or fold_std > 0.04:
-        variance_indicator = "moderate"
-    return {
-        "average_accuracy": float(np.mean(fold_accuracies)) if fold_accuracies else float(validation_accuracy),
-        "mean_accuracy": float(np.mean(fold_accuracies)) if fold_accuracies else float(validation_accuracy),
-        "fold_std": fold_std,
-        "fold_min": float(np.min(fold_accuracies)) if fold_accuracies else float(validation_accuracy),
-        "fold_max": float(np.max(fold_accuracies)) if fold_accuracies else float(validation_accuracy),
-        "train_val_gap": train_val_gap,
-        "bias_indicator": bias_indicator,
-        "variance_indicator": variance_indicator,
-    }
-
-
-def _fit_rf(train_df, feature_cols, n_estimators, max_depth, min_impurity_decrease, criterion="gini", max_features="sqrt", label_col="class_label"):
-    scaler = StandardScaler()
-    X_train = train_df[feature_cols].fillna(0.0)
-    y_train = train_df[label_col].astype(int)
-    X_train_scaled = scaler.fit_transform(X_train)
-    model = RandomForestClassifier(
-        n_estimators=int(n_estimators),
-        max_depth=int(max_depth) if max_depth is not None else None,
-        min_impurity_decrease=float(min_impurity_decrease),
-        criterion=criterion,
-        max_features=None if max_features in ("None", "none", None) else max_features,
-        random_state=42,
+def _rf_candidate_grid(params: dict):
+    resolution = _resolution_count(params)
+    n_estimators_values = _candidate_values(
+        _coalesce_param(params, "n_estimators_min", "n_estimators", default=100),
+        _coalesce_param(params, "n_estimators_max", "n_estimators", default=100),
+        resolution,
+        "int",
     )
-    model.fit(X_train_scaled, y_train)
-    return model, scaler
+    max_depth_values = _candidate_values(
+        _coalesce_param(params, "max_depth_min", "max_depth", default=10),
+        _coalesce_param(params, "max_depth_max", "max_depth", default=10),
+        resolution,
+        "optional_int",
+    )
+    impurity_values = _candidate_values(
+        _coalesce_param(params, "min_impurity_decrease_min", "min_impurity_decrease", default=0.0),
+        _coalesce_param(params, "min_impurity_decrease_max", "min_impurity_decrease", default=0.0),
+        resolution,
+        "float",
+    )
+    candidates = []
+    for n_estimators, max_depth, min_impurity_decrease in product(n_estimators_values, max_depth_values, impurity_values):
+        candidates.append({
+            "n_estimators": int(n_estimators),
+            "max_depth": max_depth,
+            "min_impurity_decrease": float(min_impurity_decrease),
+            "search_resolution": resolution,
+        })
+    return candidates
 
 
-def _score_rf(model, scaler, df, feature_cols, sensor, label_col="class_label"):
-    X = df[feature_cols].fillna(0.0)
-    y = df[label_col].astype(int)
-    X_scaled = scaler.transform(X)
-    y_pred = model.predict(X_scaled)
-    labels = LABELS_MAP[sensor]
+def _artifact_path_for_ui(path: Path):
+    try:
+        return str(path.resolve())
+    except Exception:
+        return str(path)
+
+
+def _training_history_item(candidate_index: int, fold_index: int, model_id: str, artifact_paths: dict, hyperparameters: dict,
+                           train_accuracy: float, validation_accuracy: float, n_train_samples: int, n_validation_samples: int):
     return {
-        "accuracy": float(accuracy_score(y, y_pred)),
-        "confusion_matrix": confusion_matrix(y, y_pred, labels=labels).tolist(),
-        "n_samples": int(len(df)),
+        "id": model_id,
+        "model_id": model_id,
+        "candidate_index": candidate_index,
+        "candidate_idx": candidate_index,
+        "fold_index": fold_index,
+        "fold_idx": fold_index,
+        "train_accuracy": train_accuracy,
+        "validation_accuracy": validation_accuracy,
+        "accuracy": validation_accuracy,
+        "n_train_samples": n_train_samples,
+        "n_validation_samples": n_validation_samples,
+        "hyperparameters": hyperparameters,
+        "artifact_path": _artifact_path_for_ui(artifact_paths["model"]),
+        "created_at": datetime.now().isoformat(),
     }
 
 
-def _emit_progress(progress_callback, **payload):
+def _save_json(path: Path, payload: dict):
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
+def _build_result_payload(sensor: str, model_name: str, metadata: dict, evaluation_table: str | None = None, live_metrics: dict | None = None):
+    payload = {
+        "status": "success",
+        "sensor": sensor,
+        "model_name": model_name,
+        "model_id": metadata.get("model_id", model_name),
+        "best_fold_id": metadata.get("best_fold_id"),
+        "candidate_index": metadata.get("candidate_index"),
+        "fold_index": metadata.get("fold_index"),
+        "classifier": metadata.get("classifier"),
+        "session_name": metadata.get("session_name"),
+        "session_names": metadata.get("session_names", []),
+        "n_samples": metadata.get("n_samples"),
+        "train_accuracy": metadata.get("train_accuracy"),
+        "validation_accuracy": metadata.get("validation_accuracy"),
+        "test_accuracy": metadata.get("test_accuracy", metadata.get("accuracy")),
+        "accuracy": metadata.get("test_accuracy", metadata.get("accuracy")),
+        "mean_accuracy": metadata.get("mean_accuracy"),
+        "cv_mean": metadata.get("mean_accuracy"),
+        "fold_std": metadata.get("fold_std"),
+        "cv_std": metadata.get("fold_std"),
+        "fold_min": metadata.get("fold_min"),
+        "cv_min": metadata.get("fold_min"),
+        "split_summary": metadata.get("split_summary", {}),
+        "train_ratio": metadata.get("train_ratio"),
+        "val_ratio": metadata.get("val_ratio"),
+        "test_ratio": metadata.get("test_ratio"),
+        "k_folds": metadata.get("k_folds"),
+        "resolved_split": metadata.get("resolved_split", {}),
+        "training_history": metadata.get("training_history", []),
+        "hyperparameters": metadata.get("hyperparameters", {}),
+        "group_counts": metadata.get("group_counts", {}),
+        "confusion_matrix": metadata.get("confusion_matrix", []),
+        "labels": metadata.get("labels", []),
+        "feature_importances": metadata.get("feature_importances", {}),
+        "feature_order": metadata.get("feature_order", []),
+        "tree_structure": metadata.get("tree_structure"),
+        "visualization": metadata.get("visualization"),
+        "artifact_path": metadata.get("artifact_path"),
+        "created_at": metadata.get("created_at"),
+    }
+    if evaluation_table:
+        payload["evaluation_table"] = evaluation_table
+    if live_metrics:
+        payload.update(live_metrics)
+    return payload
+
+
+def _fit_random_forest(sensor: str, train_df: pd.DataFrame, test_df: pd.DataFrame, feature_cols: list[str], params: dict, table_name: str, model_name: str, progress_callback=None):
+    split_cfg = _resolve_split_configuration(params.get('train_split', 0.7), params.get('val_split', 0.15), params.get('test_split', 0.15), params.get('n_folds', 2))
+    resolved_split = split_cfg["resolved"]
+    candidates = _rf_candidate_grid(params)
+    group_col = get_group_column(sensor)
+    folds = _build_folds(train_df, group_col, resolved_split["k_folds"])
+    history = []
+    best = None
+    total_folds = max(1, len(folds))
+    total_candidates = max(1, len(candidates))
+    total_runs = max(1, total_candidates * total_folds)
+    completed_runs = 0
+
     if progress_callback:
-        progress_callback(payload)
+        progress_callback({
+            "status": "running",
+            "progress": 0.0,
+            "candidate_index": 0,
+            "total_candidates": total_candidates,
+            "fold_index": 0,
+            "total_folds": total_folds,
+            "history": [],
+        })
 
+    for candidate_index, candidate_params in enumerate(candidates):
+        hyperparameters = _hyperparameters_for_response(sensor, candidate_params, resolved_split)
+        for fold_number, (train_idx, val_idx) in enumerate(folds, start=1):
+            fold_train = train_df.iloc[train_idx].copy()
+            fold_val = train_df.iloc[val_idx].copy()
+            scaler = StandardScaler()
+            x_train = scaler.fit_transform(fold_train[feature_cols].fillna(0.0))
+            x_val = scaler.transform(fold_val[feature_cols].fillna(0.0))
+            y_train = fold_train['label'].astype(int)
+            y_val = fold_val['label'].astype(int)
 
-def train_emg_model(
-    n_estimators=200,
-    max_depth=15,
-    min_impurity_decrease=0.0,
-    table_name="emg_windows",
-    model_name="emg_rf_model",
-    train_ratio=0.7,
-    val_ratio=0.15,
-    test_ratio=0.15,
-    k_folds=5,
-    random_state=42,
-    n_estimators_min=None,
-    n_estimators_max=None,
-    max_depth_min=None,
-    max_depth_max=None,
-    min_impurity_decrease_min=None,
-    min_impurity_decrease_max=None,
-    criterion="gini",
-    max_features="sqrt",
-    search_resolution=3,
-    progress_callback=None,
-):
-    training_started_at = time.time()
-    table_name = "emg_windows" if not table_name or table_name == "ALL" else table_name
-    feature_cols = list(EMG_FEATURE_COLUMNS)
-    df = load_sensor_dataset("EMG", table_name, feature_cols, label_col="class_label", row_filter=_filter_emg_training_rows)
-    profile = _validate_emg_session_profile(df, table_name)
-    if "error" in profile:
-        return profile
-
-    split_bundle = build_train_val_test_split(
-        "EMG",
-        df,
-        feature_cols,
-        train_ratio=train_ratio,
-        val_ratio=val_ratio,
-        test_ratio=test_ratio,
-        random_state=random_state,
-    )
-
-    n_estimators_values = _candidate_values(n_estimators_min, n_estimators_max, n_estimators, int, search_resolution)
-    max_depth_values = _candidate_values(max_depth_min, max_depth_max, max_depth, int, search_resolution)
-    impurity_values = _candidate_values(min_impurity_decrease_min, min_impurity_decrease_max, min_impurity_decrease, float, search_resolution)
-    candidates = [
-        {
-            "n_estimators": trees, 
-            "max_depth": depth, 
-            "min_impurity_decrease": impurity, 
-            "criterion": crit, 
-            "max_features": mf
-        }
-        for trees in n_estimators_values
-        for depth in max_depth_values
-        for impurity in impurity_values
-        for crit in (criterion.split(',') if isinstance(criterion, str) else [criterion])
-        for mf in (max_features.split(',') if isinstance(max_features, str) else [max_features])
-    ]
-    total_steps = max(1, len(candidates) * int(k_folds))
-    completed_steps = 0
-    best_result = None
-    training_history = []
-    run_dir = create_training_run_dir("EMG", model_name)
-    candidate_digits = max(2, len(str(len(candidates))))
-
-    for candidate_index, candidate in enumerate(candidates, start=1):
-        fold_train_scores = []
-        fold_val_scores = []
-        for fold_index, fold_train_df, fold_val_df in iter_cv_folds(split_bundle, int(k_folds), random_state=random_state):
-            model, scaler = _fit_rf(fold_train_df, feature_cols, label_col=split_bundle.label_col, **candidate)
-            train_metrics = _score_rf(model, scaler, fold_train_df, feature_cols, "EMG", label_col=split_bundle.label_col)
-            val_metrics = _score_rf(model, scaler, fold_val_df, feature_cols, "EMG", label_col=split_bundle.label_col)
-            fold_train_scores.append(train_metrics["accuracy"])
-            fold_val_scores.append(val_metrics["accuracy"])
-            accuracy = val_metrics["accuracy"]
-            id_str = f"C{candidate_index:0{candidate_digits}d}F{fold_index}"
-            artifact_path = save_candidate_snapshot(run_dir, id_str, {
-                "sensor": "EMG",
-                "classifier": "RandomForest",
-                "model": model,
-                "scaler": scaler,
-                "feature_order": feature_cols,
-                "hyperparameters": dict(candidate),
-                "train_metrics": train_metrics,
-                "validation_metrics": val_metrics,
-                "model_id": id_str,
-            })
-            history_item = {
-                "model_id": id_str,
-                "candidate_index": candidate_index,
-                "fold_index": fold_index,
-                "accuracy": accuracy,
-                "hyperparameters": dict(candidate),
-                "train_accuracy": train_metrics["accuracy"],
-                "validation_accuracy": val_metrics["accuracy"],
-                "n_train_samples": train_metrics["n_samples"],
-                "n_validation_samples": val_metrics["n_samples"],
-                "artifact_path": artifact_path,
-                "timestamp": time.time(),
-            }
-            training_history.append(history_item)
-            
-            completed_steps += 1
-            _emit_progress(
-                progress_callback,
-                stage="tuning",
-                model_id=id_str,
-                candidate_index=candidate_index,
-                total_candidates=len(candidates),
-                fold_index=fold_index,
-                total_folds=int(k_folds),
-                completed_steps=completed_steps,
-                total_steps=total_steps,
-                progress=float(completed_steps / total_steps),
-                history_item=history_item
+            model = RandomForestClassifier(
+                n_estimators=int(candidate_params.get("n_estimators", 100)),
+                max_depth=candidate_params.get("max_depth"),
+                min_impurity_decrease=float(candidate_params.get("min_impurity_decrease", 0.0)),
+                random_state=42,
             )
+            model.fit(x_train, y_train)
 
-        validation_accuracy = float(np.mean(fold_val_scores))
-        train_accuracy = float(np.mean(fold_train_scores))
-        result = {
-            "candidate": candidate,
-            "train_accuracy": train_accuracy,
-            "validation_accuracy": validation_accuracy,
-            "fold_accuracies": [float(score) for score in fold_val_scores],
-            **_compute_bias_variance(train_accuracy, validation_accuracy, fold_val_scores),
-        }
-        if best_result is None or result["validation_accuracy"] > best_result["validation_accuracy"]:
-            best_result = result
+            train_accuracy = accuracy_score(y_train, model.predict(x_train))
+            val_accuracy = accuracy_score(y_val, model.predict(x_val))
+            fold_model_id = generate_model_id(candidate_index, fold_number)
+            rejected_paths = get_rejected_model_paths(sensor, fold_model_id)
+            joblib.dump(model, rejected_paths["model"])
+            joblib.dump(scaler, rejected_paths["scaler"])
+            history_item = _training_history_item(
+                candidate_index,
+                fold_number,
+                fold_model_id,
+                rejected_paths,
+                hyperparameters["selected_hyperparameters"],
+                float(train_accuracy),
+                float(val_accuracy),
+                int(len(fold_train)),
+                int(len(fold_val)),
+            )
+            _save_json(rejected_paths["meta"], {
+                **history_item,
+                "sensor": sensor,
+                "table_name": table_name,
+            })
+            history.append(history_item)
+            completed_runs += 1
+            if progress_callback:
+                progress_callback({
+                    "status": "running",
+                    "progress": min(0.95, completed_runs / total_runs),
+                    "candidate_index": candidate_index,
+                    "total_candidates": total_candidates,
+                    "fold_index": fold_number,
+                    "total_folds": total_folds,
+                    "history": list(history),
+                    "latest_history_item": history_item,
+                })
+            if best is None or val_accuracy > best["validation_accuracy"]:
+                best = {
+                    "model": model,
+                    "scaler": scaler,
+                    "history_item": history_item,
+                    "validation_accuracy": float(val_accuracy),
+                    "train_accuracy": float(train_accuracy),
+                    "hyperparameters": hyperparameters,
+                }
 
-    final_model, final_scaler = _fit_rf(split_bundle.train_val_df, feature_cols, label_col=split_bundle.label_col, **best_result["candidate"])
-    train_metrics = _score_rf(final_model, final_scaler, split_bundle.train_val_df, feature_cols, "EMG", label_col=split_bundle.label_col)
-    test_metrics = _score_rf(final_model, final_scaler, split_bundle.test_df, feature_cols, "EMG", label_col=split_bundle.label_col)
-    importances = dict(zip(feature_cols, final_model.feature_importances_.tolist()))
-    tree_struct = tree_to_json(final_model.estimators_[0], feature_cols)
+    final_paths = get_model_paths(sensor, model_name)
+    joblib.dump(best["model"], final_paths["model"])
+    joblib.dump(best["scaler"], final_paths["scaler"])
 
-    paths = get_model_paths("EMG", model_name)
-    joblib.dump(final_model, paths["model"])
-    joblib.dump(final_scaler, paths["scaler"])
+    x_test = best["scaler"].transform(test_df[feature_cols].fillna(0.0))
+    y_test = test_df['label'].astype(int)
+    y_pred = best["model"].predict(x_test)
+    test_accuracy = float(accuracy_score(y_test, y_pred))
+    std_labels = LABELS_MAP[sensor]
+    confusion = confusion_matrix(y_test, y_pred, labels=std_labels).tolist()
+    feature_importances = dict(zip(feature_cols, best["model"].feature_importances_.tolist()))
 
     metadata = {
-        "sensor": "EMG",
-        "classifier": "RandomForest",
-        "feature_order": feature_cols,
-        "table_name": table_name,
-        "label_col": split_bundle.label_col,
-        "created_at": datetime.now().isoformat(),
-        "train_ratio": float(train_ratio),
-        "val_ratio": float(val_ratio),
-        "test_ratio": float(test_ratio),
-        "k_folds": int(k_folds),
-        "random_state": int(random_state),
-        "total_candidates": int(len(candidates)),
-        "total_models": int(len(training_history)),
-        "training_duration_seconds": float(time.time() - training_started_at),
-        "selected_hyperparameters": best_result["candidate"],
-        "train_accuracy": train_metrics["accuracy"],
-        "validation_accuracy": best_result["validation_accuracy"],
-        "test_accuracy": test_metrics["accuracy"],
-        "fold_accuracies": best_result["fold_accuracies"],
-        "average_accuracy": best_result["average_accuracy"],
-        "mean_accuracy": best_result["mean_accuracy"],
-        "fold_std": best_result["fold_std"],
-        "fold_min": best_result["fold_min"],
-        "fold_max": best_result["fold_max"],
-        "train_val_gap": best_result["train_val_gap"],
-        "bias_indicator": best_result["bias_indicator"],
-        "variance_indicator": best_result["variance_indicator"],
-        "training_history": training_history,
-        "training_history_dir": str(run_dir),
-        "confusion_matrix": test_metrics["confusion_matrix"],
-        "labels": [DISPLAY_LABELS["EMG"][idx] for idx in LABELS_MAP["EMG"]],
-        "split_summary": split_summary(split_bundle, int(k_folds)),
-        "group_counts": {
-            "train_val_groups": int(split_bundle.train_val_df[split_bundle.group_col].astype(str).nunique()) if split_bundle.group_col else 0,
-            "test_groups": int(split_bundle.test_df[split_bundle.group_col].astype(str).nunique()) if split_bundle.group_col else 0,
-        },
-        "session_profile": profile,
-    }
-    with open(paths["meta"], "w", encoding="utf-8") as handle:
-        json.dump(metadata, handle, indent=2)
-
-    load_model("EMG", model_name)
-    _emit_progress(progress_callback, stage="completed", progress=1.0, completed_steps=total_steps, total_steps=total_steps)
-    return {
-        "status": "success",
-        "sensor": "EMG",
-        "classifier": "RandomForest",
+        "sensor": sensor,
         "model_name": model_name,
-        "model_path": str(paths["model"]),
+        "model_id": model_name,
+        "best_fold_id": best["history_item"]["model_id"],
+        "candidate_index": best["history_item"]["candidate_index"],
+        "fold_index": best["history_item"]["fold_index"],
+        "classifier": "Random Forest",
+        "session_name": _extract_session_names(pd.concat([train_df, test_df], axis=0), table_name)[0] if _extract_session_names(pd.concat([train_df, test_df], axis=0), table_name) else table_name,
+        "session_names": _extract_session_names(pd.concat([train_df, test_df], axis=0), table_name),
+        "n_samples": int(len(train_df) + len(test_df)),
+        "train_accuracy": best["train_accuracy"],
+        "validation_accuracy": best["validation_accuracy"],
+        "test_accuracy": test_accuracy,
+        "accuracy": test_accuracy,
+        "mean_accuracy": float(np.mean([item["validation_accuracy"] for item in history])) if history else best["validation_accuracy"],
+        "fold_std": float(np.std([item["validation_accuracy"] for item in history])) if history else 0.0,
+        "fold_min": float(min(item["validation_accuracy"] for item in history)) if history else best["validation_accuracy"],
+        "split_summary": {
+            "total_samples": int(len(train_df) + len(test_df)),
+            "train_samples": int(round((resolved_split["k_folds"] - 1) * len(train_df) / resolved_split["k_folds"])) if len(history) > 1 else history[0]["n_train_samples"],
+            "val_samples": int(round(len(train_df) / resolved_split["k_folds"])) if len(history) > 1 else history[0]["n_validation_samples"],
+            "test_samples": int(len(test_df)),
+        },
+        "train_ratio": resolved_split["train_ratio"],
+        "val_ratio": resolved_split["val_ratio"],
+        "test_ratio": resolved_split["test_ratio"],
+        "k_folds": resolved_split["k_folds"],
+        "resolved_split": resolved_split,
+        "training_history": history,
+        "hyperparameters": best["hyperparameters"],
+        "group_counts": train_df.groupby(group_col)['label'].count().to_dict(),
+        "confusion_matrix": confusion,
+        "labels": [DISPLAY_LABELS[sensor].get(label, str(label)) for label in std_labels],
+        "feature_importances": feature_importances,
         "feature_order": feature_cols,
-        "feature_importances": importances,
-        "tree_structure": tree_struct,
-        "confusion_matrix": test_metrics["confusion_matrix"],
-        "labels": metadata["labels"],
-        "n_samples": test_metrics["n_samples"],
-        **metadata,
+        "tree_structure": tree_to_json(best["model"].estimators_[0], feature_cols),
+        "artifact_path": _artifact_path_for_ui(final_paths["model"]),
+        "created_at": datetime.now().isoformat(),
+        "table_name": table_name,
     }
+    _save_json(final_paths["meta"], metadata)
+
+    load_model(sensor, model_name)
+    if progress_callback:
+        progress_callback({
+            "status": "finalizing",
+            "progress": 0.98,
+            "candidate_index": best["history_item"]["candidate_index"],
+            "total_candidates": total_candidates,
+            "fold_index": best["history_item"]["fold_index"],
+            "total_folds": total_folds,
+            "history": list(history),
+            "latest_history_item": best["history_item"],
+            "result": _build_result_payload(sensor, model_name, metadata),
+        })
+    return _build_result_payload(sensor, model_name, metadata)
 
 
-def list_saved_models(sensor="EMG"):
-    models = []
+def train_model(sensor, n_estimators=100, max_depth=None, min_impurity_decrease=0.0, train_split=0.7, val_split=0.15, test_split=0.15, n_folds=2, table_name=None, model_name=None, progress_callback=None, **search_params):
+    sensor = sensor.upper()
+    table_name = table_name or f"{sensor.lower()}_windows"
+    model_name = model_name or generate_model_id(0, 0)
+    df = _prepare_dataframe(sensor, table_name)
+    if df.empty:
+        return {"error": "Database table is empty."}
+
+    feature_cols = get_feature_cols(sensor)
+    train_df, test_df = _split_train_and_test(df, get_group_column(sensor), min(max(float(test_split), 0.05), 0.5))
+    if train_df.empty or test_df.empty:
+        return {"error": "Unable to produce non-empty train/test partitions."}
+
+    return _fit_random_forest(sensor, train_df, test_df, feature_cols, {
+        "n_estimators": n_estimators,
+        "max_depth": max_depth,
+        "min_impurity_decrease": min_impurity_decrease,
+        "train_split": train_split,
+        "val_split": val_split,
+        "test_split": test_split,
+        "n_folds": n_folds,
+        **search_params,
+    }, table_name, model_name, progress_callback=progress_callback)
+
+
+def train_emg_model(**kwargs):
+    return train_model('EMG', **kwargs)
+
+
+def train_eog_model(**kwargs):
+    return train_model('EOG', **kwargs)
+
+
+def train_eeg_model(**kwargs):
+    return train_model('EEG', **kwargs)
+
+
+def _read_metadata(sensor: str, model_name: str):
+    paths = get_model_paths(sensor, model_name)
+    if not paths["meta"].exists():
+        return {}
+    try:
+        return json.loads(paths["meta"].read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def list_saved_models(sensor='EMG'):
     sensor = sensor.upper()
     sensor_dir = MODELS_ROOT / sensor / "models"
     from src.utils.config import config_manager
     active_name = config_manager.get_active_model(sensor)
     if not sensor_dir.exists():
         return []
+    models = []
     for path in sensor_dir.glob("*.joblib"):
         if path.name.endswith("_scaler.joblib"):
             continue
         name = path.stem
-        meta_path = sensor_dir / f"{name}_meta.json"
-        meta = {}
-        if meta_path.exists():
-            try:
-                with open(meta_path, "r", encoding="utf-8") as handle:
-                    meta = json.load(handle)
-            except Exception:
-                meta = {}
+        meta = _read_metadata(sensor, name)
+        history = meta.get("training_history", []) or []
+        latest_history_item = history[-1] if history else {}
+        best_fold_id = meta.get("best_fold_id") or latest_history_item.get("model_id") or latest_history_item.get("id")
         models.append({
             "name": name,
-            "path": str(path),
+            "model_id": best_fold_id or meta.get("model_id") or name,
+            "best_fold_id": best_fold_id,
+            "candidate_index": meta.get("candidate_index", latest_history_item.get("candidate_index")),
+            "fold_index": meta.get("fold_index", latest_history_item.get("fold_index")),
+            "candidate_idx": meta.get("candidate_index", latest_history_item.get("candidate_index")),
+            "fold_idx": meta.get("fold_index", latest_history_item.get("fold_index")),
+            "accuracy": meta.get("accuracy", meta.get("test_accuracy")),
             "created_at": meta.get("created_at"),
-            "accuracy": meta.get("test_accuracy", meta.get("accuracy")),
-            "hyperparameters": meta.get("selected_hyperparameters") or {k: v for k, v in meta.items() if k not in {"created_at", "accuracy"}},
-            "training_duration_seconds": meta.get("training_duration_seconds"),
-            "total_candidates": meta.get("total_candidates"),
-            "total_models": meta.get("total_models"),
-            "k_folds": meta.get("k_folds"),
             "active": name == active_name,
+            "session_name": meta.get("session_name"),
+            "n_samples": meta.get("n_samples"),
         })
-    models.sort(key=lambda item: item.get("created_at") or "", reverse=True)
-    return models
+    return sorted(models, key=lambda item: item.get("created_at") or "", reverse=True)
 
 
 def delete_model(sensor, model_name):
     paths = get_model_paths(sensor, model_name)
     deleted = []
-    errors = []
-    for _, path in paths.items():
+    for path in paths.values():
         if path.exists():
-            try:
-                os.remove(path)
-                deleted.append(str(path))
-            except Exception as exc:
-                errors.append(f"Failed to delete {path}: {exc}")
-    if errors:
-        return {"status": "partial_success", "deleted": deleted, "errors": errors}
+            os.remove(path)
+            deleted.append(str(path))
     return {"status": "success", "deleted": deleted}
 
 
 def load_model(sensor, model_name):
     sensor = sensor.upper()
     paths = get_model_paths(sensor, model_name)
-    if not paths["model"].exists() or not paths["scaler"].exists():
-        return {"error": f"Model {model_name} not found"}
-    try:
-        ACTIVE_MODELS[sensor] = joblib.load(paths["model"])
-        ACTIVE_SCALERS[sensor] = joblib.load(paths["scaler"])
-        ACTIVE_MODEL_NAMES[sensor] = model_name
-        from src.utils.config import config_manager
-        config_manager.set_active_model(sensor, model_name)
-        return {"status": "success", "model_name": model_name}
-    except Exception as exc:
-        return {"error": str(exc)}
-
-
-def evaluate_saved_model(sensor="EMG", table_name=None, model_name=None):
-    sensor = sensor.upper()
-    current_name = model_name or ACTIVE_MODEL_NAMES[sensor]
-    if not current_name:
-        current_name = "emg_rf_model" if sensor == "EMG" else f"{sensor.lower()}_rf"
-    paths = get_model_paths(sensor, current_name)
     if not paths["model"].exists():
-        return {"error": f"Model {current_name} not found"}
-
-    model = ACTIVE_MODELS[sensor] if ACTIVE_MODEL_NAMES[sensor] == current_name and ACTIVE_MODELS[sensor] is not None else joblib.load(paths["model"])
-    scaler = ACTIVE_SCALERS[sensor] if ACTIVE_MODEL_NAMES[sensor] == current_name and ACTIVE_SCALERS[sensor] is not None else joblib.load(paths["scaler"])
-    feature_cols = resolve_feature_cols(sensor, model=model, scaler=scaler)
-    meta = {}
-    if paths["meta"].exists():
-        try:
-            with open(paths["meta"], "r", encoding="utf-8") as handle:
-                meta = json.load(handle)
-        except Exception:
-            meta = {}
-
-    base_response = {
-        "status": "success",
-        "model_name": current_name,
-        "model_path": str(paths["model"]),
-        "feature_order": feature_cols,
-        "feature_importances": dict(zip(feature_cols, getattr(model, "feature_importances_", np.zeros(len(feature_cols))).tolist())),
-        "tree_structure": tree_to_json(model.estimators_[0], feature_cols) if hasattr(model, "estimators_") and len(model.estimators_) else None,
-        "hyperparameters": meta,
-        "train_accuracy": meta.get("train_accuracy"),
-        "validation_accuracy": meta.get("validation_accuracy"),
-        "test_accuracy": meta.get("test_accuracy", meta.get("accuracy")),
-        "average_accuracy": meta.get("average_accuracy"),
-        "mean_accuracy": meta.get("mean_accuracy"),
-        "fold_accuracies": meta.get("fold_accuracies", []),
-        "fold_std": meta.get("fold_std"),
-        "fold_min": meta.get("fold_min"),
-        "fold_max": meta.get("fold_max"),
-        "train_val_gap": meta.get("train_val_gap"),
-        "bias_indicator": meta.get("bias_indicator"),
-        "variance_indicator": meta.get("variance_indicator"),
-        "training_history": meta.get("training_history", []),
-        "training_history_dir": meta.get("training_history_dir"),
-        "split_summary": meta.get("split_summary", {}),
-        "group_counts": meta.get("group_counts", {}),
-        "accuracy": meta.get("test_accuracy", meta.get("accuracy")),
-        "confusion_matrix": meta.get("confusion_matrix"),
-        "labels": meta.get("labels"),
-        "n_samples": meta.get("split_summary", {}).get("test_samples"),
-        "classifier": meta.get("classifier", "RandomForest"),
-    }
-
-    if not table_name:
-        return base_response
-
-    label_col = meta.get("label_col", "class_label" if sensor == "EMG" else "label")
-    df = load_sensor_dataset(sensor, table_name, feature_cols, label_col=label_col, row_filter=_filter_emg_training_rows if sensor == "EMG" else None)
-    metrics = _score_rf(model, scaler, df, feature_cols, sensor, label_col=label_col)
-    base_response.update({
-        "accuracy": metrics["accuracy"],
-        "confusion_matrix": metrics["confusion_matrix"],
-        "n_samples": metrics["n_samples"],
-    })
-    return base_response
+        return {"error": f"Model {model_name} not found"}
+    ACTIVE_MODELS[sensor] = joblib.load(paths["model"])
+    ACTIVE_SCALERS[sensor] = joblib.load(paths["scaler"])
+    ACTIVE_MODEL_NAMES[sensor] = model_name
+    from src.utils.config import config_manager
+    config_manager.set_active_model(sensor, model_name)
+    return {"status": "success", "model_name": model_name}
 
 
-def get_model_tree_structure(sensor="EMG", model_name=None, tree_index=0):
+def evaluate_saved_model(sensor='EMG', table_name=None, model_name=None):
     sensor = sensor.upper()
-    current_name = model_name or ACTIVE_MODEL_NAMES[sensor]
-    if not current_name:
-        return {"error": "Model not found"}
-    model = ACTIVE_MODELS[sensor] if ACTIVE_MODEL_NAMES[sensor] == current_name and ACTIVE_MODELS[sensor] is not None else None
-    if model is None:
-        paths = get_model_paths(sensor, current_name)
-        if not paths["model"].exists():
-            return {"error": "Model not found"}
-        model = joblib.load(paths["model"])
-    if tree_index < 0 or tree_index >= len(model.estimators_):
-        return {"error": f"Tree index {tree_index} out of bounds"}
-    feature_cols = resolve_feature_cols(sensor, model=model)
-    return {
-        "status": "success",
-        "tree_index": int(tree_index),
-        "total_trees": int(len(model.estimators_)),
-        "tree_structure": tree_to_json(model.estimators_[tree_index], feature_cols),
+    model_name = model_name or ACTIVE_MODEL_NAMES[sensor]
+    if not model_name:
+        return {"error": "No active model"}
+    table_name = table_name or f"{sensor.lower()}_windows"
+    paths = get_model_paths(sensor, model_name)
+    if not paths["model"].exists():
+        return {"error": f"Model {model_name} not found"}
+
+    model = joblib.load(paths["model"])
+    scaler = joblib.load(paths["scaler"])
+    metadata = _read_metadata(sensor, model_name)
+    df = _prepare_dataframe(sensor, table_name)
+    if df.empty:
+        return {"error": "Evaluation table is empty."}
+    feature_cols = metadata.get("feature_order") or get_feature_cols(sensor)
+    x_eval = scaler.transform(df[feature_cols].fillna(0.0))
+    y_eval = df['label'].astype(int)
+    y_pred = model.predict(x_eval)
+    accuracy = float(accuracy_score(y_eval, y_pred))
+    std_labels = LABELS_MAP[sensor]
+    live_metrics = {
+        "accuracy": accuracy,
+        "test_accuracy": accuracy,
+        "confusion_matrix": confusion_matrix(y_eval, y_pred, labels=std_labels).tolist(),
+        "labels": [DISPLAY_LABELS[sensor].get(label, str(label)) for label in std_labels],
+        "n_samples": int(len(df)),
     }
+    return _build_result_payload(sensor, model_name, metadata, evaluation_table=table_name, live_metrics=live_metrics)
 
 
-try:
-    load_model("EMG", "emg_rf_model")
-except Exception:
-    pass
+def get_model_tree_structure(sensor='EMG', model_name=None, tree_index=0):
+    sensor = sensor.upper()
+    name = model_name or ACTIVE_MODEL_NAMES[sensor]
+    if not name:
+        return {"error": "No model loaded"}
+    paths = get_model_paths(sensor, name)
+    if not paths["model"].exists():
+        return {"error": f"Model {name} not found"}
+    model = joblib.load(paths["model"])
+    feature_cols = _read_metadata(sensor, name).get("feature_order") or get_feature_cols(sensor)
+    if not hasattr(model, "estimators_"):
+        return {"error": "Tree structure is not available for this model type"}
+    tree_index = max(0, min(int(tree_index), len(model.estimators_) - 1))
+    return tree_to_json(model.estimators_[tree_index], feature_cols)

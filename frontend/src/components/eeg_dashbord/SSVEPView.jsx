@@ -1,12 +1,10 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Settings, Play, Square, Activity, MousePointer2, Keyboard, Sun, Monitor, Power, Zap, Trash2, History, Target, Menu, ChevronLeft, ChevronUp, ChevronDown, Brain, Eye, Radio, Wind, ChevronRight } from 'lucide-react';
 import { motion } from 'framer-motion';
 import SSVEPStimulus from './SSVEPStimulus';
 import { soundHandler } from '../../handlers/SoundHandler';
-import CustomNumberInput from '../ui/inputs/CustomNumberInput';
-import CustomSelect from '../ui/inputs/CustomSelect';
-import CustomSlider from '../ui/inputs/CustomSlider';
 import { CalibrationApi } from '../../services/calibrationApi';
+import SSVEPSidebar from './sidebar/SSVEPSidebar';
+import { useSidebar } from './SidebarContext';
 
 const COMMON_KEYS = ['None', 'W', 'A', 'S', 'D', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'Enter', 'Escape', 'P', 'Q', '0', '1', '2', '3'];
 const MOUSE_ACTIONS = ['None', 'Left Click', 'Right Click', 'Double Click', 'Scroll Up', 'Scroll Down'];
@@ -90,39 +88,147 @@ export default function SSVEPView({ isConnected, wsEvent, onBackToMenu }) {
     }, [refreshRate]);
 
     const [globalRunning, setGlobalRunning] = useState(false);
-    const [isSyncing, setIsSyncing] = useState(false);
 
     // --- UI & Logging State ---
     const [openDropdownId, setOpenDropdownId] = useState(null);
-    const [showSidebar, setShowSidebar] = useState(true);
     const [logs, setLogs] = useState([]);
     const [realTimeFreq, setRealTimeFreq] = useState(0);
 
     // --- Protocol State ---
-    const [protocolMode, setProtocolMode] = useState(false);
-    const [protocolState, setProtocolState] = useState('IDLE');
-    const [currentTrialIdx, setCurrentTrialIdx] = useState(0);
-    const [trials, setTrials] = useState([]);
-    const [useML, setUseML] = useState(true);
-    const [scoreVector, setScoreVector] = useState([]);
+    const { setSidebarSlot, setSidebarMode } = useSidebar();
+
+    const [lastModifiedTargetId, setLastModifiedTargetId] = useState(null);
+    const [isSyncing, setIsSyncing] = useState(false);
+    const [isConfigLoaded, setIsConfigLoaded] = useState(false);
+
     const [availableModels, setAvailableModels] = useState([]);
     const [selectedModel, setSelectedModel] = useState('');
     const [predictedFreq, setPredictedFreq] = useState(0);
+    const [scoreVector, setScoreVector] = useState([]);
+    const [useML, setUseML] = useState(true);
+    const [runtimeMLState, setRuntimeMLState] = useState(true);
+    const [detectorMode, setDetectorMode] = useState('fbcca');
+    const [trials, setTrials] = useState([]);
+    const [currentTrialIdx, setCurrentTrialIdx] = useState(0);
+    const [protocolMode, setProtocolMode] = useState(false);
+    const [protocolState, setProtocolState] = useState('IDLE');
+
+    // ── Use refs to hold latest values so sidebar callbacks are never stale ──
+    const globalRunningRef = useRef(globalRunning);
+    const configsRef = useRef(configs);
+    const useMLRef = useRef(useML);
+    const logsRef = useRef(logs);
+    const runtimeMLStateRef = useRef(runtimeMLState);
+    const detectorModeRef = useRef(detectorMode);
+
+    useEffect(() => { globalRunningRef.current = globalRunning; }, [globalRunning]);
+    useEffect(() => { configsRef.current = configs; }, [configs]);
+    useEffect(() => { useMLRef.current = useML; }, [useML]);
+    useEffect(() => { logsRef.current = logs; }, [logs]);
+    useEffect(() => { runtimeMLStateRef.current = runtimeMLState; }, [runtimeMLState]);
+    useEffect(() => { detectorModeRef.current = detectorMode; }, [detectorMode]);
 
     const addLog = useCallback((message, type = 'INFO') => {
         const time = new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
         setLogs(prev => [...prev, { id: Date.now() + Math.random(), time, message, type }].slice(-100));
     }, []);
 
-    const [lastModifiedTargetId, setLastModifiedTargetId] = useState(null);
-
-    const updateConfig = (id, newValues) => {
+    const updateConfig = useCallback((id, newValues) => {
         setLastModifiedTargetId(id);
         setConfigs(prev => prev.map(cfg => cfg.id === id ? { ...cfg, ...newValues } : cfg));
-    };
+    }, []);
+
+    // ── Stable callbacks using refs so sidebar never gets stale closures ──
+    const startFlicker = useCallback(() => {
+        setProtocolMode(false);
+        setGlobalRunning(true);
+        CalibrationApi.togglePrediction('EEG', true).catch(err => console.error('EEG prediction start failed:', err));
+        addLog('Manual simulation started');
+    }, [addLog]);
+
+    const stopFlicker = useCallback(() => {
+        setGlobalRunning(false);
+        setProtocolMode(false);
+        CalibrationApi.togglePrediction('EEG', false).catch(err => console.error('EEG prediction stop failed:', err));
+        addLog('Simulation stopped');
+    }, [addLog]);
+
+    const runProtocol = useCallback(() => {
+        const currentConfigs = configsRef.current;
+        const newTrials = [];
+        const rounds = 3;
+        for (let r = 0; r < rounds; r++) {
+            const roundTargets = currentConfigs.filter(c => c.enabled).sort(() => Math.random() - 0.5);
+            roundTargets.forEach(t => newTrials.push(t.id));
+        }
+
+        if (newTrials.length === 0) {
+            addLog('Cannot start protocol: No enabled targets', 'ERROR');
+            return;
+        }
+
+        setTrials(newTrials);
+        setCurrentTrialIdx(0);
+        setProtocolMode(true);
+        setGlobalRunning(true);
+        CalibrationApi.togglePrediction('EEG', true).catch(err => console.error('EEG prediction start failed:', err));
+        addLog(`Protocol started (${newTrials.length} trials)`);
+    }, [addLog]);
+
+    // Mount-only: set sidebar mode and clear slot on unmount
+    useEffect(() => {
+        setSidebarMode('page');
+        return () => setSidebarSlot(null);
+    }, [setSidebarMode, setSidebarSlot]);
+
+    // Update the sidebar slot whenever any relevant state changes
+    useEffect(() => {
+        setSidebarSlot(
+            <SSVEPSidebar
+                onBackToMenu={onBackToMenu}
+                useML={useML}
+                runtimeMLState={runtimeMLState}
+                detectorMode={detectorMode}
+                setUseML={setUseML}
+                availableModels={availableModels}
+                selectedModel={selectedModel}
+                setSelectedModel={setSelectedModel}
+                addLog={addLog}
+                realTimeFreq={realTimeFreq}
+                predictedFreq={predictedFreq}
+                scoreVector={scoreVector}
+                configs={configs}
+                updateConfig={updateConfig}
+                isSyncing={isSyncing}
+                lastModifiedTargetId={lastModifiedTargetId}
+                globalRunning={globalRunning}
+                protocolMode={protocolMode}
+                startFlicker={startFlicker}
+                stopFlicker={stopFlicker}
+                runProtocol={runProtocol}
+                brightness={brightness}
+                setBrightness={setBrightness}
+                refreshRate={refreshRate}
+                setRefreshRate={setRefreshRate}
+                logs={logs}
+                setLogs={setLogs}
+                showTargets={showTargets}
+                setShowTargets={setShowTargets}
+                openDropdownId={openDropdownId}
+                setOpenDropdownId={setOpenDropdownId}
+                isConnected={isConnected}
+            />
+        );
+    }, [
+        onBackToMenu, useML, runtimeMLState, detectorMode, availableModels, selectedModel,
+        addLog, realTimeFreq, predictedFreq, scoreVector, configs, updateConfig,
+        isSyncing, lastModifiedTargetId, globalRunning, protocolMode, startFlicker,
+        stopFlicker, runProtocol, brightness, refreshRate,
+        logs, showTargets, openDropdownId, isConnected, setSidebarSlot
+    ]);
+
 
     // --- Load Config on Mount ---
-    const [isConfigLoaded, setIsConfigLoaded] = useState(false);
     useEffect(() => {
         fetch('/api/config')
             .then(res => res.json())
@@ -179,10 +285,10 @@ export default function SSVEPView({ isConnected, wsEvent, onBackToMenu }) {
         let predictedValue = null;
         if (wsEvent.event === 'eeg_prediction' && wsEvent.peak_frequency !== undefined) {
             freqValue = wsEvent.peak_frequency;
-            predictedValue = wsEvent.predicted_frequency ?? wsEvent.frequency;
+            predictedValue = wsEvent.ml_enabled ? (wsEvent.predicted_frequency ?? wsEvent.frequency) : wsEvent.peak_frequency;
         } else if (wsEvent.event === 'eeg_prediction' && wsEvent.frequency !== undefined) {
             freqValue = wsEvent.frequency;
-            predictedValue = wsEvent.predicted_frequency ?? wsEvent.frequency;
+            predictedValue = wsEvent.ml_enabled ? (wsEvent.predicted_frequency ?? wsEvent.frequency) : wsEvent.frequency;
         } else if (typeof wsEvent.event === 'string' && wsEvent.event.startsWith('TARGET_')) {
             const numStr = wsEvent.event.replace('TARGET_', '').replace('HZ', '').replace('_', '.');
             freqValue = parseFloat(numStr);
@@ -195,6 +301,19 @@ export default function SSVEPView({ isConnected, wsEvent, onBackToMenu }) {
         }
         if (predictedValue !== null && predictedValue !== undefined) {
             setPredictedFreq(predictedValue || 0);
+        }
+
+        if (wsEvent.event === 'eeg_prediction') {
+            const nextMLState = Boolean(wsEvent.ml_enabled);
+            const nextDetectorMode = wsEvent.detector_mode || (nextMLState ? 'lda' : 'fbcca');
+            if (nextMLState !== runtimeMLStateRef.current || nextDetectorMode !== detectorModeRef.current) {
+                setRuntimeMLState(nextMLState);
+                setDetectorMode(nextDetectorMode);
+                addLog(
+                    `EEG detector mode: ${nextDetectorMode.toUpperCase()} (${nextMLState ? 'model included' : 'model excluded'})${wsEvent.model_name ? ` [${wsEvent.model_name}]` : ''}`,
+                    'SETTINGS'
+                );
+            }
         }
 
         if (wsEvent.features?.display_score_vector) {
@@ -280,41 +399,6 @@ export default function SSVEPView({ isConnected, wsEvent, onBackToMenu }) {
         return () => clearTimeout(timeoutId);
     }, [configs, refreshRate, isConfigLoaded, useML, selectedModel]);
 
-    // --- Controls ---
-    const startFlicker = () => {
-        setProtocolMode(false);
-        setGlobalRunning(true);
-        CalibrationApi.togglePrediction('EEG', true).catch(err => console.error('EEG prediction start failed:', err));
-        addLog('Manual simulation started');
-    };
-
-    const stopFlicker = () => {
-        setGlobalRunning(false);
-        setProtocolMode(false);
-        CalibrationApi.togglePrediction('EEG', false).catch(err => console.error('EEG prediction stop failed:', err));
-        addLog('Simulation stopped');
-    };
-
-    const runProtocol = () => {
-        const newTrials = [];
-        const rounds = 3;
-        for (let r = 0; r < rounds; r++) {
-            const roundTargets = configs.filter(c => c.enabled).sort(() => Math.random() - 0.5);
-            roundTargets.forEach(t => newTrials.push(t.id));
-        }
-
-        if (newTrials.length === 0) {
-            addLog('Cannot start protocol: No enabled targets', 'ERROR');
-            return;
-        }
-
-        setTrials(newTrials);
-        setCurrentTrialIdx(0);
-        setProtocolMode(true);
-        setGlobalRunning(true);
-        CalibrationApi.togglePrediction('EEG', true).catch(err => console.error('EEG prediction start failed:', err));
-        addLog(`Protocol started (${newTrials.length} trials)`);
-    };
 
     useEffect(() => {
         return () => {
@@ -322,12 +406,10 @@ export default function SSVEPView({ isConnected, wsEvent, onBackToMenu }) {
         };
     }, []);
 
-    const rightWidth = showSidebar ? 'mr-80' : 'mr-[4.5rem]';
-
     return (
         <div className="w-full flex bg-[var(--bg)] overflow-hidden relative h-full">
             {/* Main Stimulus View */}
-            <div className={`flex-grow flex flex-col items-center justify-center relative transition-all duration-300 ${showSidebar ? 'ml-80' : 'ml-[4.5rem]'}`}>
+            <div className="flex-grow flex flex-col items-center justify-center relative transition-all duration-300">
                 <SSVEPStimulus
                     configs={configs}
                     brightness={brightness}
@@ -362,462 +444,6 @@ export default function SSVEPView({ isConnected, wsEvent, onBackToMenu }) {
                         ))}
                     </div>
                 )}
-            </div>
-
-            {/* Right Sidebar */}
-            <div
-                className={`absolute left-0 top-0 bottom-0 z-10 transition-all duration-300 ease-in-out border-r border-[var(--border)] bg-[var(--surface)]/80 backdrop-blur-md flex flex-col h-full ${showSidebar ? 'w-80 overflow-y-auto overflow-x-hidden' : 'w-[4.25rem] overflow-visible'} [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']`}
-            >
-                {/* Collapsed Icons Only State */}
-                {!showSidebar && (
-                    <div className="flex flex-col items-center justify-around py-3 w-full animate-fade-in shrink-0 h-full overflow-visible">
-                        <button onClick={onBackToMenu} className="hover:bg-white/10 rounded-full transition-colors group relative" title="Back to EEG Menu">
-                            <ChevronLeft size={34} className="text-[var(--text)]" />
-                            <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-[var(--surface)] border border-[var(--border)] px-3 py-1.5 rounded-lg text-xs font-bold text-[var(--text)] whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Back to Menu</div>
-                        </button>
-                        
-                        <div className="w-full h-px bg-[var(--border)]/80 shrink-0 my-2" />
-
-                        <button
-                            onClick={() => setShowSidebar(true)}
-                            className=" hover:bg-white/10 rounded-full transition-colors"
-                            title="Expand Sidebar"
-                        >
-                            <Menu size={34} className="text-[var(--primary)]" />
-                        </button>
-
-                        <div className="w-full h-px bg-[var(--border)]/80 shrink-0" />
-
-                        <button
-                            onClick={() => {
-                                const newState = !useML;
-                                setUseML(newState);
-                                setShowSidebar(true);
-                                console.log(`[SSVEPView] ML Pipeline inclusion toggled (collapsed): ${newState ? 'ENABLED' : 'DISABLED'}`);
-                            }}
-                            className={`p-2 rounded-full transition-all group relative ${useML ? 'text-[var(--primary)] bg-[var(--primary)]/10' : 'text-[var(--muted)] hover:bg-white/10'}`}
-                            title={useML ? "Disable ML" : "Enable ML"}
-                        >
-                            <Brain size={30} className={useML ? 'animate-pulse transition-all duration-700' : 'transition-all duration-700'} />
-                            <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-[var(--surface)]-lighter border border-[var(--primary)]/40 px-3 py-1.5 rounded-lg text-[10px] font-black text-[var(--primary)] whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-300 z-50 shadow-glow">
-                                ML PIPELINE: {useML ? 'ENABLED' : 'DISABLED'}
-                            </div>
-                        </button>
-
-                        <div className="w-full h-px bg-[var(--border)]/80 shrink-0" />
-
-                        <div className="flex flex-col items-center cursor-default group relative w-full" title="Signal Frequency">
-                            <Activity size={28} className="text-[var(--primary)]" />
-                            <span className="text-[20px] font-black tabular-nums mt-1 text-[var(--primary)]">{realTimeFreq ? realTimeFreq.toFixed(1) : '0.0'}</span>
-                            <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-[var(--surface)] border border-[var(--border)] px-1.5 py-1.5 rounded-lg text-xs font-bold text-[var(--text)] whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Live Signal (Hz)</div>
-                        </div>
-
-                        <button onClick={() => setShowSidebar(true)} title="System Activity" className="hover:text-[var(--primary)] transition-colors group relative">
-                            <History size={28} className="text-[var(--muted)] group-hover:text-[var(--primary)]" />
-                            {logs.length > 0 && <span className="absolute -top-1 -right-1 w-2 h-2 bg-[var(--primary)] rounded-full animate-pulse blur-[1px]"></span>}
-                            <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-[var(--surface)] border border-[var(--border)] px-3 py-1.5 rounded-lg text-xs font-bold text-[var(--text)] whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">System Activity Logs</div>
-                        </button>
-
-                        <div className="w-full h-px bg-[var(--border)]/80 shrink-0" />
-
-                        <button onClick={globalRunning ? stopFlicker : startFlicker} title="Start/Stop Manual Simulation" className={`transition-colors group relative p-2 rounded-full ${globalRunning ? 'text-red-500 hover:bg-red-500/20' : 'text-green-500 hover:bg-green-500/20'}`}>
-                            {globalRunning ? <Square size={28} /> : <Play size={28} />}
-                            <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-[var(--surface)] border border-[var(--border)] px-1.5 py-1.5 rounded-lg text-xs font-bold text-[var(--text)] whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">{globalRunning ? "Stop Simulation" : "Start Simulation"}</div>
-                        </button>
-
-                        {!globalRunning && (
-                            <button onClick={runProtocol} title="Run Protocol" className="transition-colors group relative p-2 rounded-full text-[var(--primary)] hover:bg-[var(--primary)]/20">
-                                <Zap size={28} />
-                                <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-[var(--surface)] px-3 py-1.5 rounded-lg text-xs font-bold text-[var(--text)] whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Run Protocol</div>
-                            </button>
-                        )}
-
-                        <div className="w-full h-px bg-[var(--border)]/80 shrink-0" />
-
-                        <button onClick={() => setShowSidebar(true)} title="Targets Settings" className="hover:text-[var(--primary)] transition-colors group relative">
-                            <Monitor size={28} className="text-[var(--muted)] group-hover:text-[var(--primary)]" />
-                            <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-[var(--surface)] border border-[var(--border)] px-3 py-1.5 rounded-lg text-xs font-bold text-[var(--text)] whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Targets Settings</div>
-                        </button>
-
-                        {configs.filter(c => c.enabled).map((cfg) => (
-                            <div key={cfg.id} className="flex flex-col items-center group relative cursor-help" title={cfg.label}>
-                                <Target size={28} className="text-[var(--primary)]/70 mb-1 group-hover:text-[var(--primary)] transition-colors" />
-                                <span className="text-[18px] font-black text-[var(--text)]/80 group-hover:text-[var(--primary)]">{cfg.freq}</span>
-                                <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-[var(--surface)] border border-[var(--border)] px-3 py-1.5 rounded-lg text-xs font-bold text-[var(--text)] whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">{cfg.label} ({cfg.freq}Hz)</div>
-                            </div>
-                        ))}
-
-                        <div className="w-full h-px bg-[var(--border)]/80 shrink-0" />
-
-                        <div className="flex flex-col w-full items-center shrink-0">
-                            <button className={`w-[42px] h-[42px] flex items-center justify-center rounded-full border transition-all cursor-default shadow-sm group relative ${isConnected ? 'bg-green-500/10 border-green-500/30 text-green-500' : 'bg-red-500/10 border-red-500/30 text-red-500'}`} title={isConnected ? "Sensor Connected" : "Sensor Disconnected"}>
-                                {isConnected ? <Zap size={28} /> : <Power size={28} />}
-                                <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-[var(--surface)] border border-[var(--border)] px-3 py-1.5 rounded-lg text-xs font-bold text-[var(--text)] whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Sensor Status</div>
-                            </button>
-                        </div>
-                    </div>
-                )}
-
-                {/* Fixed Container */}
-                <div className={`flex-grow flex flex-col overflow-hidden p-4 gap-3 font-mono transition-opacity duration-300 w-80 shrink-0 ${!showSidebar ? 'opacity-0 h-0 hidden' : 'opacity-100'}`}>
-
-                    {/* Header */}
-                    <div className="flex items-center justify-between shrink-0 mb-2">
-                        <div>
-                            <h2 className="text-2xl font-bold text-[var(--text)] mb-1 flex items-center gap-3">
-                                <Settings size={28} className="text-[var(--primary)] animate-pulse" />
-                                <span style={{ letterSpacing: '2.3px' }}>Controls</span>
-                            </h2>
-                            <p className="text-xs text-[var(--muted)]">SSVEP Protocol (+ML)</p>
-                        </div>
-                        <div className="flex gap-2">
-                            <button
-                                onClick={onBackToMenu}
-                                className="p-2 hover:bg-white/10 rounded-full transition-colors"
-                                title="Back to Dashboard Menu"
-                            >
-                                <ChevronLeft size={24} className="text-[var(--text)]" />
-                            </button>
-                            <button
-                                onClick={() => setShowSidebar(false)}
-                                className="p-2 hover:bg-white/10 rounded-full transition-colors"
-                                title="Collapse Sidebar"
-                            >
-                                <ChevronLeft size={24} className="rotate-180" />
-                            </button>
-                        </div>
-                    </div>
-
-                    {/* ML Pipeline Toggle - NOW AT TOP */}
-                    <div className="flex items-center justify-between shrink-0 bg-[var(--primary)]/10 p-3 rounded-xl border border-[var(--primary)]/30 shadow-glow mx-0.5">
-                        <div className="flex items-center gap-2">
-                            <Brain size={22} className={useML ? "text-[var(--primary)] animate-pulse" : "text-[var(--muted)]"} />
-                            <div className="flex flex-col">
-                                <span className={`text-[12px] font-black uppercase tracking-widest ${useML ? "text-[var(--primary)]" : "text-[var(--muted)]"}`}>
-                                    Include ML Pipeline
-                                </span>
-                                <span className="text-[9px] text-[var(--muted)]/60 font-bold uppercase tracking-tighter">LDA Enhancement</span>
-                            </div>
-                        </div>
-                        <button
-                            onClick={() => {
-                                const newState = !useML;
-                                setUseML(newState);
-                                console.log(`[SSVEPView] ML Pipeline inclusion toggled (sidebar): ${newState ? 'ENABLED' : 'DISABLED'}`);
-                                addLog(`ML Pipeline ${newState ? 'Enabled' : 'Disabled'}`, 'SETTINGS');
-                            }}
-                            className={`w-[48px] h-[24px] rounded-full p-1 transition-all duration-300 border-2 ${useML ? 'bg-[var(--primary)]/20 border-[var(--primary)] shadow-[0_0_12px_rgba(var(--primary-rgb),0.3)]' : 'bg-[var(--bg)] border-[var(--border)]'}`}
-                        >
-                            <div className={`w-[14px] h-[14px] rounded-full transition-all duration-300 ${useML ? 'bg-[var(--primary)] translate-x-[22px] shadow-[0_0_8px_var(--primary)]' : 'bg-muted translate-x-0'}`} />
-                        </button>
-                    </div>
-                    <div className="shrink-0 bg-[var(--bg)]/40 border border-[var(--primary)]/20 rounded-xl p-3">
-                        <div className="flex items-center justify-between mb-2">
-                            <span className="text-[11px] font-black uppercase tracking-widest text-[var(--muted)]/80">EEG Model</span>
-                            <span className="text-[10px] font-mono text-[var(--primary)]/80">{useML ? 'ACTIVE IN PIPELINE' : 'STANDBY'}</span>
-                        </div>
-                        <CustomSelect
-                            options={availableModels.map(model => ({ value: model.name, label: model.name }))}
-                            value={selectedModel}
-                            onChange={(value) => {
-                                setSelectedModel(value);
-                                addLog(`EEG model selected: ${value}`, 'SETTINGS');
-                            }}
-                            placeholder={availableModels.length ? 'Select EEG model...' : 'No EEG models'}
-                            disabled={!availableModels.length}
-                            triggerClassName="!px-3 !py-2 !h-[2.25rem] !text-xs !font-bold !rounded-[8px]"
-                        />
-                    </div>
-
-                    {/* Detection Analysis - NOW AT TOP */}
-                    <div className="bg-[var(--bg)]/60 border border-[var(--primary)]/40 rounded-xl p-3 shrink-0 backdrop-blur-md shadow-xl border-l-[4px] border-l-primary/60">
-                        <h4 className="text-[11px] font-black text-[var(--muted)]/90 uppercase tracking-widest flex items-center justify-between mb-4">
-                            <div className="flex items-center gap-2">
-                                <Activity size={16} className="text-[var(--primary)]" /> Identification Matrix
-                            </div>
-                            <span className="text-[10px] text-[var(--primary)]/80 font-mono bg-[var(--primary)]/10 px-1.5 rounded">LIVE</span>
-                        </h4>
-                        <div className="flex items-end justify-between h-[90px] gap-2 px-1">
-                            {configs.filter(c => c.enabled).map((cfg, idx) => {
-                                const score = scoreVector[idx] || 0;
-                                const height = Math.min(100, score * 100);
-                                return (
-                                    <div key={cfg.id} className="flex-1 flex flex-col items-center gap-2 group relative h-full">
-                                        <div className="w-full bg-[var(--primary)]/5 rounded-t-lg relative flex-grow overflow-hidden border-x border-t border-[var(--primary)]/10">
-                                            <motion.div
-                                                initial={{ height: 0 }}
-                                                animate={{ height: `${height}%` }}
-                                                transition={{ type: "spring", stiffness: 400, damping: 25 }}
-                                                className={`absolute bottom-0 left-0 right-0 ${height > 40 ? 'bg-[var(--primary)]/70 shadow-[0_0_20px_rgba(var(--primary-rgb),0.5)]' : 'bg-[var(--primary)]/40'}`}
-                                            />
-                                        </div>
-                                        <span className="text-[11px] font-black text-[var(--text)]/70 group-hover:text-[var(--primary)] transition-colors transform group-hover:scale-110">{cfg.freq}</span>
-
-                                        <div className="absolute bottom-[calc(100%+8px)] left-1/2 -translate-x-1/2 bg-[var(--surface)]-lighter border border-[var(--primary)]/40 px-2 py-1.5 rounded-lg text-[10px] font-black text-[var(--primary)] opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-300 z-50 whitespace-nowrap shadow-2xl transform translate-y-2 group-hover:translate-y-0 backdrop-blur-md">
-                                            {cfg.label.toUpperCase()}: {(score * 100).toFixed(1)}%
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                            {configs.filter(c => c.enabled).length === 0 && (
-                                <div className="w-full h-full flex items-center justify-center text-[11px] text-[var(--muted)] italic font-bold">
-                                    No Active Targets
-                                </div>
-                            )}
-                        </div>
-                    </div>
-
-                    <div className="flex items-center justify-between shrink-0 border-t border-[var(--border)]/50 pt-2 pb-2">
-                        <h4 className="text-xs font-bold text-[var(--muted)] uppercase tracking-widest">Global State</h4>
-                        <div className={`w-3 h-3 rounded-full animate-pulse ${globalRunning ? 'bg-green-500 shadow-[0_0_10px_#22c55e]' : 'bg-red-500'}`} />
-                    </div>
-
-                    {/* Global Actions */}
-                    <div className="grid grid-cols-2 gap-2 shrink-0">
-                        <button
-                            onClick={globalRunning ? stopFlicker : startFlicker}
-                            className={`w-full py-2.5 rounded-xl text-base font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-2 border-2 ${globalRunning
-                                ? 'bg-red-500/10 border-red-500/50 text-red-500 hover:bg-red-500/20'
-                                : 'bg-green-500/10 border-green-500/50 text-green-500 hover:bg-green-500/20 shadow-glow'
-                                }`}
-                        >
-                            {globalRunning ? <><Square size={18} /> Stop</> : <><Play size={18} /> Start</>}
-                        </button>
-
-                        {!globalRunning && (
-                            <button
-                                onClick={runProtocol}
-                                className="w-full py-2.5 bg-[var(--primary)]/10 border-2 border-[var(--primary)]/50 text-[var(--primary)] rounded-xl text-base font-bold uppercase tracking-widest hover:bg-[var(--primary)]/20 transition-all flex items-center justify-center gap-2 shadow-glow"
-                            >
-                                <Zap size={18} /> Protocol
-                            </button>
-                        )}
-                    </div>
-
-                    {/* Global Settings */}
-                    <div className="flex flex-col gap-4 shrink-0 bg-[var(--bg)]/30 p-3 rounded-xl border border-[var(--border)]/50">
-                        {/* Brightness */}
-                        <div className="space-y-2">
-                            <div className="flex items-center justify-between text-base font-bold text-[var(--muted)] uppercase tracking-widest">
-                                <span className="flex items-center gap-2"><Sun size={20} /> Brightness</span>
-                                <span className="text-[var(--primary)] text-xl">{Math.round(brightness * 100)}%</span>
-                            </div>
-                            <CustomSlider
-                                min={0.1}
-                                max={1.0}
-                                step={0.05}
-                                value={brightness}
-                                onChange={(val) => {
-                                    setBrightness(val);
-                                }}
-                                accentColor="primary"
-                            />
-                        </div>
-
-                        {/* Refresh Rate */}
-                        <div className="flex items-center justify-between border-t border-[var(--border)]/30 pt-3">
-                            <label className="text-base font-bold text-[var(--muted)] uppercase tracking-widest flex items-center gap-2">
-                                <Monitor size={20} /> Refresh Rate
-                            </label>
-                            <div className="flex items-center">
-                                <CustomNumberInput
-                                    value={refreshRate}
-                                    onChange={setRefreshRate}
-                                    min={1}
-                                    max={500}
-                                    step={1}
-                                    className="w-[6.5rem] !h-[2.25rem] !text-lg"
-                                    unit="FPS"
-                                />
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Real-time Meter */}
-                    <div className="bg-[var(--bg)]/50 border border-[var(--primary)]/20 rounded-xl p-3 flex items-center justify-between shrink-0">
-                        <div className="flex flex-col">
-                            <span className="text-base font-bold text-[var(--muted)] uppercase tracking-widest flex items-center gap-2 mb-1">
-                                <Activity size={20} className="text-[var(--primary)]" /> Signal
-                            </span>
-                            <div className="flex items-baseline gap-1">
-                                <span className="text-4xl font-black text-[var(--primary)] tabular-nums">
-                                    {realTimeFreq ? realTimeFreq.toFixed(2) : '0.00'}
-                                </span>
-                                <span className="text-lg font-bold text-[var(--muted)]">Hz</span>
-                            </div>
-                            <div className="text-[11px] font-bold uppercase tracking-widest text-[var(--muted)]/70 mt-1">
-                                Pred {predictedFreq ? predictedFreq.toFixed(2) : '0.00'} Hz
-                            </div>
-                        </div>
-                        <div className="w-1/2 flex flex-col justify-between items-end gap-1">
-                            <div className="flex items-center gap-1.5 ">
-                                <span className="w-2.5 h-2.5 rounded-full bg-[var(--primary)] animate-pulse shadow-[0_0_8px_var(--primary)]" />
-                                <span className="text-[18px] font-bold text-[var(--primary)]/80 ">LIVE</span>
-                            </div>
-                            <div className="w-full mt-2 h-[6px] bg-text/25 overflow-hidden">
-                                <div
-                                    className="h-full bg-[var(--primary)] transition-all duration-300 shadow-[0_0_8px_var(--primary)]"
-                                    style={{ width: `${Math.min((realTimeFreq || 0) * 4, 100)}%` }}
-                                />
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Targets List */}
-                    <div className="flex flex-col shrink-0 overflow-hidden border border-[var(--primary)]/40 rounded-xl bg-[var(--bg)]/20 backdrop-blur-sm">
-                        <div className="p-3 border-b border-[var(--primary)]/20 bg-[var(--bg)]/40 shrink-0 flex items-center justify-between cursor-pointer hover:bg-[var(--bg)]/60 transition-colors" onClick={() => setShowTargets(!showTargets)}>
-                            <h4 className="text-base font-black text-[var(--primary)]/80 uppercase tracking-widest">Targets</h4>
-                            <div className="flex items-center gap-2">
-                                <span className="text-sm font-black tracking-wider text-[var(--primary)]">{configs.filter(c => c.enabled).length} ACTIVE</span>
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={`text-[var(--primary)] transition-transform duration-300 ${!showTargets ? 'rotate-180' : ''}`}><path d="M6 9l6 6 6-6" /></svg>
-                            </div>
-                        </div>
-                        <div className="flex flex-col p-2 gap-2">
-                            {!showTargets ? (
-                                <div className="space-y-1">
-                                    {configs.map(cfg => (
-                                        <div key={cfg.id} className={`flex items-center justify-between px-3 py-3 relative hover:bg-white/5 rounded-lg transition-colors group ${!cfg.enabled && 'grayscale opacity-50'}`}>
-                                            <div className="flex items-center gap-3 w-5/12 overflow-hidden">
-                                                <Target size={16} strokeWidth={2.5} className={cfg.enabled ? 'text-[var(--primary)]' : 'text-[var(--muted)]/50'} />
-                                                <span className="text-[13px] font-bold truncate text-[var(--text)]/80 group-hover:text-[var(--text)] transition-colors">{cfg.label}</span>
-                                            </div>
-                                            {isSyncing && lastModifiedTargetId === cfg.id ? (
-                                                <span className="w-1.5 h-1.5 rounded-full bg-[var(--primary)] animate-pulse shadow-[0_0_5px_currentColor] shrink-0" />
-                                            ) : <span className="w-1.5 h-1.5 shrink-0" />}
-                                            <div className="flex items-center gap-1.5 justify-center w-3/12 relative">
-                                                <Activity size={14} className="text-[var(--primary)]/80" />
-                                                <span className="text-[13px] font-black text-[var(--primary)] font-mono tracking-tight">{cfg.freq}Hz</span>
-                                            </div>
-                                            <div className="flex items-center gap-2 justify-end w-4/12">
-                                                {!cfg.enabled ? <Power size={14} className="text-[var(--muted)]/50" /> : (cfg.controlType === 'Keyboard' ? <Keyboard size={14} className="text-[var(--muted)]/60" /> : <MousePointer2 size={14} className="text-[var(--muted)]/60" />)}
-                                                <span className={`text-[13px] font-bold uppercase tracking-widest truncate ${cfg.enabled ? 'text-[var(--text)]' : 'text-[var(--muted)]/50'}`}>
-                                                    {!cfg.enabled ? 'OFF' : (cfg.controlType === 'Keyboard' ? cfg.mappedKey : cfg.mappedMouse)}
-                                                </span>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            ) : (
-                                configs.map((cfg, index) => {
-                                    const isMouse = cfg.controlType === 'Mouse';
-                                    return (
-                                        <div key={cfg.id} className={`p-3 rounded-xl border transition-all space-y-2 shrink-0 relative transform-gpu ${cfg.enabled ? 'bg-[var(--bg)]/50 border-[var(--border)]' : 'bg-[var(--bg)]/20 border-[var(--border)]/30 grayscale opacity-60'}`} style={{ zIndex: openDropdownId === cfg.id ? 100 : 50 - index }}>
-                                            <div className="flex items-center justify-between gap-1">
-                                                <div className="flex items-center gap-2 overflow-hidden flex-grow">
-                                                    <button
-                                                        onClick={() => updateConfig(cfg.id, { enabled: !cfg.enabled })}
-                                                        className={`p-1.5 rounded-[6px] transition-all shrink-0 ${cfg.enabled ? 'bg-[var(--primary)]/20 text-[var(--primary)] border border-[var(--primary)]/30' : 'bg-[var(--bg)] border border-[var(--border)] text-[var(--muted)] hover:border-[var(--primary)]/50'}`}
-                                                        title={cfg.enabled ? "Disable Target" : "Enable Target"}
-                                                    >
-                                                        <Power size={14} />
-                                                    </button>
-                                                    <input
-                                                        className="bg-transparent font-bold text-base outline-none focus:text-[var(--primary)] transition-colors w-full"
-                                                        value={cfg.label}
-                                                        onChange={(e) => updateConfig(cfg.id, { label: e.target.value })}
-                                                    />
-                                                </div>
-
-                                                {isSyncing && lastModifiedTargetId === cfg.id ? (
-                                                    <span className="w-1.5 h-1.5 rounded-full bg-[var(--primary)] animate-pulse shadow-[0_0_5px_currentColor] shrink-0 mx-1" />
-                                                ) : <span className="w-1.5 h-1.5 shrink-0 mx-1" />}
-
-                                                <div className="flex items-center gap-1 shrink-0 rounded-lg border border-[var(--primary)]/20 bg-[var(--primary)]/5 px-2 py-1">
-                                                    <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--primary)]/70" title="Divisor">
-                                                        {refreshRate}/{cfg.divisor}
-                                                    </span>
-                                                    <input
-                                                        type="number"
-                                                        step="0.01"
-                                                        className="w-[3.5rem] bg-transparent text-sm font-black text-[var(--primary)] text-right outline-none focus:ring-1 focus:ring-primary rounded transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                                                        value={cfg.freq}
-                                                        onChange={(e) => updateConfig(cfg.id, { freq: parseFloat(e.target.value) || 0, isManual: true })}
-                                                    />
-                                                    <span className="text-sm font-black text-[var(--primary)]">Hz</span>
-                                                </div>
-                                            </div>
-
-                                            {/* Mapping Selection & Mode Toggle */}
-                                            <div className="flex items-center justify-between pt-1 border-t border-[var(--border)]/10">
-                                                <div className="flex items-center gap-2 flex-grow">
-                                                    <span className={`text-[10px] font-bold uppercase tracking-tight ${!isMouse ? 'text-[var(--primary)]' : 'text-[var(--muted)]'}`}>Key</span>
-                                                    <button
-                                                        onClick={() => updateConfig(cfg.id, { controlType: isMouse ? 'Keyboard' : 'Mouse' })}
-                                                        className={`w-8 h-4 shrink-0 rounded-full flex items-center transition-colors border-2 border-[var(--border)] ${isMouse ? 'bg-[var(--primary)]' : 'bg-[var(--bg)]'}`}
-                                                        disabled={!cfg.enabled}
-                                                    >
-                                                        <div className={`h-2.5 w-2.5 rounded-full bg-text shadow transition-transform duration-200 ${isMouse ? 'translate-x-[16px]' : 'translate-x-[2px]'}`} />
-                                                    </button>
-                                                    <span className={`text-[10px] font-bold uppercase tracking-tight ${isMouse ? 'text-[var(--primary)]' : 'text-[var(--muted)]'}`}>Mouse</span>
-                                                </div>
-
-                                                <div className="w-7/12">
-                                                    {!isMouse ? (
-                                                        <CustomSelect
-                                                            options={COMMON_KEYS}
-                                                            value={cfg.mappedKey || 'None'}
-                                                            onChange={(val) => updateConfig(cfg.id, { mappedKey: val })}
-                                                            disabled={!cfg.enabled}
-                                                            triggerClassName="!px-2 !py-0.5 !h-[1.75rem] !text-xs !font-bold !rounded-[6px]"
-                                                            direction={index >= 4 ? "up" : "down"}
-                                                            onOpenChange={(isOpen) => setOpenDropdownId(isOpen ? cfg.id : null)}
-                                                        />
-                                                    ) : (
-                                                        <CustomSelect
-                                                            options={MOUSE_ACTIONS}
-                                                            value={cfg.mappedMouse || 'None'}
-                                                            onChange={(val) => updateConfig(cfg.id, { mappedMouse: val })}
-                                                            disabled={!cfg.enabled}
-                                                            triggerClassName="!px-2 !py-0.5 !h-[1.75rem] !text-xs !font-bold !rounded-[6px]"
-                                                            direction={index >= 4 ? "up" : "down"}
-                                                            onOpenChange={(isOpen) => setOpenDropdownId(isOpen ? cfg.id : null)}
-                                                        />
-                                                    )}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    )
-                                })
-                            )}
-                        </div>
-                    </div>
-
-                    {/* Debug Event Log */}
-                    <div className="flex flex-col h-[420px] shrink-0 overflow-hidden border border-[var(--border)]/50 rounded-xl bg-[var(--bg)]/20 p-3">
-                        <div className="flex items-center justify-between mb-2 pb-2 border-b border-[var(--border)]/30 shrink-0">
-                            <h4 className="text-base font-bold text-[var(--muted)] uppercase tracking-widest flex items-center gap-2">
-                                <History size={20} /> System Activity
-                            </h4>
-                            <button
-                                onClick={() => setLogs([])}
-                                className="p-1 hover:bg-red-500/10 hover:text-red-500 rounded text-[var(--muted)] transition-colors"
-                                title="Clear Logs"
-                            >
-                                <Trash2 size={20} />
-                            </button>
-                        </div>
-
-                        <div className="flex-grow overflow-y-auto space-y-1.5 pr-1 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-[var(--primary)]/20 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-[var(--primary)]/40">
-                            {logs.length === 0 ? (
-                                <div className="text-base text-[var(--muted)] italic text-center py-2">No activity...</div>
-                            ) : (
-                                logs.slice().reverse().map((log) => (
-                                    <div key={log.id} className="p-2.5 rounded-xl border border-[var(--border)]/40 bg-[var(--bg)]/40 flex items-center gap-3 transition-colors hover:bg-[var(--bg)]/60 group">
-                                        <div className="flex flex-col items-center justify-center shrink-0 w-12 border-r border-[var(--border)]/30 pr-2">
-                                            {log.type === 'DETECTION' ? <Zap size={18} className="text-[var(--primary)] mb-1" /> : (log.type === 'ERROR' ? <Power size={18} className="text-red-500 mb-1" /> : <Activity size={18} className="text-[var(--muted)]/70 mb-1" />)}
-                                            <span className="text-[10px] font-mono text-[var(--muted)]/50 font-bold uppercase tracking-tighter truncate w-full text-center">{log.time}</span>
-                                        </div>
-                                        <div className="flex-grow flex items-center">
-                                            <span className={`text-[15px] ${log.type === 'ERROR' ? 'text-red-400 font-bold' : (log.type === 'DETECTION' ? 'text-[var(--primary)] font-bold' : 'text-[var(--text)]/80 font-medium')}`}>
-                                                {log.message}
-                                            </span>
-                                        </div>
-                                    </div>
-                                ))
-                            )}
-                        </div>
-                    </div>
-                </div>
             </div>
         </div>
     );

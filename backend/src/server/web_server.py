@@ -1,36 +1,30 @@
 import os
-# Force single-threading for math libraries to prevent eventlet/greenlet thread-switch conflicts
+import sys
+from pathlib import Path
+
+import uvicorn
+
+# Force single-threading for math libraries to avoid oversubscription during
+# high-frequency streaming and background model work.
 os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["MKL_NUM_THREADS"] = "1"
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
 os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
 os.environ["NUMEXPR_NUM_THREADS"] = "1"
 
-import eventlet
-# Avoid patching threading primitives; ConfigWatcher uses real threads/locks
-# and eventlet's thread patching can trigger cross-thread greenlet switch errors
-# during config reload.
-eventlet.monkey_patch(all=True, thread=False)
-
-import sys
-from pathlib import Path
-
-# Add project root to path to ensure imports work if run from this file
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.append(str(PROJECT_ROOT))
 
-from src.server.server import create_app, start_background_threads, socketio
+from src.server.server import create_app
 
 app = create_app()
 
-def main():
-    start_background_threads()
-    print("Starting Web Server...")
-    # Eventlet is now patched; socketio.run will automatically pick it up.
-    # We no longer need allow_unsafe_werkzeug as we're not using Werkzeug's server.
-    # log_output=False reduces console noise from the underlying server.
-    socketio.run(app, host='0.0.0.0', port=5005, debug=False, log_output=False)
 
-if __name__ == '__main__':
+def main():
+    print("Starting Web Server...")
+    uvicorn.run(app, host="0.0.0.0", port=5005, log_level="warning")
+
+
+if __name__ == "__main__":
     main()

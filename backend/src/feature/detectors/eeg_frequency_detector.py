@@ -1,12 +1,16 @@
 import json
 import time
 from collections import deque
+import logging
 
 import joblib
 import numpy as np
 
 from src.feature.ssvep_utils import DEFAULT_TARGET_FREQS, compute_ssvep_features
 from src.utils.paths import get_models_dir
+
+log = logging.getLogger(__name__)
+
 
 class EEGFrequencyDetector:
     """
@@ -33,7 +37,7 @@ class EEGFrequencyDetector:
         self.model = None
         self.scaler = None
         self.model_name = None
-        self.frequency_native_classes = False
+        self.detector_mode = "fbcca"
         self._load_config()
 
     def _load_config(self):
@@ -59,12 +63,29 @@ class EEGFrequencyDetector:
         self.last_emitted_ts = 0.0
 
         self._load_model()
+        self.detector_mode = "lda" if (self.use_ml_pipeline and self.classifier_mode == "lda" and self.model is not None) else "fbcca"
+        log.info(
+            "[EEGFrequencyDetector] Config loaded: mode=%s use_ml_pipeline=%s classifier=%s model=%s target_freqs=%s",
+            self.detector_mode,
+            self.use_ml_pipeline,
+            self.classifier_mode,
+            self.model_name or "none",
+            ",".join(str(freq) for freq in self.target_freqs),
+        )
 
     def _load_model(self):
         self.model = None
         self.scaler = None
         self.model_name = None
         self.frequency_native_classes = False
+
+        if not self.use_ml_pipeline or self.classifier_mode != "lda":
+            log.info(
+                "[EEGFrequencyDetector] ML pipeline excluded from runtime (use_ml_pipeline=%s, classifier=%s)",
+                self.use_ml_pipeline,
+                self.classifier_mode,
+            )
+            return
 
         active_models = self.config.get("active_models", {})
         requested_model = active_models.get("EEG")
@@ -352,6 +373,11 @@ class EEGFrequencyDetector:
         enriched_features["display_score_vector"] = fbcca_meta.get("hybrid_scores", features.get("hybrid_score_vector", []))
         enriched_features["peak_guided_target_idx"] = fbcca_meta.get("peak_guided_idx")
         enriched_features["ml_enabled"] = self.use_ml_pipeline
+        enriched_features["detector_mode"] = self.detector_mode
+        enriched_features["classifier_mode"] = self.classifier_mode
+        enriched_features["model_name"] = self.model_name
+        enriched_features["fbcca_event"] = fbcca_event
+        enriched_features["final_event"] = smoothed_event
 
         return smoothed_event, confirmed, enriched_features
 

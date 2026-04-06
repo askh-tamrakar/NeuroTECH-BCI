@@ -292,3 +292,85 @@
     transform: rotate(360deg);
   }
 }
+
+/* Sidebar Mode Transitions (LabVIEW-inspired) */
+.sidebar-wrapper {
+  position: relative;
+  width: 100%;
+  height: 100%;   /* fills the flex-1 space from the parent flex column */
+  overflow: hidden;  /* keep this so hidden panel doesn't peek */
+}
+
+.sidebar-panel {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sidebar-active {
+  opacity: 1;
+  filter: blur(0);
+  transform: scale(1);
+  pointer-events: auto;
+  z-index: 2;
+  /* Allow the active panel to scroll its content */
+  overflow-y: auto;
+  overflow-x: hidden;
+  /* Custom thin scrollbar */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(var(--primary-rgb, 0,245,255), 0.25) transparent;
+}
+
+.sidebar-active::-webkit-scrollbar {
+  width: 4px;
+}
+.sidebar-active::-webkit-scrollbar-track {
+  background: transparent;
+}
+.sidebar-active::-webkit-scrollbar-thumb {
+  background: rgba(var(--primary-rgb, 0,245,255), 0.25);
+  border-radius: 4px;
+}
+.sidebar-active::-webkit-scrollbar-thumb:hover {
+  background: rgba(var(--primary-rgb, 0,245,255), 0.5);
+}
+
+.sidebar-hidden {
+  opacity: 0;
+  filter: blur(12px);
+  transform: scale(0.96);
+  pointer-events: none;
+  z-index: 1;
+  overflow: hidden;
+}
+
+.nav-controls-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: var(--primary);
+  background: linear-gradient(135deg, var(--primary), var(--teal));
+  border: none;
+  border-radius: 100px;
+  color: white;
+  font-family: 'Inter', sans-serif;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  cursor: pointer;
+  box-shadow: 0 4px 15px rgba(var(--primary-rgb), 0.3);
+  transition: all 0.3s ease;
+}
+
+.nav-controls-toggle:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(var(--primary-rgb), 0.4);
+}
+
+.nav-controls-toggle:active {
+  transform: translateY(0);
+}

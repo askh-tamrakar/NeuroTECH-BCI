@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { BrainCircuit, Activity, ImageIcon, Menu, ChevronLeft, Gamepad2, Settings, History, ScrollText, Zap, Trophy, Keyboard, Radio, HandFist, Hand, Scissors } from 'lucide-react';
 import { soundHandler } from '../../handlers/SoundHandler';
 import CustomSelect from '../ui/inputs/CustomSelect';
+import { buildApiUrl } from '../../utils/runtimeConnection';
 import '../../styles/views/RPSGame.css';
 
 const MOVES = ['ROCK', 'PAPER', 'SCISSORS'];
@@ -89,8 +90,6 @@ const MoveImage = ({ move, assetType, type, onImageError, globalFallbackMode }) 
 };
 
 const RPSGame = ({ wsEvent }) => {
-    const API_BASE_URL = buildApiUrl('');
-
     // Game State
     const [gameState, setGameState] = useState('idle'); // 'idle', 'waiting', 'revealed', 'resetting'
     const [playerMove, setPlayerMove] = useState(null);
@@ -149,7 +148,7 @@ const RPSGame = ({ wsEvent }) => {
     }, [difficulty]);
 
     const togglePrediction = (active) => {
-        fetch(`${API_BASE_URL}/api/emg/predict/${active ? 'start' : 'stop'}`, { method: 'POST' })
+        fetch(buildApiUrl(`/api/emg/predict/${active ? 'start' : 'stop'}`), { method: 'POST' })
             .catch(err => console.error("Prediction toggle failed:", err));
     };
 
@@ -215,7 +214,7 @@ const RPSGame = ({ wsEvent }) => {
         pickComputerMove();
 
         // Fetch models
-        fetch(`${API_BASE_URL}/api/models/emg`)
+        fetch(buildApiUrl('/api/models/emg'))
             .then(res => res.json())
             .then(data => {
                 setModels(data);
@@ -242,7 +241,7 @@ const RPSGame = ({ wsEvent }) => {
         setSelectedModel(name);
         // Load model on backend
         try {
-            const res = await fetch(`${API_BASE_URL}/api/models/emg/load`, {
+            const res = await fetch(buildApiUrl('/api/models/emg/load'), {
                 method: 'POST',
                 body: JSON.stringify({ model_name: name }),
                 headers: { 'Content-Type': 'application/json' }
@@ -372,7 +371,7 @@ const RPSGame = ({ wsEvent }) => {
 
         try {
             setFeedbackSaving(true);
-            await fetch(`${API_BASE_URL}/api/emg/feedback`, {
+            await fetch(buildApiUrl('/api/emg/feedback'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

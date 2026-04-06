@@ -13,13 +13,16 @@ const RangeSlider = ({
     onChange,
     onFinalChange,
     color = '#3b82f6',
-    bgColor = '#3b3b3b',
-    labelSuffix = '',
     labelPrefix = '',
+    labelSuffix = '',
     leftColor,
     middleColor,
     rightColor,
-    hideLabels = false
+    hideLabels = false,
+    className = '',
+    compact = false,
+    leftPointerColor,
+    rightPointerColor
 }) => {
     const trackRef = useRef(null);
     const containerRef = useRef(null);
@@ -74,8 +77,8 @@ const RangeSlider = ({
             const minGap = Math.max(step, 2); // 2 units minimum distance
             const effectiveValue = Math.min(newValue, maxValue - minGap);
             if (effectiveValue !== minValue) {
-                onChange({ 
-                    min: effectiveValue, 
+                onChange({
+                    min: effectiveValue,
                     max: maxValue,
                     left: effectiveValue - min,
                     middle: maxValue - effectiveValue,
@@ -86,8 +89,8 @@ const RangeSlider = ({
             const minGap = Math.max(step, 2);
             const effectiveValue = Math.max(newValue, minValue + minGap);
             if (effectiveValue !== maxValue) {
-                onChange({ 
-                    min: minValue, 
+                onChange({
+                    min: minValue,
                     max: effectiveValue,
                     left: minValue - min,
                     middle: effectiveValue - minValue,
@@ -104,8 +107,8 @@ const RangeSlider = ({
             containerRef.current.releasePointerCapture(e.pointerId);
         }
         if (onFinalChange) {
-            onFinalChange({ 
-                min: minValue, 
+            onFinalChange({
+                min: minValue,
                 max: maxValue,
                 left,
                 middle,
@@ -118,10 +121,14 @@ const RangeSlider = ({
     const minPos = getPercentage(minValue);
     const maxPos = getPercentage(maxValue);
 
+    // Default colors for pointers if not specified
+    const finalLeftPointerColor = leftPointerColor || color;
+    const finalRightPointerColor = rightPointerColor || color;
+
     return (
         <div
             ref={containerRef}
-            className="range-slider-container w-full px-4 pt-10 pb-4 select-none touch-none"
+            className={`range-slider-container w-full ${compact ? 'px-1 pt-2 pb-2' : 'px-4 pt-10 pb-4'} select-none touch-none ${className}`}
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
             onPointerCancel={handlePointerUp}
@@ -138,9 +145,9 @@ const RangeSlider = ({
                     startDragging(e, handle);
                 }}
             >
-                {/* Full Track Fill - Handled below via segments if leftColor/middleColor/rightColor are provided */}
+                {/* Secondary 'light' fill for the entire track - only if no segments provided */}
                 {(!leftColor && !middleColor && !rightColor) && (
-                    <div 
+                    <div
                         className="absolute inset-0 rounded-full opacity-20"
                         style={{ backgroundColor: color }}
                     />
@@ -158,7 +165,6 @@ const RangeSlider = ({
                         }}
                     />
                 )}
-                
                 {/* Middle 'Active Range' Highlight - Exactly between handles */}
                 <div
                     className="absolute h-full rounded-full pointer-events-none"
@@ -166,7 +172,7 @@ const RangeSlider = ({
                         left: `${minPos}%`,
                         right: `${Math.max(0, 100 - maxPos)}%`,
                         backgroundColor: middleColor || color,
-                        boxShadow: `0 0 10px ${middleColor || color}60`
+                        boxShadow: `0 0 10px ${(middleColor || color)}60`
                     }}
                 />
 
@@ -182,10 +188,9 @@ const RangeSlider = ({
                     />
                 )}
 
-                {/* Left Handle */}
-                <div 
-                    className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-5 h-5 bg-white rounded-full shadow-xl cursor-grab active:cursor-grabbing border-2 transition-transform hover:scale-110 flex items-center justify-center"
-                    style={{ left: `${minPos}%`, borderColor: color, zIndex: activeHandle === 'min' ? 40 : 30 }}
+                <div
+                    className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-5 h-5 bg-white rounded-full shadow-xl cursor-grab active:cursor-grabbing border-2 transition-transform hover:scale-110 z-30 flex items-center justify-center"
+                    style={{ left: `${minPos}%`, borderColor: finalLeftPointerColor }}
                     onPointerDown={(e) => startDragging(e, 'min')}
                 >
                     {/* Tooltip Label */}
@@ -195,13 +200,12 @@ const RangeSlider = ({
                         </div>
                     )}
                     {/* Inner dot for handle */}
-                    <div className="w-1.5 h-1.5 rounded-full pointer-events-none" style={{ backgroundColor: color, opacity: 0.5 }} />
+                    <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: finalLeftPointerColor, opacity: 0.5 }} />
                 </div>
 
-                {/* Right Handle */}
-                <div 
-                    className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-5 h-5 bg-white rounded-full shadow-xl cursor-grab active:cursor-grabbing border-2 transition-transform hover:scale-110 flex items-center justify-center"
-                    style={{ left: `${maxPos}%`, borderColor: color, zIndex: activeHandle === 'max' ? 40 : 30 }}
+                <div
+                    className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-5 h-5 bg-white rounded-full shadow-xl cursor-grab active:cursor-grabbing border-2 transition-transform hover:scale-110 z-30 flex items-center justify-center"
+                    style={{ left: `${maxPos}%`, borderColor: finalRightPointerColor }}
                     onPointerDown={(e) => startDragging(e, 'max')}
                 >
                     {/* Tooltip Label */}
@@ -211,7 +215,7 @@ const RangeSlider = ({
                         </div>
                     )}
                     {/* Inner dot for handle */}
-                    <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: color, opacity: 0.5 }} />
+                    <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: finalRightPointerColor, opacity: 0.5 }} />
                 </div>
             </div>
         </div>

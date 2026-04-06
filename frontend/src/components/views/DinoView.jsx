@@ -9,6 +9,7 @@ import {
     Layers, Zap, Clock, ChevronDown, Activity, Target, Radio, Signal, Circle, Camera, Menu, BrainCircuit, Check, X, ChevronRight, ChevronLeft
 } from 'lucide-react'
 import { soundHandler } from '../../handlers/SoundHandler'
+import { buildApiUrl } from '../../utils/runtimeConnection'
 
 const getEventEmoji = (type) => {
     switch (type) {
@@ -44,13 +45,16 @@ const resolveColorVar = (styles, initialProp, fallbackProp1, fallbackProp2) => {
 };
 
 export default function DinoView({ isConnected, wsEvent, isPaused }) {
+<<<<<<< HEAD
     const API_BASE_URL = buildApiUrl('');
+=======
+>>>>>>> c7bf9055e61ec66fb244ff992eedfd6cca495c42
     const normalizeModelName = useCallback((name) => String(name || '').toLowerCase().replace(/[^a-z0-9]/g, ''), []);
 
     const togglePrediction = useCallback((active) => {
-        fetch(`${API_BASE_URL}/api/eog/predict/${active ? 'start' : 'stop'}`, { method: 'POST' })
+        fetch(buildApiUrl(`/api/eog/predict/${active ? 'start' : 'stop'}`), { method: 'POST' })
             .catch(err => console.error("EOG prediction toggle failed:", err));
-    }, [API_BASE_URL]);
+    }, []);
 
     // Game state
     const [cactusJump, setCactusJump] = useState(0)
@@ -268,7 +272,7 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
 
     // Load available EOG models
     useEffect(() => {
-        fetch(`${API_BASE_URL}/api/models/eog`)
+        fetch(buildApiUrl('/api/models/eog'))
             .then(res => res.json())
             .then(data => {
                 setModels(data);
@@ -291,7 +295,7 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
         // We only care if they changed METHOD or MODEL
         const updateBackendConfig = async () => {
             try {
-                const res = await fetch(`${API_BASE_URL}/api/config`);
+                const res = await fetch(buildApiUrl('/api/config'));
                 if (!res.ok) return;
                 const config = await res.json();
 
@@ -316,7 +320,7 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
                 }
 
                 if (changed) {
-                    await fetch(`${API_BASE_URL}/api/config`, {
+                    await fetch(buildApiUrl('/api/config'), {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(newConfig)
@@ -346,7 +350,7 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
         let cancelled = false;
 
         const refreshEogChannels = () => {
-            fetch(`${API_BASE_URL}/api/config`)
+            fetch(buildApiUrl('/api/config'))
                 .then(res => res.json())
                 .then(config => {
                     if (cancelled) return;
@@ -391,7 +395,7 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
             cancelled = true;
             clearInterval(intervalId);
         };
-    }, [API_BASE_URL]);
+    }, []);
 
     useEffect(() => {
         togglePrediction(true);
@@ -927,7 +931,7 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
 
         try {
             setFeedbackSaving(true)
-            await fetch(`${API_BASE_URL}/api/eog/feedback`, {
+            await fetch(buildApiUrl('/api/eog/feedback'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -943,7 +947,7 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
             setFeedbackSaving(false)
             setFeedbackPrompt(null)
         }
-    }, [API_BASE_URL, feedbackPrompt])
+    }, [feedbackPrompt])
 
     return (
         <div className="dino-container">

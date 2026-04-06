@@ -1,8 +1,9 @@
-from flask import Blueprint, jsonify, request
 import json
 import uuid
 import numpy as np
 import time
+from fastapi import APIRouter, Body, Query
+from fastapi.responses import JSONResponse
 from src.server.server.state import state
 from src.database.db_manager import db_manager
 from src.config.window_config import SESSION_CONFIG, get_window_samples
@@ -13,9 +14,52 @@ from src.utils.trial_utils import get_next_trial_id
 # but lsl_service.py has it.
 from src.server.server.lsl_service import extract_emg_features, extract_eog_features, extract_eeg_features
 
-session_bp = Blueprint('session', __name__)
+session_bp = APIRouter()
 
 EMG_COLLECTION_GAP_MS = 500.0
+EMG_BURST_WINDOWS = 5
+EMG_BURST_STRIDE_MS = 150.0
+
+
+def _json(payload, status_code: int = 200):
+    if status_code == 200:
+        return payload
+    return JSONResponse(content=payload, status_code=status_code)
+
+
+def _normalize_eeg_label(label):
+    raw = str(label).strip()
+    lowered = raw.lower()
+    mapping = {
+        'rest': 0,
+        '0': 0,
+        't1': 1,
+        'target 1': 1,
+        '1': 1,
+        't2': 2,
+        'target 2': 2,
+        '2': 2,
+        't3': 3,
+        'target 3': 3,
+        '3': 3,
+        't4': 4,
+        'target 4': 4,
+        '4': 4,
+        't5': 5,
+        'target 5': 5,
+        '5': 5,
+        't6': 6,
+        'target 6': 6,
+        '6': 6,
+    }
+    return mapping.get(lowered, 0)
+
+
+def _emg_burst_sizes(sr: float, window_ms: float) -> tuple[int, int, int]:
+    window_size = max(1, int((window_ms / 1000.0) * sr))
+    stride_size = max(1, int((EMG_BURST_STRIDE_MS / 1000.0) * sr))
+    capture_size = window_size + stride_size * (EMG_BURST_WINDOWS - 1)
+    return window_size, stride_size, capture_size
 
 
 def _resolve_sampling_rate():
@@ -90,12 +134,13 @@ def _normalize_collection_context(sensor_type, payload=None):
         "gap_ms": gap_ms,
         "time_window_ms": float(payload.get('time_window_ms') or payload.get('time_window') or 0),
         "channel_index": int(payload.get('channel_index', payload.get('channel', 0)) or 0),
+        "target_frequency": float(payload.get('target_frequency') or payload.get('targetFrequency') or 0),
     }
     if sensor in {'EMG', 'EEG'}:
         context["trial_id"] = payload.get('trial_id') or payload.get('trial_group_id') or get_next_trial_id()
     return context
 
-@session_bp.route('/api/sessions/<sensor_type>', methods=['GET'])
+@session_bp.get('/api/sessions/{sensor_type}')
 def api_list_sessions(sensor_type):
     """List available session tables."""
     tables = db_manager.get_session_tables(sensor_type)
@@ -105,45 +150,28 @@ def api_list_sessions(sensor_type):
     
     # We return the full table names as strings, as frontend parser handles `_session_` split.
     # We return the full table names as strings, as frontend parser handles `_session_` split.
-    return jsonify({"tables": tables})
+    return {"tables": tables}
 
 
-@session_bp.route('/api/dataset-size/<sensor_type>', methods=['GET'])
-def api_get_dataset_size(sensor_type):
-    """Fallback route to get count of rows in the base dataset table."""
-    try:
-        sensor = str(sensor_type).upper()
-        conn = db_manager.connect(sensor)
-        cursor = conn.cursor()
-        table_name = f"{sensor.lower()}_windows"
-        cursor.execute(f"SELECT COUNT(*) FROM {table_name}")
-        count = cursor.fetchone()[0]
-        return jsonify({"total": count})
-    except Exception as e:
-        print(f"Error fetching base dataset size for {sensor_type}: {e}")
-        return jsonify({"total": 0})
-
-
-@session_bp.route('/api/sessions/<sensor_type>/<session_name>', methods=['GET'])
-def api_get_session_data(sensor_type, session_name):
+@session_bp.get('/api/sessions/{sensor_type}/{session_name}')
+def api_get_session_data(
+    sensor_type,
+    session_name,
+    limit: int | None = Query(default=None),
+    offset: int = Query(default=0),
+    sortBy: str = Query(default='id'),
+    order: str = Query(default='ASC'),
+    label: str | None = Query(default=None),
+    row_from: str | None = Query(default=None, alias='from'),
+    row_to: str | None = Query(default=None, alias='to'),
+):
     """Get data rows for a specific session with optional pagination, sorting, and filtering."""
     try:
         # Pagination parameters
-        limit_arg = request.args.get('limit')
-        offset_arg = request.args.get('offset', 0)
-        
-        # Sorting and filtering parameters
-        sort_by = request.args.get('sortBy', 'id')
-        order = request.args.get('order', 'ASC')
-        label_filter = request.args.get('label')
-        row_from = request.args.get('from')
-        row_to = request.args.get('to')
-        
-        limit = int(limit_arg) if limit_arg is not None else None
-        offset = int(offset_arg)
-        
+        sort_by = sortBy
+
         # Convert filters to appropriate types if provided
-        l_filter = int(label_filter) if label_filter is not None and label_filter != '' else None
+        l_filter = int(label) if label is not None and label != '' else None
         r_from = int(row_from) if row_from is not None and row_from != '' else None
         r_to = int(row_to) if row_to is not None and row_to != '' else None
 
@@ -153,14 +181,14 @@ def api_get_session_data(sensor_type, session_name):
             sort_by=sort_by, order=order,
             label_filter=l_filter, row_from=r_from, row_to=r_to
         )
-        return jsonify(data)
+        return data
     except ValueError:
-        return jsonify({"error": "Invalid numeric parameters"}), 400
+        return _json({"error": "Invalid numeric parameters"}, 400)
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return _json({"error": str(e)}, 500)
 
 
-@session_bp.route('/api/sessions/<sensor_type>/<session_name>', methods=['DELETE'])
+@session_bp.delete('/api/sessions/{sensor_type}/{session_name}')
 def api_delete_session(sensor_type, session_name):
     """Delete a session table."""
     try:
@@ -168,13 +196,13 @@ def api_delete_session(sensor_type, session_name):
             # If active session was this one, reset it?
             # The UI should handle clearing local state, server state reset is tricky if it's currently recording.
             # We assume user won't delete ACTIVE recording session without stopping it first.
-            return jsonify({"status": "deleted", "session": session_name})
+            return {"status": "deleted", "session": session_name}
         else:
-            return jsonify({"error": "Failed to delete"}), 500
+            return _json({"error": "Failed to delete"}, 500)
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return _json({"error": str(e)}, 500)
 
-@session_bp.route('/api/sessions/<sensor_type>/<session_name>/clear', methods=['DELETE'])
+@session_bp.delete('/api/sessions/{sensor_type}/{session_name}/clear')
 def api_clear_session(sensor_type, session_name):
     """Clear all rows from a session without deleting the table."""
     try:
@@ -185,13 +213,13 @@ def api_clear_session(sensor_type, session_name):
             
         result = db_manager.clear_table(sensor_type, session_name)
         if result.get("status") == "success":
-            return jsonify({"status": "cleared", "session": session_name})
+            return {"status": "cleared", "session": session_name}
         else:
-            return jsonify({"error": result.get("error", "Failed to clear")}), 500
+            return _json({"error": result.get("error", "Failed to clear")}, 500)
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return _json({"error": str(e)}, 500)
 
-@session_bp.route('/api/sessions/<sensor_type>/<session_name>/rows/<row_id>', methods=['DELETE'])
+@session_bp.delete('/api/sessions/{sensor_type}/{session_name}/rows/{row_id}')
 def api_delete_session_row(sensor_type, session_name, row_id):
     """Delete a specific row from a session."""
     try:
@@ -199,79 +227,79 @@ def api_delete_session_row(sensor_type, session_name, row_id):
         try:
             r_id = int(row_id)
         except ValueError:
-            return jsonify({"error": "Invalid row ID"}), 400
+            return _json({"error": "Invalid row ID"}, 400)
 
         if db_manager.delete_session_row(sensor_type, session_name, r_id):
-            return jsonify({"status": "deleted", "row_id": r_id})
+            return {"status": "deleted", "row_id": r_id}
         else:
-            return jsonify({"error": "Failed to delete row (not found or DB error)"}), 404
+            return _json({"error": "Failed to delete row (not found or DB error)"}, 404)
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return _json({"error": str(e)}, 500)
 
-@session_bp.route('/api/sessions/<sensor_type>/<session_name>/rename', methods=['POST'])
-def api_rename_session(sensor_type, session_name):
+@session_bp.post('/api/sessions/{sensor_type}/{session_name}/rename')
+def api_rename_session(sensor_type, session_name, payload: dict | None = Body(default=None)):
     """Rename a session."""
-    data = request.get_json()
+    data = payload or {}
     new_name = data.get('new_name')
     if not new_name:
-        return jsonify({"error": "new_name is required"}), 400
+        return _json({"error": "new_name is required"}, 400)
         
     try:
         if db_manager.rename_session_table(sensor_type, session_name, new_name):
-            return jsonify({"status": "renamed", "new_name": new_name})
+            return {"status": "renamed", "new_name": new_name}
         else:
-            return jsonify({"error": "Failed to rename session"}), 500
+            return _json({"error": "Failed to rename session"}, 500)
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return _json({"error": str(e)}, 500)
 
-@session_bp.route('/api/sessions/<sensor_type>/merge_multiple', methods=['POST'])
-def api_merge_multiple_sessions(sensor_type):
+@session_bp.post('/api/sessions/{sensor_type}/merge_multiple')
+def api_merge_multiple_sessions(sensor_type, payload: dict | None = Body(default=None)):
     """Merge multiple sessions into a new session."""
-    data = request.get_json()
+    data = payload or {}
     source_sessions = data.get('source_sessions', [])
     target_session = data.get('target_session')
     
     if not source_sessions or not target_session:
-        return jsonify({"error": "source_sessions (list) and target_session are required"}), 400
+        return _json({"error": "source_sessions (list) and target_session are required"}, 400)
         
     try:
         if db_manager.merge_multiple_sessions(sensor_type, source_sessions, target_session):
-            return jsonify({"status": "merged", "sources": source_sessions, "target": target_session})
+            return {"status": "merged", "sources": source_sessions, "target": target_session}
         else:
-            return jsonify({"error": "Failed to merge sessions"}), 500
+            return _json({"error": "Failed to merge sessions"}, 500)
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return _json({"error": str(e)}, 500)
 
 
-@session_bp.route('/api/calibration/start', methods=['POST'])
-def api_start_collection():
-    payload = request.get_json() or {}
+@session_bp.post('/api/calibration/start')
+def api_start_collection(payload: dict | None = Body(default=None)):
+    payload = payload or {}
     sensor = str(payload.get('sensor', '')).upper()
     if sensor not in {'EMG', 'EOG', 'EEG'}:
-        return jsonify({"error": "Valid sensor is required"}), 400
+        return _json({"error": "Valid sensor is required"}, 400)
 
     context = _normalize_collection_context(sensor, payload)
     state.session.start_collection_context(sensor, **context)
-    return jsonify({"status": "started", "sensor": sensor, "collection_context": context})
+    return {"status": "started", "sensor": sensor, "collection_context": context}
 
 
-@session_bp.route('/api/calibration/stop', methods=['POST'])
-def api_stop_collection():
-    payload = request.get_json() or {}
+@session_bp.post('/api/calibration/stop')
+def api_stop_collection(payload: dict | None = Body(default=None)):
+    payload = payload or {}
     sensor = str(payload.get('sensor', '')).upper()
     if sensor not in {'EMG', 'EOG', 'EEG'}:
-        return jsonify({"error": "Valid sensor is required"}), 400
+        return _json({"error": "Valid sensor is required"}, 400)
 
     context = state.session.get_collection_context(sensor)
     state.session.stop_collection_context(sensor)
-    return jsonify({"status": "stopped", "sensor": sensor, "collection_context": context})
+    return {"status": "stopped", "sensor": sensor, "collection_context": context}
 
 # --- EMG ENDPOINTS ---
 
-@session_bp.route('/api/emg/start', methods=['POST'])
-def api_emg_start():
+@session_bp.post('/api/emg/start')
+def api_emg_start(payload: dict | None = Body(default=None)):
     try:
-        data = request.get_json()
+        data = payload or {}
         label = data.get('label', 0) # Default to Rest (0)
         session_name = data.get('session_name', 'DefaultSession')
         
@@ -279,11 +307,11 @@ def api_emg_start():
         label_str = label_map.get(int(label), f"Unknown_{label}")
         
         state.session.start_recording('EMG', label_str, session_name=session_name)
-        return jsonify({"status": "started", "label": label_str, "table": state.session.current_table_name})
+        return {"status": "started", "label": label_str, "table": state.session.current_table_name}
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return _json({"error": str(e)}, 500)
 
-@session_bp.route('/api/emg/stop', methods=['POST'])
+@session_bp.post('/api/emg/stop')
 def api_emg_stop():
     # Capture table name BEFORE stopping
     target_table = state.session.stop_recording() or "emg_windows"
@@ -296,14 +324,9 @@ def api_emg_stop():
         trial_id = str(collection_context.get('trial_id') or get_next_trial_id())
         sr = state.sr or SESSION_CONFIG["sampling_rate"]
         window_ms = float(collection_context.get('window_duration_ms') or SESSION_CONFIG["window_ms"])
-        requested_stride_ms = float(collection_context.get('stride_ms') or 0)
         overlap = float(collection_context.get('overlap') or SESSION_CONFIG["overlap"])
         gap_ms = float(collection_context.get('gap_ms') or 0)
-        window_size = max(1, int((window_ms / 1000.0) * sr))
-        if requested_stride_ms > 0:
-            step_size = max(1, int((requested_stride_ms / 1000.0) * sr))
-        else:
-            _, step_size = get_window_samples({"sampling_rate": sr, "window_ms": window_ms, "overlap": overlap})
+        window_size, step_size, capture_size = _emg_burst_sizes(sr, window_ms)
 
         db_manager.save_session_metadata('EMG', target_table, {
             "sensor": "EMG",
@@ -312,7 +335,7 @@ def api_emg_stop():
             "storage_format": "compact_emg_v2",
             "feature_columns": EMG_FEATURE_COLUMNS,
             "training_window_ms": float(window_ms),
-            "capture_window_ms": float(window_ms),
+            "capture_window_ms": float((capture_size / sr) * 1000.0),
             "sampling_rate": float(sr),
             "overlap": float(overlap),
             "stride_ms": float((step_size / sr) * 1000.0),
@@ -350,43 +373,43 @@ def api_emg_stop():
             if raw_data.ndim > 1 and raw_data.shape[1] == 1:
                 raw_data = raw_data.flatten()
             
-            # Slice and dice
             num_samples = len(raw_data)
-            if num_samples < window_size:
+            if num_samples < capture_size:
                 continue
                 
-            prev_features = None
-            for i in range(0, num_samples - window_size + 1, step_size):
-                window = raw_data[i : i + window_size]
-                
-                # Extract features
-                feats = extract_emg_features(window, sr, prev_features=prev_features)
-                feats['timestamp'] = time.time()
-                feats['channel_index'] = int(collection_context.get('channel_index', 0) or 0)
-                feats['sample_count'] = int(len(window))
-                feats['window_ms'] = float((len(window) / sr) * 1000.0)
-                feats['sampling_rate'] = float(sr)
-                feats['session_window_ms'] = float(window_ms)
-                feats['session_overlap'] = float(overlap)
-                feats['session_stride_ms'] = float((step_size / sr) * 1000.0)
-                feats['gap_ms'] = float(gap_ms)
-                feats['trial_id'] = trial_id
-                feats['metadata_json'] = json.dumps({
-                    "source": "backend_session_buffer",
-                    "mode": collection_context.get('mode', 'buffer_recording'),
-                    "class_label": label_int,
-                    "session_name": state.session.current_session_name,
-                    "trial_id": trial_id,
-                    "collection_context": collection_context,
-                })
-                prev_features = feats.copy()
-                
-                # Save to DB (Specific Table)
-                if db_manager.insert_window(feats, label_int, session_id, table_name=target_table):
-                    saved_count += 1
-                    # Also append to global table if not a merged session
-                    if "merge" not in target_table.lower():
-                        db_manager.insert_window(feats, label_int, session_id, table_name="emg_windows")
+            for burst_start in range(0, num_samples - capture_size + 1, capture_size):
+                burst = raw_data[burst_start: burst_start + capture_size]
+                trial_id = db_manager.next_trial_id('EMG', target_table)
+                prev_features = None
+                for offset in range(0, capture_size - window_size + 1, step_size):
+                    window = burst[offset: offset + window_size]
+                    feats = extract_emg_features(window, sr, prev_features=prev_features)
+                    feats['trial'] = trial_id
+                    feats['timestamp'] = time.time()
+                    feats['channel_index'] = int(collection_context.get('channel_index', 0) or 0)
+                    feats['sample_count'] = int(len(window))
+                    feats['window_ms'] = float((len(window) / sr) * 1000.0)
+                    feats['capture_window_ms'] = float((capture_size / sr) * 1000.0)
+                    feats['sampling_rate'] = float(sr)
+                    feats['session_window_ms'] = float(window_ms)
+                    feats['session_overlap'] = float(overlap)
+                    feats['session_stride_ms'] = float((step_size / sr) * 1000.0)
+                    feats['gap_ms'] = float(gap_ms)
+                    feats['source'] = "backend_session_buffer"
+                    feats['metadata_json'] = json.dumps({
+                        "source": "backend_session_buffer",
+                        "mode": collection_context.get('mode', 'buffer_recording'),
+                        "label": label_str,
+                        "session_name": state.session.current_session_name,
+                        "collection_context": collection_context,
+                        "trial": trial_id,
+                    })
+                    prev_features = feats.copy()
+
+                    if db_manager.insert_emg_window(feats, label_int, session_id, table_name=target_table):
+                        saved_count += 1
+                        if "merge" not in target_table.lower():
+                            db_manager.insert_emg_window(feats, label_int, session_id, table_name="emg_windows")
                     
         print(f"💾 Saved {saved_count} EMG windows to {target_table}")
         
@@ -399,11 +422,11 @@ def api_emg_stop():
         tb_str = traceback.format_exc()
         state.session.stop_collection_context('EMG')
         print(f"❌ Error processing EMG session: {tb_str}")
-        return jsonify({"status": "stopped", "error": str(e), "traceback": tb_str, "saved_windows": 0})
+        return _json({"status": "stopped", "error": str(e), "traceback": tb_str, "saved_windows": 0}, 500)
 
-    return jsonify({"status": "stopped", "saved_windows": saved_count if 'saved_count' in locals() else 0})
+    return {"status": "stopped", "saved_windows": saved_count if 'saved_count' in locals() else 0}
 
-@session_bp.route('/api/emg/status', methods=['GET'])
+@session_bp.get('/api/emg/status')
 def api_emg_status():
     status = state.session.get_status('EMG')
     
@@ -422,9 +445,9 @@ def api_emg_status():
         status['current_label'] = int(label_map_inv[curr])
         
     status['counts'] = mapped_counts
-    return jsonify(status)
+    return status
 
-@session_bp.route('/api/emg/data', methods=['DELETE'])
+@session_bp.delete('/api/emg/data')
 def api_emg_clear():
     state.session.clear_data('EMG')
     try:
@@ -436,9 +459,9 @@ def api_emg_clear():
             conn.close()
     except Exception as e:
         print(f"Failed to clear DB: {e}")
-    return jsonify({"status": "cleared"})
+    return {"status": "cleared"}
 
-@session_bp.route('/api/emg/predict/<action>', methods=['POST'])
+@session_bp.post('/api/emg/predict/{action}')
 def api_emg_predict_toggle(action):
     from src.server.server.config_manager import set_detection_state, get_detection_target
     
@@ -450,24 +473,24 @@ def api_emg_predict_toggle(action):
         if get_detection_target() == 'EMG':
             set_detection_state(False, None)
         
-    return jsonify({"status": "ok", "predicting": state.session.prediction_active['EMG']})
+    return {"status": "ok", "predicting": state.session.prediction_active['EMG']}
 
 
 # --- EOG ENDPOINTS ---
 
-@session_bp.route('/api/eog/start', methods=['POST'])
-def api_eog_start():
+@session_bp.post('/api/eog/start')
+def api_eog_start(payload: dict | None = Body(default=None)):
     try:
-        data = request.get_json()
+        data = payload or {}
         label = data.get('label', 0)
         session_name = data.get('session_name', 'DefaultSession')
         
         state.session.start_recording('EOG', str(label), session_name=session_name)
-        return jsonify({"status": "started", "label": label, "table": state.session.current_table_name})
+        return {"status": "started", "label": label, "table": state.session.current_table_name}
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return _json({"error": str(e)}, 500)
 
-@session_bp.route('/api/eog/stop', methods=['POST'])
+@session_bp.post('/api/eog/stop')
 def api_eog_stop():
     target_table = state.session.stop_recording() or "eog_windows"
     
@@ -500,24 +523,25 @@ def api_eog_stop():
             raw_data = np.array(samples)
             if raw_data.ndim > 1:
                 raw_data = raw_data.flatten()
-            if raw_data.size == 0:
-                continue
-
-            feats = extract_eog_features(raw_data, sr)
-            feats['timestamp'] = time.time()
-
-            db_manager.save_session_metadata('EOG', target_table, {
-                "window_ms": float(collection_context.get('window_duration_ms') or ((len(raw_data) / sr) * 1000.0)),
-                "stride_ms": float(collection_context.get('window_duration_ms') or ((len(raw_data) / sr) * 1000.0)),
-                "capture_window_ms": float((len(raw_data) / sr) * 1000.0),
-                "channel_index": int(collection_context.get('channel_index', 0) or 0),
-            })
-
-            if db_manager.insert_eog_window(feats, label_int, session_id, table_name=target_table):
-                saved_count += 1
-                # Also append to global table if not a merged session
-                if "merge" not in target_table.lower():
-                    db_manager.insert_eog_window(feats, label_int, session_id, table_name="eog_windows")
+                
+            sr = state.sr or 1000
+            window_size = int(sr * 0.6) # 600ms to capture full blink
+            step_size = int(window_size * 0.5)
+            serial_id = db_manager.next_serial_id(target_table)
+            
+            for i in range(0, len(raw_data) - window_size + 1, step_size):
+                window = raw_data[i : i + window_size]
+                
+                # Extract
+                feats = extract_eog_features(window, sr)
+                feats['timestamp'] = time.time()
+                feats['serial_id'] = serial_id
+                
+                if db_manager.insert_eog_window(feats, label_int, session_id, table_name=target_table):
+                    saved_count += 1
+                    # Also append to global table if not a merged session
+                    if "merge" not in target_table.lower():
+                        db_manager.insert_eog_window(feats, label_int, session_id, table_name="eog_windows")
 
         print(f"💾 Saved {saved_count} EOG windows to {target_table}")
         state.session.reset_recording_state()
@@ -527,18 +551,18 @@ def api_eog_stop():
         print(f"❌ Error processing EOG session: {e}")
         state.session.stop_collection_context('EOG')
 
-    return jsonify({"status": "stopped", "saved_windows": saved_count if 'saved_count' in locals() else 0})
+    return {"status": "stopped", "saved_windows": saved_count if 'saved_count' in locals() else 0}
 
-@session_bp.route('/api/eog/status', methods=['GET'])
+@session_bp.get('/api/eog/status')
 def api_eog_status():
-    return jsonify(state.session.get_status('EOG'))
+    return state.session.get_status('EOG')
 
-@session_bp.route('/api/eog/data', methods=['DELETE'])
+@session_bp.delete('/api/eog/data')
 def api_eog_clear():
     state.session.clear_data('EOG')
-    return jsonify({"status": "cleared"})
+    return {"status": "cleared"}
 
-@session_bp.route('/api/eog/predict/<action>', methods=['POST'])
+@session_bp.post('/api/eog/predict/{action}')
 def api_eog_predict_toggle(action):
     from src.server.server.config_manager import set_detection_state, get_detection_target
 
@@ -549,24 +573,24 @@ def api_eog_predict_toggle(action):
         state.session.prediction_active['EOG'] = False
         if get_detection_target() == 'EOG':
             set_detection_state(False, None)
-    return jsonify({"status": "ok", "predicting": state.session.prediction_active['EOG']})
+    return {"status": "ok", "predicting": state.session.prediction_active['EOG']}
 
 
 # --- EEG ENDPOINTS ---
 
-@session_bp.route('/api/eeg/start', methods=['POST'])
-def api_eeg_start():
+@session_bp.post('/api/eeg/start')
+def api_eeg_start(payload: dict | None = Body(default=None)):
     try:
-        data = request.get_json()
+        data = payload or {}
         label = data.get('label', 0)
         session_name = data.get('session_name', 'DefaultSession')
         
         state.session.start_recording('EEG', str(label), session_name=session_name)
-        return jsonify({"status": "started", "label": label, "table": state.session.current_table_name})
+        return {"status": "started", "label": label, "table": state.session.current_table_name}
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return _json({"error": str(e)}, 500)
 
-@session_bp.route('/api/eeg/stop', methods=['POST'])
+@session_bp.post('/api/eeg/stop')
 def api_eeg_stop():
     target_table = state.session.stop_recording() or "eeg_windows"
     
@@ -578,11 +602,9 @@ def api_eeg_stop():
         trial_id = str(collection_context.get('trial_id') or get_next_trial_id())
         saved_count = 0
         eeg_cfg = (state.config or {}).get('features', {}).get('EEG', {})
-        target_freqs = [float(freq) for freq in eeg_cfg.get('target_freqs', [8, 9, 12, 14.4, 16, 18])]
-        sr = state.sr or 1000
-        window_size = max(1, int(sr * float(eeg_cfg.get('window_len_sec', 1.5))))
-        step_size = max(1, int(sr * float(eeg_cfg.get('step_sec', 0.25))))
         channel_mapping = (state.config or {}).get('channel_mapping', {})
+        collection_context = state.session.get_collection_context('EEG') or {}
+        session_target_frequency = float(collection_context.get('target_frequency') or 0)
         eeg_channel_index = 0
         for channel_key, channel_info in channel_mapping.items():
             if str(channel_info.get('sensor', '')).upper() == 'EEG':
@@ -608,31 +630,38 @@ def api_eeg_stop():
             if len(samples) < 50:
                 continue
 
-            try:
-                label_int = int(label_str)
-            except:
-                continue
+            label_int = _normalize_eeg_label(label_str)
                 
             raw_data = np.array(samples)
+            
+            sr = state.sr or 1000
+            window_size = max(1, int(sr * float(eeg_cfg.get('window_len_sec', 1.5))))
+            step_size = max(1, int(sr * float(eeg_cfg.get('step_sec', 0.25))))
+            trial_id = db_manager.next_trial_id('EEG', target_table)
+            db_manager.save_session_metadata('EEG', target_table, {
+                "sensor": "EEG",
+                "table_name": target_table,
+                "session_name": target_table,
+                "storage_format": "compact_eeg_v1",
+                "channel_index": eeg_channel_index,
+                "sample_count": window_size,
+                "sampling_rate": float(sr),
+                "window_ms": float((window_size / sr) * 1000.0),
+                "target_frequency": session_target_frequency,
+                "source": "session_stop",
+            })
             
             for i in range(0, len(raw_data) - window_size + 1, step_size):
                 window = raw_data[i : i + window_size]
                 
                 # Extract
                 feats = extract_eeg_features(window, sr)
+                feats['trial'] = trial_id
                 feats['timestamp'] = time.time()
                 feats['sample_count'] = int(len(window))
                 feats['window_ms'] = float((len(window) / sr) * 1000.0)
                 feats['channel_index'] = eeg_channel_index
-                feats['target_frequency'] = _resolve_eeg_target_frequency(label_int, target_freqs=target_freqs)
-                feats['trial_id'] = trial_id
-                feats['metadata_json'] = json.dumps({
-                    "source": "backend_session_buffer",
-                    "session_name": state.session.current_session_name,
-                    "class_label": label_int,
-                    "trial_id": trial_id,
-                    "target_frequency": feats['target_frequency'],
-                })
+                feats['target_frequency'] = session_target_frequency
                 
                 if db_manager.insert_eeg_window(feats, label_int, session_id, table_name=target_table):
                     saved_count += 1
@@ -648,19 +677,19 @@ def api_eeg_stop():
         print(f"❌ Error processing EEG session: {e}")
         state.session.stop_collection_context('EEG')
 
-    return jsonify({"status": "stopped", "saved_windows": saved_count if 'saved_count' in locals() else 0})
+    return {"status": "stopped", "saved_windows": saved_count if 'saved_count' in locals() else 0}
 
-@session_bp.route('/api/eeg/status', methods=['GET'])
+@session_bp.get('/api/eeg/status')
 def api_eeg_status():
-    return jsonify(state.session.get_status('EEG'))
+    return state.session.get_status('EEG')
 
-@session_bp.route('/api/eeg/data', methods=['DELETE'])
+@session_bp.delete('/api/eeg/data')
 def api_eeg_clear():
     state.session.clear_data('EEG')
-    return jsonify({"status": "cleared"})
+    return {"status": "cleared"}
 
 
-@session_bp.route('/api/eeg/predict/<action>', methods=['POST'])
+@session_bp.post('/api/eeg/predict/{action}')
 def api_eeg_predict_toggle(action):
     from src.server.server.config_manager import set_detection_state, get_detection_target
 
@@ -671,10 +700,10 @@ def api_eeg_predict_toggle(action):
         state.session.prediction_active['EEG'] = False
         if get_detection_target() == 'EEG':
             set_detection_state(False, None)
-    return jsonify({"status": "ok", "predicting": state.session.prediction_active['EEG']})
+    return {"status": "ok", "predicting": state.session.prediction_active['EEG']}
 
 
-@session_bp.route('/api/detectors/predict/<action>', methods=['POST'])
+@session_bp.post('/api/detectors/predict/{action}')
 def api_all_predict_toggle(action):
     from src.server.server.config_manager import set_detection_state, get_detection_target
 
@@ -690,7 +719,7 @@ def api_all_predict_toggle(action):
         if get_detection_target() == 'ALL':
             set_detection_state(False, None)
 
-    return jsonify({
+    return {
         "status": "ok",
         "predicting": {
             "EMG": state.session.prediction_active['EMG'],
@@ -698,4 +727,4 @@ def api_all_predict_toggle(action):
             "EEG": state.session.prediction_active['EEG'],
         },
         "target": "ALL" if action == 'start' else None,
-    })
+    }

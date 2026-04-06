@@ -7,6 +7,8 @@ import SSVEPView from '../eeg_dashbord/SSVEPView';
 import MusicView from '../eeg_dashbord/MusicView';
 import MeditationView from '../eeg_dashbord/MeditationView';
 import BubbleGameView from '../eeg_dashbord/BubbleGameView';
+import { SidebarProvider, useSidebar } from '../eeg_dashbord/SidebarContext';
+import MainSidebar from '../eeg_dashbord/sidebar/MainSidebar';
 
 const OVERVIEW_APPS = [
   { id: 'music', title: 'Music Control', icon: Music, desc: 'Control playback using frontal lobe focus states.', path: 'music' },
@@ -31,19 +33,10 @@ const OverviewGrid = ({ onSelect }) => (
   </div>
 );
 
-const EEGDashboard = ({ wsEvent, isConnected, wsUrl }) => {
-  const navigate = useNavigate();
-  const location = useLocation();
+const EEGDashboardContent = ({ wsEvent, isConnected, wsUrl }) => {
+  const [currentView, setCurrentView] = useState("overview");
   const [eegResult, setEegResult] = useState(null);
-
-  // Derive current view from path
-  const currentView = useMemo(() => {
-    if (location.pathname.endsWith('/music')) return 'music';
-    if (location.pathname.endsWith('/meditation')) return 'meditation';
-    if (location.pathname.endsWith('/bubble_game')) return 'bubble';
-    if (location.pathname.endsWith('/ssvep')) return 'ssvep';
-    return 'overview';
-  }, [location.pathname]);
+  const { sidebarMode, setSidebarMode, sidebarSlot } = useSidebar();
 
   useEffect(() => {
     let modePreset = "frontal_fp1";
@@ -56,75 +49,111 @@ const EEGDashboard = ({ wsEvent, isConnected, wsUrl }) => {
     }).catch(err => console.error("Failed to update mode:", err));
 
     setEegResult(null);
-  }, [currentView]);
+
+    // Automatically switch to 'page' mode when entering a specific app
+    if (currentView !== 'overview') {
+      setSidebarMode('page');
+    } else {
+      setSidebarMode('main');
+    }
+  }, [currentView, setSidebarMode]);
 
   useEffect(() => {
-    if (wsEvent && wsEvent.event === 'eeg_mode_result') {
-      setEegResult(wsEvent.output || wsEvent);
+    if (wsEvent) {
+      // Priority 1: Direct mode manager output
+      if (wsEvent.event === 'eeg_mode_result') {
+        setEegResult(wsEvent.output || wsEvent);
+      }
+      // Priority 2: Feature Router predictions (F1/F2)
+      else if (wsEvent.event === 'eeg_prediction' || wsEvent.output?.event === 'eeg_prediction') {
+        setEegResult(wsEvent.output || wsEvent);
+      }
+      // Priority 3: Catch-all for any object containing relevant EEG fields
+      else if (wsEvent.features || wsEvent.band_powers) {
+        setEegResult(wsEvent);
+      }
     }
   }, [wsEvent]);
 
-  const isFullContainer = currentView === "ssvep" || currentView === "bubble";
+  const handleSelectView = React.useCallback((view) => {
+    setCurrentView(view);
+  }, []);
+
+  const handleBackToMenu = React.useCallback(() => {
+    setCurrentView('overview');
+  }, []);
+
+  const renderView = () => {
+    switch (currentView) {
+      case "overview": return <OverviewGrid onSelect={handleSelectView} />;
+      case "music": return <MusicView result={eegResult} onNavigate={handleSelectView} onBackToMenu={handleBackToMenu} />;
+      case "meditation": return <MeditationView result={eegResult} currentView={currentView} onNavigate={handleSelectView} onBackToMenu={handleBackToMenu} />;
+      case "bubble": return <BubbleGameView result={eegResult} isConnected={isConnected} onBackToMenu={handleBackToMenu} onNavigate={handleSelectView} />;
+      case "ssvep": return <SSVEPView isConnected={isConnected} wsEvent={wsEvent} onBackToMenu={handleBackToMenu} onNavigate={handleSelectView} />;
+      default: return <OverviewGrid onSelect={handleSelectView} />;
+    }
+  };
+
+  // All page views are now "Full Container" because they handle their own internal layout/sidebars
+  const isFullContainer = currentView !== "overview";
 
   return (
-    <div className="flex flex-row h-full w-full bg-[var(--bg)]">
+    <div className="flex flex-row h-full w-full bg-[var(--bg)] overflow-hidden">
 
-      {/* Native Left Sidebar Navigation (Hidden when Full Container App is active) */}
-      {!isFullContainer && (
-        <div className="w-[18rem] bg-[var(--surface)] border-r border-[var(--border)] shrink-0 flex flex-col h-full z-10 p-4">
-          <h2 className="text-xl font-black mb-6 text-[var(--primary)] tracking-widest px-2">NEURO SUITE</h2>
+      {/* ── DUAL SIDEBAR SYSTEM ── */}
+      <div className="w-[18rem] bg-[var(--surface)] border-r border-[var(--border)] shrink-0 flex flex-col h-full z-20 relative transition-all duration-500">
 
-          <div className="flex flex-col gap-1.5 h-full overflow-y-auto [&::-webkit-scrollbar]:hidden">
+        {/* LabVIEW-style Toggle Button — always a fixed header row */}
+        <div className="shrink-0 flex items-center justify-end px-4 pt-3 pb-2 border-b border-[var(--border)]/30">
+          {isFullContainer ? (
             <button
-              className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold text-sm border ${currentView === 'overview' ? 'bg-[var(--primary)]/10 text-[var(--primary)] border-[var(--primary)]/30 shadow-sm' : 'text-[var(--text)] hover:bg-[var(--bg)] border-transparent'}`}
-              onClick={() => navigate('/dashboard/eeg')}
+              onClick={() => setSidebarMode(sidebarMode === 'main' ? 'page' : 'main')}
+              className="nav-controls-toggle"
+              title="Switch Navigation / Controls"
             >
-              <Grid size={18} /> Dashboard Overview
+              <Layers size={14} />
+              {sidebarMode === 'main' ? 'NAV' : 'CTRL'}
             </button>
-            <button
-              className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold text-sm border ${currentView === 'music' ? 'bg-[var(--primary)]/10 text-[var(--primary)] border-[var(--primary)]/30 shadow-sm' : 'text-[var(--text)] hover:bg-[var(--bg)] border-transparent'}`}
-              onClick={() => navigate('/dashboard/eeg/music')}
-            >
-              <Music size={18} /> Music Control
-            </button>
-            <button
-              className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold text-sm border ${currentView === 'meditation' ? 'bg-[var(--primary)]/10 text-[var(--primary)] border-[var(--primary)]/30 shadow-sm' : 'text-[var(--text)] hover:bg-[var(--bg)] border-transparent'}`}
-              onClick={() => navigate('/dashboard/eeg/meditation')}
-            >
-              <Wind size={18} /> Meditation Trainer
-            </button>
-            <button
-              className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold text-sm border ${currentView === 'bubble' ? 'bg-[var(--primary)]/10 text-[var(--primary)] border-[var(--primary)]/30 shadow-sm' : 'text-[var(--text)] hover:bg-[var(--bg)] border-transparent'}`}
-              onClick={() => navigate('/dashboard/eeg/bubble_game')}
-            >
-              <Activity size={18} /> Bubble Game
-            </button>
-            <button
-              className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold text-sm border ${currentView === 'ssvep' ? 'bg-[var(--primary)]/10 text-[var(--primary)] border-[var(--primary)]/30 shadow-sm' : 'text-[var(--text)] hover:bg-[var(--bg)] border-transparent'}`}
-              onClick={() => navigate('/dashboard/eeg/ssvep')}
-            >
-              <Eye size={18} /> SSVEP Interface
-            </button>
+          ) : (
+            <span className="text-[9px] font-black tracking-[3px] uppercase text-[var(--muted)]/40 pr-1">EEG Suite</span>
+          )}
+        </div>
+
+        {/* Sidebar content — flex-1 allows it to grow and inner panel handles scroll */}
+        <div className="sidebar-wrapper flex-1 min-h-0">
+          {/* Global Navigation Panel */}
+          <div className={`sidebar-panel ${sidebarMode === 'main' ? 'sidebar-active' : 'sidebar-hidden'}`}>
+            <MainSidebar currentView={currentView} onSelect={handleSelectView} />
+          </div>
+
+          {/* Page-Specific Sidebar Panel (Empty for overview) */}
+          <div className={`sidebar-panel ${sidebarMode === 'page' ? 'sidebar-active' : 'sidebar-hidden'}`}>
+            <div className="h-full">
+              {sidebarSlot || (
+                <div className="flex flex-col items-center justify-center h-full opacity-40 text-center px-6">
+                  <MonitorPlay size={40} className="mb-4 text-[var(--primary)]" />
+                  <p className="text-[10px] font-bold tracking-widest uppercase">
+                    Select a view to see controls
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
         </div>
-      )}
+      </div>
 
-      {/* Main Content Area */}
-      <div className={`flex-grow h-full overflow-hidden flex flex-col relative`}>
-        <div className={isFullContainer ? "h-full w-full" : "w-full h-full mx-auto flex-1 overflow-y-auto p-4 md:p-8"}>
-          <Routes>
-            <Route index element={<OverviewGrid onSelect={(id) => navigate(`/dashboard/eeg/${id === 'bubble' ? 'bubble_game' : id}`)} />} />
-            <Route path="music" element={<MusicView result={eegResult} />} />
-            <Route path="meditation" element={<MeditationView result={eegResult} />} />
-            <Route path="bubble_game" element={<BubbleGameView result={eegResult} isConnected={isConnected} onBackToMenu={() => navigate('/dashboard/eeg')} />} />
-            <Route path="ssvep" element={<SSVEPView isConnected={isConnected} wsEvent={wsEvent} onBackToMenu={() => navigate('/dashboard/eeg')} />} />
-            <Route path="*" element={<Navigate to="/dashboard/eeg" replace />} />
-          </Routes>
-        </div>
+      {/* ── MAIN CONTENT AREA ── */}
+      <div className="flex-grow h-full relative overflow-hidden">
+        {renderView()}
       </div>
     </div>
   );
 };
 
-export default EEGDashboard;
+const EEGDashboard = (props) => (
+  <SidebarProvider>
+    <EEGDashboardContent {...props} />
+  </SidebarProvider>
+);
 
+export default EEGDashboard;

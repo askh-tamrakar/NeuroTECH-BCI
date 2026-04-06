@@ -1,7 +1,21 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
-import { Settings, Play, Square, Activity, Wind, Power, Zap, History, Menu, ChevronLeft, ChevronRight, Brain, BookOpen } from 'lucide-react';
+import { Settings, Play, Square, Activity, Wind, Power, Zap, History, Menu, ChevronLeft, ChevronRight, Brain, BookOpen, Eye, Grid, Music, Volume2, Trophy, Clock, Calendar, CheckSquare, Sparkles, VolumeX } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import '../../styles/views/MeditationView.css';
+import MeditationSidebar from './sidebar/MeditationSidebar';
+import { useSidebar } from './SidebarContext';
+
+/* ── REAL SOUNDSCAPE TRACKS ────────────────────── */
+const TRACKS = [
+  { id: 'stress_melt',   label: 'Singing Bowl Waves',  file: '/Resources/eeg_music/meditativetiger-stress-melt-gentle-singing-bowl-waves-489168.mp3', category: 'meditation' },
+  { id: 'nature_calm',   label: 'Nature Calm',          file: '/Resources/eeg_music/andriig-nature-calm-music-507173.mp3',                              category: 'meditation' },
+  { id: 'xylophone',    label: 'Xylophone & Forest',   file: '/Resources/eeg_music/mandakimdk-xylophone-and-forest-307174.mp3',                        category: 'meditation' },
+  { id: 'soft_calm',    label: 'Soft Calm Background', file: '/Resources/eeg_music/krasnoshchok-background-music-soft-calm-404429.mp3',                category: 'focus'     },
+  { id: 'dark_ambient', label: 'Dark Desolation',      file: '/Resources/eeg_music/aberrantrealities-dark-desolation-ambience-219091.mp3',             category: 'focus'     },
+  { id: 'funk_rock',    label: 'Funk Rock',             file: '/Resources/eeg_music/kandlaker-funk-rock-2-226325.mp3',                                  category: 'focus'     },
+  { id: 'countdown',    label: 'Countdown',             file: '/Resources/eeg_music/kaden_cook-countdown-219722.mp3',                                   category: 'focus'     },
+];
 
 /* ── DAILY WISDOM QUOTES ───────────────────────── */
 const WISDOM = [
@@ -16,27 +30,143 @@ const WISDOM = [
 
 /* ── BREATH CYCLE: 4-7-8 ───────────────────────── */
 const PHASES = [
-  { name: 'INHALE',  dur: 4 },
-  { name: 'HOLD',    dur: 7 },
-  { name: 'EXHALE',  dur: 8 },
-  { name: 'REST',    dur: 1 },
+  { name: 'INHALE', dur: 4 },
+  { name: 'HOLD', dur: 7 },
+  { name: 'EXHALE', dur: 8 },
+  { name: 'REST', dur: 1 },
 ];
 const TOTAL_CYCLE = PHASES.reduce((s, p) => s + p.dur, 0);
 
 /* ── PRESETS (minutes) ─────────────────────────── */
 const PRESETS = [3, 5, 10, 15];
 
-const MeditationView = ({ result }) => {
-  const containerRef      = useRef(null);
-  const resultRef         = useRef(null);
-  const { currentTheme }  = useTheme();
-  const themeRef          = useRef(currentTheme);
+const MeditationView = ({ result, currentView, onNavigate }) => {
+  const containerRef = useRef(null);
+  const resultRef = useRef(null);
+  const { currentTheme } = useTheme();
+  const themeRef = useRef(currentTheme);
 
   const [wisdomIdx] = useState(() => Math.floor(Math.random() * WISDOM.length));
   const [showSidebar, setShowSidebar] = useState(true);
+  const [sidebarTab, setSidebarTab] = useState('controls');
 
-  useEffect(() => { themeRef.current = currentTheme; }, [currentTheme]);
-  useEffect(() => { resultRef.current = result; }, [result]);
+  /* ── MUSIC MIXER STATE ─────────────────────── */
+  const [musicState, setMusicState] = useState(
+    TRACKS.map(t => ({ id: t.id, label: t.label, active: false, vol: 0.8, category: t.category }))
+  );
+
+  /* ── AUDIO REFS (one Audio object per track) ── */
+  const audioRefs = useRef({});
+  useEffect(() => {
+    // Create Audio objects once on mount — high initial volume
+    TRACKS.forEach(t => {
+      const audio = new Audio(t.file);
+      audio.loop = true;
+      audio.volume = 0.8;
+      audio.preload = 'auto';
+      audioRefs.current[t.id] = audio;
+    });
+    return () => {
+      Object.values(audioRefs.current).forEach(a => { a.pause(); a.src = ''; });
+    };
+  }, []);
+
+  /* ── VOLUME SYNC ONLY (no play/pause here) ──── */
+  // play/pause must happen synchronously inside the user-click handler
+  // to satisfy browser autoplay policy — see toggleMusic below
+  useEffect(() => {
+    musicState.forEach(m => {
+      const audio = audioRefs.current[m.id];
+      if (!audio) return;
+      audio.volume = Math.max(0, Math.min(1, m.vol));
+    });
+  }, [musicState]);
+
+  /* ── PERSISTENT STATS ──────────────────────── */
+  const [stats, setStats] = useState(() => {
+    try {
+      const saved = localStorage.getItem('med_stats');
+      const parsed = saved ? JSON.parse(saved) : null;
+      return {
+        streak: parsed?.streak ?? 0,
+        totalMin: parsed?.totalMin ?? 0,
+        sessions: Array.isArray(parsed?.sessions) ? parsed.sessions : [],
+        lastDate: parsed?.lastDate ?? null,
+        xp: parsed?.xp ?? 0
+      };
+    } catch {
+      return { streak: 0, totalMin: 0, sessions: [], lastDate: null, xp: 0 };
+    }
+  });
+
+  const toggleMusic = useCallback((id) => {
+    // Play/pause synchronously HERE — this is the direct user-gesture context.
+    // Browsers block audio.play() inside useEffect (not a user gesture).
+    const audio = audioRefs.current[id];
+    setMusicState(prev => {
+      const next = prev.map(m => m.id === id ? { ...m, active: !m.active } : m);
+      const track = next.find(m => m.id === id);
+      if (audio) {
+        if (track.active) {
+          audio.volume = track.vol;
+          audio.play().catch(err => console.warn('[Audio] Play blocked:', err));
+        } else {
+          audio.pause();
+        }
+      }
+      return next;
+    });
+  }, []);
+
+  const updateVol = useCallback((id, vol) => {
+    const clampedVol = Math.max(0, Math.min(1, vol));
+    const audio = audioRefs.current[id];
+    if (audio) audio.volume = clampedVol;
+    setMusicState(prev => prev.map(m => m.id === id ? { ...m, vol: clampedVol } : m));
+  }, []);
+
+  /* ── MASTER VOLUME ────────────────────────── */
+  const [masterVol, setMasterVol] = useState(1.0);
+  const onMasterVol = useCallback((val) => {
+    const clamped = Math.max(0, Math.min(1, val));
+    setMasterVol(clamped);
+    // Apply master * per-track volume to all Audio elements
+    setMusicState(prev => {
+      prev.forEach(m => {
+        const audio = audioRefs.current[m.id];
+        if (audio) audio.volume = Math.max(0, Math.min(1, m.vol * clamped));
+      });
+      return prev; // state unchanged, only audio.volume mutated
+    });
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem('med_stats', JSON.stringify(stats));
+  }, [stats]);
+
+  const { setSidebarSlot } = useSidebar();
+
+  // Update the sidebar slot whenever state affecting the sidebar changes
+  useEffect(() => {
+    setSidebarSlot(
+      <MeditationSidebar
+        containerRef={containerRef}
+        musicState={musicState}
+        toggleMusic={toggleMusic}
+        updateVol={updateVol}
+        masterVol={masterVol}
+        onMasterVol={onMasterVol}
+        stats={stats}
+        wisdomIdx={wisdomIdx}
+      />
+    );
+  }, [musicState, masterVol, stats, wisdomIdx, toggleMusic, updateVol, onMasterVol, setSidebarSlot]);
+
+  // Separate cleanup-only effect: clear slot on unmount
+  useEffect(() => {
+    return () => setSidebarSlot(null);
+  }, [setSidebarSlot]);
+
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -48,29 +178,29 @@ const MeditationView = ({ result }) => {
     const waveC1 = $('med-wave-1');
     const waveC2 = $('med-wave-2');
     const ctxRadar = radar?.getContext('2d');
-    const wCtx1  = waveC1?.getContext('2d');
-    const wCtx2  = waveC2?.getContext('2d');
+    const wCtx1 = waveC1?.getContext('2d');
+    const wCtx2 = waveC2?.getContext('2d');
 
     if (!ctxRadar || !wCtx1 || !wCtx2) return;
 
     /* ── STATE ─────────────────────────────────── */
-    let eegMode        = 'simulate';
-    let simInterval    = null;
-    let fetchInterval  = null;
-    let animId         = null;
+    let eegMode = 'simulate';
+    let simInterval = null;
+    let fetchInterval = null;
+    let animId = null;
     let sessionRunning = false;
-    let sessionStart   = 0;
-    let presetSecs     = 5 * 60; // default 5 min
-    let calmSignal     = 0;
-    let rawBands       = [20, 20, 25, 20, 15];
+    let sessionStart = 0;
+    let presetSecs = 5 * 60; // default 5 min
+    let calmSignal = 0;
+    let rawBands = [20, 20, 25, 20, 15];
 
     const WAVE_LEN = 160;
-    let wave1Hist  = [];
-    let wave2Hist  = [];
+    let wave1Hist = [];
+    let wave2Hist = [];
 
     let breathTick = 0;
     let cycleCount = 0;
-    let lastTS     = null;
+    let lastTS = null;
 
     let calmAcc = 0, calmSamples = 0;
 
@@ -92,7 +222,7 @@ const MeditationView = ({ result }) => {
       if (!canvas || !canvas.parentElement) return;
       const rect = canvas.parentElement.getBoundingClientRect();
       if (!rect.width || !rect.height) return;
-      canvas.width  = rect.width;
+      canvas.width = rect.width;
       canvas.height = rect.height;
     }
     function resizeAll() {
@@ -110,13 +240,13 @@ const MeditationView = ({ result }) => {
       ctx.clearRect(0, 0, W, H);
 
       const cx = W / 2, cy = H / 2;
-      const R  = Math.min(W, H) * 0.36;
-      const n  = 5;
+      const R = Math.min(W, H) * 0.36;
+      const n = 5;
       const labels = ['Delta', 'Theta', 'Alpha', 'Beta', 'Gamma'];
       const angles = labels.map((_, i) => (i / n) * Math.PI * 2 - Math.PI / 2);
 
       const primary = tc('--primary');
-      const line1   = isLeft ? tc('--graph-line-1') : tc('--primary');
+      const line1 = isLeft ? tc('--graph-line-1') : tc('--primary');
       const gridCol = tc('--graph-grid', 'rgba(255,255,255,0.06)');
 
       // Grid rings
@@ -148,7 +278,7 @@ const MeditationView = ({ result }) => {
 
       // Data polygon
       const total = bands.reduce((a, b) => a + b, 0) || 100;
-      const norm  = bands.map(v => v / total);
+      const norm = bands.map(v => v / total);
 
       ctx.beginPath();
       angles.forEach((a, i) => {
@@ -166,10 +296,10 @@ const MeditationView = ({ result }) => {
       ctx.fill();
 
       ctx.strokeStyle = line1;
-      ctx.lineWidth   = 1.5;
-      ctx.shadowBlur  = 10; ctx.shadowColor = line1;
+      ctx.lineWidth = 1.5;
+      ctx.shadowBlur = 10; ctx.shadowColor = line1;
       ctx.stroke();
-      ctx.shadowBlur  = 0;
+      ctx.shadowBlur = 0;
 
       // Vertex dots + labels
       const textCol = tc('--graph-text', tc('--muted'));
@@ -237,36 +367,43 @@ const MeditationView = ({ result }) => {
 
     function startSimulation() {
       eegMode = 'simulate';
-      if (simInterval)  clearInterval(simInterval);
+      if (simInterval) clearInterval(simInterval);
       if (fetchInterval) clearInterval(fetchInterval);
       simInterval = setInterval(() => {
         simPhase += 0.06;
         simTrend += (Math.random() - 0.47) * 0.03;
         simTrend = Math.max(-0.3, Math.min(0.3, simTrend));
-        const base  = 0.55 + simTrend;
+        const base = 0.55 + simTrend;
         const noise = Math.sin(simPhase * 1.2) * 0.12 + Math.sin(simPhase * 3.5) * 0.06
-                    + (Math.random() - 0.5) * 0.06;
+          + (Math.random() - 0.5) * 0.06;
         calmSignal = Math.max(0, Math.min(1, base + noise));
 
-        const alpha = Math.round(22 + calmSignal * 18 + (Math.random() - 0.5) * 4);
-        const theta = Math.round(18 + calmSignal * 10 + (Math.random() - 0.5) * 3);
         const delta = Math.round(14 + (Math.random() - 0.5) * 4);
-        const beta  = Math.round(Math.max(8, 26 - calmSignal * 18 + (Math.random() - 0.5) * 4));
-        const gamma = Math.round(8  + (Math.random() - 0.5) * 3);
+        const theta = Math.round(18 + calmSignal * 15 + (Math.random() - 0.5) * 3);
+        const alpha = Math.round(22 + calmSignal * 22 + (Math.random() - 0.5) * 4);
+        const beta = Math.round(Math.max(8, 28 - calmSignal * 20 + (Math.random() - 0.5) * 4));
+        const gamma = Math.round(8 + (Math.random() - 0.5) * 3);
         rawBands = [delta, theta, alpha, beta, gamma];
+
+        // Derived Metrics
+        const focusScore = Math.round(calmSignal * 100);
+        const stressLevel = Math.max(0, Math.round(100 - (calmSignal * 100) + (Math.random() - 0.5) * 10));
+
+        const fv = $('med-focus-val'); if (fv) fv.textContent = focusScore;
+        const sv = $('med-stress-val'); if (sv) sv.textContent = stressLevel;
       }, 60);
     }
 
     function startLiveStream() {
       eegMode = 'ws';
-      if (simInterval)  clearInterval(simInterval);
+      if (simInterval) clearInterval(simInterval);
       if (fetchInterval) clearInterval(fetchInterval);
       fetchInterval = setInterval(() => {
         const res = resultRef.current;
         if (res?.band_powers?.length >= 5) {
-          const bp  = res.band_powers;
+          const bp = res.band_powers;
           const sum = bp.reduce((a, b) => a + b, 0) || 1;
-          rawBands  = bp.map(v => Math.round((v / sum) * 100));
+          rawBands = bp.map(v => Math.round((v / sum) * 100));
           const relA = rawBands[2] / 100, relT = rawBands[1] / 100, relB = rawBands[3] / 100;
           calmSignal = Math.max(0, Math.min(1, (relA + relT * 0.5) / (relB + 0.1) * 0.4));
         }
@@ -289,12 +426,12 @@ const MeditationView = ({ result }) => {
     /* ── UPDATE DOM ────────────────────────────── */
     function updateDOM(phaseInfo) {
       if (!containerRef.current) return;
-      
+
       const pb = $('med-phase-badge');
       if (pb) pb.textContent = sessionRunning ? phaseInfo.phase.name : 'READY';
 
       if (sessionRunning) {
-        const elapsed  = Math.max(0, (Date.now() - sessionStart) / 1000);
+        const elapsed = Math.max(0, (Date.now() - sessionStart) / 1000);
         const remaining = Math.max(0, presetSecs - elapsed);
         const mm = String(Math.floor(remaining / 60)).padStart(2, '0');
         const ss = String(Math.floor(remaining % 60)).padStart(2, '0');
@@ -319,40 +456,40 @@ const MeditationView = ({ result }) => {
       // Focus Orb Animation
       const orb = $('med-focus-orb');
       const orbText = $('med-orb-text');
-      
+
       if (orb && orbText) {
-          if (sessionRunning) {
-             const { idx, progress } = phaseInfo;
-             let scale = 1;
-             
-             // Base size 1, Max size 3.5
-             if (idx === 0) { // INHALE
-                 scale = 1 + (2.5 * progress);
-                 orbText.textContent = 'INHALE';
-                 orbText.style.opacity = 1;
-             } else if (idx === 1) { // HOLD
-                 scale = 3.5;
-                 orbText.textContent = 'HOLD';
-                 orbText.style.opacity = 0.5 + Math.sin(Date.now() / 200) * 0.5; // pulse
-             } else if (idx === 2) { // EXHALE
-                 scale = 3.5 - (2.5 * progress);
-                 orbText.textContent = 'EXHALE';
-                 orbText.style.opacity = 1;
-             } else if (idx === 3) { // REST
-                 scale = 1;
-                 orbText.textContent = 'REST';
-                 orbText.style.opacity = 0.5;
-             }
-             
-             orb.style.transform = `scale(${scale})`;
-             const cFactor = Math.floor(calmSignal * 255);
-             orb.style.boxShadow = `0 0 ${20 + calmSignal*60}px rgba(0, ${cFactor}, 255, 0.4)`;
-          } else {
-             orb.style.transform = 'scale(1)';
-             orbText.textContent = 'READY';
-             orbText.style.opacity = 0.5;
-             orb.style.boxShadow = '0 0 40px var(--primary)';
+        if (sessionRunning) {
+          const { idx, progress } = phaseInfo;
+          let scale = 1;
+
+          // Base size 1, Max size 3.5
+          if (idx === 0) { // INHALE
+            scale = 1 + (2.5 * progress);
+            orbText.textContent = 'INHALE';
+            orbText.style.opacity = 1;
+          } else if (idx === 1) { // HOLD
+            scale = 3.5;
+            orbText.textContent = 'HOLD';
+            orbText.style.opacity = 0.5 + Math.sin(Date.now() / 200) * 0.5; // pulse
+          } else if (idx === 2) { // EXHALE
+            scale = 3.5 - (2.5 * progress);
+            orbText.textContent = 'EXHALE';
+            orbText.style.opacity = 1;
+          } else if (idx === 3) { // REST
+            scale = 1;
+            orbText.textContent = 'REST';
+            orbText.style.opacity = 0.5;
           }
+
+          orb.style.transform = `scale(${scale})`;
+          const cFactor = Math.floor(calmSignal * 255);
+          orb.style.boxShadow = `0 0 ${20 + calmSignal * 60}px rgba(0, ${cFactor}, 255, 0.4)`;
+        } else {
+          orb.style.transform = 'scale(1)';
+          orbText.textContent = 'READY';
+          orbText.style.opacity = 0.5;
+          orb.style.boxShadow = '0 0 40px var(--primary)';
+        }
       }
 
       // Sidebar indicators
@@ -381,7 +518,7 @@ const MeditationView = ({ result }) => {
       const phaseInfo = getPhase();
 
       // Push wave histories — use left=alpha, right=theta as channel proxies
-      const leftSig  = rawBands[2] / 100; // alpha
+      const leftSig = rawBands[2] / 100; // alpha
       const rightSig = rawBands[1] / 100; // theta
       wave1Hist.push(leftSig + (Math.random() - 0.5) * 0.04);
       wave2Hist.push(rightSig + (Math.random() - 0.5) * 0.03);
@@ -399,13 +536,30 @@ const MeditationView = ({ result }) => {
     }
 
     /* ── SESSION PERSISTENCE ───────────────────── */
-    function loadSessions() {
-      try { return JSON.parse(localStorage.getItem('med_sessions') || '[]'); } catch { return []; }
-    }
     function saveSession(data) {
-      const s = loadSessions(); s.unshift(data);
-      if (s.length > 5) s.pop();
-      localStorage.setItem('med_sessions', JSON.stringify(s));
+      setStats(prev => {
+        const today = new Date().toDateString();
+        let newStreak = prev.streak;
+        if (prev.lastDate !== today) {
+          // Increment streak if last session was yesterday
+          const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
+          if (prev.lastDate === yesterday.toDateString()) newStreak++;
+          else if (!prev.lastDate) newStreak = 1;
+          else newStreak = 1; // broken streak
+        }
+
+        const newSessions = [data, ...prev.sessions].slice(0, 10);
+        const addedXP = 50 + (data.avgCalm * 2);
+
+        return {
+          ...prev,
+          streak: newStreak,
+          totalMin: prev.totalMin + (parseInt(data.duration.split(':')[0]) || 0),
+          sessions: newSessions,
+          lastDate: today,
+          xp: prev.xp + addedXP
+        };
+      });
     }
 
     /* ── EXPOSED HANDLERS ──────────────────────── */
@@ -418,9 +572,9 @@ const MeditationView = ({ result }) => {
 
       // Update Expanded Button
       const btn = $('med-session-btn');
-      if (btn) { 
-        btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-square"><rect width="18" height="18" x="3" y="3" rx="2"/></svg> Stop`; 
-        btn.className = 'w-full py-2.5 rounded-xl text-base font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-2 border-2 bg-red-500/10 border-red-500/50 text-red-500 hover:bg-red-500/20'; 
+      if (btn) {
+        btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-square"><rect width="18" height="18" x="3" y="3" rx="2"/></svg> Stop`;
+        btn.className = 'w-full py-2.5 rounded-xl text-base font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-2 border-2 bg-red-500/10 border-red-500/50 text-red-500 hover:bg-red-500/20';
       }
 
       // Update Collapsed Button
@@ -430,7 +584,7 @@ const MeditationView = ({ result }) => {
         $('med-col-play')?.classList.add('hidden');
         $('med-col-stop')?.classList.remove('hidden');
         const tt = $('med-col-tooltip-session');
-        if(tt) tt.textContent = 'Stop Session';
+        if (tt) tt.textContent = 'Stop Session';
       }
 
       // Update Phase Badge Styling
@@ -449,12 +603,12 @@ const MeditationView = ({ result }) => {
       const ss = String(elapsed % 60).padStart(2, '0');
       const avgCalm = calmSamples > 0 ? Math.round((calmAcc / calmSamples) * 100) : 0;
       saveSession({ duration: `${mm}:${ss}`, avgCalm, cycles: cycleCount, mode: eegMode === 'ws' ? 'LIVE' : 'SIM' });
-      
+
       // Update Expanded Button
       const btn = $('med-session-btn');
-      if (btn) { 
-        btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-play"><polygon points="6 3 20 12 6 21 6 3"/></svg> Start`; 
-        btn.className = 'w-full py-2.5 rounded-xl text-base font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-2 border-2 bg-green-500/10 border-green-500/50 text-green-500 hover:bg-green-500/20 shadow-glow'; 
+      if (btn) {
+        btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-play"><polygon points="6 3 20 12 6 21 6 3"/></svg> Start`;
+        btn.className = 'w-full py-2.5 rounded-xl text-base font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-2 border-2 bg-green-500/10 border-green-500/50 text-green-500 hover:bg-green-500/20 shadow-glow';
       }
 
       // Update Collapsed Button
@@ -464,7 +618,7 @@ const MeditationView = ({ result }) => {
         $('med-col-play')?.classList.remove('hidden');
         $('med-col-stop')?.classList.add('hidden');
         const tt = $('med-col-tooltip-session');
-        if(tt) tt.textContent = 'Start Session';
+        if (tt) tt.textContent = 'Start Session';
       }
 
       // Reset info
@@ -486,22 +640,22 @@ const MeditationView = ({ result }) => {
     container.toggleConnHandler = () => {
       if (eegMode === 'simulate') startLiveStream(); else startSimulation();
       const isWs = eegMode === 'ws';
-      
+
       // Update Collapsed button
       const colConnBtn = $('med-col-conn-btn');
       if (colConnBtn) {
-          colConnBtn.className = `w-[42px] h-[42px] flex items-center justify-center rounded-full border transition-all cursor-pointer shadow-sm group relative ${isWs ? 'bg-green-500/10 border-green-500/30 text-green-500' : 'bg-red-500/10 border-red-500/30 text-red-500'}`;
-          if (isWs) {
-              $('med-col-power')?.classList.add('hidden');
-              $('med-col-zap')?.classList.remove('hidden');
-              const lbl = $('med-col-conn-lbl');
-              if(lbl) lbl.textContent = 'Sensor Connected';
-          } else {
-              $('med-col-power')?.classList.remove('hidden');
-              $('med-col-zap')?.classList.add('hidden');
-              const lbl = $('med-col-conn-lbl');
-              if(lbl) lbl.textContent = 'Simulate Mode';
-          }
+        colConnBtn.className = `w-[42px] h-[42px] flex items-center justify-center rounded-full border transition-all cursor-pointer shadow-sm group relative ${isWs ? 'bg-green-500/10 border-green-500/30 text-green-500' : 'bg-red-500/10 border-red-500/30 text-red-500'}`;
+        if (isWs) {
+          $('med-col-power')?.classList.add('hidden');
+          $('med-col-zap')?.classList.remove('hidden');
+          const lbl = $('med-col-conn-lbl');
+          if (lbl) lbl.textContent = 'Sensor Connected';
+        } else {
+          $('med-col-power')?.classList.remove('hidden');
+          $('med-col-zap')?.classList.add('hidden');
+          const lbl = $('med-col-conn-lbl');
+          if (lbl) lbl.textContent = 'Simulate Mode';
+        }
       }
 
       // Update Expanded box
@@ -510,15 +664,15 @@ const MeditationView = ({ result }) => {
       const expConnT = $('med-exp-conn-text');
       const expConnBg = $('med-exp-conn-box');
       if (isWs) {
-          expConnL?.classList.remove('hidden');
-          expConnS?.classList.add('hidden');
-          if(expConnT) expConnT.textContent = 'LIVE FEED';
-          if(expConnBg) expConnBg.className = 'bg-bg/50 border border-green-500/20 rounded-xl p-3 flex flex-col shrink-0 mb-4 shadow-[0_0_10px_rgba(34,197,94,0.1)] transition-colors cursor-pointer hover:bg-bg/70';
+        expConnL?.classList.remove('hidden');
+        expConnS?.classList.add('hidden');
+        if (expConnT) expConnT.textContent = 'LIVE FEED';
+        if (expConnBg) expConnBg.className = 'bg-bg/50 border border-green-500/20 rounded-xl p-3 flex flex-col shrink-0 mb-4 shadow-[0_0_10px_rgba(34,197,94,0.1)] transition-colors cursor-pointer hover:bg-bg/70';
       } else {
-          expConnL?.classList.add('hidden');
-          expConnS?.classList.remove('hidden');
-          if(expConnT) expConnT.textContent = 'SIMULATE';
-          if(expConnBg) expConnBg.className = 'bg-bg/50 border border-red-500/20 rounded-xl p-3 flex flex-col shrink-0 mb-4 shadow-[0_0_10px_rgba(239,68,68,0.1)] transition-colors cursor-pointer hover:bg-bg/70';
+        expConnL?.classList.add('hidden');
+        expConnS?.classList.remove('hidden');
+        if (expConnT) expConnT.textContent = 'SIMULATE';
+        if (expConnBg) expConnBg.className = 'bg-bg/50 border border-red-500/20 rounded-xl p-3 flex flex-col shrink-0 mb-4 shadow-[0_0_10px_rgba(239,68,68,0.1)] transition-colors cursor-pointer hover:bg-bg/70';
       }
     };
 
@@ -543,213 +697,90 @@ const MeditationView = ({ result }) => {
 
     return () => {
       window.removeEventListener('resize', resizeAll);
-      if (simInterval)  clearInterval(simInterval);
+      if (simInterval) clearInterval(simInterval);
       if (fetchInterval) clearInterval(fetchInterval);
       if (animId) cancelAnimationFrame(animId);
     };
   }, []);
 
   const wisdom = WISDOM[wisdomIdx];
-  const rightWidth = showSidebar ? 'mr-80' : 'mr-[4.25rem]';
 
   return (
     <div className="w-full h-full flex bg-bg overflow-hidden relative" ref={containerRef}>
 
       {/* ══ CENTER AREA: Main Charts ═══════════════════════════════ */}
-      <div className={`flex-grow flex flex-col transition-all duration-300 ${rightWidth}`}>
-          <div className="med-main">
-            {/* Top row: Brain Activity & Focus Orb */}
-            <div className="med-charts-row">
-              {/* Brain Activity (Radar) */}
-              <div className="med-chart-panel">
-                <div className="med-section-header">
-                  <span className="med-section-icon">⬡</span>
-                  <span className="med-section-title">Brain Activity</span>
-                  <span className="med-section-sub"> · Electroencephalogram (EEG)</span>
-                </div>
-                <div className="med-chart-label">Global EEG Power</div>
-                <canvas id="med-radar" className="med-radar-canvas" />
+      <div className="flex-grow flex flex-col transition-all duration-300">
+        <div className="med-main">
+          {/* Top row: Brain Activity & Focus Orb */}
+          <div className="med-charts-row">
+            {/* Brain Activity (Radar) */}
+            <div className="med-chart-panel">
+              <div className="med-section-header">
+                <span className="med-section-icon">⬡</span>
+                <span className="med-section-title">Brain Activity</span>
+                <span className="med-section-sub"> · Electroencephalogram (EEG)</span>
               </div>
-
-              {/* Focus Bubble (Breathing) */}
-              <div className="med-chart-panel border-l border-border/50">
-                <div className="med-section-header">
-                  <span className="med-section-icon" style={{ marginLeft: '-2px' }}>◎</span>
-                  <span className="med-section-title">Respiration</span>
-                  <span className="med-section-sub"> · Focus Bubble</span>
-                </div>
-                
-                <div className="flex-grow flex flex-col items-center justify-center relative bg-bg/20">
-                    <div className="relative w-64 h-64 flex items-center justify-center">
-                        {/* Outer glow ring limits */}
-                        <div className="absolute inset-2 rounded-full border border-primary/20 opacity-50 border-dashed" style={{ boxShadow: 'inset 0 0 40px rgba(0,255,255,0.1)' }} />
-                        
-                        {/* The animated bubble */}
-                        <div id="med-focus-orb" className="w-16 h-16 rounded-full bg-gradient-to-tr from-primary/80 to-primary/30 backdrop-blur-sm transition-transform duration-75 border border-primary/50 flex flex-col items-center justify-center relative overflow-hidden will-change-transform z-10" style={{ transformOrigin: 'center center', boxShadow: '0 0 40px var(--primary)' }}>
-                           {/* Inner sheen */}
-                           <div className="absolute inset-0 bg-white/20 rounded-full w-full h-[30%] -top-[10%] blur-sm pointer-events-none" />
-                        </div>
-                    </div>
-                    
-                    <div id="med-orb-text" className="absolute bottom-8 font-mono text-primary/80 font-bold tracking-[0.3em] uppercase text-xl transition-all">READY</div>
-                </div>
-              </div>
+              <div className="med-chart-label">Global EEG Power</div>
+              <canvas id="med-radar" className="med-radar-canvas" />
             </div>
 
-            {/* Bottom EEG wave rows */}
-            <div className="med-waves-col" style={{ height: '38%' }}>
-              <div className="med-wave-row">
-                <div className="med-wave-label">CH1 · ALPHA BAND (α)</div>
-                <div className="med-calm-bar-wrap">
-                  <span>CALM</span>
-                  <div className="med-calm-track">
-                    <div className="med-calm-fill" id="med-calm-fill" />
-                  </div>
-                  <span className="med-calm-pct" id="med-calm-pct">0%</span>
-                </div>
-                <canvas id="med-wave-1" className="med-wave-canvas" />
+            {/* Focus Bubble (Breathing) */}
+            <div className="med-chart-panel border-l border-border/50">
+              <div className="med-section-header">
+                <span className="med-section-icon" style={{ marginLeft: '-2px' }}>◎</span>
+                <span className="med-section-title">Respiration</span>
+                <span className="med-section-sub"> · Focus Bubble</span>
               </div>
 
-              <div className="med-wave-row">
-                <div className="med-wave-label">CH2 · THETA BAND (θ)</div>
-                <canvas id="med-wave-2" className="med-wave-canvas" />
+              {/* Real-time Metrics Overlays */}
+              <div className="absolute top-16 left-4 right-4 flex justify-between z-10 pointer-events-none">
+                <div className="flex flex-col items-center">
+                  <span className="text-[10px] font-bold text-primary/60 tracking-widest uppercase">Focus</span>
+                  <span id="med-focus-val" className="text-2xl font-black text-primary font-mono tabular-nums">0</span>
+                </div>
+                <div className="flex flex-col items-center">
+                  <span className="text-[10px] font-bold text-red-500/60 tracking-widest uppercase">Stress</span>
+                  <span id="med-stress-val" className="text-2xl font-black text-red-500 font-mono tabular-nums">0</span>
+                </div>
+              </div>
+
+              <div className="flex-grow flex flex-col items-center justify-center relative bg-bg/20">
+                <div className="relative w-64 h-64 flex items-center justify-center">
+                  {/* Outer glow ring limits */}
+                  <div className="absolute inset-2 rounded-full border border-primary/20 opacity-50 border-dashed" style={{ boxShadow: 'inset 0 0 40px rgba(0,255,255,0.1)' }} />
+
+                  {/* The animated bubble */}
+                  <div id="med-focus-orb" className="w-16 h-16 rounded-full bg-gradient-to-tr from-primary/80 to-primary/30 backdrop-blur-sm transition-transform duration-75 border border-primary/50 flex flex-col items-center justify-center relative overflow-hidden will-change-transform z-10" style={{ transformOrigin: 'center center', boxShadow: '0 0 40px var(--primary)' }}>
+                    {/* Inner sheen */}
+                    <div className="absolute inset-0 bg-white/20 rounded-full w-full h-[30%] -top-[10%] blur-sm pointer-events-none" />
+                  </div>
+                </div>
+
+                <div id="med-orb-text" className="absolute bottom-8 font-mono text-primary/80 font-bold tracking-[0.3em] uppercase text-xl transition-all">READY</div>
               </div>
             </div>
           </div>
-      </div>
 
-      {/* ══ RIGHT SIDEBAR ══════════════════════════════ */}
-      <div className={`absolute right-0 top-0 bottom-0 z-10 transition-all duration-300 ease-in-out border-l border-border bg-surface/80 backdrop-blur-md flex flex-col h-full ${showSidebar ? 'w-80 overflow-y-auto overflow-x-hidden' : 'w-[4.25rem] overflow-visible'} [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']`}>
-        
-        {/* Collapsed Sidebar */}
-        {!showSidebar && (
-            <div className="flex flex-col items-center justify-around py-4 w-full animate-fade-in shrink-0 h-full overflow-visible">
-                <button onClick={() => setShowSidebar(true)} className="p-2 hover:bg-white/10 rounded-full transition-colors" title="Expand Sidebar">
-                    <Menu size={30} className="text-primary" />
-                </button>
-
-                <div className="w-full h-px bg-border/80 shrink-0 my-2" />
-
-                <div className="flex flex-col items-center cursor-default group relative w-full" title="Calm Signal">
-                    <Activity size={24} className="text-primary mb-1" />
-                    <span id="med-col-calm-val" className="text-[18px] font-black tabular-nums mt-1 text-primary">0</span>
-                    <div className="absolute right-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Calm Signal %</div>
+          {/* Bottom EEG wave rows */}
+          <div className="med-waves-col" style={{ height: '38%' }}>
+            <div className="med-wave-row">
+              <div className="med-wave-label">CH1 · ALPHA BAND (α)</div>
+              <div className="med-calm-bar-wrap">
+                <span>CALM</span>
+                <div className="med-calm-track">
+                  <div className="med-calm-fill" id="med-calm-fill" />
                 </div>
-
-                <div className="w-full h-px bg-border/80 shrink-0 my-2" />
-
-                <button id="med-col-session-btn" onClick={() => containerRef.current?.sessionBtnHandler()} title="Start/Stop Session" className="transition-colors group relative p-3 rounded-full text-green-500 hover:bg-green-500/20">
-                    <Play id="med-col-play" size={26} />
-                    <Square id="med-col-stop" size={26} className="hidden" />
-                    <div id="med-col-tooltip-session" className="absolute right-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Start Session</div>
-                </button>
-
-                <div className="w-full h-px bg-border/80 shrink-0 my-2" />
-
-                <button onClick={() => setShowSidebar(true)} title="Controls Settings" className="hover:text-primary transition-colors group relative p-2">
-                    <Settings size={28} className="text-muted group-hover:text-primary" />
-                    <div className="absolute right-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Settings & Presets</div>
-                </button>
-
-                <div className="w-full h-px bg-border/80 shrink-0 my-2" />
-
-                <div className="flex flex-col w-full items-center shrink-0 mt-auto">
-                    <button id="med-col-conn-btn" onClick={() => containerRef.current?.toggleConnHandler()} className="w-[42px] h-[42px] flex items-center justify-center rounded-full border transition-all cursor-pointer shadow-sm group relative bg-red-500/10 border-red-500/30 text-red-500" title="Connection Mode">
-                        <Zap id="med-col-zap" size={24} className="hidden" />
-                        <Power id="med-col-power" size={24} />
-                        <div id="med-col-conn-lbl" className="absolute right-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Simulate Mode</div>
-                    </button>
-                </div>
-            </div>
-        )}
-
-        {/* Expanded Sidebar */}
-        <div className={`flex-grow flex flex-col overflow-hidden p-4 gap-3 font-mono transition-opacity duration-300 w-80 shrink-0 ${!showSidebar ? 'opacity-0 h-0 hidden' : 'opacity-100'}`}>
-            {/* Header */}
-            <div className="flex items-center justify-between shrink-0 mb-2">
-                <div>
-                    <h2 className="text-2xl font-bold text-text mb-1 flex items-center gap-3">
-                        <Settings size={28} className="text-primary animate-pulse" />
-                        <span style={{ letterSpacing: '2.3px' }}>Controls</span>
-                    </h2>
-                    <p className="text-xs text-muted font-mono">Meditation Trainer</p>
-                </div>
-                <button onClick={() => setShowSidebar(false)} className="p-2 hover:bg-white/10 rounded-full transition-colors" title="Collapse Sidebar">
-                    <ChevronLeft size={24} className="rotate-180" />
-                </button>
+                <span className="med-calm-pct" id="med-calm-pct">0%</span>
+              </div>
+              <canvas id="med-wave-1" className="med-wave-canvas" />
             </div>
 
-            {/* Global Actions */}
-            <div className="shrink-0 mb-2">
-                <button id="med-session-btn" onClick={() => containerRef.current?.sessionBtnHandler()} className="w-full py-2.5 rounded-xl text-base font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-2 border-2 bg-green-500/10 border-green-500/50 text-green-500 hover:bg-green-500/20 shadow-glow">
-                    <Play size={18} /> Start
-                </button>
+            <div className="med-wave-row">
+              <div className="med-wave-label">CH2 · THETA BAND (θ)</div>
+              <canvas id="med-wave-2" className="med-wave-canvas" />
             </div>
-
-            {/* Session Phase Info */}
-            <div className="flex flex-col gap-2 shrink-0 bg-bg/30 p-3 rounded-xl border border-border/50 mb-2">
-                <div className="text-xs text-muted uppercase tracking-widest mb-1 flex items-center gap-2"><Wind size={16}/> Breath Phase</div>
-                <div id="med-phase-badge" className="text-center font-bold text-lg font-mono tracking-widest py-2 rounded-lg border border-muted/50 text-muted bg-bg/50 transition-all">READY</div>
-                <div id="med-timer-big" className="text-4xl text-center font-black text-text font-mono tracking-widest drop-shadow-[0_0_8px_var(--primary)] my-2">05:00</div>
-                <div id="med-cycle-count" className="text-xs text-center text-muted font-mono tracking-widest opacity-80">CYCLE 0</div>
-            </div>
-
-            {/* Presets Grid */}
-            <div className="mb-2 shrink-0">
-                <div className="text-xs text-muted font-bold uppercase tracking-widest mb-2 flex items-center gap-2"><Wind size={16}/> Duration</div>
-                <div className="grid grid-cols-2 gap-2">
-                    {PRESETS.map(min => (
-                        <button key={min} className={`med-preset-btn p-2 rounded-lg border transition-all font-mono text-sm tracking-wider ${min === 5 ? 'bg-primary text-bg border-primary shadow-glow' : 'bg-bg/50 border-border text-muted hover:border-primary'}`} data-min={min} onClick={() => containerRef.current?.presetHandler(min)}>{min} min</button>
-                    ))}
-                </div>
-            </div>
-
-            {/* Calm Signal */}
-            <div className="bg-bg/50 border border-primary/20 rounded-xl p-3 flex items-center justify-between shrink-0 mb-2">
-                <div className="flex flex-col">
-                    <span className="text-base font-bold text-muted uppercase tracking-widest flex items-center gap-2 mb-1">
-                        <Activity size={20} className="text-primary" /> Calm
-                    </span>
-                    <div className="flex items-baseline gap-1">
-                        <span id="med-exp-calm-val" className="text-3xl font-black text-primary tabular-nums">0%</span>
-                    </div>
-                </div>
-                <div className="w-1/2 flex flex-col items-end gap-1">
-                    <div className="flex items-center gap-1.5">
-                        <span className="w-2.5 h-2.5 rounded-full bg-primary animate-pulse shadow-[0_0_8px_var(--primary)]" />
-                        <span className="text-sm font-bold text-primary/80">SIGNAL</span>
-                    </div>
-                    <div className="w-full mt-2 h-1 bg-bg rounded-full overflow-hidden flex justify-end">
-                        <div id="med-exp-calm-pip" className="h-full bg-primary transition-all duration-300 shadow-[0_0_8px_var(--primary)]" style={{ width: '0%' }} />
-                    </div>
-                </div>
-            </div>
-
-            {/* Connection Mode */}
-            <div id="med-exp-conn-box" className="bg-bg/50 border border-red-500/20 rounded-xl p-3 flex flex-col shrink-0 mb-4 shadow-[0_0_10px_rgba(239,68,68,0.1)] transition-colors cursor-pointer hover:bg-bg/70" onClick={() => containerRef.current?.toggleConnHandler()}>
-               <div className="flex items-center justify-between mb-2">
-                   <span className="text-xs font-bold text-muted uppercase tracking-widest">Input Source</span>
-                   <button className="text-xs text-muted hover:text-text border border-border px-2 py-0.5 rounded-md hover:bg-white/5 transition-all">SWITCH</button>
-               </div>
-               <div className="flex items-center gap-3">
-                   <div className="p-2 rounded-full bg-bg/80 border border-border">
-                       <Zap id="med-exp-conn-icon-live" size={24} className="text-green-500 hidden" />
-                       <Power id="med-exp-conn-icon-sim" size={24} className="text-red-500" />
-                   </div>
-                   <span id="med-exp-conn-text" className="font-bold text-lg tracking-widest">SIMULATE</span>
-               </div>
-            </div>
-
-            {/* Daily Wisdom */}
-            <div className="mt-auto border border-border/50 bg-bg/20 rounded-xl p-3 shrink-0">
-                <div className="flex items-center gap-2 text-primary/80 font-mono text-xs font-bold uppercase tracking-widest mb-2">
-                    <BookOpen size={14}/> Daily Wisdom
-                </div>
-                <p className="text-[13px] text-text/90 italic mb-2 leading-relaxed">"{wisdom.quote}"</p>
-                <p className="text-xs text-primary/70">{wisdom.author}</p>
-            </div>
+          </div>
         </div>
-
       </div>
     </div>
   );

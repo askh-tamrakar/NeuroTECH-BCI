@@ -3,12 +3,12 @@ import { ChevronUp, ChevronDown } from 'lucide-react';
 
 export default function CustomNumberInput({ value, onChange, min, max, step = 1, accentColor = 'primary', className = 'w-[72px]', unit, borderless = false }) {
     const [localValue, setLocalValue] = useState(value);
-    const [inputValue, setInputValue] = useState(value.toString());
+    const [inputValue, setInputValue] = useState(String(value ?? ''));
     const inputRef = useRef(null);
 
     useEffect(() => {
         setLocalValue(value);
-        setInputValue(value.toString());
+        setInputValue(String(value ?? ''));
     }, [value]);
 
     const handleIncrement = () => {
@@ -71,6 +71,7 @@ export default function CustomNumberInput({ value, onChange, min, max, step = 1,
             <input
                 ref={inputRef}
                 type="text"
+                inputMode="numeric"
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 onBlur={handleBlur}

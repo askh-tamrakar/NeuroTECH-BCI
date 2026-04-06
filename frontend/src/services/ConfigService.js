@@ -1,4 +1,4 @@
-import { buildApiUrl } from '../utils/runtimeConnection'
+import { fetchWithBase } from '../utils/runtimeConnection'
 
 const CONFIG_KEY = 'biosignals-config'
 const CONFIG_DEFAULTS = {
@@ -94,12 +94,10 @@ export const ConfigService = {
             console.warn('⚠️ Failed to load from localStorage:', e)
         }
 
-        const API_BASE_URL = buildApiUrl('');
-
         // If no cache, try to load from backend (if endpoint exists)
         try {
             console.log('📡 Fetching config from backend...')
-            const response = await fetch(`${API_BASE_URL}/api/config`)
+            const response = await fetchWithBase('/api/config')
 
             if (response.status === 404) {
                 console.log('ℹ️ Backend /api/config endpoint not available (older web_server.py)')
@@ -156,9 +154,8 @@ export const ConfigService = {
      * Gracefully handles missing endpoint
      */
     async syncFromBackend() {
-        const API_BASE_URL = buildApiUrl('');
         try {
-            const response = await fetch(`${API_BASE_URL}/api/config`)
+            const response = await fetchWithBase('/api/config')
 
             if (response.status === 404) {
                 console.log('ℹ️ Backend endpoint not available')
@@ -185,9 +182,8 @@ export const ConfigService = {
      * FIXED: Gracefully handles missing endpoint
      */
     async saveToBackend(config) {
-        const API_BASE_URL = buildApiUrl('');
         try {
-            const response = await fetch(`${API_BASE_URL}/api/config`, {
+            const response = await fetchWithBase('/api/config', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -219,14 +215,13 @@ export const ConfigService = {
      * Clear all config (localStorage + backend if available)
      */
     async clearConfig() {
-        const API_BASE_URL = buildApiUrl('');
         try {
             localStorage.removeItem(CONFIG_KEY)
             console.log('🗑️ Config cleared from localStorage')
 
             // Also notify backend if endpoint exists
             try {
-                await fetch(`${API_BASE_URL}/api/config`, { method: 'DELETE' }).catch(() => { })
+                await fetchWithBase('/api/config', { method: 'DELETE' }).catch(() => { })
             } catch (e) {
                 console.warn('⚠️ Could not notify backend of config clear')
             }

@@ -1,5 +1,6 @@
 /* eslint-disable no-restricted-globals */
 import { io } from 'socket.io-client';
+import { getSocketIoConnection } from '../utils/runtimeConnection';
 
 let socket = null;
 const broadcast = new BroadcastChannel('bci-data-stream');
@@ -7,6 +8,12 @@ const broadcast = new BroadcastChannel('bci-data-stream');
 // State for timestamp interpolation (similar to what was in LiveView)
 let lastTs = 0;
 let isPaused = false;
+
+// Throttling state for main-thread notifications
+let pendingSamplesBuffer = [];
+let lastStreamName = '';
+let throttleTimeout = null;
+const THROTTLE_MS = 50; // 20Hz updates for UI/Recording
 
 self.onmessage = (e) => {
     const { type, payload } = e.data;
@@ -35,12 +42,14 @@ self.onmessage = (e) => {
 function connect(url) {
     if (socket) socket.disconnect();
 
-    console.log(`[DataWorker] Connecting to ${url}`);
+    const { endpoint: defaultEndpoint, options } = getSocketIoConnection();
+    const endpoint = url || defaultEndpoint;
 
-    socket = io(url, {
-        reconnection: true,
+    console.log(`[DataWorker] Connecting to ${endpoint}`);
+
+    socket = io(endpoint, {
         timeout: 10000,
-        transports: ['websocket', 'polling']
+        ...options,
     });
 
     socket.on('connect', () => {
@@ -96,31 +105,56 @@ function connect(url) {
         });
 
         // Broadcast to all listening workers (SignalWorker, ChartWorker, etc.)
+        // This remains REAL-TIME (no throttle) for smooth charts
         broadcast.postMessage({
             type: 'DATA_BATCH',
             streamName: batchData.stream_name,
             samples: interpolatedSamples
         });
 
+        // Buffer for throttled main-thread updates
+        bufferBatchForMainThread(interpolatedSamples, batchData.stream_name);
+    });
+
+    function bufferBatchForMainThread(samples, streamName) {
+        pendingSamplesBuffer = pendingSamplesBuffer.concat(samples);
+        lastStreamName = streamName;
+
+        if (!throttleTimeout) {
+            throttleTimeout = setTimeout(flushBufferToMainThread, THROTTLE_MS);
+        }
+    }
+
+    function flushBufferToMainThread() {
+        if (pendingSamplesBuffer.length === 0) {
+            throttleTimeout = null;
+            return;
+        }
+
+        const lastSample = pendingSamplesBuffer[pendingSamplesBuffer.length - 1];
+        const totalCount = pendingSamplesBuffer.length;
+
         // Notify main thread for recording (full high-frequency array)
         self.postMessage({
             type: 'RECORD_BATCH',
             payload: {
-                samples: interpolatedSamples
+                samples: pendingSamplesBuffer
             }
         });
 
-        // Also notify main thread for UI elements (timer, etc.) but with reduced frequency if needed
-        // For now, send every batch but the main thread can choose to throttle its UI update
+        // Also notify main thread for UI elements (timer, stats, etc.)
         self.postMessage({
             type: 'UI_UPDATE',
             payload: {
-                streamName: batchData.stream_name,
-                lastSample: interpolatedSamples[interpolatedSamples.length - 1],
-                sampleCount: interpolatedSamples.length
+                streamName: lastStreamName,
+                lastSample: lastSample,
+                sampleCount: totalCount
             }
         });
-    });
+
+        pendingSamplesBuffer = [];
+        throttleTimeout = null;
+    }
 
     socket.on('bio_event', (eventData) => {
         self.postMessage({ type: 'EVENT', payload: eventData });
