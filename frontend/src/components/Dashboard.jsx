@@ -141,10 +141,10 @@ export default function Dashboard() {
                   setTheme(t.id);
                   close?.();
                 }}
-                baseColor={t.colors['--navPill']}
-                pillColor={t.colors['--navBase']}
-                hoveredTextColor={t.colors['--navBase']}
-                pillTextColor={t.colors['--navPill']}
+                baseColor={t.navBase}
+                pillColor={t.navPill}
+                hoveredTextColor={t.navPill}
+                pillTextColor={t.navBase}
               />
             </ScrollStackItem>
           ))}
