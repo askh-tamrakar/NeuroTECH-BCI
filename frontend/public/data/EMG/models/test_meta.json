@@ -1,28 +1,29 @@
 {
   "sensor": "EMG",
-  "model_name": "unit",
-  "model_id": "unit",
-  "best_fold_id": "C01F2",
-  "candidate_index": 0,
-  "fold_index": 2,
+  "model_name": "test",
+  "model_id": "test",
+  "best_fold_id": "C0DF1",
+  "candidate_index": 12,
+  "fold_index": 1,
   "classifier": "Random Forest",
-  "session_name": "emg_session_unit_train_2e2225e9",
+  "session_name": "Session_6_846",
   "session_names": [
-    "emg_session_unit_train_2e2225e9"
+    "Session_6_846",
+    "emg_session_Session_6_846"
   ],
-  "n_samples": 35,
+  "n_samples": 295,
   "train_accuracy": 1.0,
-  "validation_accuracy": 1.0,
-  "test_accuracy": 1.0,
-  "accuracy": 1.0,
-  "mean_accuracy": 0.6,
-  "fold_std": 0.48989794855663565,
-  "fold_min": 0.0,
+  "validation_accuracy": 0.98,
+  "test_accuracy": 0.9333333333333333,
+  "accuracy": 0.9333333333333333,
+  "mean_accuracy": 0.8680000000000001,
+  "fold_std": 0.06106220265100655,
+  "fold_min": 0.74,
   "split_summary": {
-    "total_samples": 35,
-    "train_samples": 20,
-    "val_samples": 5,
-    "test_samples": 10
+    "total_samples": 295,
+    "train_samples": 200,
+    "val_samples": 50,
+    "test_samples": 45
   },
   "train_ratio": 0.68,
   "val_ratio": 0.17,
@@ -42,11 +43,11 @@
       "candidate_idx": 0,
       "fold_index": 1,
       "fold_idx": 1,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 0.0,
-      "accuracy": 0.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.995,
+      "validation_accuracy": 0.92,
+      "accuracy": 0.92,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 50,
         "max_depth": 5,
@@ -58,7 +59,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C01F1.joblib",
-      "created_at": "2026-04-05T16:21:24.030880"
+      "created_at": "2026-04-06T08:59:07.843453"
     },
     {
       "id": "C01F2",
@@ -67,11 +68,11 @@
       "candidate_idx": 0,
       "fold_index": 2,
       "fold_idx": 2,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.985,
+      "validation_accuracy": 0.94,
+      "accuracy": 0.94,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 50,
         "max_depth": 5,
@@ -83,7 +84,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C01F2.joblib",
-      "created_at": "2026-04-05T16:21:24.533701"
+      "created_at": "2026-04-06T08:59:08.207248"
     },
     {
       "id": "C01F3",
@@ -92,11 +93,11 @@
       "candidate_idx": 0,
       "fold_index": 3,
       "fold_idx": 3,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.995,
+      "validation_accuracy": 0.88,
+      "accuracy": 0.88,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 50,
         "max_depth": 5,
@@ -108,7 +109,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C01F3.joblib",
-      "created_at": "2026-04-05T16:21:24.824753"
+      "created_at": "2026-04-06T08:59:08.596106"
     },
     {
       "id": "C01F4",
@@ -117,11 +118,11 @@
       "candidate_idx": 0,
       "fold_index": 4,
       "fold_idx": 4,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.98,
+      "validation_accuracy": 0.8,
+      "accuracy": 0.8,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 50,
         "max_depth": 5,
@@ -133,7 +134,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C01F4.joblib",
-      "created_at": "2026-04-05T16:21:25.042652"
+      "created_at": "2026-04-06T08:59:09.333326"
     },
     {
       "id": "C01F5",
@@ -142,11 +143,11 @@
       "candidate_idx": 0,
       "fold_index": 5,
       "fold_idx": 5,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 0.0,
-      "accuracy": 0.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.99,
+      "validation_accuracy": 0.82,
+      "accuracy": 0.82,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 50,
         "max_depth": 5,
@@ -158,7 +159,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C01F5.joblib",
-      "created_at": "2026-04-05T16:21:25.252883"
+      "created_at": "2026-04-06T08:59:09.753092"
     },
     {
       "id": "C02F1",
@@ -167,11 +168,11 @@
       "candidate_idx": 1,
       "fold_index": 1,
       "fold_idx": 1,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 0.0,
-      "accuracy": 0.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.99,
+      "validation_accuracy": 0.94,
+      "accuracy": 0.94,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 50,
         "max_depth": 5,
@@ -183,7 +184,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C02F1.joblib",
-      "created_at": "2026-04-05T16:21:25.457407"
+      "created_at": "2026-04-06T08:59:10.087139"
     },
     {
       "id": "C02F2",
@@ -192,11 +193,11 @@
       "candidate_idx": 1,
       "fold_index": 2,
       "fold_idx": 2,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.985,
+      "validation_accuracy": 0.94,
+      "accuracy": 0.94,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 50,
         "max_depth": 5,
@@ -208,7 +209,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C02F2.joblib",
-      "created_at": "2026-04-05T16:21:25.894087"
+      "created_at": "2026-04-06T08:59:10.441562"
     },
     {
       "id": "C02F3",
@@ -217,11 +218,11 @@
       "candidate_idx": 1,
       "fold_index": 3,
       "fold_idx": 3,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.995,
+      "validation_accuracy": 0.88,
+      "accuracy": 0.88,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 50,
         "max_depth": 5,
@@ -233,7 +234,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C02F3.joblib",
-      "created_at": "2026-04-05T16:21:26.306498"
+      "created_at": "2026-04-06T08:59:10.766380"
     },
     {
       "id": "C02F4",
@@ -242,11 +243,11 @@
       "candidate_idx": 1,
       "fold_index": 4,
       "fold_idx": 4,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.985,
+      "validation_accuracy": 0.8,
+      "accuracy": 0.8,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 50,
         "max_depth": 5,
@@ -258,7 +259,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C02F4.joblib",
-      "created_at": "2026-04-05T16:21:26.528722"
+      "created_at": "2026-04-06T08:59:11.069824"
     },
     {
       "id": "C02F5",
@@ -267,11 +268,11 @@
       "candidate_idx": 1,
       "fold_index": 5,
       "fold_idx": 5,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 0.0,
-      "accuracy": 0.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.985,
+      "validation_accuracy": 0.82,
+      "accuracy": 0.82,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 50,
         "max_depth": 5,
@@ -283,7 +284,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C02F5.joblib",
-      "created_at": "2026-04-05T16:21:26.722407"
+      "created_at": "2026-04-06T08:59:11.387790"
     },
     {
       "id": "C03F1",
@@ -292,11 +293,11 @@
       "candidate_idx": 2,
       "fold_index": 1,
       "fold_idx": 1,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 0.0,
-      "accuracy": 0.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.985,
+      "validation_accuracy": 0.94,
+      "accuracy": 0.94,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 50,
         "max_depth": 5,
@@ -308,7 +309,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C03F1.joblib",
-      "created_at": "2026-04-05T16:21:26.933257"
+      "created_at": "2026-04-06T08:59:11.687148"
     },
     {
       "id": "C03F2",
@@ -317,11 +318,11 @@
       "candidate_idx": 2,
       "fold_index": 2,
       "fold_idx": 2,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.985,
+      "validation_accuracy": 0.94,
+      "accuracy": 0.94,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 50,
         "max_depth": 5,
@@ -333,7 +334,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C03F2.joblib",
-      "created_at": "2026-04-05T16:21:27.301627"
+      "created_at": "2026-04-06T08:59:11.999041"
     },
     {
       "id": "C03F3",
@@ -342,11 +343,11 @@
       "candidate_idx": 2,
       "fold_index": 3,
       "fold_idx": 3,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.995,
+      "validation_accuracy": 0.88,
+      "accuracy": 0.88,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 50,
         "max_depth": 5,
@@ -358,7 +359,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C03F3.joblib",
-      "created_at": "2026-04-05T16:21:27.718329"
+      "created_at": "2026-04-06T08:59:12.306654"
     },
     {
       "id": "C03F4",
@@ -367,11 +368,11 @@
       "candidate_idx": 2,
       "fold_index": 4,
       "fold_idx": 4,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.98,
+      "validation_accuracy": 0.8,
+      "accuracy": 0.8,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 50,
         "max_depth": 5,
@@ -383,7 +384,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C03F4.joblib",
-      "created_at": "2026-04-05T16:21:28.022103"
+      "created_at": "2026-04-06T08:59:12.589895"
     },
     {
       "id": "C03F5",
@@ -392,11 +393,11 @@
       "candidate_idx": 2,
       "fold_index": 5,
       "fold_idx": 5,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 0.0,
-      "accuracy": 0.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.985,
+      "validation_accuracy": 0.82,
+      "accuracy": 0.82,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 50,
         "max_depth": 5,
@@ -408,7 +409,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C03F5.joblib",
-      "created_at": "2026-04-05T16:21:28.262783"
+      "created_at": "2026-04-06T08:59:12.886035"
     },
     {
       "id": "C04F1",
@@ -418,10 +419,10 @@
       "fold_index": 1,
       "fold_idx": 1,
       "train_accuracy": 1.0,
-      "validation_accuracy": 0.0,
-      "accuracy": 0.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "validation_accuracy": 0.92,
+      "accuracy": 0.92,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 50,
         "max_depth": 10,
@@ -433,7 +434,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C04F1.joblib",
-      "created_at": "2026-04-05T16:21:28.482738"
+      "created_at": "2026-04-06T08:59:13.178556"
     },
     {
       "id": "C04F2",
@@ -443,10 +444,10 @@
       "fold_index": 2,
       "fold_idx": 2,
       "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "validation_accuracy": 0.92,
+      "accuracy": 0.92,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 50,
         "max_depth": 10,
@@ -458,7 +459,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C04F2.joblib",
-      "created_at": "2026-04-05T16:21:28.748688"
+      "created_at": "2026-04-06T08:59:13.404228"
     },
     {
       "id": "C04F3",
@@ -468,10 +469,10 @@
       "fold_index": 3,
       "fold_idx": 3,
       "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "validation_accuracy": 0.86,
+      "accuracy": 0.86,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 50,
         "max_depth": 10,
@@ -483,7 +484,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C04F3.joblib",
-      "created_at": "2026-04-05T16:21:29.265181"
+      "created_at": "2026-04-06T08:59:13.682012"
     },
     {
       "id": "C04F4",
@@ -493,10 +494,10 @@
       "fold_index": 4,
       "fold_idx": 4,
       "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "validation_accuracy": 0.8,
+      "accuracy": 0.8,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 50,
         "max_depth": 10,
@@ -508,7 +509,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C04F4.joblib",
-      "created_at": "2026-04-05T16:21:29.478613"
+      "created_at": "2026-04-06T08:59:14.111051"
     },
     {
       "id": "C04F5",
@@ -518,10 +519,10 @@
       "fold_index": 5,
       "fold_idx": 5,
       "train_accuracy": 1.0,
-      "validation_accuracy": 0.0,
-      "accuracy": 0.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "validation_accuracy": 0.8,
+      "accuracy": 0.8,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 50,
         "max_depth": 10,
@@ -533,7 +534,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C04F5.joblib",
-      "created_at": "2026-04-05T16:21:29.697317"
+      "created_at": "2026-04-06T08:59:14.417638"
     },
     {
       "id": "C05F1",
@@ -542,11 +543,11 @@
       "candidate_idx": 4,
       "fold_index": 1,
       "fold_idx": 1,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 0.0,
-      "accuracy": 0.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.995,
+      "validation_accuracy": 0.96,
+      "accuracy": 0.96,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 50,
         "max_depth": 10,
@@ -558,7 +559,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C05F1.joblib",
-      "created_at": "2026-04-05T16:21:29.901973"
+      "created_at": "2026-04-06T08:59:14.816361"
     },
     {
       "id": "C05F2",
@@ -567,11 +568,11 @@
       "candidate_idx": 4,
       "fold_index": 2,
       "fold_idx": 2,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.995,
+      "validation_accuracy": 0.88,
+      "accuracy": 0.88,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 50,
         "max_depth": 10,
@@ -583,7 +584,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C05F2.joblib",
-      "created_at": "2026-04-05T16:21:30.166682"
+      "created_at": "2026-04-06T08:59:15.128401"
     },
     {
       "id": "C05F3",
@@ -593,10 +594,10 @@
       "fold_index": 3,
       "fold_idx": 3,
       "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "validation_accuracy": 0.88,
+      "accuracy": 0.88,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 50,
         "max_depth": 10,
@@ -608,7 +609,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C05F3.joblib",
-      "created_at": "2026-04-05T16:21:30.382825"
+      "created_at": "2026-04-06T08:59:15.421651"
     },
     {
       "id": "C05F4",
@@ -617,11 +618,11 @@
       "candidate_idx": 4,
       "fold_index": 4,
       "fold_idx": 4,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.99,
+      "validation_accuracy": 0.8,
+      "accuracy": 0.8,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 50,
         "max_depth": 10,
@@ -633,7 +634,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C05F4.joblib",
-      "created_at": "2026-04-05T16:21:30.923317"
+      "created_at": "2026-04-06T08:59:15.710184"
     },
     {
       "id": "C05F5",
@@ -642,11 +643,11 @@
       "candidate_idx": 4,
       "fold_index": 5,
       "fold_idx": 5,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 0.0,
-      "accuracy": 0.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.99,
+      "validation_accuracy": 0.74,
+      "accuracy": 0.74,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 50,
         "max_depth": 10,
@@ -658,7 +659,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C05F5.joblib",
-      "created_at": "2026-04-05T16:21:31.160744"
+      "created_at": "2026-04-06T08:59:16.167972"
     },
     {
       "id": "C06F1",
@@ -667,11 +668,11 @@
       "candidate_idx": 5,
       "fold_index": 1,
       "fold_idx": 1,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 0.0,
-      "accuracy": 0.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.995,
+      "validation_accuracy": 0.96,
+      "accuracy": 0.96,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 50,
         "max_depth": 10,
@@ -683,7 +684,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C06F1.joblib",
-      "created_at": "2026-04-05T16:21:31.443723"
+      "created_at": "2026-04-06T08:59:16.451593"
     },
     {
       "id": "C06F2",
@@ -692,11 +693,11 @@
       "candidate_idx": 5,
       "fold_index": 2,
       "fold_idx": 2,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.995,
+      "validation_accuracy": 0.9,
+      "accuracy": 0.9,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 50,
         "max_depth": 10,
@@ -708,7 +709,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C06F2.joblib",
-      "created_at": "2026-04-05T16:21:31.649054"
+      "created_at": "2026-04-06T08:59:16.707366"
     },
     {
       "id": "C06F3",
@@ -718,10 +719,10 @@
       "fold_index": 3,
       "fold_idx": 3,
       "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "validation_accuracy": 0.88,
+      "accuracy": 0.88,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 50,
         "max_depth": 10,
@@ -733,7 +734,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C06F3.joblib",
-      "created_at": "2026-04-05T16:21:31.868796"
+      "created_at": "2026-04-06T08:59:16.968297"
     },
     {
       "id": "C06F4",
@@ -742,11 +743,11 @@
       "candidate_idx": 5,
       "fold_index": 4,
       "fold_idx": 4,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.99,
+      "validation_accuracy": 0.8,
+      "accuracy": 0.8,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 50,
         "max_depth": 10,
@@ -758,7 +759,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C06F4.joblib",
-      "created_at": "2026-04-05T16:21:32.178142"
+      "created_at": "2026-04-06T08:59:17.311993"
     },
     {
       "id": "C06F5",
@@ -767,11 +768,11 @@
       "candidate_idx": 5,
       "fold_index": 5,
       "fold_idx": 5,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 0.0,
-      "accuracy": 0.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.99,
+      "validation_accuracy": 0.74,
+      "accuracy": 0.74,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 50,
         "max_depth": 10,
@@ -783,7 +784,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C06F5.joblib",
-      "created_at": "2026-04-05T16:21:32.715054"
+      "created_at": "2026-04-06T08:59:17.587857"
     },
     {
       "id": "C07F1",
@@ -793,10 +794,10 @@
       "fold_index": 1,
       "fold_idx": 1,
       "train_accuracy": 1.0,
-      "validation_accuracy": 0.0,
-      "accuracy": 0.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "validation_accuracy": 0.92,
+      "accuracy": 0.92,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 50,
         "max_depth": 15,
@@ -808,7 +809,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C07F1.joblib",
-      "created_at": "2026-04-05T16:21:33.032636"
+      "created_at": "2026-04-06T08:59:17.855394"
     },
     {
       "id": "C07F2",
@@ -818,10 +819,10 @@
       "fold_index": 2,
       "fold_idx": 2,
       "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "validation_accuracy": 0.92,
+      "accuracy": 0.92,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 50,
         "max_depth": 15,
@@ -833,7 +834,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C07F2.joblib",
-      "created_at": "2026-04-05T16:21:33.326660"
+      "created_at": "2026-04-06T08:59:18.111681"
     },
     {
       "id": "C07F3",
@@ -843,10 +844,10 @@
       "fold_index": 3,
       "fold_idx": 3,
       "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "validation_accuracy": 0.86,
+      "accuracy": 0.86,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 50,
         "max_depth": 15,
@@ -858,7 +859,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C07F3.joblib",
-      "created_at": "2026-04-05T16:21:33.620777"
+      "created_at": "2026-04-06T08:59:18.419744"
     },
     {
       "id": "C07F4",
@@ -868,10 +869,10 @@
       "fold_index": 4,
       "fold_idx": 4,
       "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "validation_accuracy": 0.8,
+      "accuracy": 0.8,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 50,
         "max_depth": 15,
@@ -883,7 +884,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C07F4.joblib",
-      "created_at": "2026-04-05T16:21:34.073302"
+      "created_at": "2026-04-06T08:59:18.654705"
     },
     {
       "id": "C07F5",
@@ -893,10 +894,10 @@
       "fold_index": 5,
       "fold_idx": 5,
       "train_accuracy": 1.0,
-      "validation_accuracy": 0.0,
-      "accuracy": 0.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "validation_accuracy": 0.8,
+      "accuracy": 0.8,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 50,
         "max_depth": 15,
@@ -908,7 +909,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C07F5.joblib",
-      "created_at": "2026-04-05T16:21:34.445454"
+      "created_at": "2026-04-06T08:59:18.934778"
     },
     {
       "id": "C08F1",
@@ -917,11 +918,11 @@
       "candidate_idx": 7,
       "fold_index": 1,
       "fold_idx": 1,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 0.0,
-      "accuracy": 0.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.995,
+      "validation_accuracy": 0.96,
+      "accuracy": 0.96,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 50,
         "max_depth": 15,
@@ -933,7 +934,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C08F1.joblib",
-      "created_at": "2026-04-05T16:21:35.005153"
+      "created_at": "2026-04-06T08:59:19.206517"
     },
     {
       "id": "C08F2",
@@ -942,11 +943,11 @@
       "candidate_idx": 7,
       "fold_index": 2,
       "fold_idx": 2,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.995,
+      "validation_accuracy": 0.88,
+      "accuracy": 0.88,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 50,
         "max_depth": 15,
@@ -958,7 +959,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C08F2.joblib",
-      "created_at": "2026-04-05T16:21:35.345223"
+      "created_at": "2026-04-06T08:59:19.464047"
     },
     {
       "id": "C08F3",
@@ -968,10 +969,10 @@
       "fold_index": 3,
       "fold_idx": 3,
       "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "validation_accuracy": 0.88,
+      "accuracy": 0.88,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 50,
         "max_depth": 15,
@@ -983,7 +984,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C08F3.joblib",
-      "created_at": "2026-04-05T16:21:35.650491"
+      "created_at": "2026-04-06T08:59:19.742676"
     },
     {
       "id": "C08F4",
@@ -992,11 +993,11 @@
       "candidate_idx": 7,
       "fold_index": 4,
       "fold_idx": 4,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.99,
+      "validation_accuracy": 0.8,
+      "accuracy": 0.8,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 50,
         "max_depth": 15,
@@ -1008,7 +1009,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C08F4.joblib",
-      "created_at": "2026-04-05T16:21:35.934220"
+      "created_at": "2026-04-06T08:59:20.016575"
     },
     {
       "id": "C08F5",
@@ -1017,11 +1018,11 @@
       "candidate_idx": 7,
       "fold_index": 5,
       "fold_idx": 5,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 0.0,
-      "accuracy": 0.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.99,
+      "validation_accuracy": 0.74,
+      "accuracy": 0.74,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 50,
         "max_depth": 15,
@@ -1033,7 +1034,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C08F5.joblib",
-      "created_at": "2026-04-05T16:21:36.225563"
+      "created_at": "2026-04-06T08:59:20.269738"
     },
     {
       "id": "C09F1",
@@ -1042,11 +1043,11 @@
       "candidate_idx": 8,
       "fold_index": 1,
       "fold_idx": 1,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 0.0,
-      "accuracy": 0.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.995,
+      "validation_accuracy": 0.96,
+      "accuracy": 0.96,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 50,
         "max_depth": 15,
@@ -1058,7 +1059,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C09F1.joblib",
-      "created_at": "2026-04-05T16:21:36.505106"
+      "created_at": "2026-04-06T08:59:20.562489"
     },
     {
       "id": "C09F2",
@@ -1067,11 +1068,11 @@
       "candidate_idx": 8,
       "fold_index": 2,
       "fold_idx": 2,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.995,
+      "validation_accuracy": 0.9,
+      "accuracy": 0.9,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 50,
         "max_depth": 15,
@@ -1083,7 +1084,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C09F2.joblib",
-      "created_at": "2026-04-05T16:21:37.124070"
+      "created_at": "2026-04-06T08:59:20.835449"
     },
     {
       "id": "C09F3",
@@ -1093,10 +1094,10 @@
       "fold_index": 3,
       "fold_idx": 3,
       "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "validation_accuracy": 0.88,
+      "accuracy": 0.88,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 50,
         "max_depth": 15,
@@ -1108,7 +1109,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C09F3.joblib",
-      "created_at": "2026-04-05T16:21:37.375288"
+      "created_at": "2026-04-06T08:59:21.139958"
     },
     {
       "id": "C09F4",
@@ -1117,11 +1118,11 @@
       "candidate_idx": 8,
       "fold_index": 4,
       "fold_idx": 4,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.99,
+      "validation_accuracy": 0.8,
+      "accuracy": 0.8,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 50,
         "max_depth": 15,
@@ -1133,7 +1134,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C09F4.joblib",
-      "created_at": "2026-04-05T16:21:37.599732"
+      "created_at": "2026-04-06T08:59:21.418916"
     },
     {
       "id": "C09F5",
@@ -1142,11 +1143,11 @@
       "candidate_idx": 8,
       "fold_index": 5,
       "fold_idx": 5,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 0.0,
-      "accuracy": 0.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.99,
+      "validation_accuracy": 0.74,
+      "accuracy": 0.74,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 50,
         "max_depth": 15,
@@ -1158,7 +1159,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C09F5.joblib",
-      "created_at": "2026-04-05T16:21:37.825660"
+      "created_at": "2026-04-06T08:59:21.806880"
     },
     {
       "id": "C0AF1",
@@ -1167,11 +1168,11 @@
       "candidate_idx": 9,
       "fold_index": 1,
       "fold_idx": 1,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 0.0,
-      "accuracy": 0.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.985,
+      "validation_accuracy": 0.94,
+      "accuracy": 0.94,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 125,
         "max_depth": 5,
@@ -1183,7 +1184,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C0AF1.joblib",
-      "created_at": "2026-04-05T16:21:38.776359"
+      "created_at": "2026-04-06T08:59:22.479299"
     },
     {
       "id": "C0AF2",
@@ -1192,11 +1193,11 @@
       "candidate_idx": 9,
       "fold_index": 2,
       "fold_idx": 2,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.995,
+      "validation_accuracy": 0.92,
+      "accuracy": 0.92,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 125,
         "max_depth": 5,
@@ -1208,7 +1209,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C0AF2.joblib",
-      "created_at": "2026-04-05T16:21:39.492125"
+      "created_at": "2026-04-06T08:59:23.181078"
     },
     {
       "id": "C0AF3",
@@ -1218,10 +1219,10 @@
       "fold_index": 3,
       "fold_idx": 3,
       "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "validation_accuracy": 0.86,
+      "accuracy": 0.86,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 125,
         "max_depth": 5,
@@ -1233,7 +1234,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C0AF3.joblib",
-      "created_at": "2026-04-05T16:21:40.405691"
+      "created_at": "2026-04-06T08:59:23.941465"
     },
     {
       "id": "C0AF4",
@@ -1242,11 +1243,11 @@
       "candidate_idx": 9,
       "fold_index": 4,
       "fold_idx": 4,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.995,
+      "validation_accuracy": 0.8,
+      "accuracy": 0.8,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 125,
         "max_depth": 5,
@@ -1258,7 +1259,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C0AF4.joblib",
-      "created_at": "2026-04-05T16:21:41.383216"
+      "created_at": "2026-04-06T08:59:24.623609"
     },
     {
       "id": "C0AF5",
@@ -1267,11 +1268,11 @@
       "candidate_idx": 9,
       "fold_index": 5,
       "fold_idx": 5,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 0.0,
-      "accuracy": 0.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.99,
+      "validation_accuracy": 0.84,
+      "accuracy": 0.84,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 125,
         "max_depth": 5,
@@ -1283,7 +1284,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C0AF5.joblib",
-      "created_at": "2026-04-05T16:21:41.988781"
+      "created_at": "2026-04-06T08:59:25.389740"
     },
     {
       "id": "C0BF1",
@@ -1292,11 +1293,11 @@
       "candidate_idx": 10,
       "fold_index": 1,
       "fold_idx": 1,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 0.0,
-      "accuracy": 0.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.985,
+      "validation_accuracy": 0.94,
+      "accuracy": 0.94,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 125,
         "max_depth": 5,
@@ -1308,7 +1309,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C0BF1.joblib",
-      "created_at": "2026-04-05T16:21:42.815079"
+      "created_at": "2026-04-06T08:59:26.102928"
     },
     {
       "id": "C0BF2",
@@ -1317,11 +1318,11 @@
       "candidate_idx": 10,
       "fold_index": 2,
       "fold_idx": 2,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.99,
+      "validation_accuracy": 0.92,
+      "accuracy": 0.92,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 125,
         "max_depth": 5,
@@ -1333,7 +1334,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C0BF2.joblib",
-      "created_at": "2026-04-05T16:21:43.386576"
+      "created_at": "2026-04-06T08:59:26.767779"
     },
     {
       "id": "C0BF3",
@@ -1343,10 +1344,10 @@
       "fold_index": 3,
       "fold_idx": 3,
       "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "validation_accuracy": 0.86,
+      "accuracy": 0.86,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 125,
         "max_depth": 5,
@@ -1358,7 +1359,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C0BF3.joblib",
-      "created_at": "2026-04-05T16:21:43.904371"
+      "created_at": "2026-04-06T08:59:27.448569"
     },
     {
       "id": "C0BF4",
@@ -1367,11 +1368,11 @@
       "candidate_idx": 10,
       "fold_index": 4,
       "fold_idx": 4,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.99,
+      "validation_accuracy": 0.8,
+      "accuracy": 0.8,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 125,
         "max_depth": 5,
@@ -1383,7 +1384,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C0BF4.joblib",
-      "created_at": "2026-04-05T16:21:44.802240"
+      "created_at": "2026-04-06T08:59:28.152532"
     },
     {
       "id": "C0BF5",
@@ -1392,11 +1393,11 @@
       "candidate_idx": 10,
       "fold_index": 5,
       "fold_idx": 5,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 0.0,
-      "accuracy": 0.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.985,
+      "validation_accuracy": 0.84,
+      "accuracy": 0.84,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 125,
         "max_depth": 5,
@@ -1408,7 +1409,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C0BF5.joblib",
-      "created_at": "2026-04-05T16:21:45.405030"
+      "created_at": "2026-04-06T08:59:28.861716"
     },
     {
       "id": "C0CF1",
@@ -1417,11 +1418,11 @@
       "candidate_idx": 11,
       "fold_index": 1,
       "fold_idx": 1,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 0.0,
-      "accuracy": 0.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.985,
+      "validation_accuracy": 0.94,
+      "accuracy": 0.94,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 125,
         "max_depth": 5,
@@ -1433,7 +1434,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C0CF1.joblib",
-      "created_at": "2026-04-05T16:21:45.985907"
+      "created_at": "2026-04-06T08:59:29.547320"
     },
     {
       "id": "C0CF2",
@@ -1442,11 +1443,11 @@
       "candidate_idx": 11,
       "fold_index": 2,
       "fold_idx": 2,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.99,
+      "validation_accuracy": 0.92,
+      "accuracy": 0.92,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 125,
         "max_depth": 5,
@@ -1458,7 +1459,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C0CF2.joblib",
-      "created_at": "2026-04-05T16:21:46.386457"
+      "created_at": "2026-04-06T08:59:30.235568"
     },
     {
       "id": "C0CF3",
@@ -1467,11 +1468,11 @@
       "candidate_idx": 11,
       "fold_index": 3,
       "fold_idx": 3,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.995,
+      "validation_accuracy": 0.86,
+      "accuracy": 0.86,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 125,
         "max_depth": 5,
@@ -1483,7 +1484,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C0CF3.joblib",
-      "created_at": "2026-04-05T16:21:46.845023"
+      "created_at": "2026-04-06T08:59:30.936848"
     },
     {
       "id": "C0CF4",
@@ -1492,11 +1493,11 @@
       "candidate_idx": 11,
       "fold_index": 4,
       "fold_idx": 4,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.99,
+      "validation_accuracy": 0.8,
+      "accuracy": 0.8,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 125,
         "max_depth": 5,
@@ -1508,7 +1509,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C0CF4.joblib",
-      "created_at": "2026-04-05T16:21:47.505505"
+      "created_at": "2026-04-06T08:59:31.626538"
     },
     {
       "id": "C0CF5",
@@ -1517,11 +1518,11 @@
       "candidate_idx": 11,
       "fold_index": 5,
       "fold_idx": 5,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 0.0,
-      "accuracy": 0.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.975,
+      "validation_accuracy": 0.84,
+      "accuracy": 0.84,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 125,
         "max_depth": 5,
@@ -1533,7 +1534,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C0CF5.joblib",
-      "created_at": "2026-04-05T16:21:47.853204"
+      "created_at": "2026-04-06T08:59:32.421901"
     },
     {
       "id": "C0DF1",
@@ -1543,10 +1544,10 @@
       "fold_index": 1,
       "fold_idx": 1,
       "train_accuracy": 1.0,
-      "validation_accuracy": 0.0,
-      "accuracy": 0.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "validation_accuracy": 0.98,
+      "accuracy": 0.98,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 125,
         "max_depth": 10,
@@ -1558,7 +1559,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C0DF1.joblib",
-      "created_at": "2026-04-05T16:21:48.378677"
+      "created_at": "2026-04-06T08:59:33.115571"
     },
     {
       "id": "C0DF2",
@@ -1568,10 +1569,10 @@
       "fold_index": 2,
       "fold_idx": 2,
       "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "validation_accuracy": 0.88,
+      "accuracy": 0.88,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 125,
         "max_depth": 10,
@@ -1583,7 +1584,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C0DF2.joblib",
-      "created_at": "2026-04-05T16:21:48.746634"
+      "created_at": "2026-04-06T08:59:33.768961"
     },
     {
       "id": "C0DF3",
@@ -1593,10 +1594,10 @@
       "fold_index": 3,
       "fold_idx": 3,
       "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "validation_accuracy": 0.84,
+      "accuracy": 0.84,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 125,
         "max_depth": 10,
@@ -1608,7 +1609,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C0DF3.joblib",
-      "created_at": "2026-04-05T16:21:49.191518"
+      "created_at": "2026-04-06T08:59:34.428709"
     },
     {
       "id": "C0DF4",
@@ -1618,10 +1619,10 @@
       "fold_index": 4,
       "fold_idx": 4,
       "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "validation_accuracy": 0.8,
+      "accuracy": 0.8,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 125,
         "max_depth": 10,
@@ -1633,7 +1634,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C0DF4.joblib",
-      "created_at": "2026-04-05T16:21:49.762632"
+      "created_at": "2026-04-06T08:59:35.022957"
     },
     {
       "id": "C0DF5",
@@ -1643,10 +1644,10 @@
       "fold_index": 5,
       "fold_idx": 5,
       "train_accuracy": 1.0,
-      "validation_accuracy": 0.0,
-      "accuracy": 0.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "validation_accuracy": 0.84,
+      "accuracy": 0.84,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 125,
         "max_depth": 10,
@@ -1658,7 +1659,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C0DF5.joblib",
-      "created_at": "2026-04-05T16:21:50.160429"
+      "created_at": "2026-04-06T08:59:35.627956"
     },
     {
       "id": "C0EF1",
@@ -1668,10 +1669,10 @@
       "fold_index": 1,
       "fold_idx": 1,
       "train_accuracy": 1.0,
-      "validation_accuracy": 0.0,
-      "accuracy": 0.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "validation_accuracy": 0.98,
+      "accuracy": 0.98,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 125,
         "max_depth": 10,
@@ -1683,7 +1684,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C0EF1.joblib",
-      "created_at": "2026-04-05T16:21:50.783037"
+      "created_at": "2026-04-06T08:59:36.217990"
     },
     {
       "id": "C0EF2",
@@ -1693,10 +1694,10 @@
       "fold_index": 2,
       "fold_idx": 2,
       "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "validation_accuracy": 0.88,
+      "accuracy": 0.88,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 125,
         "max_depth": 10,
@@ -1708,7 +1709,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C0EF2.joblib",
-      "created_at": "2026-04-05T16:21:51.218421"
+      "created_at": "2026-04-06T08:59:36.801742"
     },
     {
       "id": "C0EF3",
@@ -1718,10 +1719,10 @@
       "fold_index": 3,
       "fold_idx": 3,
       "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "validation_accuracy": 0.84,
+      "accuracy": 0.84,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 125,
         "max_depth": 10,
@@ -1733,7 +1734,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C0EF3.joblib",
-      "created_at": "2026-04-05T16:21:51.632828"
+      "created_at": "2026-04-06T08:59:37.405617"
     },
     {
       "id": "C0EF4",
@@ -1743,10 +1744,10 @@
       "fold_index": 4,
       "fold_idx": 4,
       "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "validation_accuracy": 0.8,
+      "accuracy": 0.8,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 125,
         "max_depth": 10,
@@ -1758,7 +1759,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C0EF4.joblib",
-      "created_at": "2026-04-05T16:21:52.461797"
+      "created_at": "2026-04-06T08:59:37.981979"
     },
     {
       "id": "C0EF5",
@@ -1767,11 +1768,11 @@
       "candidate_idx": 13,
       "fold_index": 5,
       "fold_idx": 5,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 0.0,
-      "accuracy": 0.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.995,
+      "validation_accuracy": 0.82,
+      "accuracy": 0.82,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 125,
         "max_depth": 10,
@@ -1783,7 +1784,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C0EF5.joblib",
-      "created_at": "2026-04-05T16:21:53.081534"
+      "created_at": "2026-04-06T08:59:38.574877"
     },
     {
       "id": "C0FF1",
@@ -1792,11 +1793,11 @@
       "candidate_idx": 14,
       "fold_index": 1,
       "fold_idx": 1,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 0.0,
-      "accuracy": 0.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.995,
+      "validation_accuracy": 0.98,
+      "accuracy": 0.98,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 125,
         "max_depth": 10,
@@ -1808,7 +1809,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C0FF1.joblib",
-      "created_at": "2026-04-05T16:21:53.925952"
+      "created_at": "2026-04-06T08:59:39.109864"
     },
     {
       "id": "C0FF2",
@@ -1818,10 +1819,10 @@
       "fold_index": 2,
       "fold_idx": 2,
       "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "validation_accuracy": 0.88,
+      "accuracy": 0.88,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 125,
         "max_depth": 10,
@@ -1833,7 +1834,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C0FF2.joblib",
-      "created_at": "2026-04-05T16:21:54.480981"
+      "created_at": "2026-04-06T08:59:39.686118"
     },
     {
       "id": "C0FF3",
@@ -1843,10 +1844,10 @@
       "fold_index": 3,
       "fold_idx": 3,
       "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "validation_accuracy": 0.86,
+      "accuracy": 0.86,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 125,
         "max_depth": 10,
@@ -1858,7 +1859,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C0FF3.joblib",
-      "created_at": "2026-04-05T16:21:54.880693"
+      "created_at": "2026-04-06T08:59:40.251773"
     },
     {
       "id": "C0FF4",
@@ -1867,11 +1868,11 @@
       "candidate_idx": 14,
       "fold_index": 4,
       "fold_idx": 4,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.99,
+      "validation_accuracy": 0.8,
+      "accuracy": 0.8,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 125,
         "max_depth": 10,
@@ -1883,7 +1884,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C0FF4.joblib",
-      "created_at": "2026-04-05T16:21:55.496248"
+      "created_at": "2026-04-06T08:59:40.838301"
     },
     {
       "id": "C0FF5",
@@ -1892,11 +1893,11 @@
       "candidate_idx": 14,
       "fold_index": 5,
       "fold_idx": 5,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 0.0,
-      "accuracy": 0.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.995,
+      "validation_accuracy": 0.84,
+      "accuracy": 0.84,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 125,
         "max_depth": 10,
@@ -1908,7 +1909,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C0FF5.joblib",
-      "created_at": "2026-04-05T16:21:55.881299"
+      "created_at": "2026-04-06T08:59:41.434211"
     },
     {
       "id": "C10F1",
@@ -1918,10 +1919,10 @@
       "fold_index": 1,
       "fold_idx": 1,
       "train_accuracy": 1.0,
-      "validation_accuracy": 0.0,
-      "accuracy": 0.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "validation_accuracy": 0.98,
+      "accuracy": 0.98,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 125,
         "max_depth": 15,
@@ -1933,7 +1934,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C10F1.joblib",
-      "created_at": "2026-04-05T16:21:56.427873"
+      "created_at": "2026-04-06T08:59:42.078536"
     },
     {
       "id": "C10F2",
@@ -1943,10 +1944,10 @@
       "fold_index": 2,
       "fold_idx": 2,
       "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "validation_accuracy": 0.88,
+      "accuracy": 0.88,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 125,
         "max_depth": 15,
@@ -1958,7 +1959,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C10F2.joblib",
-      "created_at": "2026-04-05T16:21:56.780072"
+      "created_at": "2026-04-06T08:59:42.663808"
     },
     {
       "id": "C10F3",
@@ -1968,10 +1969,10 @@
       "fold_index": 3,
       "fold_idx": 3,
       "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "validation_accuracy": 0.84,
+      "accuracy": 0.84,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 125,
         "max_depth": 15,
@@ -1983,7 +1984,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C10F3.joblib",
-      "created_at": "2026-04-05T16:21:57.188233"
+      "created_at": "2026-04-06T08:59:43.232908"
     },
     {
       "id": "C10F4",
@@ -1993,10 +1994,10 @@
       "fold_index": 4,
       "fold_idx": 4,
       "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "validation_accuracy": 0.8,
+      "accuracy": 0.8,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 125,
         "max_depth": 15,
@@ -2008,7 +2009,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C10F4.joblib",
-      "created_at": "2026-04-05T16:21:57.736903"
+      "created_at": "2026-04-06T08:59:43.779313"
     },
     {
       "id": "C10F5",
@@ -2018,10 +2019,10 @@
       "fold_index": 5,
       "fold_idx": 5,
       "train_accuracy": 1.0,
-      "validation_accuracy": 0.0,
-      "accuracy": 0.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "validation_accuracy": 0.84,
+      "accuracy": 0.84,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 125,
         "max_depth": 15,
@@ -2033,7 +2034,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C10F5.joblib",
-      "created_at": "2026-04-05T16:21:58.133511"
+      "created_at": "2026-04-06T08:59:44.387554"
     },
     {
       "id": "C11F1",
@@ -2043,10 +2044,10 @@
       "fold_index": 1,
       "fold_idx": 1,
       "train_accuracy": 1.0,
-      "validation_accuracy": 0.0,
-      "accuracy": 0.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "validation_accuracy": 0.98,
+      "accuracy": 0.98,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 125,
         "max_depth": 15,
@@ -2058,7 +2059,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C11F1.joblib",
-      "created_at": "2026-04-05T16:21:58.707010"
+      "created_at": "2026-04-06T08:59:44.961257"
     },
     {
       "id": "C11F2",
@@ -2068,10 +2069,10 @@
       "fold_index": 2,
       "fold_idx": 2,
       "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "validation_accuracy": 0.88,
+      "accuracy": 0.88,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 125,
         "max_depth": 15,
@@ -2083,7 +2084,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C11F2.joblib",
-      "created_at": "2026-04-05T16:21:59.113903"
+      "created_at": "2026-04-06T08:59:45.563199"
     },
     {
       "id": "C11F3",
@@ -2093,10 +2094,10 @@
       "fold_index": 3,
       "fold_idx": 3,
       "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "validation_accuracy": 0.84,
+      "accuracy": 0.84,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 125,
         "max_depth": 15,
@@ -2108,7 +2109,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C11F3.joblib",
-      "created_at": "2026-04-05T16:21:59.624608"
+      "created_at": "2026-04-06T08:59:46.179042"
     },
     {
       "id": "C11F4",
@@ -2118,10 +2119,10 @@
       "fold_index": 4,
       "fold_idx": 4,
       "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "validation_accuracy": 0.8,
+      "accuracy": 0.8,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 125,
         "max_depth": 15,
@@ -2133,7 +2134,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C11F4.joblib",
-      "created_at": "2026-04-05T16:22:00.152815"
+      "created_at": "2026-04-06T08:59:46.733968"
     },
     {
       "id": "C11F5",
@@ -2142,11 +2143,11 @@
       "candidate_idx": 16,
       "fold_index": 5,
       "fold_idx": 5,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 0.0,
-      "accuracy": 0.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.995,
+      "validation_accuracy": 0.82,
+      "accuracy": 0.82,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 125,
         "max_depth": 15,
@@ -2158,7 +2159,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C11F5.joblib",
-      "created_at": "2026-04-05T16:22:00.520888"
+      "created_at": "2026-04-06T08:59:47.276755"
     },
     {
       "id": "C12F1",
@@ -2167,11 +2168,11 @@
       "candidate_idx": 17,
       "fold_index": 1,
       "fold_idx": 1,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 0.0,
-      "accuracy": 0.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.995,
+      "validation_accuracy": 0.98,
+      "accuracy": 0.98,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 125,
         "max_depth": 15,
@@ -2183,7 +2184,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C12F1.joblib",
-      "created_at": "2026-04-05T16:22:01.106600"
+      "created_at": "2026-04-06T08:59:47.822462"
     },
     {
       "id": "C12F2",
@@ -2193,10 +2194,10 @@
       "fold_index": 2,
       "fold_idx": 2,
       "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "validation_accuracy": 0.88,
+      "accuracy": 0.88,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 125,
         "max_depth": 15,
@@ -2208,7 +2209,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C12F2.joblib",
-      "created_at": "2026-04-05T16:22:01.494076"
+      "created_at": "2026-04-06T08:59:48.402743"
     },
     {
       "id": "C12F3",
@@ -2218,10 +2219,10 @@
       "fold_index": 3,
       "fold_idx": 3,
       "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "validation_accuracy": 0.86,
+      "accuracy": 0.86,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 125,
         "max_depth": 15,
@@ -2233,7 +2234,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C12F3.joblib",
-      "created_at": "2026-04-05T16:22:01.859301"
+      "created_at": "2026-04-06T08:59:49.079359"
     },
     {
       "id": "C12F4",
@@ -2242,11 +2243,11 @@
       "candidate_idx": 17,
       "fold_index": 4,
       "fold_idx": 4,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.99,
+      "validation_accuracy": 0.8,
+      "accuracy": 0.8,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 125,
         "max_depth": 15,
@@ -2258,7 +2259,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C12F4.joblib",
-      "created_at": "2026-04-05T16:22:02.445634"
+      "created_at": "2026-04-06T08:59:49.654917"
     },
     {
       "id": "C12F5",
@@ -2267,11 +2268,11 @@
       "candidate_idx": 17,
       "fold_index": 5,
       "fold_idx": 5,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 0.0,
-      "accuracy": 0.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.995,
+      "validation_accuracy": 0.84,
+      "accuracy": 0.84,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 125,
         "max_depth": 15,
@@ -2283,7 +2284,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C12F5.joblib",
-      "created_at": "2026-04-05T16:22:02.976152"
+      "created_at": "2026-04-06T08:59:50.203763"
     },
     {
       "id": "C13F1",
@@ -2292,11 +2293,11 @@
       "candidate_idx": 18,
       "fold_index": 1,
       "fold_idx": 1,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 0.0,
-      "accuracy": 0.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.985,
+      "validation_accuracy": 0.92,
+      "accuracy": 0.92,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 200,
         "max_depth": 5,
@@ -2308,7 +2309,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C13F1.joblib",
-      "created_at": "2026-04-05T16:22:03.917933"
+      "created_at": "2026-04-06T08:59:51.188874"
     },
     {
       "id": "C13F2",
@@ -2318,10 +2319,10 @@
       "fold_index": 2,
       "fold_idx": 2,
       "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "validation_accuracy": 0.92,
+      "accuracy": 0.92,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 200,
         "max_depth": 5,
@@ -2333,7 +2334,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C13F2.joblib",
-      "created_at": "2026-04-05T16:22:04.753128"
+      "created_at": "2026-04-06T08:59:52.181671"
     },
     {
       "id": "C13F3",
@@ -2343,10 +2344,10 @@
       "fold_index": 3,
       "fold_idx": 3,
       "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "validation_accuracy": 0.86,
+      "accuracy": 0.86,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 200,
         "max_depth": 5,
@@ -2358,7 +2359,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C13F3.joblib",
-      "created_at": "2026-04-05T16:22:05.493517"
+      "created_at": "2026-04-06T08:59:53.138654"
     },
     {
       "id": "C13F4",
@@ -2367,11 +2368,11 @@
       "candidate_idx": 18,
       "fold_index": 4,
       "fold_idx": 4,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.985,
+      "validation_accuracy": 0.8,
+      "accuracy": 0.8,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 200,
         "max_depth": 5,
@@ -2383,7 +2384,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C13F4.joblib",
-      "created_at": "2026-04-05T16:22:06.265293"
+      "created_at": "2026-04-06T08:59:54.160260"
     },
     {
       "id": "C13F5",
@@ -2392,11 +2393,11 @@
       "candidate_idx": 18,
       "fold_index": 5,
       "fold_idx": 5,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 0.0,
-      "accuracy": 0.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.98,
+      "validation_accuracy": 0.84,
+      "accuracy": 0.84,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 200,
         "max_depth": 5,
@@ -2408,7 +2409,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C13F5.joblib",
-      "created_at": "2026-04-05T16:22:06.804049"
+      "created_at": "2026-04-06T08:59:55.081126"
     },
     {
       "id": "C14F1",
@@ -2417,11 +2418,11 @@
       "candidate_idx": 19,
       "fold_index": 1,
       "fold_idx": 1,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 0.0,
-      "accuracy": 0.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.985,
+      "validation_accuracy": 0.92,
+      "accuracy": 0.92,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 200,
         "max_depth": 5,
@@ -2433,7 +2434,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C14F1.joblib",
-      "created_at": "2026-04-05T16:22:07.532960"
+      "created_at": "2026-04-06T08:59:55.944191"
     },
     {
       "id": "C14F2",
@@ -2442,11 +2443,11 @@
       "candidate_idx": 19,
       "fold_index": 2,
       "fold_idx": 2,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.99,
+      "validation_accuracy": 0.92,
+      "accuracy": 0.92,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 200,
         "max_depth": 5,
@@ -2458,7 +2459,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C14F2.joblib",
-      "created_at": "2026-04-05T16:22:08.279165"
+      "created_at": "2026-04-06T08:59:56.900998"
     },
     {
       "id": "C14F3",
@@ -2468,10 +2469,10 @@
       "fold_index": 3,
       "fold_idx": 3,
       "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "validation_accuracy": 0.86,
+      "accuracy": 0.86,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 200,
         "max_depth": 5,
@@ -2483,7 +2484,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C14F3.joblib",
-      "created_at": "2026-04-05T16:22:08.928368"
+      "created_at": "2026-04-06T08:59:57.857131"
     },
     {
       "id": "C14F4",
@@ -2492,11 +2493,11 @@
       "candidate_idx": 19,
       "fold_index": 4,
       "fold_idx": 4,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.99,
+      "validation_accuracy": 0.8,
+      "accuracy": 0.8,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 200,
         "max_depth": 5,
@@ -2508,7 +2509,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C14F4.joblib",
-      "created_at": "2026-04-05T16:22:09.757734"
+      "created_at": "2026-04-06T08:59:58.761146"
     },
     {
       "id": "C14F5",
@@ -2517,11 +2518,11 @@
       "candidate_idx": 19,
       "fold_index": 5,
       "fold_idx": 5,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 0.0,
-      "accuracy": 0.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.98,
+      "validation_accuracy": 0.84,
+      "accuracy": 0.84,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 200,
         "max_depth": 5,
@@ -2533,7 +2534,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C14F5.joblib",
-      "created_at": "2026-04-05T16:22:10.514704"
+      "created_at": "2026-04-06T08:59:59.654588"
     },
     {
       "id": "C15F1",
@@ -2542,11 +2543,11 @@
       "candidate_idx": 20,
       "fold_index": 1,
       "fold_idx": 1,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 0.0,
-      "accuracy": 0.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.985,
+      "validation_accuracy": 0.92,
+      "accuracy": 0.92,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 200,
         "max_depth": 5,
@@ -2558,7 +2559,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C15F1.joblib",
-      "created_at": "2026-04-05T16:22:11.158153"
+      "created_at": "2026-04-06T09:00:00.547321"
     },
     {
       "id": "C15F2",
@@ -2567,11 +2568,11 @@
       "candidate_idx": 20,
       "fold_index": 2,
       "fold_idx": 2,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.99,
+      "validation_accuracy": 0.92,
+      "accuracy": 0.92,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 200,
         "max_depth": 5,
@@ -2583,7 +2584,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C15F2.joblib",
-      "created_at": "2026-04-05T16:22:11.974217"
+      "created_at": "2026-04-06T09:00:01.469911"
     },
     {
       "id": "C15F3",
@@ -2592,11 +2593,11 @@
       "candidate_idx": 20,
       "fold_index": 3,
       "fold_idx": 3,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.995,
+      "validation_accuracy": 0.86,
+      "accuracy": 0.86,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 200,
         "max_depth": 5,
@@ -2608,7 +2609,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C15F3.joblib",
-      "created_at": "2026-04-05T16:22:13.364055"
+      "created_at": "2026-04-06T09:00:02.358110"
     },
     {
       "id": "C15F4",
@@ -2617,11 +2618,11 @@
       "candidate_idx": 20,
       "fold_index": 4,
       "fold_idx": 4,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.985,
+      "validation_accuracy": 0.8,
+      "accuracy": 0.8,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 200,
         "max_depth": 5,
@@ -2633,7 +2634,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C15F4.joblib",
-      "created_at": "2026-04-05T16:22:14.400781"
+      "created_at": "2026-04-06T09:00:03.285490"
     },
     {
       "id": "C15F5",
@@ -2642,11 +2643,11 @@
       "candidate_idx": 20,
       "fold_index": 5,
       "fold_idx": 5,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 0.0,
-      "accuracy": 0.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.98,
+      "validation_accuracy": 0.84,
+      "accuracy": 0.84,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 200,
         "max_depth": 5,
@@ -2658,7 +2659,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C15F5.joblib",
-      "created_at": "2026-04-05T16:22:15.895994"
+      "created_at": "2026-04-06T09:00:04.220460"
     },
     {
       "id": "C16F1",
@@ -2668,10 +2669,10 @@
       "fold_index": 1,
       "fold_idx": 1,
       "train_accuracy": 1.0,
-      "validation_accuracy": 0.0,
-      "accuracy": 0.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "validation_accuracy": 0.98,
+      "accuracy": 0.98,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 200,
         "max_depth": 10,
@@ -2683,7 +2684,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C16F1.joblib",
-      "created_at": "2026-04-05T16:22:17.224170"
+      "created_at": "2026-04-06T09:00:05.389120"
     },
     {
       "id": "C16F2",
@@ -2693,10 +2694,10 @@
       "fold_index": 2,
       "fold_idx": 2,
       "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "validation_accuracy": 0.9,
+      "accuracy": 0.9,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 200,
         "max_depth": 10,
@@ -2708,7 +2709,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C16F2.joblib",
-      "created_at": "2026-04-05T16:22:18.396615"
+      "created_at": "2026-04-06T09:00:06.288345"
     },
     {
       "id": "C16F3",
@@ -2718,10 +2719,10 @@
       "fold_index": 3,
       "fold_idx": 3,
       "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "validation_accuracy": 0.84,
+      "accuracy": 0.84,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 200,
         "max_depth": 10,
@@ -2733,7 +2734,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C16F3.joblib",
-      "created_at": "2026-04-05T16:22:19.758661"
+      "created_at": "2026-04-06T09:00:07.224693"
     },
     {
       "id": "C16F4",
@@ -2743,10 +2744,10 @@
       "fold_index": 4,
       "fold_idx": 4,
       "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "validation_accuracy": 0.8,
+      "accuracy": 0.8,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 200,
         "max_depth": 10,
@@ -2758,7 +2759,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C16F4.joblib",
-      "created_at": "2026-04-05T16:22:21.076236"
+      "created_at": "2026-04-06T09:00:08.110587"
     },
     {
       "id": "C16F5",
@@ -2768,10 +2769,10 @@
       "fold_index": 5,
       "fold_idx": 5,
       "train_accuracy": 1.0,
-      "validation_accuracy": 0.0,
-      "accuracy": 0.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "validation_accuracy": 0.84,
+      "accuracy": 0.84,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 200,
         "max_depth": 10,
@@ -2783,7 +2784,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C16F5.joblib",
-      "created_at": "2026-04-05T16:22:22.199745"
+      "created_at": "2026-04-06T09:00:09.111298"
     },
     {
       "id": "C17F1",
@@ -2793,10 +2794,10 @@
       "fold_index": 1,
       "fold_idx": 1,
       "train_accuracy": 1.0,
-      "validation_accuracy": 0.0,
-      "accuracy": 0.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "validation_accuracy": 0.98,
+      "accuracy": 0.98,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 200,
         "max_depth": 10,
@@ -2808,7 +2809,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C17F1.joblib",
-      "created_at": "2026-04-05T16:22:23.520199"
+      "created_at": "2026-04-06T09:00:10.033024"
     },
     {
       "id": "C17F2",
@@ -2818,10 +2819,10 @@
       "fold_index": 2,
       "fold_idx": 2,
       "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "validation_accuracy": 0.9,
+      "accuracy": 0.9,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 200,
         "max_depth": 10,
@@ -2833,7 +2834,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C17F2.joblib",
-      "created_at": "2026-04-05T16:22:25.084682"
+      "created_at": "2026-04-06T09:00:10.964656"
     },
     {
       "id": "C17F3",
@@ -2843,10 +2844,10 @@
       "fold_index": 3,
       "fold_idx": 3,
       "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "validation_accuracy": 0.86,
+      "accuracy": 0.86,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 200,
         "max_depth": 10,
@@ -2858,7 +2859,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C17F3.joblib",
-      "created_at": "2026-04-05T16:22:26.066901"
+      "created_at": "2026-04-06T09:00:11.960967"
     },
     {
       "id": "C17F4",
@@ -2868,10 +2869,10 @@
       "fold_index": 4,
       "fold_idx": 4,
       "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "validation_accuracy": 0.8,
+      "accuracy": 0.8,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 200,
         "max_depth": 10,
@@ -2883,7 +2884,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C17F4.joblib",
-      "created_at": "2026-04-05T16:22:27.396115"
+      "created_at": "2026-04-06T09:00:13.037301"
     },
     {
       "id": "C17F5",
@@ -2892,11 +2893,11 @@
       "candidate_idx": 22,
       "fold_index": 5,
       "fold_idx": 5,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 0.0,
-      "accuracy": 0.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.995,
+      "validation_accuracy": 0.84,
+      "accuracy": 0.84,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 200,
         "max_depth": 10,
@@ -2908,7 +2909,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C17F5.joblib",
-      "created_at": "2026-04-05T16:22:28.972570"
+      "created_at": "2026-04-06T09:00:14.284544"
     },
     {
       "id": "C18F1",
@@ -2917,11 +2918,11 @@
       "candidate_idx": 23,
       "fold_index": 1,
       "fold_idx": 1,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 0.0,
-      "accuracy": 0.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.995,
+      "validation_accuracy": 0.98,
+      "accuracy": 0.98,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 200,
         "max_depth": 10,
@@ -2933,7 +2934,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C18F1.joblib",
-      "created_at": "2026-04-05T16:22:29.984349"
+      "created_at": "2026-04-06T09:00:15.312937"
     },
     {
       "id": "C18F2",
@@ -2943,10 +2944,10 @@
       "fold_index": 2,
       "fold_idx": 2,
       "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "validation_accuracy": 0.9,
+      "accuracy": 0.9,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 200,
         "max_depth": 10,
@@ -2958,7 +2959,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C18F2.joblib",
-      "created_at": "2026-04-05T16:22:31.140935"
+      "created_at": "2026-04-06T09:00:16.381969"
     },
     {
       "id": "C18F3",
@@ -2968,10 +2969,10 @@
       "fold_index": 3,
       "fold_idx": 3,
       "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "validation_accuracy": 0.86,
+      "accuracy": 0.86,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 200,
         "max_depth": 10,
@@ -2983,7 +2984,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C18F3.joblib",
-      "created_at": "2026-04-05T16:22:32.347687"
+      "created_at": "2026-04-06T09:00:17.342608"
     },
     {
       "id": "C18F4",
@@ -2992,11 +2993,11 @@
       "candidate_idx": 23,
       "fold_index": 4,
       "fold_idx": 4,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.99,
+      "validation_accuracy": 0.8,
+      "accuracy": 0.8,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 200,
         "max_depth": 10,
@@ -3008,7 +3009,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C18F4.joblib",
-      "created_at": "2026-04-05T16:22:33.291121"
+      "created_at": "2026-04-06T09:00:18.342844"
     },
     {
       "id": "C18F5",
@@ -3017,11 +3018,11 @@
       "candidate_idx": 23,
       "fold_index": 5,
       "fold_idx": 5,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 0.0,
-      "accuracy": 0.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.995,
+      "validation_accuracy": 0.84,
+      "accuracy": 0.84,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 200,
         "max_depth": 10,
@@ -3033,7 +3034,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C18F5.joblib",
-      "created_at": "2026-04-05T16:22:34.419566"
+      "created_at": "2026-04-06T09:00:19.320285"
     },
     {
       "id": "C19F1",
@@ -3043,10 +3044,10 @@
       "fold_index": 1,
       "fold_idx": 1,
       "train_accuracy": 1.0,
-      "validation_accuracy": 0.0,
-      "accuracy": 0.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "validation_accuracy": 0.98,
+      "accuracy": 0.98,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 200,
         "max_depth": 15,
@@ -3058,7 +3059,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C19F1.joblib",
-      "created_at": "2026-04-05T16:22:36.676814"
+      "created_at": "2026-04-06T09:00:20.362905"
     },
     {
       "id": "C19F2",
@@ -3068,10 +3069,10 @@
       "fold_index": 2,
       "fold_idx": 2,
       "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "validation_accuracy": 0.9,
+      "accuracy": 0.9,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 200,
         "max_depth": 15,
@@ -3083,7 +3084,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C19F2.joblib",
-      "created_at": "2026-04-05T16:22:39.495854"
+      "created_at": "2026-04-06T09:00:21.497304"
     },
     {
       "id": "C19F3",
@@ -3093,10 +3094,10 @@
       "fold_index": 3,
       "fold_idx": 3,
       "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "validation_accuracy": 0.84,
+      "accuracy": 0.84,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 200,
         "max_depth": 15,
@@ -3108,7 +3109,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C19F3.joblib",
-      "created_at": "2026-04-05T16:22:40.848589"
+      "created_at": "2026-04-06T09:00:22.497622"
     },
     {
       "id": "C19F4",
@@ -3118,10 +3119,10 @@
       "fold_index": 4,
       "fold_idx": 4,
       "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "validation_accuracy": 0.8,
+      "accuracy": 0.8,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 200,
         "max_depth": 15,
@@ -3133,7 +3134,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C19F4.joblib",
-      "created_at": "2026-04-05T16:22:41.984279"
+      "created_at": "2026-04-06T09:00:23.453514"
     },
     {
       "id": "C19F5",
@@ -3143,10 +3144,10 @@
       "fold_index": 5,
       "fold_idx": 5,
       "train_accuracy": 1.0,
-      "validation_accuracy": 0.0,
-      "accuracy": 0.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "validation_accuracy": 0.84,
+      "accuracy": 0.84,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 200,
         "max_depth": 15,
@@ -3158,7 +3159,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C19F5.joblib",
-      "created_at": "2026-04-05T16:22:43.080715"
+      "created_at": "2026-04-06T09:00:24.457342"
     },
     {
       "id": "C1AF1",
@@ -3168,10 +3169,10 @@
       "fold_index": 1,
       "fold_idx": 1,
       "train_accuracy": 1.0,
-      "validation_accuracy": 0.0,
-      "accuracy": 0.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "validation_accuracy": 0.98,
+      "accuracy": 0.98,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 200,
         "max_depth": 15,
@@ -3183,7 +3184,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C1AF1.joblib",
-      "created_at": "2026-04-05T16:22:44.004939"
+      "created_at": "2026-04-06T09:00:25.494210"
     },
     {
       "id": "C1AF2",
@@ -3193,10 +3194,10 @@
       "fold_index": 2,
       "fold_idx": 2,
       "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "validation_accuracy": 0.9,
+      "accuracy": 0.9,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 200,
         "max_depth": 15,
@@ -3208,7 +3209,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C1AF2.joblib",
-      "created_at": "2026-04-05T16:22:45.136004"
+      "created_at": "2026-04-06T09:00:26.457178"
     },
     {
       "id": "C1AF3",
@@ -3218,10 +3219,10 @@
       "fold_index": 3,
       "fold_idx": 3,
       "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "validation_accuracy": 0.86,
+      "accuracy": 0.86,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 200,
         "max_depth": 15,
@@ -3233,7 +3234,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C1AF3.joblib",
-      "created_at": "2026-04-05T16:22:46.518994"
+      "created_at": "2026-04-06T09:00:27.479426"
     },
     {
       "id": "C1AF4",
@@ -3243,10 +3244,10 @@
       "fold_index": 4,
       "fold_idx": 4,
       "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "validation_accuracy": 0.8,
+      "accuracy": 0.8,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 200,
         "max_depth": 15,
@@ -3258,7 +3259,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C1AF4.joblib",
-      "created_at": "2026-04-05T16:22:47.480168"
+      "created_at": "2026-04-06T09:00:28.441459"
     },
     {
       "id": "C1AF5",
@@ -3267,11 +3268,11 @@
       "candidate_idx": 25,
       "fold_index": 5,
       "fold_idx": 5,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 0.0,
-      "accuracy": 0.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.995,
+      "validation_accuracy": 0.84,
+      "accuracy": 0.84,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 200,
         "max_depth": 15,
@@ -3283,7 +3284,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C1AF5.joblib",
-      "created_at": "2026-04-05T16:22:48.543684"
+      "created_at": "2026-04-06T09:00:29.465945"
     },
     {
       "id": "C1BF1",
@@ -3292,11 +3293,11 @@
       "candidate_idx": 26,
       "fold_index": 1,
       "fold_idx": 1,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 0.0,
-      "accuracy": 0.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.995,
+      "validation_accuracy": 0.98,
+      "accuracy": 0.98,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 200,
         "max_depth": 15,
@@ -3308,7 +3309,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C1BF1.joblib",
-      "created_at": "2026-04-05T16:22:49.618419"
+      "created_at": "2026-04-06T09:00:30.433617"
     },
     {
       "id": "C1BF2",
@@ -3318,10 +3319,10 @@
       "fold_index": 2,
       "fold_idx": 2,
       "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "validation_accuracy": 0.9,
+      "accuracy": 0.9,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 200,
         "max_depth": 15,
@@ -3333,7 +3334,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C1BF2.joblib",
-      "created_at": "2026-04-05T16:22:50.708383"
+      "created_at": "2026-04-06T09:00:31.440060"
     },
     {
       "id": "C1BF3",
@@ -3343,10 +3344,10 @@
       "fold_index": 3,
       "fold_idx": 3,
       "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "validation_accuracy": 0.86,
+      "accuracy": 0.86,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 200,
         "max_depth": 15,
@@ -3358,7 +3359,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C1BF3.joblib",
-      "created_at": "2026-04-05T16:22:51.924086"
+      "created_at": "2026-04-06T09:00:32.425228"
     },
     {
       "id": "C1BF4",
@@ -3367,11 +3368,11 @@
       "candidate_idx": 26,
       "fold_index": 4,
       "fold_idx": 4,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 1.0,
-      "accuracy": 1.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.99,
+      "validation_accuracy": 0.8,
+      "accuracy": 0.8,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 200,
         "max_depth": 15,
@@ -3383,7 +3384,7 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C1BF4.joblib",
-      "created_at": "2026-04-05T16:22:53.008746"
+      "created_at": "2026-04-06T09:00:33.401799"
     },
     {
       "id": "C1BF5",
@@ -3392,11 +3393,11 @@
       "candidate_idx": 26,
       "fold_index": 5,
       "fold_idx": 5,
-      "train_accuracy": 1.0,
-      "validation_accuracy": 0.0,
-      "accuracy": 0.0,
-      "n_train_samples": 20,
-      "n_validation_samples": 5,
+      "train_accuracy": 0.995,
+      "validation_accuracy": 0.84,
+      "accuracy": 0.84,
+      "n_train_samples": 200,
+      "n_validation_samples": 50,
       "hyperparameters": {
         "n_estimators": 200,
         "max_depth": 15,
@@ -3408,14 +3409,14 @@
         "k_folds": 5
       },
       "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\rejected_models\\EMG\\C1BF5.joblib",
-      "created_at": "2026-04-05T16:22:53.875720"
+      "created_at": "2026-04-06T09:00:34.312074"
     }
   ],
   "hyperparameters": {
     "sensor": "EMG",
     "selected_hyperparameters": {
-      "n_estimators": 50,
-      "max_depth": 5,
+      "n_estimators": 125,
+      "max_depth": 10,
       "min_impurity_decrease": 0.001,
       "search_resolution": 3,
       "train_ratio": 0.68,
@@ -3430,36 +3431,81 @@
     "random_state": 42
   },
   "group_counts": {
-    "AA0002": 5,
-    "AA0100": 5,
-    "AA0101": 5,
-    "AA0102": 5,
-    "AA0200": 5
+    "AA0DB2": 5,
+    "AA0DB3": 5,
+    "AA0DB4": 5,
+    "AA0DB5": 5,
+    "AA0DB7": 5,
+    "AA0DB8": 5,
+    "AA0DB9": 5,
+    "AA0DBA": 5,
+    "AA0DBB": 5,
+    "AA0DBC": 5,
+    "AA0DBD": 5,
+    "AA0DBF": 5,
+    "AA0DC0": 5,
+    "AA0DC1": 5,
+    "AA0DC2": 5,
+    "AA0DC3": 5,
+    "AA0DC4": 5,
+    "AA0DC5": 5,
+    "AA0DC6": 5,
+    "AA0DC7": 5,
+    "AA0DC8": 5,
+    "AA0DC9": 5,
+    "AA0DCB": 5,
+    "AA0DCC": 5,
+    "AA0DCD": 5,
+    "AA0DCE": 5,
+    "AA0DCF": 5,
+    "AA0DD0": 5,
+    "AA0DD1": 5,
+    "AA0DD2": 5,
+    "AA0DD4": 5,
+    "AA0DD5": 5,
+    "AA0DD6": 5,
+    "AA0DD7": 5,
+    "AA0DD8": 5,
+    "AA0DD9": 5,
+    "AA0DDA": 5,
+    "AA0DDB": 5,
+    "AA0DDC": 5,
+    "AA0DDD": 5,
+    "AA0DDF": 5,
+    "AA0DE1": 5,
+    "AA0DE2": 5,
+    "AA0DE3": 5,
+    "AA0DE4": 5,
+    "AA0DE5": 5,
+    "AA0DE7": 5,
+    "AA0DE8": 5,
+    "AA0DE9": 5,
+    "AA0DEB": 5
   },
   "confusion_matrix": [
     [
-      10,
+      15,
       0,
+      0,
+      0
+    ],
+    [
+      1,
+      19,
       0,
       0
     ],
     [
       0,
       0,
-      0,
+      5,
       0
     ],
     [
       0,
       0,
-      0,
-      0
-    ],
-    [
-      0,
-      0,
-      0,
-      0
+      2,
+      3
     ]
   ],
   "labels": [
@@ -3469,26 +3515,26 @@
     "Scissors"
   ],
   "feature_importances": {
-    "mav": 0.03445506314168008,
-    "rms": 0.034136383488109635,
-    "iemg": 0.03867386414754836,
-    "var": 0.021093251773280405,
-    "wl": 0.05840474056586589,
-    "zc": 0.04706919359670783,
-    "ssc": 0.09765335968889531,
-    "mean_freq": 0.038235215198108616,
-    "median_freq": 0.07315295843648306,
-    "spectral_entropy": 0.020888215842012548,
-    "d_mav": 0.020310737444448355,
-    "d_rms": 0.06325257500830439,
-    "d_iemg": 0.04897497684126593,
-    "d_var": 0.05356484527534836,
-    "d_wl": 0.04315467523678668,
-    "d_zc": 0.041952726845217295,
-    "d_ssc": 0.04801726119907937,
-    "d_mean_freq": 0.07415291670180023,
-    "d_median_freq": 0.048175351530190244,
-    "d_spectral_entropy": 0.0946816880388674
+    "mav": 0.1105625719909433,
+    "rms": 0.13244203328669352,
+    "iemg": 0.10237719282778686,
+    "var": 0.20690420916109128,
+    "wl": 0.11561286523324019,
+    "zc": 0.0556970812142889,
+    "ssc": 0.07134392165056215,
+    "mean_freq": 0.018654202546065177,
+    "median_freq": 0.022187911056437956,
+    "spectral_entropy": 0.02599138686825163,
+    "d_mav": 0.010346306614523758,
+    "d_rms": 0.017788231545623596,
+    "d_iemg": 0.014868617892883325,
+    "d_var": 0.021385125429111664,
+    "d_wl": 0.014093684666004849,
+    "d_zc": 0.01077599544168054,
+    "d_ssc": 0.016809193638739655,
+    "d_mean_freq": 0.010570594518442056,
+    "d_median_freq": 0.011214695898505211,
+    "d_spectral_entropy": 0.010374178519124302
   },
   "feature_order": [
     "mav",
@@ -3513,60 +3559,393 @@
     "d_spectral_entropy"
   ],
   "tree_structure": {
-    "name": "d_mean_freq <= 0.71",
+    "name": "rms <= -0.59",
     "attributes": {
-      "samples": 11,
-      "gini": 0.585
+      "samples": 130,
+      "gini": 0.6145499999999999
     },
     "children": [
       {
-        "name": "ssc <= -0.71",
+        "name": "ssc <= 0.70",
         "attributes": {
-          "samples": 8,
-          "gini": 0.33673469387755106
+          "samples": 47,
+          "gini": 0.5947232691926205
         },
         "children": [
           {
-            "name": "Class 0",
+            "name": "d_spectral_entropy <= 1.24",
             "attributes": {
-              "samples": 2,
-              "gini": 0.0,
-              "value": [
-                1.0,
-                0.0,
-                0.0
-              ]
-            }
+              "samples": 13,
+              "gini": 0.5318559556786704
+            },
+            "children": [
+              {
+                "name": "d_iemg <= 0.02",
+                "attributes": {
+                  "samples": 11,
+                  "gini": 0.31999999999999995
+                },
+                "children": [
+                  {
+                    "name": "wl <= -0.59",
+                    "attributes": {
+                      "samples": 5,
+                      "gini": 0.5
+                    },
+                    "children": [
+                      {
+                        "name": "Class 3",
+                        "attributes": {
+                          "samples": 3,
+                          "gini": 0.0,
+                          "value": [
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0
+                          ]
+                        }
+                      },
+                      {
+                        "name": "Class 2",
+                        "attributes": {
+                          "samples": 2,
+                          "gini": 0.0,
+                          "value": [
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0
+                          ]
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "name": "Class 2",
+                    "attributes": {
+                      "samples": 6,
+                      "gini": 0.0,
+                      "value": [
+                        0.0,
+                        0.0,
+                        1.0,
+                        0.0
+                      ]
+                    }
+                  }
+                ]
+              },
+              {
+                "name": "Class 1",
+                "attributes": {
+                  "samples": 2,
+                  "gini": 0.0,
+                  "value": [
+                    0.0,
+                    1.0,
+                    0.0,
+                    0.0
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "name": "zc <= 1.29",
+            "attributes": {
+              "samples": 34,
+              "gini": 0.45192307692307687
+            },
+            "children": [
+              {
+                "name": "wl <= -1.14",
+                "attributes": {
+                  "samples": 28,
+                  "gini": 0.3396430502974581
+                },
+                "children": [
+                  {
+                    "name": "Class 0",
+                    "attributes": {
+                      "samples": 19,
+                      "gini": 0.0,
+                      "value": [
+                        1.0,
+                        0.0,
+                        0.0,
+                        0.0
+                      ]
+                    }
+                  },
+                  {
+                    "name": "zc <= 0.69",
+                    "attributes": {
+                      "samples": 9,
+                      "gini": 0.19753086419753085
+                    },
+                    "children": [
+                      {
+                        "name": "Class 1",
+                        "attributes": {
+                          "samples": 1,
+                          "gini": 0.0,
+                          "value": [
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0
+                          ]
+                        }
+                      },
+                      {
+                        "name": "Class 2",
+                        "attributes": {
+                          "samples": 8,
+                          "gini": 0.0,
+                          "value": [
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "name": "rms <= -1.10",
+                "attributes": {
+                  "samples": 6,
+                  "gini": 0.19753086419753085
+                },
+                "children": [
+                  {
+                    "name": "Class 0",
+                    "attributes": {
+                      "samples": 1,
+                      "gini": 0.0,
+                      "value": [
+                        1.0,
+                        0.0,
+                        0.0,
+                        0.0
+                      ]
+                    }
+                  },
+                  {
+                    "name": "Class 2",
+                    "attributes": {
+                      "samples": 5,
+                      "gini": 0.0,
+                      "value": [
+                        0.0,
+                        0.0,
+                        1.0,
+                        0.0
+                      ]
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "mav <= 0.34",
+        "attributes": {
+          "samples": 83,
+          "gini": 0.28075235863229375
+        },
+        "children": [
+          {
+            "name": "spectral_entropy <= -0.55",
+            "attributes": {
+              "samples": 28,
+              "gini": 0.5770975056689343
+            },
+            "children": [
+              {
+                "name": "var <= -0.62",
+                "attributes": {
+                  "samples": 9,
+                  "gini": 0.19753086419753085
+                },
+                "children": [
+                  {
+                    "name": "Class 2",
+                    "attributes": {
+                      "samples": 1,
+                      "gini": 0.0,
+                      "value": [
+                        0.0,
+                        0.0,
+                        1.0,
+                        0.0
+                      ]
+                    }
+                  },
+                  {
+                    "name": "Class 1",
+                    "attributes": {
+                      "samples": 8,
+                      "gini": 0.0,
+                      "value": [
+                        0.0,
+                        1.0,
+                        0.0,
+                        0.0
+                      ]
+                    }
+                  }
+                ]
+              },
+              {
+                "name": "d_iemg <= -1.06",
+                "attributes": {
+                  "samples": 19,
+                  "gini": 0.44791666666666663
+                },
+                "children": [
+                  {
+                    "name": "Class 1",
+                    "attributes": {
+                      "samples": 4,
+                      "gini": 0.0,
+                      "value": [
+                        0.0,
+                        1.0,
+                        0.0,
+                        0.0
+                      ]
+                    }
+                  },
+                  {
+                    "name": "zc <= 1.03",
+                    "attributes": {
+                      "samples": 15,
+                      "gini": 0.265
+                    },
+                    "children": [
+                      {
+                        "name": "rms <= -0.44",
+                        "attributes": {
+                          "samples": 14,
+                          "gini": 0.19390581717451527
+                        },
+                        "children": [
+                          {
+                            "name": "Class 1",
+                            "attributes": {
+                              "samples": 1,
+                              "gini": 0.0,
+                              "value": [
+                                0.0,
+                                1.0,
+                                0.0,
+                                0.0
+                              ]
+                            }
+                          },
+                          {
+                            "name": "d_wl <= -0.35",
+                            "attributes": {
+                              "samples": 13,
+                              "gini": 0.1049382716049383
+                            },
+                            "children": [
+                              {
+                                "name": "ssc <= -0.36",
+                                "attributes": {
+                                  "samples": 2,
+                                  "gini": 0.5
+                                },
+                                "children": [
+                                  {
+                                    "name": "Class 3",
+                                    "attributes": {
+                                      "samples": 1,
+                                      "gini": 0.0,
+                                      "value": [
+                                        0.0,
+                                        0.0,
+                                        0.0,
+                                        1.0
+                                      ]
+                                    }
+                                  },
+                                  {
+                                    "name": "Class 2",
+                                    "attributes": {
+                                      "samples": 1,
+                                      "gini": 0.0,
+                                      "value": [
+                                        0.0,
+                                        0.0,
+                                        1.0,
+                                        0.0
+                                      ]
+                                    }
+                                  }
+                                ]
+                              },
+                              {
+                                "name": "Class 3",
+                                "attributes": {
+                                  "samples": 11,
+                                  "gini": 0.0,
+                                  "value": [
+                                    0.0,
+                                    0.0,
+                                    0.0,
+                                    1.0
+                                  ]
+                                }
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "name": "Class 2",
+                        "attributes": {
+                          "samples": 1,
+                          "gini": 0.0,
+                          "value": [
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
           },
           {
             "name": "Class 1",
             "attributes": {
-              "samples": 6,
+              "samples": 55,
               "gini": 0.0,
               "value": [
                 0.0,
                 1.0,
+                0.0,
                 0.0
               ]
             }
           }
         ]
-      },
-      {
-        "name": "Class 2",
-        "attributes": {
-          "samples": 3,
-          "gini": 0.0,
-          "value": [
-            0.0,
-            0.0,
-            1.0
-          ]
-        }
       }
     ]
   },
-  "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\EMG\\models\\unit.joblib",
-  "created_at": "2026-04-05T16:22:53.947768",
-  "table_name": "emg_session_unit_train_2e2225e9"
+  "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\frontend\\public\\data\\EMG\\models\\test.joblib",
+  "created_at": "2026-04-06T09:00:34.491936",
+  "table_name": "emg_session_Session_6_846"
 }
