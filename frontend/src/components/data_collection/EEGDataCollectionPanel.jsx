@@ -1,33 +1,40 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Target, Activity, CheckCircle2 } from 'lucide-react';
+import { Target, Activity } from 'lucide-react';
+import { FlickerStimulus } from '../../utils/stimulus';
 
 export default function EEGDataCollectionPanel({
     isCalibrating,
     targetLabel,
     targetFrequency,
     onRecord,
-    savedCount = 0,
-    targetCount = 40
+    targetCount = 40,
+    onFinished // callback to stop calibration
 }) {
     // Phases: 'IDLE', 'REST_PRE', 'FOCUS', 'REST_POST'
     const [phase, setPhase] = useState('IDLE');
     const [timeLeft, setTimeLeft] = useState(0);
+    const [protocolCount, setProtocolCount] = useState(0);
+
     // We use a ref for accurate timing
     const phaseTimeoutRef = useRef(null);
     const countdownIntervalRef = useRef(null);
     const focusStartMsRef = useRef(0);
     const animationFrameRef = useRef(null);
+    const flickerRef = useRef(null);
+    const stimulusElRef = useRef(null);
     const [isLedOn, setIsLedOn] = useState(false);
 
-    // Initial state sync
+    // Sync isCalibrating
     useEffect(() => {
         if (!isCalibrating) {
             setPhase('IDLE');
             setTimeLeft(0);
             setIsLedOn(false);
+            setProtocolCount(0);
             if (phaseTimeoutRef.current) clearTimeout(phaseTimeoutRef.current);
             if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
             if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+            if (flickerRef.current) flickerRef.current.stop();
         } else if (phase === 'IDLE') {
             startPhase('REST_PRE');
         }
@@ -38,7 +45,7 @@ export default function EEGDataCollectionPanel({
 
         if (phaseTimeoutRef.current) clearTimeout(phaseTimeoutRef.current);
         if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
-        if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+        if (flickerRef.current) flickerRef.current.stop();
 
         setIsLedOn(false); // Default off
 
@@ -71,46 +78,55 @@ export default function EEGDataCollectionPanel({
                 if (onRecord) {
                     onRecord(startMs, endMs, targetLabel);
                 }
+
+                // Trials increment after FOCUS finishes
+                setProtocolCount(prev => {
+                    const next = prev + 1;
+                    if (next >= targetCount && onFinished) {
+                        onFinished(); // Stop the calibration
+                    }
+                    return next;
+                });
+
                 startPhase('REST_POST');
             } else if (newPhase === 'REST_POST') {
                 startPhase('REST_PRE'); // Loop
             }
         }, durationMs);
 
-    }, [targetLabel, targetFrequency, onRecord]);
+    }, [targetLabel, targetFrequency, onRecord, targetCount, onFinished]);
 
     const startFlicker = useCallback(() => {
         if (!targetFrequency || targetFrequency <= 0) return;
 
-        const periodMs = 1000 / targetFrequency;
-        const halfPeriodMs = periodMs / 2;
-        let lastToggleTime = performance.now();
-
-        const loop = (timestamp) => {
-            const currentPhase = phase; 
-            // We can't rely completely on 'phase' variable here due to closure, 
-            // but we cancel animation frame when phase changes, so it's safe.
-            
-            if (timestamp - lastToggleTime >= halfPeriodMs) {
-                setIsLedOn((prev) => !prev);
-                lastToggleTime = timestamp;
-            }
-            animationFrameRef.current = requestAnimationFrame(loop);
-        };
-        animationFrameRef.current = requestAnimationFrame(loop);
+        if (!flickerRef.current) {
+            flickerRef.current = new FlickerStimulus(targetFrequency, (isOn) => {
+                // High-performance direct DOM update
+                if (stimulusElRef.current) {
+                    stimulusElRef.current.style.opacity = isOn ? '1' : '0';
+                    stimulusElRef.current.style.backgroundColor = isOn ? 'white' : 'black';
+                }
+                // Keep react state in sync for other potential uses, 
+                // but direct DOM is the primary flicker driver
+                setIsLedOn(isOn);
+            });
+        } else {
+            flickerRef.current.updateFrequency(targetFrequency);
+        }
+        flickerRef.current.start();
     }, [targetFrequency]);
 
     useEffect(() => {
         return () => {
             if (phaseTimeoutRef.current) clearTimeout(phaseTimeoutRef.current);
             if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
-            if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+            if (flickerRef.current) flickerRef.current.stop();
         };
     }, []);
 
-    // Calculate progress
+    // Calculate progress based on protocols (cycles)
     const effectiveTargetCount = Math.max(1, Number(targetCount) || 1);
-    const trialCount = Number(savedCount) || 0;
+    const trialCount = protocolCount;
     const progressPercent = Math.min(100, (trialCount / effectiveTargetCount) * 100);
 
     return (
@@ -146,7 +162,7 @@ export default function EEGDataCollectionPanel({
             </div>
 
             {/* Stimulus Area */}
-            <div className="flex-grow min-h-0 flex flex-col relative items-center justify-center p-4 bg-black/20">
+            <div className="flex-grow min-h-0 flex flex-col relative items-center justify-center p-1 bg-black/20">
                 {phase === 'IDLE' ? (
                     <div className="text-center space-y-3 opacity-50">
                         <Target size={48} className="mx-auto" strokeWidth={1.5} />
@@ -154,23 +170,18 @@ export default function EEGDataCollectionPanel({
                         <p className="text-sm text-muted max-w-xs">Select a frequency and click Start Collection to begin automated trials.</p>
                     </div>
                 ) : (
-                    <div className="flex flex-col items-center justify-center w-full h-full space-y-8 animate-in zoom-in-95 duration-300">
-                        
-                        {/* Status Text Indicator */}
-                        <div className={`px-4 py-1.5 rounded-full border-2 text-sm font-black uppercase tracking-widest shadow-lg transition-colors duration-300 ${
-                            phase === 'FOCUS' 
-                                ? 'bg-red-500/20 text-red-500 border-red-500 shadow-red-500/20' 
-                                : 'bg-blue-500/20 text-blue-500 border-blue-500 shadow-blue-500/20'
-                        }`}>
-                            {phase === 'FOCUS' ? '🔴 FOCUS & RECORD' : '⏸ REST'}
-                        </div>
-
+                    <div className="flex flex-col items-center justify-center w-full h-full space-y-2 animate-in zoom-in-95 duration-300">
                         {/* Visual Stimulus */}
-                        <div className="relative flex items-center justify-center w-48 h-48 sm:w-64 sm:h-64 rounded-2xl bg-[var(--bg)] border-2 border-border shadow-inner overflow-hidden">
+                        <div className="relative flex items-center justify-center w-full h-full rounded-2xl bg-[var(--bg)] border-2 border-border shadow-inner overflow-hidden">
                             {phase === 'FOCUS' ? (
-                                <div 
-                                    className={`absolute inset-0 transition-opacity duration-[10ms] ${isLedOn ? 'bg-white opacity-100' : 'bg-black opacity-0'}`}
-                                    style={{ boxShadow: isLedOn ? 'inset 0 0 50px rgba(255,255,255,0.8)' : 'none' }}
+                                <div
+                                    ref={stimulusElRef}
+                                    className="absolute inset-0 "
+                                    style={{
+                                        opacity: isLedOn ? 1 : 0,
+                                        backgroundColor: isLedOn ? 'white' : 'black',
+                                        boxShadow: isLedOn ? 'inset 0 0 50px rgba(255,255,255,0.8)' : 'none'
+                                    }}
                                 />
                             ) : (
                                 <div className="text-[var(--muted)] opacity-50 scale-150">
@@ -181,23 +192,33 @@ export default function EEGDataCollectionPanel({
                                 </div>
                             )}
                         </div>
-
-                        {/* Countdown */}
-                        <div className="text-3xl font-mono font-black text-[var(--text-secondary)]">
-                            00:0{timeLeft}
-                        </div>
                     </div>
                 )}
             </div>
 
             {/* Footer */}
-            <div className="p-3 border-t border-[var(--border)] bg-[var(--bg)]/50 flex justify-between items-center">
-                <div className="text-xs uppercase font-bold text-muted flex items-center gap-1">
-                    {trialCount >= effectiveTargetCount && <CheckCircle2 size={14} className="text-emerald-500" />}
-                    {trialCount >= effectiveTargetCount ? 'Target Reached' : 'Auto-collecting'}
+            <div className="p-2 border-t border-[var(--border)] bg-[var(--bg)]/50 flex justify-between items-center">
+                {/* Status Text Indicator */}
+                <div className={`px-4 py-1.5 rounded-full border-2 text-sm font-black uppercase tracking-widest shadow-lg transition-colors duration-300 
+                    ${isCalibrating
+                        ? (phase === 'FOCUS'
+                            ? 'bg-red-500/20 text-red-500 border-red-500 shadow-red-500/20'
+                            : 'bg-blue-500/20 text-blue-500 border-blue-500 shadow-blue-500/20'
+                        )
+                        : 'bg-yellow-500/20 text-yellow-500 border-yellow-500 shadow-yellow-500/20'}`}>
+
+                    {isCalibrating
+                        ? (phase === 'FOCUS'
+                            ? '🔴 RECORD'
+                            : '⏸ REST')
+                        : 'IDLE'}
                 </div>
-                <div className="text-xs text-muted font-mono bg-surface px-2 py-1 rounded">
+                <div className="text-[16px] font-black text-muted font-mono bg-surface px-2 py-1 rounded">
                     Protocol: 2s ↔ 3s ↔ 2s
+                </div>
+                {/* Countdown */}
+                <div className="text-3xl font-mono font-black text-[var(--text-secondary)]">
+                    00:0{timeLeft}
                 </div>
             </div>
         </div>
