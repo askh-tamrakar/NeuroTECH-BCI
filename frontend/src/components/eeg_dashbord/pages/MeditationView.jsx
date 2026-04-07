@@ -385,20 +385,45 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
       ctx.stroke();
       ctx.shadowBlur = 0;
 
-      // Vertex dots + labels
+      // Band label colors — neon palette per wave type
+      const bandColors = [
+        '#4f8eff', // Delta — blue
+        '#a855f7', // Theta — purple
+        '#22c55e', // Alpha — green
+        '#00e5ff', // Beta  — cyan
+        '#f59e0b', // Gamma — amber
+      ];
+
+      // Vertex dots + highlighted labels
       const textCol = tc('--graph-text', tc('--muted'));
       angles.forEach((a, i) => {
         const r = R * norm[i];
         const x = cx + Math.cos(a) * r;
         const y = cy + Math.sin(a) * r;
-        ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI * 2);
-        ctx.fillStyle = line1; ctx.fill();
 
-        const lx = cx + Math.cos(a) * (R + 16);
-        const ly = cy + Math.sin(a) * (R + 16);
-        ctx.font = '9px "Share Tech Mono", monospace';
-        ctx.fillStyle = hex2rgba(textCol, 0.75);
-        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        // Glowing dot at data vertex
+        ctx.beginPath(); ctx.arc(x, y, 3.5, 0, Math.PI * 2);
+        ctx.fillStyle = bandColors[i];
+        ctx.shadowBlur = 12; ctx.shadowColor = bandColors[i];
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
+        // Label position — further out from center
+        const lx = cx + Math.cos(a) * (R + 22);
+        const ly = cy + Math.sin(a) * (R + 22);
+
+        // Semi-transparent badge background
+        ctx.font = 'bold 10px "Orbitron", "Share Tech Mono", monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        const labelW = ctx.measureText(labels[i]).width + 10;
+        ctx.fillStyle = 'rgba(0,0,0,0.55)';
+        ctx.beginPath();
+        ctx.roundRect(lx - labelW / 2, ly - 8, labelW, 16, 4);
+        ctx.fill();
+
+        // Label text — no glow
+        ctx.fillStyle = bandColors[i];
         ctx.fillText(labels[i], lx, ly);
       });
       ctx.restore();
@@ -737,7 +762,6 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
                   <span id="med-dominant-val" className="text-[10px] font-black tracking-[2px] uppercase">Alpha</span>
                 </div>
               </div>
-              <div className="med-chart-label">Global EEG Power</div>
               <canvas id="med-radar" className="med-radar-canvas" />
             </div>
 

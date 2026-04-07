@@ -63,6 +63,8 @@
   flex-direction: column;
   border-right: 1px solid var(--border);
   position: relative;
+  /* Darkened background for the radar chart */
+  background: rgba(0, 0, 0, 0.55);
 }
 .med-chart-panel:last-child { border-right: none; }
 

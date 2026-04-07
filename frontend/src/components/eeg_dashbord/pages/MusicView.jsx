@@ -260,23 +260,6 @@ const MusicView = ({ result, onNavigate }) => {
         />
       </div>
 
-      {/* ── TRACK INDICATOR (Top Right) ── */}
-      <div className="absolute top-32 right-12 z-10 transition-all duration-500 hover:scale-105">
-        <div className="track-indicator-card px-6 py-4 rounded-xl flex items-center gap-4">
-          <div className="relative w-12 h-12 rounded-lg overflow-hidden shrink-0 album-art-glow">
-            <img 
-              alt="album art" 
-              src="https://lh3.googleusercontent.com/aida-public/AB6AXuAo46g4FZ8ZhOppcsvmJNv8CvdOw_azldNM9P1tZStbYO_OGiRIORlNGLvloOMxAC9_xXAEolhjqZuI5zQspAa2hPEm7gkTCl0fKiwGJgyvp73LxeHCKqddrX6gXYtBBs5_4cBpIOoqBjF52lUufXGh_F47ruOxGjFU1ZQ618ZXvs_dUvtjbhdnGG4FEZ953K6NUc1Gudh52U8ob2KjWOD1b24tPEc_cCUWdoxbOv0BY5pMTTgvA0Q8KROoGYd9oCZe5rtbx6531pI" 
-              className="w-full h-full object-cover"
-            />
-          </div>
-          <div>
-            <div className="font-headline text-[10px] tracking-widest uppercase mb-0.5" style={{ color: stateTheme.primary }}>Now Playing</div>
-            <div className="font-headline font-bold text-lg text-white leading-tight">Neon Drifter</div>
-            <div className="text-[9px] text-white/40 uppercase tracking-[0.2em]">Tokyo Midnight</div>
-          </div>
-        </div>
-      </div>
 
       {/* ── PARAMETER CLUSTER (Bottom Left) ── */}
       <div className="absolute bottom-40 left-12 z-10">
