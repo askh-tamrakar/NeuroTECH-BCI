@@ -79,6 +79,32 @@ const MusicView = ({ result, onNavigate }) => {
     }
   }, [result?.state]);
 
+  // ── REAL-TIME METRIC DERIVATIONS ──
+  const liveMetrics = useMemo(() => {
+    const features = result?.features || {};
+    const bandMix = result?.band_mix || {};
+
+    // Frequency Gain: alpha relative power (relaxation/focus intensity) as a 0–100% value
+    const alphaRel = features.alpha_rel ?? bandMix.alpha ?? null;
+    const freqGain = alphaRel !== null ? Math.round(alphaRel * 100) : null;
+
+    // Dominant Wave: pick the highest-powered band
+    const bands = {
+      Delta: features.delta ?? 0,
+      Theta: features.theta ?? 0,
+      Alpha: features.alpha ?? 0,
+      Beta:  features.beta  ?? 0,
+    };
+    const dominantWave = Object.entries(bands).reduce(
+      (best, [k, v]) => (v > best[1] ? [k, v] : best),
+      ['—', -1]
+    )[0];
+
+    const state = result?.state || null;
+
+    return { freqGain, dominantWave, state };
+  }, [result]);
+
   const { setSidebarSlot } = useSidebar();
 
   const togglePlayback = async () => {
@@ -253,58 +279,106 @@ const MusicView = ({ result, onNavigate }) => {
       </div>
 
       {/* ── PARAMETER CLUSTER (Bottom Left) ── */}
-      <div className="absolute bottom-40 left-32 z-10">
+      <div className="absolute bottom-40 left-12 z-10">
         <div className="parameter-cluster">
-          {[
-            { label: 'Frequency Gain', value: '84%', color: stateTheme.primary, width: '84%' },
-            { label: 'Particle Density', value: '2.4k', color: stateTheme.secondary, width: '45%' },
-            { label: 'Chroma Shift', value: 'Active', color: stateTheme.accent, width: '60%' }
-          ].map((param, i) => (
-            <div key={i} className="parameter-item">
-              <div className="parameter-label-row">
-                <span className="parameter-label">{param.label}</span>
-                <span className="parameter-value" style={{ color: param.color }}>{param.value}</span>
-              </div>
-              <div className="parameter-progress-bg">
-                <div 
-                  className="parameter-progress-fill" 
-                  style={{ width: param.width, backgroundColor: param.color, boxShadow: `0 0 10px ${param.color}44` }} 
-                />
-              </div>
+
+          {/* Frequency Gain — live alpha band power */}
+          <div className="parameter-item">
+            <div className="parameter-label-row">
+              <span className="parameter-label">Frequency Gain</span>
+              <span className="parameter-value" style={{ color: stateTheme.primary }}>
+                {liveMetrics.freqGain !== null ? `${liveMetrics.freqGain}%` : '—'}
+              </span>
             </div>
-          ))}
+            <div className="parameter-progress-bg">
+              <div
+                className="parameter-progress-fill"
+                style={{
+                  width: liveMetrics.freqGain !== null ? `${liveMetrics.freqGain}%` : '0%',
+                  backgroundColor: stateTheme.primary,
+                  boxShadow: `0 0 10px ${stateTheme.primary}44`,
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Dominant Wave */}
+          <div className="parameter-item">
+            <div className="parameter-label-row">
+              <span className="parameter-label">Dominant Wave</span>
+              <span className="parameter-value" style={{ color: stateTheme.secondary }}>
+                {liveMetrics.dominantWave}
+              </span>
+            </div>
+            <div
+              className="text-[8px] tracking-widest uppercase mt-0.5"
+              style={{ color: `${stateTheme.secondary}cc` }}
+            >
+              {liveMetrics.dominantWave !== '—'
+                ? `${liveMetrics.dominantWave} wave active`
+                : 'Awaiting signal...'}
+            </div>
+          </div>
+
+          {/* Brain State */}
+          <div className="parameter-item">
+            <div className="parameter-label-row">
+              <span className="parameter-label">Brain State</span>
+              <span
+                className="parameter-value px-2 py-0.5 rounded-full text-black text-[8px] font-black tracking-widest uppercase"
+                style={{
+                  backgroundColor: liveMetrics.state ? stateTheme.primary : '#334155',
+                  boxShadow: liveMetrics.state ? `0 0 12px ${stateTheme.primary}66` : 'none',
+                  color: '#000',
+                }}
+              >
+                {liveMetrics.state || 'No Signal'}
+              </span>
+            </div>
+          </div>
+
         </div>
       </div>
 
       {/* ── FREQUENCY WAVE BARS (Frozen & Centered) ── */}
       <FrequencyWaves stateTheme={stateTheme} />
 
-      {/* ── MINI CONTROL PANEL (Bottom Center) ── */}
-      <div className="fixed bottom-10 left-1/2 -translate-x-1/2 flex gap-12 items-center z-50 bg-black/40 rounded-full px-14 py-5 border border-white/10 backdrop-blur-xl shadow-[0_0_50px_rgba(0,0,0,0.5)]">
-        <button 
+      {/* ── MINI CONTROL PANEL (Bottom Center — Absolute) ── */}
+      <div
+        className="absolute bottom-8 left-1/2 -translate-x-1/2 flex gap-12 items-center z-50"
+        style={{
+          background: 'rgba(0,0,0,0.5)',
+          borderRadius: '9999px',
+          padding: '1.2rem 3.5rem',
+          border: '1px solid rgba(255,255,255,0.08)',
+          backdropFilter: 'blur(20px)',
+          boxShadow: '0 0 50px rgba(0,0,0,0.5)',
+        }}
+      >
+        <button
           onClick={() => {
             musicHandler.stop();
             musicHandler.play();
           }}
-          className="flex flex-col items-center gap-1.5 text-white/60 hover:scale-110 hover:text-white transition-all active:scale-90 group"
+          className="flex flex-col items-center gap-1.5 text-white/60 hover:scale-110 hover:text-white transition-all active:scale-90"
         >
-          <RotateCcw size={24} />
+          <RotateCcw size={22} />
           <span className="font-bold text-[8px] tracking-[0.2em] uppercase opacity-60">Restart</span>
         </button>
 
-        <button 
+        <button
           onClick={togglePlayback}
           className="w-16 h-16 flex items-center justify-center rounded-full text-black shadow-lg transition-all hover:scale-105 active:scale-95"
-          style={{ 
+          style={{
             background: `linear-gradient(135deg, ${stateTheme.primary}, ${stateTheme.secondary})`,
-            boxShadow: `0 0 30px ${stateTheme.primary}44`
+            boxShadow: `0 0 30px ${stateTheme.primary}55`,
           }}
         >
-          {isPlaying ? <Pause size={32} fill="currentColor" /> : <Play size={32} fill="currentColor" />}
+          {isPlaying ? <Pause size={28} fill="currentColor" /> : <Play size={28} fill="currentColor" />}
         </button>
 
-        <button className="flex flex-col items-center gap-1.5 text-white/60 hover:scale-110 hover:text-white transition-all active:scale-90 group">
-          <FastForward size={24} />
+        <button className="flex flex-col items-center gap-1.5 text-white/60 hover:scale-110 hover:text-white transition-all active:scale-90">
+          <FastForward size={22} />
           <span className="font-bold text-[8px] tracking-[0.2em] uppercase opacity-60">Next Mode</span>
         </button>
       </div>

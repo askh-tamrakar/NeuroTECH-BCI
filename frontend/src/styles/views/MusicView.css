@@ -6,6 +6,8 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  /* Gentle zoom-out so all elements fit comfortably */
+  zoom: 0.9;
 }
 
 /* ── WIREFRAME MESH BACKGROUND ── */
@@ -28,15 +30,16 @@
 /* ── GLOWING HALO ARC ── */
 .music-halo-arc {
   position: absolute;
-  top: 10%;
+  top: -5%;
   left: 50%;
   transform: translateX(-50%);
-  width: min(80vw, 700px);
-  height: min(80vw, 700px);
+  width: min(75vw, 620px);
+  height: min(75vw, 620px);
   border: 2px solid rgba(0, 229, 255, 0.4);
   border-radius: 50%;
   box-shadow: 0 0 40px rgba(0, 229, 255, 0.1), inset 0 0 40px rgba(0, 229, 255, 0.1);
-  mask-image: linear-gradient(to bottom, black 40%, transparent 90%);
+  /* Show more of the arc — less masking at top */
+  mask-image: linear-gradient(to bottom, black 60%, transparent 95%);
   pointer-events: none;
   z-index: 0;
 }
