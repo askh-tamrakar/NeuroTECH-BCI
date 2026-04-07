@@ -202,8 +202,7 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
     const chartRef = useRef(null); // Access to Worker Chart
     const chartCardRef = useRef(null);
     const chartLayoutReadyRef = useRef(false);
-    const latestSignalTimeRef = useRef(Date.now()); // Track latest TS for logic // For signal time updates
-    const lastUiUpdateRef = useRef(0); // For throttling UI re-renders
+    const latestSignalTimeRef = useRef(Date.now()); // Track latest TS for logic
 
     const activeSensorRef = useRef(activeSensor);
     const activeChannelIndexRef = useRef(activeChannelIndex); // Ref for channel
@@ -390,12 +389,9 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
                 const incomingTs = Number(payload?.lastSample?.timestamp);
                 if (incomingTs && incomingTs > 0) {
                     latestSignalTimeRef.current = incomingTs;
+                    setDataLastUpdated(Date.now());
 
                     const now = Date.now();
-                    if (now - lastUiUpdateRef.current > 200) {
-                        setDataLastUpdated(now);
-                        lastUiUpdateRef.current = now;
-                    }
                     if (now - lastTimeUpdateRef.current > 50) {
                         windowWorkerRef.current?.postMessage({ type: 'UPDATE_SIGNAL_TIME', payload: incomingTs });
                         lastTimeUpdateRef.current = now;
@@ -2351,7 +2347,6 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
                                             onRecord={handleEEGRecord}
                                             savedCount={markedWindows.filter(w => w.label === targetLabel && (w.status === 'saved' || w.status === 'correct')).length}
                                             targetCount={autoCalibrate ? autoTargetCount : autoLimit}
-                                            onFinished={handleStopCalibration}
                                         />
                                     </div>
                                     <div className={`h-full transition-all duration-200 ${showEegWindowList ? 'opacity-100 translate-y-0' : 'pointer-events-none absolute inset-0 opacity-0 -translate-y-1'}`}>

@@ -1,5 +1,5 @@
 import Tree from 'react-d3-tree';
-import { useState, useEffect, Fragment, useMemo, useRef, useCallback, memo } from 'react';
+import { useState, useEffect, Fragment, useMemo, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { io } from 'socket.io-client';
 import { buildApiUrl, getSocketIoConnection } from '../../utils/runtimeConnection';
@@ -35,7 +35,7 @@ const renderCustomNodeElement = ({ nodeDatum, toggleNode }) => (
 
 // --- NEW/UPDATED COMPONENTS ---
 
-const ModelIdBadge = memo(({ model, size = 'sm', isActive = false, className = '' }) => {
+const ModelIdBadge = ({ model, size = 'sm', isActive = false, className = '' }) => {
     const candidateIdx = model.candidate_index ?? model.candidate_idx ?? 0;
     const foldIdx = model.fold_index ?? model.fold_idx ?? 0;
     const displayCandidateIdx = candidateIdx + 1;
@@ -92,7 +92,7 @@ const ModelIdBadge = memo(({ model, size = 'sm', isActive = false, className = '
     );
 };
 
-const SavedModelsList = memo(({ models, selectedModelName, onSelect, onDelete }) => (
+const SavedModelsList = ({ models, selectedModelName, onSelect, onDelete }) => (
     <div className="flex flex-col h-full overflow-hidden">
         <div className="text-lg flex justify-around items-center font-bold text-[var(--muted)] uppercase tracking-widest mb-2 border-b border-[var(--border)] pb-1 px-1">
             <span className=' flex flex-row items-center'>
@@ -139,7 +139,7 @@ const SavedModelsList = memo(({ models, selectedModelName, onSelect, onDelete })
     </div>
 );
 
-const SplitAccuracyCard = memo(({ result, models, selectedModelName, onSelectModel, onDeleteModel, params, onParamsChange, totalSamples }) => {
+const SplitAccuracyCard = ({ result, models, selectedModelName, onSelectModel, onDeleteModel, params, onParamsChange, totalSamples }) => {
     const accuracy = result?.accuracy;
     const n_samples = result?.n_samples;
     const source = result?.source;
@@ -301,7 +301,7 @@ const FEATURE_METADATA = {
     }
 };
 
-const FeatureInsightCard = memo(({ importances, featureOrder, sensor }) => {
+const FeatureInsightCard = ({ importances, featureOrder, sensor }) => {
     const [view, setView] = useState('importance'); // 'importance' or 'list'
     const [selectedFeature, setSelectedFeature] = useState(null);
 
@@ -566,7 +566,7 @@ const groupSortMetric = (group, sortField, sortedFolds) => {
     }
 };
 
-const HistoryList = memo(({ history = [], selectedId, onSelect, emptyText = 'No training history available.', decimalCandidateDisplay = false, sortField = 'candidate', sortDirection = 'asc' }) => {
+const HistoryList = ({ history = [], selectedId, onSelect, emptyText = 'No training history available.', decimalCandidateDisplay = false, sortField = 'candidate', sortDirection = 'asc' }) => {
     const grouped = useMemo(() => {
         const groups = {};
         history.forEach((item) => {
@@ -1125,7 +1125,7 @@ const TrainingStatusDashboard = ({ job, countdown, params, selectedHistoryItem, 
     );
 };
 
-const DataInsightCard = memo(({ result, sensor, params, embedded = false, onMatrixToggle }) => {
+const DataInsightCard = ({ result, sensor, params, embedded = false, onMatrixToggle }) => {
     if (!result) return <div className={`p-4 ${card} h-full text-[var(--muted)] flex items-center justify-center italic relative`}>No insight data available yet.</div>;
 
     const v = getVerdict(result.train_accuracy, result.validation_accuracy, result.test_accuracy || result.accuracy);
