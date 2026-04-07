@@ -7,20 +7,21 @@ const MainSidebar = ({ currentView, onSelect }) => {
 
     const btn = (view, Icon, label) => (
         <button
-            className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold text-sm border ${currentView === view
-                ? 'bg-[var(--primary)]/10 text-[var(--primary)] border-[var(--primary)]/30 shadow-sm'
-                : 'text-[var(--text)] hover:bg-[var(--bg)] border-transparent'
+            className={`flex items-center gap-4 px-3 py-4 rounded-[20px] transition-all font-black text-lg border whitespace-nowrap ${currentView === view
+                ? 'bg-[var(--primary)]/20 text-[var(--primary)] border-[var(--primary)]/50 shadow-lg scale-[1.02]'
+                : 'text-[var(--text)] hover:bg-[var(--bg)] border-transparent opacity-60 hover:opacity-100 hover:scale-[1.02]'
                 }`}
             onClick={() => onSelect(view)}
         >
-            <Icon size={18} /> {label}
+            <Icon size={24} strokeWidth={2.5} className="shrink-0" /> 
+            <span className="truncate">{label}</span>
         </button>
     );
 
     return (
         <div className="flex flex-col h-full w-full p-4 font-mono transition-opacity duration-300">
             <div className="flex items-center justify-between mb-6 px-2">
-                <h2 className="text-base font-black text-[var(--primary)] tracking-[4px] uppercase">
+                <h2 className="text-xl font-black text-[var(--primary)] tracking-[6px] uppercase">
                     Navigator
                 </h2>
                 {currentView !== 'overview' && (
@@ -36,7 +37,7 @@ const MainSidebar = ({ currentView, onSelect }) => {
             </div>
 
             <div className="flex flex-col gap-1.5 flex-grow overflow-y-auto [&::-webkit-scrollbar]:hidden">
-                <p className="text-[9px] font-black text-[var(--muted)] uppercase tracking-[3px] px-2 mb-1">
+                <p className="text-[13px] font-black text-[var(--muted)] uppercase tracking-[5px] px-2 mb-3 opacity-50">
                     Applications
                 </p>
                 {btn('overview', Grid, 'Dashboard Overview')}

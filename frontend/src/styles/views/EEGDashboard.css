@@ -119,44 +119,193 @@
 .eeg-overview-container {
   display: flex;
   flex-direction: column;
-  padding: 10px;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 20px 40px;
+  min-height: 100%;
+  text-align: center;
+  overflow-y: auto;
 }
 
 .eeg-overview-title {
-  font-size: 2.5rem;
-  font-weight: 700;
-  margin: 0 0 10px 0;
-  background: linear-gradient(135deg, #fff 0%, #aaa 100%);
+  font-size: 3.5rem;
+  font-weight: 900;
+  margin: 0 0 20px;
+  font-family: 'Outfit', sans-serif;
+  letter-spacing: -0.04em;
+  background: linear-gradient(135deg, #fff 0%, #888 100%);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
+  width: 100%;
+  max-width: 1200px;
+  text-align: left;
 }
 
 .eeg-overview-subtitle {
-  font-size: 1.1rem;
-  color: #aaa;
+  font-size: 1.25rem;
+  color: rgba(255, 255, 255, 0.4);
   margin-bottom: 40px;
+  font-weight: 400;
+  max-width: 1200px;
+  width: 100%;
+  text-align: left;
 }
 
 .eeg-app-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 24px;
-  padding-bottom: 40px;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 40px;
+  max-width: 1200px;
+  width: 100%;
+  margin: 0 auto;
+  padding-bottom: 45px;
+  transform-style: preserve-3d;
+  perspective: 2000px;
 }
 
 .eeg-app-card {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  border-radius: 16px;
-  padding: 24px;
+  background: rgba(255, 255, 255, 0.01);
+  backdrop-filter: blur(50px);
+  -webkit-backdrop-filter: blur(50px);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  border-radius: 36px;
+  padding: 48px;
   cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  position: relative;
+  overflow: hidden;
+  box-shadow:
+    0 20px 40px rgba(0, 0, 0, 0.3),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+  transform-style: preserve-3d;
+  will-change: transform;
 }
+
+@keyframes meshGradient {
+  0% {
+    background-position: 0% 50%;
+  }
+
+  50% {
+    background-position: 100% 50%;
+  }
+
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.decoration-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(60px);
+  opacity: 0.2;
+  z-index: 0;
+  pointer-events: none;
+  transition: all 1s ease;
+}
+
+.orb-1 {
+  width: 300px;
+  height: 300px;
+  top: -150px;
+  right: -150px;
+  background: var(--theme-color);
+}
+
+.orb-2 {
+  width: 200px;
+  height: 200px;
+  bottom: -100px;
+  left: -100px;
+  background: var(--theme-color);
+}
+
+.eeg-app-card:hover .decoration-orb {
+  opacity: 0.4;
+  transform: scale(1.2) translate(20px, -20px);
+}
+
+.card-shimmer {
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(to right,
+      transparent,
+      rgba(255, 255, 255, 0.05),
+      transparent);
+  transform: skewX(-25deg);
+  pointer-events: none;
+  z-index: 5;
+}
+
+.eeg-app-card:hover .card-shimmer {
+  animation: shimmerEffect 1.5s infinite;
+}
+
+@keyframes shimmerEffect {
+  100% {
+    left: 200%;
+  }
+}
+
+/* Base Decoration Layer */
+.eeg-card-decoration {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  opacity: 0.15;
+  transition: all 0.6s ease;
+  z-index: 0;
+}
+
+/* Theme: Music */
+.card-music { --theme-color: #a855f7; --theme-bg: linear-gradient(135deg, rgba(168, 85, 247, 0.1) 0%, rgba(99, 102, 241, 0.05) 100%); }
+.card-music .eeg-app-icon { 
+  background: linear-gradient(135deg, #a855f7, #6366f1); color: white; 
+  animation: musicPulse 3s ease-in-out infinite;
+}
+@keyframes musicPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
+.card-music .orb-1 { background: radial-gradient(circle, #a855f7, transparent); opacity: 0.1; }
+.card-music:hover { border-color: #a855f7; box-shadow: 0 0 50px rgba(168, 85, 247, 0.2); }
+
+/* Theme: Meditation */
+.card-meditation { --theme-color: #10b981; --theme-bg: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(59, 130, 246, 0.05) 100%); }
+.card-meditation .eeg-app-icon { 
+  background: linear-gradient(135deg, #10b981, #3b82f6); color: white; 
+  animation: meditationBreath 4s ease-in-out infinite;
+}
+@keyframes meditationBreath { 0%, 100% { box-shadow: 0 0 20px rgba(16, 185, 129, 0.3); } 50% { box-shadow: 0 0 40px rgba(16, 185, 129, 0.6); } }
+.card-meditation .orb-1 { background: radial-gradient(circle, #10b981, transparent); opacity: 0.1; }
+.card-meditation:hover { border-color: #10b981; box-shadow: 0 0 50px rgba(16, 185, 129, 0.2); }
+
+/* Theme: Bubble Game */
+.card-bubble { --theme-color: #0ea5e9; --theme-bg: linear-gradient(135deg, rgba(14, 165, 233, 0.1) 0%, rgba(45, 212, 191, 0.05) 100%); }
+.card-bubble .eeg-app-icon { 
+  background: linear-gradient(135deg, #0ea5e9, #2dd4bf); color: white; 
+  animation: bubbleFloat 4s ease-in-out infinite;
+}
+@keyframes bubbleFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+.card-bubble .orb-1 { background: radial-gradient(circle, #0ea5e9, transparent); opacity: 0.1; }
+.card-bubble:hover { border-color: #0ea5e9; box-shadow: 0 0 50px rgba(14, 165, 233, 0.2); }
+
+/* Theme: SSVEP */
+.card-ssvep { --theme-color: #f59e0b; --theme-bg: linear-gradient(135deg, rgba(245, 158, 11, 0.1) 0%, rgba(239, 68, 68, 0.05) 100%); }
+.card-ssvep .eeg-app-icon { 
+  background: linear-gradient(135deg, #f59e0b, #ef4444); color: white; 
+  animation: ssvepFlash 5s linear infinite;
+}
+@keyframes ssvepFlash { 0%, 100% { opacity: 1; } 50% { opacity: 0.85; } }
+.card-ssvep .orb-1 { background: radial-gradient(circle, #f59e0b, transparent); opacity: 0.1; }
+.card-ssvep:hover { border-color: #f59e0b; box-shadow: 0 0 50px rgba(245, 158, 11, 0.2); }
 
 .eeg-view-icon {
   width: 48px;
@@ -179,42 +328,68 @@
 }
 
 .eeg-app-card:hover {
-  background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 193, 7, 0.4);
-  transform: translateY(-4px);
-  box-shadow: 0 8px 24px rgba(255, 193, 7, 0.15);
+  background: var(--theme-bg);
+  background-size: 200% 200%;
+  animation: meshGradient 6s ease infinite;
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow:
+    0 50px 100px rgba(0, 0, 0, 0.5),
+    0 0 50px rgba(var(--theme-color-rgb, 255, 255, 255), 0.1);
 }
 
 .eeg-app-icon {
-  width: 56px;
-  height: 56px;
-  border-radius: 14px;
-  background: rgba(255, 193, 7, 0.1);
-  color: var(--accent, #FFC107);
+  width: 72px;
+  height: 72px;
+  border-radius: 22px;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 20px;
-  transition: all 0.3s ease;
+  margin-bottom: 24px;
+  transition: all 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.4);
+  position: relative;
+  z-index: 10;
+  transform-style: preserve-3d;
 }
 
 .eeg-app-card:hover .eeg-app-icon {
-  background: rgba(255, 193, 7, 0.2);
-  transform: scale(1.05);
+  transform: translateZ(60px) rotateY(-15deg) scale(1.15);
+  box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5);
 }
 
-.eeg-app-card h3 {
-  margin: 0 0 10px 0;
-  font-size: 1.25rem;
+.card-title-premium {
+  margin: 0 0 12px 0;
+  font-size: 1.75rem;
   color: #fff;
-  font-weight: 600;
+  font-family: 'Outfit', sans-serif;
+  font-weight: 900;
+  letter-spacing: -0.05em;
+  transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+  z-index: 10;
+  text-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
 }
 
-.eeg-app-card p {
+.eeg-app-card:hover .card-title-premium {
+  transform: translateZ(40px) translateX(15px);
+  color: #fff;
+}
+
+.card-desc-premium {
   margin: 0;
-  font-size: 0.95rem;
-  color: #888;
-  line-height: 1.5;
+  font-size: 1.15rem;
+  color: rgba(255, 255, 255, 0.4);
+  line-height: 1.6;
+  font-weight: 400;
+  transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  max-width: 85%;
+  position: relative;
+  z-index: 10;
+}
+
+.eeg-app-card:hover .card-desc-premium {
+  color: rgba(255, 255, 255, 0.7);
+  transform: translateZ(20px) translateX(15px);
 }
 
 .eeg-progress-track {
@@ -297,8 +472,10 @@
 .sidebar-wrapper {
   position: relative;
   width: 100%;
-  height: 100%;   /* fills the flex-1 space from the parent flex column */
-  overflow: hidden;  /* keep this so hidden panel doesn't peek */
+  height: 100%;
+  /* fills the flex-1 space from the parent flex column */
+  overflow: hidden;
+  /* keep this so hidden panel doesn't peek */
 }
 
 .sidebar-panel {
