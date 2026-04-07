@@ -485,7 +485,7 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
                     break;
                 case 'REQUEST_SAMPLES':
                     const { id, start, end, delay } = payload;
-                    setTimeout(async () => {
+                    const doCollect = async () => {
                         if (deletedWindowIdsRef.current.has(id)) return;
                         if (chartRef.current) {
                             try {
@@ -532,7 +532,12 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
                                 });
                             }
                         }
-                    }, delay);
+                    };
+                    if (delay > 0) {
+                        setTimeout(doCollect, delay);
+                    } else {
+                        doCollect();
+                    }
                     break;
                 case 'BATCH_PRODUCTION_COMPLETE':
                     setIsBatchProducing(false);

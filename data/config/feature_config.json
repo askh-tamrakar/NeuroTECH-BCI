@@ -106,7 +106,7 @@
     "use_ml_pipeline": false
   },
   "EOG": {
-    "detection_method": "Threshold",
+    "detection_method": "ML",
     "SingleBlink": {
       "amplitude": [
         0.7082626082003116,

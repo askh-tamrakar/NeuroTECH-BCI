@@ -337,7 +337,7 @@ class StreamManagerApp:
         scale = vref / (1 << adc_bits)
         
         # For Batching
-        batch_size = 20
+        batch_size = 10
         sample_buffer = []
 
         try:
@@ -422,33 +422,47 @@ class StreamManagerApp:
         """
         Handles data from Filter Router (Port 6001).
         Protocol: [0xAA (Sync)] [Count (1 Byte)] [Float 1...N]
+        Uses buffered reading for efficiency with high-frequency data.
         """
+        buffer = b""
         try:
             while self.is_running:
-                # 1. Read Header (2 bytes)
-                header = self._recv_exact(conn, 2)
-                if not header:
+                # Read in larger chunks for efficiency
+                data = conn.recv(4096)
+                if not data:
                     break
                 
-                sync, count = header[0], header[1]
+                buffer += data
                 
-                if sync != 0xAA:
-                    # Sync lost - drain a bit
-                    continue
-
-                # 2. Read Payload (Count * 4 bytes)
-                payload_size = count * 4
-                data = self._recv_exact(conn, payload_size)
-                if not data:
-                    return
-                
-                # 3. Process
-                fmt = f'<{count}f'
-                samples = struct.unpack(fmt, data)
-                
-                # Push to LSL Processed Stream
-                if self.lsl_processed:
-                    self.lsl_processed.push_sample(samples)
+                # Process all complete packets in buffer
+                while len(buffer) >= 2:
+                    sync = buffer[0]
+                    
+                    if sync != 0xAA:
+                        # Sync lost - scan forward for 0xAA
+                        idx = buffer.find(b'\xAA', 1)
+                        if idx == -1:
+                            buffer = b""
+                            break
+                        buffer = buffer[idx:]
+                        continue
+                    
+                    count = buffer[1]
+                    packet_size = 2 + count * 4
+                    
+                    if len(buffer) < packet_size:
+                        break  # Wait for more data
+                    
+                    # Parse payload
+                    payload_data = buffer[2:packet_size]
+                    fmt = f'<{count}f'
+                    samples = struct.unpack(fmt, payload_data)
+                    
+                    # Push to LSL Processed Stream
+                    if self.lsl_processed:
+                        self.lsl_processed.push_sample(samples)
+                    
+                    buffer = buffer[packet_size:]
                     
         except (ConnectionResetError, BrokenPipeError):
             # Silent on disconnect

@@ -128,15 +128,27 @@ function addData(newPoints) {
     // 1. Sort incoming batch just in case it's unordered
     newPoints.sort((a, b) => a.time - b.time);
 
-    // 2. Filter out samples that overlap previously processed time (JITTER FIX)
+    // 2. Detect BACKWARD timestamp jumps only.
+    //    Forward jumps are handled naturally by point eviction.
+    //    Backward jumps freeze the stream (monotonicity filter rejects all) — must reset.
+    const newestIncoming = newPoints[newPoints.length - 1].time;
+    if (lastTsHead > 0 && newestIncoming < lastTsHead - 1000) {
+        // Backward jump: new data is >1s behind our head — accept new timeline
+        points = [];
+        envelopeState = 0;
+        lastTsHead = 0;
+        isOffsetInitialized = false;
+    }
+
+    // 3. Filter out samples that overlap previously processed time (JITTER FIX)
     const filteredPoints = newPoints.filter(p => p.time > lastTsHead);
     if (filteredPoints.length === 0) return;
 
-    // 3. Update the global timestamp head
+    // 4. Update the global timestamp head
     const newestSampleTime = filteredPoints[filteredPoints.length - 1].time;
     lastTsHead = newestSampleTime;
 
-    // 4. Auto-Sync Clock: Estimate lag
+    // 5. Auto-Sync Clock: Estimate lag
     const sysTime = Date.now();
     const currentLag = sysTime - newestSampleTime;
 

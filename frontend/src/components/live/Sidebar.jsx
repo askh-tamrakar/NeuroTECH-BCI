@@ -564,6 +564,35 @@ function FilterSection({
                 )}
             </div>
 
+            {/* Notch Q Factor */}
+            {filterConfig.notch_enabled && (
+                <div className="space-y-2 pl-6 mb-2">
+                    <label className="text-xs text-muted flex justify-between items-center font-medium">
+                        <span className="flex items-center gap-1.5"><Sliders size={12} /> Notch Q Factor</span>
+                        <span className={`${colorClass} font-bold text-sm bg-${accentColor}-500/10 px-2 py-0.5 rounded`}>
+                            {filterConfig.notch_q || 30}
+                        </span>
+                    </label>
+                    <div className="px-1">
+                        <CustomSlider
+                            min={5}
+                            max={100}
+                            step={1}
+                            value={filterConfig.notch_q || 30}
+                            onChange={(val) => onFilterChange(sensorType, 'notch_q', val)}
+                            onFinalChange={(val) => {
+                                onSave?.(buildUpdatedConfig('notch_q', val));
+                            }}
+                            accentColor={accentColor}
+                        />
+                    </div>
+                    <div className="flex justify-between text-[10px] uppercase tracking-wider text-muted font-mono font-bold px-1">
+                        <span>5 (Wide)</span>
+                        <span>100 (Narrow)</span>
+                    </div>
+                </div>
+            )}
+
             <div className="space-y-2 mb-4">
                 <label className="text-sm font-medium flex items-center gap-2 cursor-pointer text-text hover:text-text/80 transition-colors">
                     <input
@@ -584,7 +613,7 @@ function FilterSection({
                         {(() => {
                             const ranges = {
                                 EMG: { min: 1, max: 300, step: 2 },
-                                EEG: { min: 1, max: 50, step: 1 },
+                                EEG: { min: 1, max: 120, step: 1 },
                                 EOG: { min: 0.1, max: 20, step: 0.1 }
                             };
                             const range = ranges[sensorType] || { min: 1, max: 300, step: 1 };
@@ -628,38 +657,13 @@ function FilterSection({
                 )}
             </div>
 
-            <div className="space-y-2 pt-3 border-t border-border/40">
-                <label className="text-xs text-muted flex justify-between items-center font-medium">
-                    <span className="flex items-center gap-1.5"><Sliders size={12} /> High-Pass Cutoff</span>
-                    <span className={`${colorClass} font-bold text-sm bg-${accentColor}-500/10 px-2 py-0.5 rounded`}>
-                        {filterConfig.cutoff || 1} Hz
-                    </span>
-                </label>
-                <div className="px-1">
-                    <CustomSlider
-                        min={0.1}
-                        max={200}
-                        step={0.1}
-                        value={filterConfig.cutoff || 1}
-                        onChange={(val) => onFilterChange(sensorType, 'cutoff', val)}
-                        onFinalChange={(val) => {
-                            onSave?.(buildUpdatedConfig('cutoff', val));
-                        }}
-                        accentColor={accentColor}
-                    />
-                </div>
-                <div className="flex justify-between text-[10px] uppercase tracking-wider text-muted font-mono font-bold px-1">
-                    <span>0.1 Hz</span>
-                    <span>200 Hz</span>
-                </div>
-            </div>
-
-            {filterConfig.order && (
-                <div className="space-y-2 pt-3 border-t border-border/40 mt-3">
+            {/* Bandpass Order */}
+            {filterConfig.bandpass_enabled && (
+                <div className="space-y-2 pt-3 border-t border-border/40">
                     <label className="text-xs text-muted flex justify-between items-center font-medium">
-                        <span className="flex items-center gap-1.5"><ListOrdered size={12} /> Filter Order</span>
+                        <span className="flex items-center gap-1.5"><ListOrdered size={12} /> Bandpass Order</span>
                         <span className={`${colorClass} font-bold text-sm bg-${accentColor}-500/10 px-2 py-0.5 rounded`}>
-                            {filterConfig.order}
+                            {filterConfig.bandpass_order || 4}
                         </span>
                     </label>
                     <div className="px-1">
@@ -667,10 +671,10 @@ function FilterSection({
                             min={1}
                             max={8}
                             step={1}
-                            value={filterConfig.order || 4}
-                            onChange={(val) => onFilterChange(sensorType, 'order', val)}
+                            value={filterConfig.bandpass_order || 4}
+                            onChange={(val) => onFilterChange(sensorType, 'bandpass_order', val)}
                             onFinalChange={(val) => {
-                                onSave?.(buildUpdatedConfig('order', val));
+                                onSave?.(buildUpdatedConfig('bandpass_order', val));
                             }}
                             accentColor={accentColor}
                         />
@@ -681,6 +685,66 @@ function FilterSection({
                     </div>
                 </div>
             )}
+
+            {/* EMG Envelope Controls */}
+            {sensorType === 'EMG' && filterConfig.envelope_enabled && (
+                <div className="space-y-3 pt-3 border-t border-border/40 mt-3">
+                    <h5 className={`text-xs font-bold ${colorClass} uppercase tracking-wider flex items-center gap-1.5`}>
+                        <Activity size={12} /> Envelope Settings
+                    </h5>
+                    <div className="space-y-2">
+                        <label className="text-xs text-muted flex justify-between items-center font-medium">
+                            <span className="flex items-center gap-1.5"><Sliders size={12} /> Envelope Cutoff</span>
+                            <span className={`${colorClass} font-bold text-sm bg-${accentColor}-500/10 px-2 py-0.5 rounded`}>
+                                {filterConfig.envelope_cutoff || 8} Hz
+                            </span>
+                        </label>
+                        <div className="px-1">
+                            <CustomSlider
+                                min={1}
+                                max={30}
+                                step={0.5}
+                                value={filterConfig.envelope_cutoff || 8}
+                                onChange={(val) => onFilterChange(sensorType, 'envelope_cutoff', val)}
+                                onFinalChange={(val) => {
+                                    onSave?.(buildUpdatedConfig('envelope_cutoff', val));
+                                }}
+                                accentColor={accentColor}
+                            />
+                        </div>
+                        <div className="flex justify-between text-[10px] uppercase tracking-wider text-muted font-mono font-bold px-1">
+                            <span>1 Hz</span>
+                            <span>30 Hz</span>
+                        </div>
+                    </div>
+                    <div className="space-y-2">
+                        <label className="text-xs text-muted flex justify-between items-center font-medium">
+                            <span className="flex items-center gap-1.5"><ListOrdered size={12} /> Envelope Order</span>
+                            <span className={`${colorClass} font-bold text-sm bg-${accentColor}-500/10 px-2 py-0.5 rounded`}>
+                                {filterConfig.envelope_order || 4}
+                            </span>
+                        </label>
+                        <div className="px-1">
+                            <CustomSlider
+                                min={1}
+                                max={6}
+                                step={1}
+                                value={filterConfig.envelope_order || 4}
+                                onChange={(val) => onFilterChange(sensorType, 'envelope_order', val)}
+                                onFinalChange={(val) => {
+                                    onSave?.(buildUpdatedConfig('envelope_order', val));
+                                }}
+                                accentColor={accentColor}
+                            />
+                        </div>
+                        <div className="flex justify-between text-[10px] uppercase tracking-wider text-muted font-mono font-bold px-1">
+                            <span>1st</span>
+                            <span>6th</span>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <div className="h-[35px] shrink-0" />
         </div>
     )

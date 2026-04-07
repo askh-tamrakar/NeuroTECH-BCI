@@ -19,8 +19,12 @@ let windowTimer = null;
 let markedWindows = [];
 let deletedWindowIds = new Set();
 let latestSignalTime = Date.now();
+let prevSignalTime = 0; // Track previous signal time for jump detection
 const MAX_WINDOWS = 2000;
 const PREVIEW_POINTS = 72;
+
+// Pending collection queue: windows waiting for signal time to pass their endTime
+let pendingCollections = [];
 
 // --- Message Handler ---
 self.onmessage = function (e) {
@@ -57,7 +61,16 @@ self.onmessage = function (e) {
             if (payload.timeWindow !== undefined) timeWindow = payload.timeWindow;
             break;
         case 'UPDATE_SIGNAL_TIME':
+            prevSignalTime = latestSignalTime;
             latestSignalTime = payload;
+            
+            // Detect large timestamp jumps (>3s) — invalidate stale pending collections
+            if (prevSignalTime > 0 && Math.abs(latestSignalTime - prevSignalTime) > 3000) {
+                pendingCollections = [];
+            }
+            
+            // Signal-time-based collection: check if any pending windows are ready
+            checkPendingCollections();
             break;
         case 'START_WINDOWING':
             startAutoWindowing(payload || {});
@@ -76,6 +89,7 @@ self.onmessage = function (e) {
         case 'CLEAR_ALL_WINDOWS':
             markedWindows.forEach((window) => deletedWindowIds.add(window.id));
             markedWindows = [];
+            pendingCollections = [];
             notifyWindowsUpdate();
             break;
         case 'GET_WINDOWS_FULL':
@@ -151,15 +165,13 @@ function startAutoWindowing(options = {}) {
         markedWindows = [...markedWindows, newWindow].slice(-MAX_WINDOWS);
         notifyWindowsUpdate();
 
-        // Request samples from main thread (which gets them from chart worker)
-        self.postMessage({
-            type: 'REQUEST_SAMPLES',
-            payload: {
-                id: newWindow.id,
-                start,
-                end,
-                delay: delayToCenter + windowDuration + 100
-            }
+        // Queue for signal-time-based collection instead of wall-clock setTimeout.
+        // The window will be collected when latestSignalTime passes endTime + buffer.
+        pendingCollections.push({
+            id: newWindow.id,
+            start,
+            end,
+            createdAt: Date.now()
         });
 
         windowTimer = setTimeout(createNextWindow, cadenceMs);
@@ -172,6 +184,46 @@ function stopAutoWindowing() {
     if (windowTimer) {
         clearTimeout(windowTimer);
         windowTimer = null;
+    }
+}
+
+// Signal-time-based collection: fires REQUEST_SAMPLES only when the
+// data stream has actually advanced past the window's endTime.
+// This replaces the old wall-clock setTimeout approach that would fire
+// before data had actually arrived (causing "error" status windows).
+function checkPendingCollections() {
+    if (pendingCollections.length === 0) return;
+    
+    const COLLECTION_BUFFER_MS = 200; // Wait 200ms past endTime for safety
+    const STALE_TIMEOUT_MS = 30000;   // Expire after 30s wall-clock to avoid leaks
+    const now = Date.now();
+    
+    const ready = [];
+    const remaining = [];
+    
+    for (const pc of pendingCollections) {
+        if (deletedWindowIds.has(pc.id)) continue; // Skip deleted
+        
+        if (latestSignalTime >= pc.end + COLLECTION_BUFFER_MS) {
+            ready.push(pc);
+        } else if (now - pc.createdAt > STALE_TIMEOUT_MS) {
+            // Timed out — mark as error
+            self.postMessage({
+                type: 'REQUEST_SAMPLES',
+                payload: { id: pc.id, start: pc.start, end: pc.end, delay: 0 }
+            });
+        } else {
+            remaining.push(pc);
+        }
+    }
+    
+    pendingCollections = remaining;
+    
+    for (const pc of ready) {
+        self.postMessage({
+            type: 'REQUEST_SAMPLES',
+            payload: { id: pc.id, start: pc.start, end: pc.end, delay: 0 }
+        });
     }
 }
 

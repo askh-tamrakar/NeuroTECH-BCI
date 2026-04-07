@@ -1,3 +1,4 @@
+import numpy as np
 from scipy.signal import butter, iirnotch, tf2sos
 
 def design_emg_highpass(cutoff_hz, fs, order=4):

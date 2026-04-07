@@ -82,16 +82,18 @@ function connect(url) {
         if (lastTs === 0) {
              batchStartTs = Date.now() - (totalSamples * sampleIntervalMs);
         } else {
-             // To prevent frontend clocks from drifting too far from reality,
-             // slowly pull lastTs towards Date.now() if it drifts too far
              const now = Date.now();
              const expectedStart = now - (totalSamples * sampleIntervalMs);
              
-             // If we are more than 500ms behind or somehow ahead of now, hard reset
-             if (Math.abs(lastTs - expectedStart) > 500) {
+             // Only hard-reset on genuine disconnect (>5s gap between batches)
+             // This avoids the straight-line artifacts caused by timestamp discontinuities.
+             // Normal network jitter (up to a few seconds) is absorbed by keeping
+             // timestamps strictly monotonic from lastTs.
+             if (Math.abs(lastTs - expectedStart) > 5000) {
                  batchStartTs = expectedStart;
              } else {
-                 batchStartTs = lastTs; // Strict continuous sequence
+                 // Strict continuous sequence — no gaps, no dashes
+                 batchStartTs = lastTs;
              }
         }
 

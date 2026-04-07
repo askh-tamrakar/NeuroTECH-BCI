@@ -71,14 +71,9 @@ def load_config() -> dict:
             "ch1": {"sensor": "EOG", "enabled": True}
         },
         "filters": {
-            "EMG": {"cutoff": 70.0, "order": 4, "notch_enabled": False, "notch_freq": 50, "bandpass_enabled": False, "bandpass_low": 20, "bandpass_high": 250, "envelope_enabled": True, "envelope_cutoff": 10.0, "envelope_order": 4},
-            "EOG": {"bandpass_enabled": True, "bandpass_low": 0.5, "bandpass_high": 35.0, "bandpass_order": 4, "notch_enabled": False, "notch_freq": 50.0},
-            "EEG": {
-                "filters": [
-                    {"type": "notch", "freq": 50.0, "Q": 30},
-                    {"type": "bandpass", "low": 0.5, "high": 45.0, "order": 4}
-                ]
-            }
+            "EMG": {"bandpass_order": 4, "notch_enabled": True, "notch_freq": 50, "notch_q": 30.0, "bandpass_enabled": True, "bandpass_low": 20, "bandpass_high": 250, "envelope_enabled": True, "envelope_cutoff": 8.0, "envelope_order": 4},
+            "EOG": {"bandpass_enabled": True, "bandpass_low": 0.5, "bandpass_high": 10.0, "bandpass_order": 4, "notch_enabled": False, "notch_freq": 50.0, "notch_q": 30.0},
+            "EEG": {"bandpass_enabled": True, "bandpass_low": 1.0, "bandpass_high": 45.0, "bandpass_order": 4, "notch_enabled": True, "notch_freq": 50.0, "notch_q": 30.0}
         }
     }
     
@@ -377,62 +372,112 @@ class FilterRouter:
 
         # Start background config monitor only after main thread has reached a stable state
         self._start_config_watcher()
+
+        # Set socket to non-blocking with a small timeout to avoid stalling
+        # the processing loop if the downstream consumer is slow
+        if self.stream_socket:
+            try:
+                self.stream_socket.settimeout(0.05)  # 50ms send timeout
+                # Increase send buffer to absorb transient slowdowns
+                self.stream_socket.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 65536)
+            except Exception as e:
+                log.warning(f"[Router] Could not set socket options: {e}")
         
         self.running = True
         log.info("Starting processing loop...")
         
         sample_count = 0
         error_count = 0
+        _send_errors = 0
+        _max_send_errors = 10  # Consecutive errors before reconnect
+        
+        # Pre-compute struct format string (stays constant while num_channels is fixed)
+        _cached_num_ch = self.num_channels
+        _header = struct.pack('<BB', 0xAA, _cached_num_ch)
+        _fmt = f'<{_cached_num_ch}f'
         
         try:
             while self.running:
-                # Optimized: Pull a chunk of samples (max 20ms of data)
-                samples, timestamps = self.inlet.pull_chunk(timeout=0.1, max_samples=25)
+                # Pull larger chunks - 50ms worth of data at 1kHz = 50 samples
+                # This reduces per-iteration overhead significantly
+                samples, timestamps = self.inlet.pull_chunk(timeout=0.05, max_samples=64)
                 
                 if not samples:
                     continue
                 
+                # Take a snapshot of processors under lock, then process OUTSIDE lock
                 with self._config_lock:
-                    num_samples = len(samples)
-                    # Convert to numpy array for efficient slicing (Samples x Channels)
-                    data_arr = np.array(samples, dtype=float)
-                    processed_arr = np.zeros_like(data_arr)
+                    num_ch = self.num_channels
+                    processors = dict(self.channel_processors)
+                
+                # Update cached struct format if channel count changed
+                if num_ch != _cached_num_ch:
+                    _cached_num_ch = num_ch
+                    _header = struct.pack('<BB', 0xAA, _cached_num_ch)
+                    _fmt = f'<{_cached_num_ch}f'
+                
+                num_samples = len(samples)
+                # Convert to numpy array for efficient slicing (Samples x Channels)
+                data_arr = np.array(samples, dtype=float)
+                processed_arr = np.zeros_like(data_arr)
+                
+                for ch_idx in range(num_ch):
+                    ch_data = data_arr[:, ch_idx]
+                    processor = processors.get(ch_idx)
                     
-                    for ch_idx in range(self.num_channels):
-                        ch_data = data_arr[:, ch_idx]
-                        processor = self.channel_processors.get(ch_idx)
-                        
-                        if processor and hasattr(processor, 'process_batch'):
-                            processed_arr[:, ch_idx] = processor.process_batch(ch_data)
-                        elif processor:
-                            # Fallback for processors without process_batch
-                            for s_idx in range(num_samples):
-                                processed_arr[s_idx, ch_idx] = processor.process_sample(ch_data[s_idx])
-                        else:
-                            processed_arr[:, ch_idx] = ch_data
-                    
-                    # Prepare batch payload
-                    # Each sample: [0xAA, count, ch0, ch1, ...]
-                    batch_payload = bytearray()
-                    for s_idx in range(num_samples):
-                        sample_data = processed_arr[s_idx]
-                        header = struct.pack('<BB', 0xAA, self.num_channels)
-                        payload = struct.pack(f'<{self.num_channels}f', *sample_data)
-                        batch_payload.extend(header + payload)
-                    
-                    sample_count += num_samples
+                    if processor and hasattr(processor, 'process_batch'):
+                        processed_arr[:, ch_idx] = processor.process_batch(ch_data)
+                    elif processor:
+                        # Fallback for processors without process_batch
+                        for s_idx in range(num_samples):
+                            processed_arr[s_idx, ch_idx] = processor.process_sample(ch_data[s_idx])
+                    else:
+                        processed_arr[:, ch_idx] = ch_data
+                
+                # Prepare batch payload - pre-allocate bytearray for efficiency
+                sample_size = 2 + num_ch * 4  # header(2) + floats
+                batch_payload = bytearray(num_samples * sample_size)
+                offset = 0
+                for s_idx in range(num_samples):
+                    batch_payload[offset:offset+2] = _header
+                    offset += 2
+                    struct.pack_into(_fmt, batch_payload, offset, *processed_arr[s_idx])
+                    offset += num_ch * 4
+                
+                sample_count += num_samples
 
-                    # ✅ Push entire BATCH to Stream Manager in one operation
-                    if self.stream_connected and self.stream_socket and batch_payload:
+                # Push batch OUTSIDE the config lock to avoid blocking config updates
+                if self.stream_connected and self.stream_socket and batch_payload:
+                    try:
+                        self.stream_socket.sendall(batch_payload)
+                        _send_errors = 0
+                    except socket.timeout:
+                        # Socket send buffer is full - downstream is slow
+                        _send_errors += 1
+                        if _send_errors >= _max_send_errors:
+                            log.warning(f"[Router] Stream Manager too slow, {_send_errors} consecutive timeouts")
+                            _send_errors = 0
+                    except Exception as e:
+                        print(f"[Router] Stream push error: {e}")
+                        self.stream_connected = False
+                        # Attempt reconnect
                         try:
-                            self.stream_socket.sendall(batch_payload)
-                        except Exception as e:
-                            print(f"[Router] Stream push error: {e}")
-                            self.stream_connected = False
+                            self.stream_socket.close()
+                        except:
+                            pass
+                        try:
+                            self.stream_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                            self.stream_socket.settimeout(0.05)
+                            self.stream_socket.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 65536)
+                            self.stream_socket.connect(('127.0.0.1', 6001))
+                            self.stream_connected = True
+                            log.info("[Router] Reconnected to Stream Manager")
+                        except Exception:
+                            self.stream_socket = None
 
-                    # Log progress occasionally
-                    if sample_count % max(self.sr * 5, 1) < len(samples):
-                        log.debug(f"[Router] ✅ {sample_count} samples processed (Batched)")
+                # Log progress occasionally
+                if sample_count % max(self.sr * 5, 1) < num_samples:
+                    log.debug(f"[Router] ✅ {sample_count} samples processed (Batched)")
         
         except KeyboardInterrupt:
             print("\n[Router] [STOP] Stopping...")

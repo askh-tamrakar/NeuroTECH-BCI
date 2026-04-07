@@ -8,8 +8,8 @@
     },
     "ch1": {
       "enabled": true,
-      "sensor": "EEG",
-      "label": "UNUSED"
+      "sensor": "EOG",
+      "label": "EOG_1"
     }
   },
   "display": {

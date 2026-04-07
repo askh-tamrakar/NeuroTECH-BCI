@@ -7,10 +7,10 @@ let width = 0;
 let height = 0;
 
 // Data Storage
-// We keep a large buffer of points. 
-// points: { time: number, value: number, future: number|undef }[]
+// We keep a bounded buffer of points with time-based eviction.
+// At 1000Hz, 30s = 30000 points. We keep 60s max to cover any time window.
 let points = [];
-const MAX_POINTS = 50000; // Keep enough history
+const MAX_POINTS = 60000;
 let channelIndex = -1; // To be set via INIT or SET_CONFIG
 
 const broadcast = new BroadcastChannel('bci-data-stream');
@@ -177,15 +177,28 @@ function addData(newPoints) {
     // 1. Sort incoming batch
     newPoints.sort((a, b) => a.time - b.time);
 
-    // 2. Filter out samples that overlap previously processed time (JITTER FIX)
+    // 2. Detect BACKWARD timestamp jumps only.
+    //    Forward jumps are handled naturally by time-based eviction.
+    //    Backward jumps (new data older than head) freeze the stream because
+    //    the monotonicity filter rejects everything — we must reset.
+    const newestIncoming = newPoints[newPoints.length - 1].time;
+    if (lastTsHead > 0 && newestIncoming < lastTsHead - 1000) {
+        // Backward jump: new data is >1s behind our head — accept new timeline
+        points = [];
+        envelopeState = 0;
+        lastTsHead = 0;
+        isOffsetInitialized = false;
+    }
+
+    // 3. Filter out samples that overlap previously processed time (JITTER FIX)
     const filteredPoints = newPoints.filter(p => p.time > lastTsHead);
     if (filteredPoints.length === 0) return;
 
-    // 3. Update the global timestamp head
+    // 4. Update the global timestamp head
     const newestSampleTime = filteredPoints[filteredPoints.length - 1].time;
     lastTsHead = newestSampleTime;
 
-    // 4. Auto-Sync Clock: Estimate lag
+    // 5. Auto-Sync Clock: Estimate lag
     const sysTime = Date.now();
     const currentLag = sysTime - newestSampleTime;
 
@@ -206,6 +219,27 @@ function addData(newPoints) {
     });
 
     points.push(...normalizedPoints);
+    
+    // Time-based eviction: keep 3x the visible time window.
+    // This must be generous enough that signal-time-based window collection
+    // (which fires when signal time passes window.endTime + 200ms) can still
+    // read sample data for the full window duration.
+    // With timeWindow=5s, windows span ~1.5s and are collected ~4.2s after creation,
+    // meaning the oldest needed data is ~4.2s old — well within 3*5=15s.
+    const maxAge = (config.timeWindow || 5000) * 3;
+    const cutoffTime = lastTsHead - maxAge;
+    let cutIdx = 0;
+    for (let i = 0; i < points.length; i++) {
+        if (points[i].time >= cutoffTime) {
+            cutIdx = i;
+            break;
+        }
+    }
+    if (cutIdx > 0) {
+        points = points.slice(cutIdx);
+    }
+    
+    // Hard cap as safety net
     if (points.length > MAX_POINTS) {
         points = points.slice(points.length - MAX_POINTS);
     }
@@ -432,7 +466,8 @@ function draw() {
 
             ctx.moveTo(startX, startY);
 
-            // Draw line backwards
+            // Draw line backwards, detecting large gaps to avoid straight-line artifacts
+            let prevTime = (i < points.length - 1) ? now : points[i].time;
             for (let j = i; j >= 0; j--) {
                 const p = points[j];
                 const age = now - p.time;
@@ -440,10 +475,20 @@ function draw() {
 
                 if (x_ms < -200) break; // Optimization
 
-                const x = timeToPx(x_ms);
-                const y = valToPy(getPointValue(p));
-
-                ctx.lineTo(x, y);
+                // Gap detection: only break the path on genuine data loss (>200ms gap)
+                // Small gaps from batch boundaries or jitter should still draw continuous lines
+                const timeDelta = prevTime - p.time;
+                if (timeDelta > 200 && j < i) {
+                    // Start a new sub-path after the gap
+                    const x = timeToPx(x_ms);
+                    const y = valToPy(getPointValue(p));
+                    ctx.moveTo(x, y);
+                } else {
+                    const x = timeToPx(x_ms);
+                    const y = valToPy(getPointValue(p));
+                    ctx.lineTo(x, y);
+                }
+                prevTime = p.time;
             }
         }
     }

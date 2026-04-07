@@ -5,12 +5,14 @@
   },
   "channel_mapping": {
     "ch0": {
-      "sensor": "EEG",
-      "label": "Fp1"
+      "sensor": "EMG",
+      "label": "EMG_0",
+      "enabled": true
     },
     "ch1": {
-      "sensor": "EEG",
-      "label": "Oz"
+      "sensor": "EOG",
+      "label": "EOG_1",
+      "enabled": true
     }
   },
   "display": {

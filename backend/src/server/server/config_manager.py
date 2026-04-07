@@ -157,7 +157,7 @@ def save_calibration_config(config: dict) -> bool:
 
 
 def build_default_detection_config() -> dict:
-    return {"active": False, "target": None}
+    return {"active": True, "target": None}
 
 
 def build_default_sensor_presets() -> dict:

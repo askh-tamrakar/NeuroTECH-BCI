@@ -1,43 +1,34 @@
 {
   "filters": {
     "EEG": {
+      "notch_enabled": true,
+      "notch_freq": 50,
+      "notch_q": 30,
       "bandpass_enabled": true,
       "bandpass_high": 30,
-      "bandpass_low": 0,
-      "cutoff": 1.1,
-      "filters": [
-        {
-          "Q": 30,
-          "freq": 50,
-          "type": "notch"
-        },
-        {
-          "high": 45,
-          "low": 0.5,
-          "order": 4,
-          "type": "bandpass"
-        }
-      ],
-      "notch_enabled": true
+      "bandpass_low": 0.5,
+      "bandpass_order": 4
     },
     "EMG": {
+      "notch_enabled": true,
+      "notch_freq": 50,
+      "notch_q": 30,
       "bandpass_enabled": true,
       "bandpass_high": 250,
       "bandpass_low": 20,
-      "cutoff": 20,
-      "notch_enabled": true,
-      "notch_freq": 50,
-      "order": 4,
-      "type": "high_pass"
+      "bandpass_order": 4,
+      "envelope_enabled": true,
+      "envelope_cutoff": 8,
+      "envelope_order": 4
     },
     "EOG": {
+      "notch_enabled": true,
+      "notch_freq": 50,
+      "notch_q": 30,
       "bandpass_enabled": true,
       "bandpass_high": 10,
-      "bandpass_low": 4,
-      "cutoff": 10,
-      "notch_enabled": true,
-      "order": 4,
-      "type": "low_pass"
+      "bandpass_low": 0.5,
+      "bandpass_order": 4
     }
   }
 }

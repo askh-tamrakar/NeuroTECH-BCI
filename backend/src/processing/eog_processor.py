@@ -43,7 +43,7 @@ class EOGFilterProcessor:
         self.bp_enabled = eog_cfg.get("bandpass_enabled", False)
         self.bp_low = float(eog_cfg.get("bandpass_low", 0.5))
         self.bp_high = float(eog_cfg.get("bandpass_high", 10.0))
-        self.bp_order = int(eog_cfg.get("bandpass_order", 4))
+        self.bp_order = int(eog_cfg.get("bandpass_order", eog_cfg.get("order", 4)))
 
     def _design_filters(self):
         nyq = self.sr / 2.0
@@ -96,6 +96,13 @@ class EOGFilterProcessor:
         # 2. Bandpass (SOS)
         if self.bp_enabled and self.zi_bp is not None:
              out, self.zi_bp = sosfilt(self.sos_bp, out, zi=self.zi_bp)
+
+        # Guard against NaN propagation from filter instability
+        if np.any(np.isnan(out)):
+            out = np.nan_to_num(out, nan=0.0)
+            # Reset filter states to recover from NaN contamination
+            self.zi_notch = lfilter_zi(self.b_notch, self.a_notch) * 0.0 if (self.notch_enabled and self.b_notch is not None and self.a_notch is not None and len(self.a_notch) > 1) else None
+            self.zi_bp = sosfilt_zi(self.sos_bp) * 0.0 if self.bp_enabled and self.sos_bp is not None else None
 
         return out.astype(float)
 

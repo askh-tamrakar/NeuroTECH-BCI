@@ -4,9 +4,10 @@ SerialPacketReader - Fixed & Production-Ready
 - Robust threaded serial reader with packet sync
 - Proper connection management
 - Complete parenthesis and error handling
+- Drop notification via callback on queue overflow
 """
 
-from typing import Optional, Dict
+from typing import Optional, Dict, Callable
 import time
 import queue
 import threading
@@ -22,7 +23,8 @@ class SerialPacketReader:
         sync2: int = 0x7C, 
         end_byte: int = 0x01,
         connect_timeout: float = 3.0, 
-        max_queue: int = 10000
+        max_queue: int = 10000,
+        on_drop_callback: Optional[Callable[[int], None]] = None
     ):
         """Initialize serial reader"""
         self.port = port
@@ -36,10 +38,13 @@ class SerialPacketReader:
         self.is_running = False
         self.data_queue: queue.Queue = queue.Queue(maxsize=max_queue)
         self.message_queue: queue.Queue = queue.Queue(maxsize=100) # Queue for text messages
+        self.on_drop_callback = on_drop_callback
 
         # Stats
         self.packets_received = 0
         self.packets_dropped = 0
+        self._drop_burst_count = 0      # Consecutive drops in current burst
+        self._last_drop_log_time = 0.0   # Rate-limit drop warnings
         self.sync_errors = 0
         self.bytes_received = 0
         self.duplicates = 0
@@ -201,8 +206,24 @@ class SerialPacketReader:
                         self.data_queue.put_nowait(packet_bytes)
                         self.packets_received += 1
                         self.last_packet_time = time.time()
+                        # Reset drop burst counter on successful enqueue
+                        if self._drop_burst_count > 0:
+                            self._drop_burst_count = 0
                     except queue.Full:
                         self.packets_dropped += 1
+                        self._drop_burst_count += 1
+                        # Rate-limited warning: log at most once per second
+                        now = time.time()
+                        if now - self._last_drop_log_time >= 1.0:
+                            print(f"⚠️ Queue overflow: {self._drop_burst_count} packets dropped "
+                                  f"(total: {self.packets_dropped}, queue full at {self.data_queue.maxsize})")
+                            self._last_drop_log_time = now
+                            # Notify via callback if registered
+                            if self.on_drop_callback:
+                                try:
+                                    self.on_drop_callback(self.packets_dropped)
+                                except Exception:
+                                    pass
                     i += self.packet_len
                 else:
                     # Bad end byte

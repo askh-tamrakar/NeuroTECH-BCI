@@ -1076,48 +1076,6 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
                                         </div>
                                     </div>
                                 </div>
-
-                                {feedbackPrompt && (
-                                    <div className="mt-4 rounded-2xl border border-primary/20 bg-bg/60 p-4 flex flex-col gap-3">
-                                        <div className="flex items-center justify-between gap-3">
-                                            <div>
-                                                <div className="text-xs font-bold uppercase tracking-[0.2em] text-primary">EOG Feedback</div>
-                                                <div className="text-sm font-bold text-text">
-                                                    {feedbackPrompt.context}: {feedbackPrompt.prediction}
-                                                </div>
-                                            </div>
-                                            <div className="text-xs font-mono text-muted">
-                                                {(feedbackPrompt.confidence || 0).toFixed(2)}
-                                            </div>
-                                        </div>
-                                        <div className="flex flex-wrap gap-2">
-                                            <button
-                                                onClick={() => submitFeedback(feedbackPrompt.prediction)}
-                                                disabled={feedbackSaving}
-                                                className="px-3 py-2 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 font-bold text-xs uppercase tracking-wider hover:bg-emerald-500/20 transition-colors disabled:opacity-50 flex items-center gap-2"
-                                            >
-                                                <Check size={14} /> Yes
-                                            </button>
-                                            {['SingleBlink', 'DoubleBlink', 'Rest'].filter((label) => label !== feedbackPrompt.prediction).map((label) => (
-                                                <button
-                                                    key={label}
-                                                    onClick={() => submitFeedback(label)}
-                                                    disabled={feedbackSaving}
-                                                    className="px-3 py-2 rounded-xl bg-surface border border-border text-text font-bold text-xs uppercase tracking-wider hover:border-primary/40 hover:text-primary transition-colors disabled:opacity-50"
-                                                >
-                                                    {label}
-                                                </button>
-                                            ))}
-                                            <button
-                                                onClick={() => setFeedbackPrompt(null)}
-                                                disabled={feedbackSaving}
-                                                className="px-3 py-2 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 font-bold text-xs uppercase tracking-wider hover:bg-red-500/15 transition-colors disabled:opacity-50 flex items-center gap-2"
-                                            >
-                                                <X size={14} /> Dismiss
-                                            </button>
-                                        </div>
-                                    </div>
-                                )}
                             </div>
 
                             {/* Canvas */}
