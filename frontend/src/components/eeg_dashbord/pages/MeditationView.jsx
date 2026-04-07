@@ -434,19 +434,43 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
       if (fetchInterval) clearInterval(fetchInterval);
       fetchInterval = setInterval(() => {
         const res = resultRef.current;
-        if (res?.band_powers?.length >= 5) {
-          // Use absolute backend band powers - radar normalizes them via ratio automatically
-          // We can apply a small log baseline so delta doesn't 100% crush the UI visually, 
-          // or just pass them raw as requested by user's raw band matching rule
+        if (!res) return;
+
+        // ── BAND POWERS (same priority chain as Music page liveMetrics) ──
+        // Priority 1: Individual feature keys from eeg_prediction event
+        if (res.features?.delta !== undefined) {
+          rawBands = [
+            res.features.delta  || 0,
+            res.features.theta  || 0,
+            res.features.alpha  || 0,
+            res.features.beta   || 0,
+            res.features.gamma  || 0,
+          ];
+        }
+        // Priority 2: Direct band_powers array (from eeg_mode_result)
+        else if (res.band_powers?.length >= 5) {
           rawBands = [...res.band_powers];
         }
+        // Priority 3: radar_bands from meditation module output
+        else if (res.radar_bands?.length >= 5) {
+          rawBands = [...res.radar_bands];
+        }
 
-        if (res?.meditation_score !== undefined) {
+        // ── CALM SIGNAL ──
+        // Priority 1: Server-computed meditation score
+        if (res.meditation_score !== undefined) {
           calmSignal = Math.max(0, Math.min(1, res.meditation_score / 100));
-        } else if (res?.band_mix) {
-           // Fallback to calculate base calm from mix if score is omitted for some reason
-           const { alpha, theta, beta } = res.band_mix;
-           calmSignal = Math.max(0, Math.min(1, (alpha + theta * 0.5) / (beta + 0.1) * 0.4));
+        }
+        // Priority 2: Alpha relative power (same as Music page Frequency Gain)
+        else if (res.features?.alpha_rel !== undefined) {
+          const alphaRel = res.features.alpha_rel || 0;
+          const betaRel  = res.features.beta_rel  || 0;
+          calmSignal = Math.max(0, Math.min(1, alphaRel * 1.5 - betaRel * 0.5));
+        }
+        // Priority 3: band_mix ratios fallback
+        else if (res.band_mix) {
+          const { alpha = 0, theta = 0, beta = 0.1 } = res.band_mix;
+          calmSignal = Math.max(0, Math.min(1, (alpha + theta * 0.5) / (beta + 0.1) * 0.4));
         }
       }, 60);
     }
