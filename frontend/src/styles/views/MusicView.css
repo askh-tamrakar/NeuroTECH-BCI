@@ -41,50 +41,78 @@
   z-index: 0;
 }
 
-/* ── VISUALIZER HEADER ── */
-.visualizer-preview-header {
-  position: absolute;
-  top: 80px;
-  left: 80px;
-  z-index: 10;
+/* ── TRACK INDICATOR CARD ── */
+.track-indicator-card {
+  background: rgba(var(--surface-rgb), 0.4);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+.album-art-glow {
+  box-shadow: 0 0 15px rgba(var(--primary-rgb), 0.2);
+}
+
+/* ── PARAMETER CLUSTER ── */
+.parameter-cluster {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
   pointer-events: none;
 }
 
-.demo-mode-badge {
+.parameter-item {
   display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.parameter-label-row {
+  display: flex;
+  justify-content: space-between;
   align-items: center;
-  gap: 8px;
-  color: #a3e635; /* Lime/Green */
-  font-size: 11px;
-  font-weight: 900;
+}
+
+.parameter-label {
+  font-size: 10px;
   text-transform: uppercase;
-  letter-spacing: 2px;
-  margin-bottom: 8px;
+  letter-spacing: 0.2em;
+  font-weight: 600;
+  color: var(--text-secondary);
 }
 
-.demo-dot {
-  width: 6px;
-  height: 6px;
-  background: #a3e635;
-  border-radius: 50%;
-  box-shadow: 0 0 8px #a3e635;
-}
-
-.visualizer-title {
-  font-size: clamp(2.5rem, 6vw, 4.5rem);
+.parameter-value {
+  font-size: 10px;
+  text-transform: uppercase;
   font-weight: 700;
-  color: #ffffff;
-  margin: 0;
-  line-height: 1;
 }
 
-.visualizer-subtext {
-  font-size: 14px;
-  font-weight: 500;
-  color: rgba(255, 255, 255, 0.4);
-  letter-spacing: 2px;
-  margin-top: 15px;
-  line-height: 1.6;
+.parameter-progress-bg {
+  width: 12rem;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 9999px;
+  overflow: hidden;
+  position: relative;
+}
+
+.parameter-progress-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  border-radius: 9999px;
+  transition: width 0.3s ease;
+}
+
+/* ── ANIMATIONS ── */
+@keyframes neon-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.95); }
+}
+
+.animate-neon-pulse {
+  animation: neon-pulse 2s infinite ease-in-out;
 }
 
 /* ── LAYOUT UTILS ── */

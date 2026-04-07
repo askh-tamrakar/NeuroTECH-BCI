@@ -1,9 +1,64 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Music, Volume2, VolumeX, Pause, Play, Headphones, FastForward, Activity } from 'lucide-react';
+import { Music, Volume2, VolumeX, Pause, Play, Headphones, FastForward, Activity, RotateCcw } from 'lucide-react';
 import '../../../styles/views/MusicView.css';
 import MusicSidebar from '../sidebar/MusicSidebar';
 import { useSidebar } from './SidebarContext';
 import { musicHandler } from '../../../handlers/MusicHandler';
+
+const FrequencyWaves = ({ stateTheme }) => {
+  const barsRef = useRef([]);
+
+  useEffect(() => {
+    let animationId;
+    const updateWaves = () => {
+      const data = musicHandler.getFrequencyData();
+      if (data && data.length > 0 && barsRef.current.length > 0) {
+        for (let i = 0; i < 8; i++) {
+          const bar = barsRef.current[i];
+          if (bar) {
+            const binIdx = Math.floor((i / 8) * (data.length * 0.6));
+            const val = data[binIdx] || 0;
+            const height = Math.max(15, (val / 255) * 100);
+            bar.style.height = `${height}%`;
+          }
+        }
+      }
+      animationId = requestAnimationFrame(updateWaves);
+    };
+    updateWaves();
+    return () => cancelAnimationFrame(animationId);
+  }, []);
+
+  const barColors = [
+    `${stateTheme.primary}66`,
+    `${stateTheme.primary}99`,
+    stateTheme.primary,
+    stateTheme.secondary,
+    stateTheme.primary,
+    stateTheme.accent,
+    stateTheme.primary,
+    `${stateTheme.primary}66`,
+  ];
+
+  return (
+    <div className="absolute bottom-32 left-1/2 -translate-x-1/2 z-10 hidden lg:block pointer-events-none">
+      <div className="flex items-end gap-1.5 h-12 opacity-40">
+        {barColors.map((color, i) => (
+          <div
+            key={i}
+            ref={el => barsRef.current[i] = el}
+            className="w-1.5 rounded-full transition-all duration-100"
+            style={{ 
+              backgroundColor: color, 
+              height: '30%',
+              boxShadow: `0 0 15px ${color}33`
+            }}
+          />
+        ))}
+      </div>
+    </div>
+  );
+};
 
 const MusicView = ({ result, onNavigate }) => {
   const canvasRef = useRef(null);
@@ -24,7 +79,7 @@ const MusicView = ({ result, onNavigate }) => {
     }
   }, [result?.state]);
 
-  const { setSidebarSlot, setSidebarMiniSlot } = useSidebar();
+  const { setSidebarSlot } = useSidebar();
 
   const togglePlayback = async () => {
     if (!isPlaying) {
@@ -47,62 +102,8 @@ const MusicView = ({ result, onNavigate }) => {
         stateTheme={stateTheme}
       />
     );
-    setSidebarMiniSlot(
-      <div className="flex h-full w-full flex-col items-center gap-3 px-2 py-3 [scrollbar-width:none] [-ms-overflow-style:'none'] [&::-webkit-scrollbar]:hidden">
-        <div className="mt-12 flex flex-col items-center gap-2">
-          <div
-            className="flex h-11 w-11 items-center justify-center rounded-xl border border-[var(--primary)]/35 bg-[var(--primary)]/10 text-[var(--primary)]"
-            title={result?.state || 'Music'}
-          >
-            <Music size={18} />
-          </div>
-          <span className="text-[9px] font-black uppercase tracking-[2px] text-[var(--primary)] [writing-mode:vertical-rl] rotate-180">
-            Music
-          </span>
-        </div>
-
-        <div className="flex flex-col items-center gap-2 rounded-2xl border border-[var(--primary)]/20 bg-[var(--bg)]/60 px-1.5 py-2 shadow-[0_0_12px_rgba(0,0,0,0.16)]">
-          <button
-            type="button"
-            onClick={togglePlayback}
-            className="flex h-11 w-11 items-center justify-center rounded-xl border border-[var(--primary)]/35 bg-[var(--bg)] text-[var(--primary)]"
-            title={isPlaying ? 'Pause playback' : 'Start playback'}
-          >
-            {isPlaying ? <Pause size={18} /> : <Play size={18} />}
-          </button>
-          <button
-            type="button"
-            onClick={() => setIsMuted(!isMuted)}
-            className={`flex h-11 w-11 items-center justify-center rounded-xl border ${isMuted ? 'border-red-500/35 text-red-400 bg-red-500/10' : 'border-[var(--border)] text-[var(--text)] bg-[var(--bg)]'}`}
-            title={isMuted ? 'Unmute output' : 'Mute output'}
-          >
-            {isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
-          </button>
-        </div>
-
-        <div className="flex w-full flex-col items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--bg)]/60 px-1.5 py-2 text-center">
-          <span className="text-[8px] font-black uppercase tracking-[2px] text-[var(--muted)]">State</span>
-          <div
-            className="w-full rounded-xl border border-[var(--primary)]/20 px-1 py-2 text-[8px] font-black uppercase tracking-[1.5px]"
-            style={{ color: stateTheme.primary, boxShadow: `inset 0 0 10px ${stateTheme.glow}` }}
-            title={result?.state || 'Awaiting neural state'}
-          >
-            {(result?.state || 'Idle').slice(0, 8)}
-          </div>
-          <div className="flex w-full items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface)]/60 px-1 py-2 text-[8px] font-black uppercase tracking-[1.5px] text-[var(--muted)]">
-            {result?.action?.includes('tempo') ? <FastForward size={12} className="mr-1 text-[var(--primary)]" /> :
-              result?.action?.includes('volume') ? <Activity size={12} className="mr-1 text-[var(--primary)]" /> :
-                <Headphones size={12} className="mr-1 text-[var(--primary)]" />}
-            {(result?.action || 'Monitor').slice(0, 8)}
-          </div>
-        </div>
-      </div>
-    );
-    return () => {
-      setSidebarSlot(null);
-      setSidebarMiniSlot(null);
-    };
-  }, [isPlaying, isMuted, result, stateTheme, setSidebarSlot, setSidebarMiniSlot]);
+    return () => setSidebarSlot(null);
+  }, [isPlaying, isMuted, result, stateTheme, setSidebarSlot]);
 
   // Track initialization
   useEffect(() => {
@@ -146,51 +147,41 @@ const MusicView = ({ result, onNavigate }) => {
 
       ctx.clearRect(0, 0, width, height);
 
-      // Draw dense mountain lines from back to front
-      const lineCount = 40; 
-      const stepY = height / (lineCount * 1.8);
-      const startY = height * 0.95;
+      // REDUCED Line Count for "Cleaner" Look
+      const lineCount = 20; 
+      const startY = height * 0.9;
 
-      ctx.lineWidth = 1.0;
+      ctx.lineWidth = 0.8;
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
 
       for (let i = lineCount; i >= 0; i--) {
         const z = i / lineCount;
-        const yBase = startY - (z * height * 0.6);
-        const alpha = (1 - z) * 0.8;
+        const yBase = startY - (z * height * 0.5);
+        const alpha = (1 - z) * 0.6;
         
         ctx.strokeStyle = `rgba(0, 229, 255, ${alpha})`;
-        // Create a fill for the mountain face
-        ctx.fillStyle = `rgba(10, 26, 31, ${alpha * 0.8})`; 
+        ctx.fillStyle = `rgba(5, 15, 20, ${alpha * 0.5})`; 
         
         ctx.beginPath();
-
-        const segmentCount = 60;
+        const segmentCount = 50;
         const segmentWidth = width / segmentCount;
 
         for (let j = 0; j <= segmentCount; j++) {
           const x = j * segmentWidth;
-          
-          // Audio influence
-          const binIdx = Math.floor((j / segmentCount) * (freqData.length * 0.4));
+          const binIdx = Math.floor((j / segmentCount) * (freqData.length * 0.3));
           const val = freqData[binIdx] || 0;
           
-          // Complex Wave: Frequency + Multi-frequency Sine + Offset
-          const audioPeak = (val / 255) * 120 * (1 - z);
-          const noise = Math.sin(j * 0.15 + (offset * (1 + z)) + (i * 0.5)) * 25 * (1 - z);
-          const noise2 = Math.cos(j * 0.05 - (offset * 0.5)) * 10 * (1 - z);
+          // Smoother, less erratic peaks
+          const audioPeak = (val / 255) * 80 * (1 - z);
+          const noise = Math.sin(j * 0.1 + (offset * (0.8 + z)) + (i * 0.4)) * 15 * (1 - z);
           
-          const y = yBase - audioPeak - noise - noise2;
+          const y = yBase - audioPeak - noise;
 
-          if (j === 0) {
-            ctx.moveTo(x, y);
-          } else {
-            ctx.lineTo(x, y);
-          }
+          if (j === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
         }
 
-        // Close the path to fill the mountain floor
         ctx.lineTo(width, height);
         ctx.lineTo(0, height);
         ctx.closePath();
@@ -224,11 +215,99 @@ const MusicView = ({ result, onNavigate }) => {
           width: '100%',
           height: '100%',
           pointerEvents: 'none',
-          zIndex: 2,
+          zIndex: 5,
           opacity: 0.9,
           maskImage: 'radial-gradient(ellipse at bottom, black 60%, transparent 95%)'
         }}
       />
+
+      {/* ── BACKGROUND REFINEMENTS FROM PREVIEW ── */}
+      <div className="absolute inset-0 z-0 opacity-40">
+        <img 
+          alt="neon wireframe landscape" 
+          src="https://lh3.googleusercontent.com/aida-public/AB6AXuBRzTWxdbmQm_2SDM4jYV1nKfQE1YgCMX5zAKU4SzZqnhIH2nmfAyoiNGkL_ZEZupPX2OZfhGoslGa23Ull1cjPSZvkxkxaXCEIXLKa9ftnnNfsqgXwknUwWQfuyJhMsyxlKgDCO88S0XLcwYXlWvrhYtvHMDjvspoXG46LPAr-ZiaG8y4I_mmKqi0rWAsWPCvZitvtt9cEnKFwUlU9wDFSs1l8QB7aiubp3OHC3L3n4iHqEXSj-XzbhSHtZWIVCJbx6GAZPlhLENk" 
+          className="w-full h-full object-cover mix-blend-screen"
+        />
+        <div 
+          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full blur-[120px] transition-colors duration-1000" 
+          style={{ backgroundColor: `${stateTheme.primary}22` }}
+        />
+      </div>
+
+      {/* ── TRACK INDICATOR (Top Right) ── */}
+      <div className="absolute top-32 right-12 z-10 transition-all duration-500 hover:scale-105">
+        <div className="track-indicator-card px-6 py-4 rounded-xl flex items-center gap-4">
+          <div className="relative w-12 h-12 rounded-lg overflow-hidden shrink-0 album-art-glow">
+            <img 
+              alt="album art" 
+              src="https://lh3.googleusercontent.com/aida-public/AB6AXuAo46g4FZ8ZhOppcsvmJNv8CvdOw_azldNM9P1tZStbYO_OGiRIORlNGLvloOMxAC9_xXAEolhjqZuI5zQspAa2hPEm7gkTCl0fKiwGJgyvp73LxeHCKqddrX6gXYtBBs5_4cBpIOoqBjF52lUufXGh_F47ruOxGjFU1ZQ618ZXvs_dUvtjbhdnGG4FEZ953K6NUc1Gudh52U8ob2KjWOD1b24tPEc_cCUWdoxbOv0BY5pMTTgvA0Q8KROoGYd9oCZe5rtbx6531pI" 
+              className="w-full h-full object-cover"
+            />
+          </div>
+          <div>
+            <div className="font-headline text-[10px] tracking-widest uppercase mb-0.5" style={{ color: stateTheme.primary }}>Now Playing</div>
+            <div className="font-headline font-bold text-lg text-white leading-tight">Neon Drifter</div>
+            <div className="text-[9px] text-white/40 uppercase tracking-[0.2em]">Tokyo Midnight</div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── PARAMETER CLUSTER (Bottom Left) ── */}
+      <div className="absolute bottom-40 left-32 z-10">
+        <div className="parameter-cluster">
+          {[
+            { label: 'Frequency Gain', value: '84%', color: stateTheme.primary, width: '84%' },
+            { label: 'Particle Density', value: '2.4k', color: stateTheme.secondary, width: '45%' },
+            { label: 'Chroma Shift', value: 'Active', color: stateTheme.accent, width: '60%' }
+          ].map((param, i) => (
+            <div key={i} className="parameter-item">
+              <div className="parameter-label-row">
+                <span className="parameter-label">{param.label}</span>
+                <span className="parameter-value" style={{ color: param.color }}>{param.value}</span>
+              </div>
+              <div className="parameter-progress-bg">
+                <div 
+                  className="parameter-progress-fill" 
+                  style={{ width: param.width, backgroundColor: param.color, boxShadow: `0 0 10px ${param.color}44` }} 
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ── FREQUENCY WAVE BARS (Frozen & Centered) ── */}
+      <FrequencyWaves stateTheme={stateTheme} />
+
+      {/* ── MINI CONTROL PANEL (Bottom Center) ── */}
+      <div className="fixed bottom-10 left-1/2 -translate-x-1/2 flex gap-12 items-center z-50 bg-black/40 rounded-full px-14 py-5 border border-white/10 backdrop-blur-xl shadow-[0_0_50px_rgba(0,0,0,0.5)]">
+        <button 
+          onClick={() => {
+            musicHandler.stop();
+            musicHandler.play();
+          }}
+          className="flex flex-col items-center gap-1.5 text-white/60 hover:scale-110 hover:text-white transition-all active:scale-90 group"
+        >
+          <RotateCcw size={24} />
+          <span className="font-bold text-[8px] tracking-[0.2em] uppercase opacity-60">Restart</span>
+        </button>
+
+        <button 
+          onClick={togglePlayback}
+          className="w-16 h-16 flex items-center justify-center rounded-full text-black shadow-lg transition-all hover:scale-105 active:scale-95"
+          style={{ 
+            background: `linear-gradient(135deg, ${stateTheme.primary}, ${stateTheme.secondary})`,
+            boxShadow: `0 0 30px ${stateTheme.primary}44`
+          }}
+        >
+          {isPlaying ? <Pause size={32} fill="currentColor" /> : <Play size={32} fill="currentColor" />}
+        </button>
+
+        <button className="flex flex-col items-center gap-1.5 text-white/60 hover:scale-110 hover:text-white transition-all active:scale-90 group">
+          <FastForward size={24} />
+          <span className="font-bold text-[8px] tracking-[0.2em] uppercase opacity-60">Next Mode</span>
+        </button>
+      </div>
     </div>
   );
 };
