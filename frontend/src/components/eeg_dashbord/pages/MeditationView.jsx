@@ -219,14 +219,14 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
         </div>
 
         <div className="flex w-full flex-col gap-1 rounded-2xl border border-[var(--border)] bg-[var(--bg)]/60 px-1.5 py-2">
-          <span className="text-center text-[8px] font-black uppercase tracking-[2px] text-[var(--muted)]">Presets</span>
-          <div className="grid grid-cols-2 gap-1">
+          <span className="text-center text-[8px] font-black uppercase tracking-[2px] text-[var(--muted)] mb-1">Timer</span>
+          <div className="flex flex-col gap-1">
             {PRESETS.map((min) => (
               <button
                 key={min}
                 type="button"
                 onClick={() => containerRef.current?.presetHandler(min)}
-                className="rounded-lg border border-[var(--border)] bg-[var(--surface)]/60 px-1 py-1.5 text-[8px] font-black uppercase tracking-[1.5px] text-[var(--muted)] hover:border-primary/40 hover:text-primary"
+                className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)]/60 py-2 text-[9px] font-black uppercase tracking-[1.5px] text-[var(--muted)] hover:border-primary/50 hover:bg-primary/10 hover:text-primary transition-all"
                 title={`Set ${min} minute session`}
               >
                 {min}m
