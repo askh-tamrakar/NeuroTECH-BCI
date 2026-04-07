@@ -144,13 +144,10 @@ function EEGContent() {
                   </span>
                 </div>
               ) : (
-                <div className="min-w-0 pr-14">
+                <div className="min-w-0 pr-20">
                   <h2 className="truncate text-[14px] font-black uppercase tracking-[4px] text-[var(--primary)]">
                     {sidebarMeta.title}
                   </h2>
-                  <p className="mt-1 truncate text-[10px] font-bold uppercase tracking-[2px] text-[var(--muted)]/75">
-                    {sidebarMeta.subtitle}
-                  </p>
                 </div>
               )}
             </div>
