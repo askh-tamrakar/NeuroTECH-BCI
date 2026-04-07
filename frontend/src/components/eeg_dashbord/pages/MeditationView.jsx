@@ -45,11 +45,17 @@ const PRESETS = [3, 5, 10, 15];
 const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => {
   const containerRef = useRef(null);
   const resultRef = useRef(null);
+  const wsEventRef = useRef(null);
   
   // Keep resultRef fresh for the requestAnimationFrame loop
   useEffect(() => {
     resultRef.current = result;
   }, [result]);
+
+  // Keep wsEventRef fresh — captures raw eeg_prediction events with full feature set
+  useEffect(() => {
+    wsEventRef.current = wsEvent;
+  }, [wsEvent]);
 
   const { currentTheme } = useTheme();
   const themeRef = useRef(currentTheme);
@@ -327,9 +333,14 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
       const line1 = isLeft ? tc('--graph-line-1') : tc('--primary');
       const gridCol = tc('--graph-grid', 'rgba(255,255,255,0.06)');
 
-      // Grid rings
+      // Grid rings — 5 rings: 0, 25, 50, 75, 100
+      // INNER is the fraction for the "0" baseline ring (no-signal pentagon)
+      const INNER = 0.12;
+      const ringFracs  = [INNER, INNER + 0.22, INNER + 0.44, INNER + 0.66, 1.0];
+      const ringLabels = ['0', '25', '50', '75', '100'];
+
       ctx.save();
-      [0.25, 0.5, 0.75, 1.0].forEach(frac => {
+      ringFracs.forEach((frac, ri) => {
         ctx.beginPath();
         angles.forEach((a, i) => {
           const x = cx + Math.cos(a) * R * frac;
@@ -337,17 +348,19 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
           i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
         });
         ctx.closePath();
-        ctx.strokeStyle = frac === 1
-          ? hex2rgba(primary, 0.25)
-          : hex2rgba(gridCol, 0.8);
-        ctx.lineWidth = frac === 1 ? 1.2 : 0.7;
+        ctx.strokeStyle = frac === 1.0
+          ? hex2rgba(primary, 0.30)
+          : frac === INNER
+            ? hex2rgba(primary, 0.50)   // inner "0" ring is brighter — it's the baseline
+            : hex2rgba(gridCol, 0.8);
+        ctx.lineWidth = frac === 1.0 ? 1.2 : frac === INNER ? 1.0 : 0.6;
         ctx.stroke();
 
-        // Numeric labels (25, 50, 75, 100)
+        // Numeric labels
         ctx.font = 'bold 9px "Share Tech Mono", monospace';
-        ctx.fillStyle = hex2rgba(primary, 0.7);
+        ctx.fillStyle = hex2rgba(primary, frac === INNER ? 0.9 : 0.6);
         ctx.textAlign = 'center';
-        ctx.fillText((frac * 100).toFixed(0), cx, cy - R * frac - 3);
+        ctx.fillText(ringLabels[ri], cx, cy - R * frac - 3);
       });
 
       // Spokes
@@ -360,13 +373,14 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
         ctx.stroke();
       });
 
-      // Data polygon
+      // Data polygon — remapped so norm=0 sits ON the 0-ring, norm=1 reaches outer edge
       const total = bands.reduce((a, b) => a + b, 0) || 100;
-      const norm = bands.map(v => v / total);
+      const norm  = bands.map(v => v / total);
 
       ctx.beginPath();
       angles.forEach((a, i) => {
-        const r = R * norm[i];
+        // Map: 0 → INNER ring, 1 → full radius
+        const r = (INNER + norm[i] * (1 - INNER)) * R;
         const x = cx + Math.cos(a) * r;
         const y = cy + Math.sin(a) * r;
         i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
@@ -433,42 +447,45 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
       eegMode = 'ws';
       if (fetchInterval) clearInterval(fetchInterval);
       fetchInterval = setInterval(() => {
-        const res = resultRef.current;
-        if (!res) return;
+        const ws  = wsEventRef.current;  // raw eeg_prediction — has full features
+        const res = resultRef.current;   // processed result  — has state/band_mix/score
 
-        // ── BAND POWERS (same priority chain as Music page liveMetrics) ──
-        // Priority 1: Individual feature keys from eeg_prediction event
-        if (res.features?.delta !== undefined) {
+        // ── BAND POWERS ──────────────────────────────────────────────────────
+        // Priority 1: wsEvent.features (eeg_prediction) — has ALL 4 bands raw
+        const feat = ws?.features || res?.features;
+        if (feat?.delta !== undefined) {
+          // Log-scale so large delta doesn't visually crush theta/alpha/beta
           rawBands = [
-            res.features.delta  || 0,
-            res.features.theta  || 0,
-            res.features.alpha  || 0,
-            res.features.beta   || 0,
-            res.features.gamma  || 0,
+            Math.log1p(feat.delta || 0),
+            Math.log1p(feat.theta || 0),
+            Math.log1p(feat.alpha || 0),
+            Math.log1p(feat.beta  || 0),
+            0, // gamma — keep at 0 per user request
           ];
         }
-        // Priority 2: Direct band_powers array (from eeg_mode_result)
-        else if (res.band_powers?.length >= 5) {
-          rawBands = [...res.band_powers];
+        // Priority 2: band_powers array from mode result
+        else if (res?.band_powers?.length >= 4) {
+          rawBands = [
+            Math.log1p(res.band_powers[0] || 0),
+            Math.log1p(res.band_powers[1] || 0),
+            Math.log1p(res.band_powers[2] || 0),
+            Math.log1p(res.band_powers[3] || 0),
+            0,
+          ];
         }
-        // Priority 3: radar_bands from meditation module output
-        else if (res.radar_bands?.length >= 5) {
-          rawBands = [...res.radar_bands];
+        // Priority 3: radar_bands (pre-computed, already scaled)
+        else if (res?.radar_bands?.length >= 4) {
+          rawBands = [...res.radar_bands.slice(0, 4), 0];
         }
 
-        // ── CALM SIGNAL ──
-        // Priority 1: Server-computed meditation score
-        if (res.meditation_score !== undefined) {
+        // ── CALM SIGNAL ──────────────────────────────────────────────────────
+        if (res?.meditation_score !== undefined) {
           calmSignal = Math.max(0, Math.min(1, res.meditation_score / 100));
-        }
-        // Priority 2: Alpha relative power (same as Music page Frequency Gain)
-        else if (res.features?.alpha_rel !== undefined) {
-          const alphaRel = res.features.alpha_rel || 0;
-          const betaRel  = res.features.beta_rel  || 0;
+        } else if (feat?.alpha_rel !== undefined) {
+          const alphaRel = feat.alpha_rel || 0;
+          const betaRel  = feat.beta_rel  || 0;
           calmSignal = Math.max(0, Math.min(1, alphaRel * 1.5 - betaRel * 0.5));
-        }
-        // Priority 3: band_mix ratios fallback
-        else if (res.band_mix) {
+        } else if (res?.band_mix) {
           const { alpha = 0, theta = 0, beta = 0.1 } = res.band_mix;
           calmSignal = Math.max(0, Math.min(1, (alpha + theta * 0.5) / (beta + 0.1) * 0.4));
         }
