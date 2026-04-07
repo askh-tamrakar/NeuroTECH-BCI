@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo, useLayoutEffect } from 'react';
 import WorkerTimeSeriesChart from '../charts/WorkerTimeSeriesChart';
 import WorkerFFTChart from '../charts/WorkerFFTChart';
 import WindowListPanel from '../data_collection/WindowListPanel';
@@ -24,6 +24,7 @@ import { soundHandler } from '../../handlers/SoundHandler'
 import SessionWorker from '../../workers/session.worker.js?worker';
 import WindowWorker from '../../workers/window.worker.js?worker';
 import SaveWorker from '../../workers/save.worker.js?worker';
+import '../../styles/live/SignalChart.css';
 
 const DEFAULT_PALETTE = [
     '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6',
@@ -193,10 +194,14 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
     const [fftStats, setFftStats] = useState({ min: 0, max: 0, mean: 0 });
 
     const [dataLastUpdated, setDataLastUpdated] = useState(0);
+    const [chartLayoutReady, setChartLayoutReady] = useState(false);
+    const [chartRenderKey, setChartRenderKey] = useState(0);
 
     // Refs for accessing latest state inside interval/timeouts
     // const chartDataRef = useRef(chartData); // REMOVED
     const chartRef = useRef(null); // Access to Worker Chart
+    const chartCardRef = useRef(null);
+    const chartLayoutReadyRef = useRef(false);
     const latestSignalTimeRef = useRef(Date.now()); // Track latest TS for logic
 
     const activeSensorRef = useRef(activeSensor);
@@ -1776,6 +1781,83 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
     const fftRangeValue = Number(manualYRange) || Math.max(1, Math.ceil((fftStats.max || 1) * 1.15));
     const fftRangeDisplay = formatAmplitudeValue(fftRangeValue);
 
+    useEffect(() => {
+        chartLayoutReadyRef.current = chartLayoutReady;
+    }, [chartLayoutReady]);
+
+    useLayoutEffect(() => {
+        const card = chartCardRef.current;
+        if (!card) return undefined;
+
+        let frameA = null;
+        let frameB = null;
+        let settleTimer = null;
+        let cancelled = false;
+        let lastWidth = 0;
+        let lastHeight = 0;
+
+        chartLayoutReadyRef.current = false;
+        setChartLayoutReady(false);
+
+        const measureAndArm = () => {
+            if (frameA) cancelAnimationFrame(frameA);
+            if (frameB) cancelAnimationFrame(frameB);
+            if (settleTimer) clearTimeout(settleTimer);
+
+            frameA = requestAnimationFrame(() => {
+                frameB = requestAnimationFrame(() => {
+                    if (cancelled) return;
+
+                    const width = Math.round(card.clientWidth || 0);
+                    const height = Math.round(card.clientHeight || 0);
+                    if (width < 320 || height < 180) {
+                        measureAndArm();
+                        return;
+                    }
+
+                    lastWidth = width;
+                    lastHeight = height;
+
+                    settleTimer = setTimeout(() => {
+                        if (cancelled) return;
+
+                        const stableWidth = Math.round(card.clientWidth || 0);
+                        const stableHeight = Math.round(card.clientHeight || 0);
+                        if (Math.abs(stableWidth - lastWidth) <= 2 && Math.abs(stableHeight - lastHeight) <= 2) {
+                            chartLayoutReadyRef.current = true;
+                            setChartLayoutReady(true);
+                            setChartRenderKey((prev) => prev + 1);
+                        } else {
+                            measureAndArm();
+                        }
+                    }, 40);
+                });
+            });
+        };
+
+        const observer = new ResizeObserver(() => {
+            if (cancelled) return;
+            const width = Math.round(card.clientWidth || 0);
+            const height = Math.round(card.clientHeight || 0);
+            if (!chartLayoutReadyRef.current || Math.abs(width - lastWidth) > 8 || Math.abs(height - lastHeight) > 8) {
+                chartLayoutReadyRef.current = false;
+                setChartLayoutReady(false);
+                measureAndArm();
+            }
+        });
+
+        observer.observe(card);
+        measureAndArm();
+
+        return () => {
+            cancelled = true;
+            observer.disconnect();
+            if (frameA) cancelAnimationFrame(frameA);
+            if (frameB) cancelAnimationFrame(frameB);
+            if (settleTimer) clearTimeout(settleTimer);
+        };
+    }, [activeSensor, graphMode, mode]);
+
 
     return (
         <div className="flex flex-col flex-1 min-h-0 bg-bg text-text animate-in fade-in duration-500 overflow-hidden gap-2">
@@ -1976,7 +2058,10 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
                 </div>
 
                 {/* CHART CARD */}
-                <div className="flex-grow min-w-0 bg-surface border-2 border-border rounded-xl shadow-sm overflow-hidden flex flex-col relative ">
+                <div
+                    ref={chartCardRef}
+                    className="flex-grow min-w-0 bg-surface border-2 border-border rounded-xl shadow-sm overflow-hidden flex flex-col relative min-h-0"
+                >
                     {/* Status Badge Overlay */}
                     <div className="absolute top-14 right-2 z-10">
                         <div className={`px-2 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider border backdrop-blur-sm shadow-sm ${isCalibrating
@@ -1986,7 +2071,11 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
                         </div>
                     </div>
 
-                    {!isFftMode ? (
+                    {!chartLayoutReady ? (
+                        <div className="flex flex-1 min-h-0 items-center justify-center text-muted/70 text-sm font-semibold tracking-wide uppercase">
+                            Preparing graph layout...
+                        </div>
+                    ) : !isFftMode ? (
                         <>
                             {/* Time Series Chart Header Controls */}
                             <div
@@ -2127,6 +2216,7 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
                             <div className="chart-area flex-grow relative">
                                 <div className="absolute inset-0 p-2">
                                     <WorkerTimeSeriesChart
+                                        key={`timeseries-${chartRenderKey}-${activeSensor}-${activeChannelIndex}-${emgDisplayMode}`}
                                         ref={chartRef}
                                         timeWindow={timeWindow}
                                         activeSensor={activeSensor}
@@ -2145,6 +2235,7 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
                         <div className="chart-area flex-grow flex flex-col min-h-0 relative">
                             <div className="absolute inset-0 p-0">
                                 <WorkerFFTChart
+                                    key={`fft-${chartRenderKey}-${activeSensor}-${activeChannelIndex}`}
                                     ref={chartRef}
                                     channelIndex={activeChannelIndex}
                                     graphNo={`Graph ${activeChannelIndex + 1}`}

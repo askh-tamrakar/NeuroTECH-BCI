@@ -104,7 +104,7 @@ def log_system(msg, icon=Theme.SYS):
 
 
 def runtime_prompt() -> str:
-    return "NeuroTECH Pipeline Load >>> "
+    return "NeuroTECH Loded >>> "
 
 
 ALLOWLIST = [
@@ -746,6 +746,8 @@ class PipelineOrchestrator:
 
         ordered = dependency_order(actual_processes, self.specs)
         pretty = ", ".join(block_ids)
+        if reason == "manual":
+            log_system(f"Reload request accepted for: {pretty}", icon=Theme.INFO)
         log_system(f"Reloading {pretty} ({reason})...", icon=Theme.INFO)
 
         for block_id in reversed(ordered):
@@ -925,7 +927,6 @@ class PipelineOrchestrator:
     def run_background_threads(self):
         threading.Thread(target=self.watch_loop, daemon=True).start()
         threading.Thread(target=self.monitor_loop, daemon=True).start()
-        threading.Thread(target=self.command_loop, daemon=True).start()
 
     def shutdown_handler(self, signum, frame):
         self.shutdown()
@@ -958,7 +959,7 @@ def main(argv: list[str] | None = None):
     orchestrator.install_signal_handlers()
     orchestrator.startup()
     orchestrator.run_background_threads()
-    orchestrator.wait_forever()
+    orchestrator.command_loop()
 
 
 if __name__ == "__main__":

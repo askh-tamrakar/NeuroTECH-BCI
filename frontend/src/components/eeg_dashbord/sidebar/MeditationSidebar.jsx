@@ -1,11 +1,8 @@
 import React from 'react';
 import {
-    Settings, Play, Square, Activity, Wind, Power, Zap,
-    History, Menu, ChevronLeft, Brain, BookOpen, Eye, Grid,
-    Music, Volume2, Trophy, Clock, Calendar, CheckSquare,
-    Sparkles, VolumeX, Layers
+    Play, Activity, Wind, Power, Zap,
+    BookOpen, Volume2, VolumeX
 } from 'lucide-react';
-import { useSidebar } from '../pages/SidebarContext';
 
 const PRESETS = [3, 5, 10, 15];
 const WISDOM = [
@@ -82,31 +79,20 @@ const MeditationSidebar = ({
     onMasterVol = () => { },
     wisdomIdx = 0,
 }) => {
-    const { sidebarMode, setSidebarMode } = useSidebar();
     const wisdom = WISDOM[wisdomIdx] || WISDOM[0];
 
 
     return (
         <div className="flex-grow flex flex-col p-4 gap-4 font-mono transition-opacity duration-300 w-full shrink-0 overflow-hidden">
-            {/* Header */}
-            <div className="flex items-center justify-between shrink-0 mb-1">
+            <div className="flex items-center gap-3 rounded-xl border border-primary/20 bg-bg/40 px-3 py-2.5 shrink-0">
+                <Wind size={22} className="text-primary" />
                 <div>
-                    <h2 className="text-[22px] font-bold text-text mb-1 flex items-center gap-3 tracking-[2px]">
-                        <Wind size={26} className="text-primary" />
-                        <span style={{ letterSpacing: '2.3px' }}>NEURO TRAINER</span>
-                    </h2>
+                    <h3 className="text-[16px] font-bold text-text tracking-[2px]">NEURO TRAINER</h3>
+                    <p className="text-[10px] font-bold uppercase tracking-[2px] text-muted/70">Meditation control center</p>
                 </div>
-                <button
-                    onClick={() => setSidebarMode('main')}
-                    className="nav-controls-toggle"
-                    title="Switch to Navigation"
-                >
-                    <Layers size={14} />
-                    CTRL
-                </button>
             </div>
 
-            <div className="flex flex-col gap-4 h-full overflow-y-auto scrollbar-hide pb-10">
+            <div className="flex flex-col gap-4 h-full overflow-y-auto pb-10 [scrollbar-width:none] [-ms-overflow-style:'none'] [&::-webkit-scrollbar]:hidden">
 
                 {/* Start Session Button */}
                 <div className="shrink-0">

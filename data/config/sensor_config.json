@@ -14,7 +14,7 @@
   },
   "active_models": {
     "EMG": "Neptune",
-    "EOG": "dino-ml",
+    "EOG": "dino ml",
     "EEG": "Neo"
   },
   "adc_settings": {

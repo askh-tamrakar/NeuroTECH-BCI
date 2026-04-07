@@ -14,17 +14,17 @@
   },
   "EEG": {
     "target_freqs": [
-      3.72,
-      4.19,
-      5.58,
-      6.7,
-      7.44,
-      8.38
+      6,
+      9,
+      12,
+      16,
+      18,
+      20
     ],
     "targets": [
       {
         "id": 0,
-        "freq": 3.72,
+        "freq": 6,
         "label": "Target 1",
         "mappedKey": "W",
         "mappedMouse": "Left Click",
@@ -32,11 +32,11 @@
         "controlType": "Keyboard",
         "divisor": 18,
         "source": "dynamic",
-        "isManual": false
+        "isManual": true
       },
       {
         "id": 1,
-        "freq": 4.19,
+        "freq": 9,
         "label": "Target 2",
         "mappedKey": "A",
         "mappedMouse": "None",
@@ -44,11 +44,11 @@
         "controlType": "Keyboard",
         "divisor": 16,
         "source": "dynamic",
-        "isManual": false
+        "isManual": true
       },
       {
         "id": 2,
-        "freq": 5.58,
+        "freq": 12,
         "label": "Target 3",
         "mappedKey": "S",
         "mappedMouse": "None",
@@ -56,11 +56,11 @@
         "controlType": "Keyboard",
         "divisor": 12,
         "source": "dynamic",
-        "isManual": false
+        "isManual": true
       },
       {
         "id": 3,
-        "freq": 6.7,
+        "freq": 16,
         "label": "Target 4",
         "mappedKey": "D",
         "mappedMouse": "None",
@@ -68,11 +68,11 @@
         "controlType": "Keyboard",
         "divisor": 10,
         "source": "dynamic",
-        "isManual": false
+        "isManual": true
       },
       {
         "id": 4,
-        "freq": 7.44,
+        "freq": 18,
         "label": "Target 5",
         "mappedKey": "Space",
         "mappedMouse": "None",
@@ -80,11 +80,11 @@
         "controlType": "Keyboard",
         "divisor": 9,
         "source": "dynamic",
-        "isManual": false
+        "isManual": true
       },
       {
         "id": 5,
-        "freq": 8.38,
+        "freq": 20,
         "label": "Target 6",
         "mappedKey": "W",
         "mappedMouse": "None",
@@ -92,7 +92,7 @@
         "controlType": "Keyboard",
         "divisor": 8,
         "source": "dynamic",
-        "isManual": false
+        "isManual": true
       }
     ],
     "rest_threshold": 0.6,
@@ -102,7 +102,7 @@
     "num_harmonics": 4,
     "step_sec": 0.25,
     "smoothing_windows": 7,
-    "refresh_rate": 67,
+    "refresh_rate": 83,
     "use_ml_pipeline": true
   },
   "EOG": {

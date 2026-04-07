@@ -1,39 +1,25 @@
 import React from 'react';
-import { Music, Activity, Wind, Eye, Grid, ChevronLeft, Menu, Play, Pause, Volume2, VolumeX, Headphones, FastForward, Layers } from 'lucide-react';
-import { useSidebar } from '../pages/SidebarContext';
+import { Music, Activity, Play, Pause, Volume2, VolumeX, Headphones, FastForward } from 'lucide-react';
 
 const MusicSidebar = ({
     isPlaying, togglePlayback,
     isMuted, setIsMuted,
     result, stateTheme
 }) => {
-    const { sidebarMode, setSidebarMode } = useSidebar();
-
     return (
-        <div className="flex-grow flex flex-col p-4 font-mono transition-opacity duration-300 w-full shrink-0">
-            {/* Page Header */}
-            <div className="flex items-center justify-between mb-6 px-2">
-                <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-[var(--primary)]/15 flex items-center justify-center border border-[var(--primary)]/30 shadow-glow">
-                        <Music size={20} className="text-[var(--primary)]" />
-                    </div>
-                    <div>
-                        <h2 className="text-lg font-black text-[var(--primary)] tracking-widest leading-none">
-                            MUSIC SYNERGY
-                        </h2>
-                        <p className="text-[10px] text-[var(--muted)] font-bold uppercase tracking-widest mt-1">
-                            Neural Audio Response
-                        </p>
-                    </div>
+        <div className="flex-grow flex flex-col p-4 font-mono transition-opacity duration-300 w-full shrink-0 overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:'none'] [&::-webkit-scrollbar]:hidden">
+            <div className="mb-4 flex items-center gap-3 rounded-xl border border-[var(--primary)]/20 bg-[var(--bg)]/40 px-3 py-2.5">
+                <div className="w-10 h-10 rounded-xl bg-[var(--primary)]/15 flex items-center justify-center border border-[var(--primary)]/30 shadow-glow">
+                    <Music size={20} className="text-[var(--primary)]" />
                 </div>
-                <button
-                    onClick={() => setSidebarMode('main')}
-                    className="nav-controls-toggle"
-                    title="Switch to Navigation"
-                >
-                    <Layers size={14} />
-                    CTRL
-                </button>
+                <div>
+                    <h3 className="text-lg font-black text-[var(--primary)] tracking-widest leading-none">
+                        MUSIC SYNERGY
+                    </h3>
+                    <p className="text-[10px] text-[var(--muted)] font-bold uppercase tracking-widest mt-1">
+                        Neural Audio Response
+                    </p>
+                </div>
             </div>
 
             {/* Playback Controls */}

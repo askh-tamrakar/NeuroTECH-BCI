@@ -1,14 +1,15 @@
 import React from 'react';
+import { NavLink } from 'react-router-dom';
 import { Terminal, Gamepad2, Brain, HandMetal, FlaskConical, Settings2, Bot } from 'lucide-react';
 
-export default function MobileNav({ currentPage, setCurrentPage, mobileMainView, setMobileMainView }) {
+export default function MobileNav({ currentPage, mobileMainView, setMobileMainView }) {
     const navItems = [
-        { id: 'live', icon: Terminal, label: 'Terminal', href: '#live' },
-        { id: 'dino', icon: Gamepad2, label: 'Dino', href: '#dino' },
-        { id: 'eeg_dashboard', icon: Brain, label: 'EEG', href: '#eeg_dashboard' },
-        { id: 'rps', icon: HandMetal, label: 'RPS', href: '#rps' },
-        { id: 'lab', icon: FlaskConical, label: 'Lab', href: '#lab' },
-        { id: 'servo_claw', icon: Bot, label: 'Servo', href: '#servo_claw' }
+        { id: 'terminal', icon: Terminal, label: 'Terminal', href: '/dashboard/terminal' },
+        { id: 'dino', icon: Gamepad2, label: 'Dino', href: '/dashboard/dino' },
+        { id: 'eeg', icon: Brain, label: 'EEG', href: '/dashboard/eeg' },
+        { id: 'rps', icon: HandMetal, label: 'RPS', href: '/dashboard/rps' },
+        { id: 'lab', icon: FlaskConical, label: 'Lab', href: '/dashboard/lab/data_collection' },
+        { id: 'servo_claw', icon: Bot, label: 'Servo', href: '/dashboard/servo_claw' }
     ]
 
     return (
@@ -20,22 +21,21 @@ export default function MobileNav({ currentPage, setCurrentPage, mobileMainView,
                 const isActive = currentPage === item.id;
                 const Icon = item.icon;
                 return (
-                    <a
+                    <NavLink
                         key={item.id}
-                        href={item.href}
-                        onClick={() => setCurrentPage(item.id)}
+                        to={item.href}
                         className={`p-3 rounded-2xl transition-all shrink-0 ${isActive ? 'bg-primary/20 text-primary shadow-lg border border-primary/50' : 'text-muted hover:text-text hover:bg-surface border border-transparent'}`}
                         title={item.label}
                     >
                         <Icon size={24} />
-                    </a>
+                    </NavLink>
                 )
             })}
 
             <div className="flex-grow shrink-0 min-h-[20px]" />
 
             {/* Toggle Settings Sidebar (Only on Live page) */}
-            {currentPage === 'live' && (
+            {currentPage === 'terminal' && (
                 <button
                     onClick={() => setMobileMainView(prev => prev === 'settings' ? 'graphs' : 'settings')}
                     className={`p-3 rounded-2xl transition-all shrink-0 mb-4 ${mobileMainView === 'settings' ? 'bg-primary text-white shadow-lg' : 'bg-surface border border-border text-muted hover:text-text hover:border-primary/50'}`}

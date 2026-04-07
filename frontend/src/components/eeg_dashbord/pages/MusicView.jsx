@@ -24,7 +24,7 @@ const MusicView = ({ result, onNavigate }) => {
     }
   }, [result?.state]);
 
-  const { setSidebarSlot } = useSidebar();
+  const { setSidebarSlot, setSidebarMiniSlot } = useSidebar();
 
   const togglePlayback = async () => {
     if (!isPlaying) {
@@ -47,8 +47,62 @@ const MusicView = ({ result, onNavigate }) => {
         stateTheme={stateTheme}
       />
     );
-    return () => setSidebarSlot(null);
-  }, [isPlaying, isMuted, result, stateTheme, setSidebarSlot]);
+    setSidebarMiniSlot(
+      <div className="flex h-full w-full flex-col items-center gap-3 px-2 py-3 [scrollbar-width:none] [-ms-overflow-style:'none'] [&::-webkit-scrollbar]:hidden">
+        <div className="mt-12 flex flex-col items-center gap-2">
+          <div
+            className="flex h-11 w-11 items-center justify-center rounded-xl border border-[var(--primary)]/35 bg-[var(--primary)]/10 text-[var(--primary)]"
+            title={result?.state || 'Music'}
+          >
+            <Music size={18} />
+          </div>
+          <span className="text-[9px] font-black uppercase tracking-[2px] text-[var(--primary)] [writing-mode:vertical-rl] rotate-180">
+            Music
+          </span>
+        </div>
+
+        <div className="flex flex-col items-center gap-2 rounded-2xl border border-[var(--primary)]/20 bg-[var(--bg)]/60 px-1.5 py-2 shadow-[0_0_12px_rgba(0,0,0,0.16)]">
+          <button
+            type="button"
+            onClick={togglePlayback}
+            className="flex h-11 w-11 items-center justify-center rounded-xl border border-[var(--primary)]/35 bg-[var(--bg)] text-[var(--primary)]"
+            title={isPlaying ? 'Pause playback' : 'Start playback'}
+          >
+            {isPlaying ? <Pause size={18} /> : <Play size={18} />}
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsMuted(!isMuted)}
+            className={`flex h-11 w-11 items-center justify-center rounded-xl border ${isMuted ? 'border-red-500/35 text-red-400 bg-red-500/10' : 'border-[var(--border)] text-[var(--text)] bg-[var(--bg)]'}`}
+            title={isMuted ? 'Unmute output' : 'Mute output'}
+          >
+            {isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
+          </button>
+        </div>
+
+        <div className="flex w-full flex-col items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--bg)]/60 px-1.5 py-2 text-center">
+          <span className="text-[8px] font-black uppercase tracking-[2px] text-[var(--muted)]">State</span>
+          <div
+            className="w-full rounded-xl border border-[var(--primary)]/20 px-1 py-2 text-[8px] font-black uppercase tracking-[1.5px]"
+            style={{ color: stateTheme.primary, boxShadow: `inset 0 0 10px ${stateTheme.glow}` }}
+            title={result?.state || 'Awaiting neural state'}
+          >
+            {(result?.state || 'Idle').slice(0, 8)}
+          </div>
+          <div className="flex w-full items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface)]/60 px-1 py-2 text-[8px] font-black uppercase tracking-[1.5px] text-[var(--muted)]">
+            {result?.action?.includes('tempo') ? <FastForward size={12} className="mr-1 text-[var(--primary)]" /> :
+              result?.action?.includes('volume') ? <Activity size={12} className="mr-1 text-[var(--primary)]" /> :
+                <Headphones size={12} className="mr-1 text-[var(--primary)]" />}
+            {(result?.action || 'Monitor').slice(0, 8)}
+          </div>
+        </div>
+      </div>
+    );
+    return () => {
+      setSidebarSlot(null);
+      setSidebarMiniSlot(null);
+    };
+  }, [isPlaying, isMuted, result, stateTheme, setSidebarSlot, setSidebarMiniSlot]);
 
   // Track initialization
   useEffect(() => {

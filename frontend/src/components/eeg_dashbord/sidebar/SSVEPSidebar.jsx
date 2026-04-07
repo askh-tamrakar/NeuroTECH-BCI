@@ -1,14 +1,12 @@
 import React from 'react';
 import {
     Settings, Play, Square, Activity, MousePointer2, Keyboard,
-    Sun, Monitor, Power, Zap, Trash2, History, Target, Menu,
-    ChevronLeft, Brain, Eye, Radio, Wind, ChevronRight, Layers
+    Sun, Monitor, Power, Zap, Trash2, History, Target, Brain
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import CustomNumberInput from '../../ui/inputs/CustomNumberInput';
 import CustomSelect from '../../ui/inputs/CustomSelect';
 import CustomSlider from '../../ui/inputs/CustomSlider';
-import { useSidebar } from '../pages/SidebarContext';
 
 const COMMON_KEYS = ['None', 'W', 'A', 'S', 'D', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'Enter', 'Escape', 'P', 'Q', '0', '1', '2', '3'];
 const MOUSE_ACTIONS = ['None', 'Left Click', 'Right Click', 'Double Click', 'Scroll Up', 'Scroll Down'];
@@ -18,7 +16,6 @@ const MOUSE_ACTIONS = ['None', 'Left Click', 'Right Click', 'Double Click', 'Scr
  * All state is owned by SSVEPView; props are passed down.
  */
 const SSVEPSidebar = ({
-    onBackToMenu,
     useML, setUseML,
     runtimeMLState, detectorMode,
     availableModels, selectedModel, setSelectedModel,
@@ -36,28 +33,14 @@ const SSVEPSidebar = ({
     openDropdownId, setOpenDropdownId,
     isConnected,
 }) => {
-    const { sidebarMode, setSidebarMode } = useSidebar();
-
     return (
         <div className="flex-grow flex flex-col overflow-hidden p-4 gap-3 font-mono transition-opacity duration-300 w-full shrink-0">
-
-            {/* Header */}
-            <div className="flex items-center justify-between shrink-0 mb-2">
+            <div className="flex items-center gap-3 rounded-xl border border-[var(--primary)]/20 bg-[var(--bg)]/40 px-3 py-2.5 shrink-0">
+                <Settings size={22} className="text-[var(--primary)] animate-pulse" />
                 <div>
-                    <h2 className="text-2xl font-bold text-[var(--text)] mb-1 flex items-center gap-3">
-                        <Settings size={28} className="text-[var(--primary)] animate-pulse" />
-                        <span style={{ letterSpacing: '2.3px' }}>SSVEP CONTROLS</span>
-                    </h2>
-                    <p className="text-xs text-[var(--muted)]">Neurofeedback Stimulation</p>
+                    <h3 className="text-[16px] font-black uppercase tracking-[3px] text-[var(--primary)]">SSVEP Controls</h3>
+                    <p className="text-[10px] font-bold uppercase tracking-[2px] text-[var(--muted)]/70">Neurofeedback stimulation</p>
                 </div>
-                <button
-                    onClick={() => setSidebarMode('main')}
-                    className="nav-controls-toggle"
-                    title="Switch to Navigation"
-                >
-                    <Layers size={14} />
-                    CTRL
-                </button>
             </div>
 
             {/* ML Pipeline Toggle */}
@@ -267,7 +250,7 @@ const SSVEPSidebar = ({
                         <Trash2 size={20} />
                     </button>
                 </div>
-                <div className="flex-grow overflow-y-auto space-y-1.5 pr-1 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-[var(--primary)]/20 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-[var(--primary)]/40">
+                <div className="flex-grow overflow-y-auto space-y-1.5 pr-1 [scrollbar-width:none] [-ms-overflow-style:'none'] [&::-webkit-scrollbar]:hidden">
                     {logs.length === 0 ? (
                         <div className="text-base text-[var(--muted)] italic text-center py-2">No activity...</div>
                     ) : (

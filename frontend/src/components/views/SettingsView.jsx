@@ -170,11 +170,11 @@ export default function SettingsView({
   // activeSection derived from path
   const activeSection = useMemo(() => {
     const path = location.pathname;
-    if (path.includes('/account')) return 'account';
-    if (path.includes('/style')) return 'appearance';
+    if (path.includes('/auth') || path.includes('/account')) return 'account';
+    if (path.includes('/styles') || path.includes('/style')) return 'appearance';
     if (path.includes('/link')) return 'connectivity';
-    if (path.includes('/sountrack')) return 'audio';
-    if (path.includes('/keys')) return 'hotkeys';
+    if (path.includes('/soundtrack') || path.includes('/sountrack') || path.includes('/soundtrac')) return 'audio';
+    if (path.includes('/controls') || path.includes('/keys')) return 'hotkeys';
     return 'account';
   }, [location.pathname]);
 
@@ -201,11 +201,11 @@ export default function SettingsView({
 
   const handleSectionChange = (id) => {
     const pathMap = {
-      'account': 'account',
-      'appearance': 'style',
+      'account': 'auth',
+      'appearance': 'styles',
       'connectivity': 'link',
-      'audio': 'sountrack',
-      'hotkeys': 'keys'
+      'audio': 'soundtrack',
+      'hotkeys': 'controls'
     };
     navigate(`/dashboard/settings/${pathMap[id] || id}`);
   };
@@ -531,11 +531,11 @@ export default function SettingsView({
       <aside className="w-[82px] bg-surface/90 border-r border-border flex flex-col items-center py-6 gap-2 shrink-0 z-20">
         {[
           { id: 'account', icon: UserPlus, label: 'Account' },
-          { id: 'appearance', icon: Palette, label: 'Style', path: 'style' },
+          { id: 'appearance', icon: Palette, label: 'Style', path: 'styles' },
           { id: 'connectivity', icon: Globe, label: 'Link', path: 'link' },
           { divider: true },
-          { id: 'audio', icon: Music, label: 'Audio', path: 'sountrack' },
-          { id: 'hotkeys', icon: Keyboard, label: 'Keys', path: 'keys' }
+          { id: 'audio', icon: Music, label: 'Audio', path: 'soundtrack' },
+          { id: 'hotkeys', icon: Keyboard, label: 'Keys', path: 'controls' }
         ].map((item, i) => {
           if (item.divider) return <div key={`div-${i}`} className="w-[38px] h-px bg-border my-2" />;
           const isActive = activeSection === item.id;

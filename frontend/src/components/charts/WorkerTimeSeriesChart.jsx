@@ -27,6 +27,44 @@ const WorkerTimeSeriesChart = forwardRef(({
     // Transfer state to prevent double-transfer in StrictMode
     const isTransferred = useRef(false);
     const workerCleanupTimerRef = useRef(null);
+    const resizeRafRef = useRef(null);
+    const resizeTimeoutRef = useRef(null);
+    const initRafRef = useRef(null);
+
+    const scheduleResizeSync = () => {
+        const width = containerRef.current?.clientWidth || 0;
+        const height = containerRef.current?.clientHeight || 0;
+        if (!workerRef.current || !width || !height) return;
+
+        workerRef.current.postMessage({
+            type: 'RESIZE',
+            payload: { width, height }
+        });
+
+        if (resizeRafRef.current) cancelAnimationFrame(resizeRafRef.current);
+        resizeRafRef.current = requestAnimationFrame(() => {
+            const nextWidth = containerRef.current?.clientWidth || 0;
+            const nextHeight = containerRef.current?.clientHeight || 0;
+            if (workerRef.current && nextWidth && nextHeight) {
+                workerRef.current.postMessage({
+                    type: 'RESIZE',
+                    payload: { width: nextWidth, height: nextHeight }
+                });
+            }
+        });
+
+        if (resizeTimeoutRef.current) clearTimeout(resizeTimeoutRef.current);
+        resizeTimeoutRef.current = setTimeout(() => {
+            const nextWidth = containerRef.current?.clientWidth || 0;
+            const nextHeight = containerRef.current?.clientHeight || 0;
+            if (workerRef.current && nextWidth && nextHeight) {
+                workerRef.current.postMessage({
+                    type: 'RESIZE',
+                    payload: { width: nextWidth, height: nextHeight }
+                });
+            }
+        }, 120);
+    };
 
     // Initialize Worker
     useEffect(() => {
@@ -38,58 +76,7 @@ const WorkerTimeSeriesChart = forwardRef(({
             workerCleanupTimerRef.current = null;
         }
 
-        if (!workerRef.current) {
-            // Check for OffscreenCanvas support
-            if (!canvasRef.current.transferControlToOffscreen) {
-                console.error("OffscreenCanvas not supported!");
-                return;
-            }
-
-            try {
-                // Create Worker
-                const worker = new Worker(new URL('../../workers/chart.worker.js', import.meta.url), { type: 'module' });
-                workerRef.current = worker;
-
-
-                if (!isTransferred.current) {
-                    const offscreen = canvasRef.current.transferControlToOffscreen();
-                    isTransferred.current = true;
-
-                    const initPayload = {
-                        canvas: offscreen,
-                        width: containerRef.current.clientWidth,
-                        height: containerRef.current.clientHeight,
-                        config: {
-                            timeWindow,
-                            channelIndex,
-                            activeSensor,
-                            displayMode,
-                            ...config
-                        }
-                    };
-                    worker.postMessage({ type: 'INIT', payload: initPayload }, [offscreen]);
-
-                    // Handle Responses
-                    worker.onmessage = (e) => {
-                        const { type, idPromise, payload } = e.data;
-                        if (type === 'GET_SAMPLES_RESULT') {
-                            if (pendingRequests.current.has(idPromise)) {
-                                const resolve = pendingRequests.current.get(idPromise);
-                                pendingRequests.current.delete(idPromise);
-                                resolve(payload);
-                            }
-                        } else if (type === 'SELECTION_RESULT') {
-                            if (onWindowSelect) {
-                                onWindowSelect(payload.start, payload.end);
-                            }
-                        }
-                    };
-                }
-            } catch (err) {
-                console.error("Failed to transfer canvas or init worker:", err);
-            }
-        } else {
-            const worker = workerRef.current;
+        const bindWorkerMessages = (worker) => {
             worker.onmessage = (e) => {
                 const { type, idPromise, payload } = e.data;
                 if (type === 'GET_SAMPLES_RESULT') {
@@ -104,9 +91,8 @@ const WorkerTimeSeriesChart = forwardRef(({
                     }
                 }
             };
-        }
+        };
 
-        // Resize Observer
         const observer = new ResizeObserver((entries) => {
             for (let entry of entries) {
                 const { width, height } = entry.contentRect;
@@ -120,7 +106,69 @@ const WorkerTimeSeriesChart = forwardRef(({
         });
         observer.observe(containerRef.current);
 
+        const initWhenSized = () => {
+            const width = containerRef.current?.clientWidth || 0;
+            const height = containerRef.current?.clientHeight || 0;
+
+            if (!width || !height) {
+                initRafRef.current = requestAnimationFrame(initWhenSized);
+                return;
+            }
+
+            if (!workerRef.current) {
+                if (!canvasRef.current.transferControlToOffscreen) {
+                    console.error("OffscreenCanvas not supported!");
+                    return;
+                }
+
+                try {
+                    const worker = new Worker(new URL('../../workers/chart.worker.js', import.meta.url), { type: 'module' });
+                    workerRef.current = worker;
+                    bindWorkerMessages(worker);
+
+                    if (!isTransferred.current) {
+                        const offscreen = canvasRef.current.transferControlToOffscreen();
+                        isTransferred.current = true;
+
+                        const initPayload = {
+                            canvas: offscreen,
+                            width,
+                            height,
+                            config: {
+                                timeWindow,
+                                channelIndex,
+                                activeSensor,
+                                displayMode,
+                                ...config
+                            }
+                        };
+                        worker.postMessage({ type: 'INIT', payload: initPayload }, [offscreen]);
+                    }
+                } catch (err) {
+                    console.error("Failed to transfer canvas or init worker:", err);
+                }
+            } else {
+                bindWorkerMessages(workerRef.current);
+            }
+
+            scheduleResizeSync();
+        };
+
+        initWhenSized();
+
         return () => {
+            if (initRafRef.current) {
+                cancelAnimationFrame(initRafRef.current);
+                initRafRef.current = null;
+            }
+            if (resizeRafRef.current) {
+                cancelAnimationFrame(resizeRafRef.current);
+                resizeRafRef.current = null;
+            }
+            if (resizeTimeoutRef.current) {
+                clearTimeout(resizeTimeoutRef.current);
+                resizeTimeoutRef.current = null;
+            }
             // DELAYED CLEANUP
             workerCleanupTimerRef.current = setTimeout(() => {
                 if (workerRef.current) {

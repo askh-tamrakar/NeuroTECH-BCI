@@ -513,10 +513,10 @@ const RPSGame = ({ wsEvent }) => {
     };
 
     return (
-        <div className="rps-container overflow-hidden pt-[72px] pb-[32px] relative h-full flex flex-row-reverse w-full">
+        <div className="rps-container overflow-hidden relative h-full flex flex-row w-full">
 
             {/* Main Game Area */}
-            <div className="flex-1 flex flex-col items-center justify-start h-full overflow-hidden w-full relative">
+            <div className="order-2 flex-1 flex flex-col items-center justify-start h-full overflow-hidden w-full relative">
 
                 {/* Header (Play Button, Scoreboard, Title) */}
                 <div className="rps-header flex items-center justify-between w-full px-4 md:px-8 py-2 md:py-4 z-20 shrink-0 relative">
@@ -658,7 +658,7 @@ const RPSGame = ({ wsEvent }) => {
             </div>
 
             {/* Left Sidebar Container */}
-            <div className={`transition-all duration-300 ease-in-out border-r border-border bg-surface/80 backdrop-blur-md flex flex-col h-full relative ${!isSidebarCollapsed ? 'w-80 overflow-y-auto overflow-x-hidden' : 'w-[4.5rem] overflow-visible'} [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']`}>
+            <div className={`order-1 transition-all duration-300 ease-in-out border-r border-border bg-surface/80 backdrop-blur-md flex flex-col h-full relative ${!isSidebarCollapsed ? 'w-80 overflow-y-auto overflow-x-hidden' : 'w-[4.5rem] overflow-visible'} [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']`}>
                 {/* Collapsed State Icons */}
                 {isSidebarCollapsed && (
                     <div className="flex flex-col items-center gap-4 w-full animate-fade-in shrink-0 h-full relative">

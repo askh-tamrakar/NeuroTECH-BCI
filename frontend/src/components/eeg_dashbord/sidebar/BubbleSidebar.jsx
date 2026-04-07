@@ -1,9 +1,8 @@
 import React from 'react';
 import {
     Settings, Play, Square, Activity, MousePointer2, Zap,
-    History, Menu, ChevronLeft, Gamepad2, Mouse, Trash2, Power, Layers
+    History, Menu, ChevronLeft, Gamepad2, Mouse, Trash2, Power
 } from 'lucide-react';
-import { useSidebar } from '../pages/SidebarContext';
 
 /**
  * BubbleSidebar — page-specific controls sidebar for BubbleGameView.
@@ -11,7 +10,6 @@ import { useSidebar } from '../pages/SidebarContext';
  *        difficulty, setDifficulty, realTimeFreq, globalRunning, containerRef
  */
 const BubbleSidebar = ({
-    onBackToMenu,
     mouseMode, setMouseMode,
     difficulty, setDifficulty,
     realTimeFreq,
@@ -19,28 +17,16 @@ const BubbleSidebar = ({
     globalRunning,
     containerRef,
 }) => {
-    const { sidebarMode, setSidebarMode } = useSidebar();
-    // ... within the return ...
     const dashOffset = 201 - (Math.min(100, focusScore || 0) / 100) * 201;
 
     return (
-        <div className="flex-grow flex flex-col p-4 gap-4 font-mono transition-opacity duration-300 w-full shrink-0 overflow-y-auto scrollbar-hide">
-            {/* Header */}
-            <div className="flex items-center justify-between shrink-0 mb-1">
+        <div className="flex-grow flex flex-col p-4 gap-4 font-mono transition-opacity duration-300 w-full shrink-0 overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:'none'] [&::-webkit-scrollbar]:hidden">
+            <div className="flex items-center gap-3 rounded-xl border border-[var(--primary)]/20 bg-[var(--bg)]/40 px-3 py-2.5 shrink-0">
+                <Gamepad2 size={18} className="text-[var(--primary)]" />
                 <div>
-                    <h2 className="text-[22px] font-bold text-[var(--text)] mb-1 flex items-center gap-3 tracking-[2px]">
-                        <Gamepad2 size={26} className="text-[var(--primary)]" />
-                        BUBBLE GAME
-                    </h2>
+                    <h3 className="text-[12px] font-black uppercase tracking-[3px] text-[var(--primary)]">Bubble Game</h3>
+                    <p className="text-[10px] font-bold uppercase tracking-[2px] text-[var(--muted)]/70">Sensor control panel</p>
                 </div>
-                <button
-                    onClick={() => setSidebarMode('main')}
-                    className="nav-controls-toggle"
-                    title="Switch to Navigation"
-                >
-                    <Layers size={14} />
-                    CTRL
-                </button>
             </div>
 
             {/* Global Play/Stop */}

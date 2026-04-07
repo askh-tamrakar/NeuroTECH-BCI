@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { formatAmplitudeValue } from '../../utils/spectrumFormat';
 import RangeSlider from '../ui/inputs/RangeSlider';
+import '../../styles/live/SignalChart.css';
 
 const DEFAULT_PALETTE = [
     '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6',
@@ -75,6 +76,9 @@ const WorkerFFTChart = forwardRef(({
     const workerRef = useRef(null);
     const isTransferred = useRef(false);
     const workerCleanupTimerRef = useRef(null);
+    const resizeRafRef = useRef(null);
+    const resizeTimeoutRef = useRef(null);
+    const initRafRef = useRef(null);
     const requestIdCounter = useRef(0);
     const pendingRequests = useRef(new Map());
 
@@ -107,6 +111,41 @@ const WorkerFFTChart = forwardRef(({
 
     const rangeDisplay = forceRangeDisplay || effectiveRange.toString();
 
+    const scheduleResizeSync = () => {
+        const width = containerRef.current?.clientWidth || 0;
+        const height = containerRef.current?.clientHeight || 0;
+        if (!workerRef.current || !width || !height) return;
+
+        workerRef.current.postMessage({
+            type: 'RESIZE',
+            payload: { width, height }
+        });
+
+        if (resizeRafRef.current) cancelAnimationFrame(resizeRafRef.current);
+        resizeRafRef.current = requestAnimationFrame(() => {
+            const nextWidth = containerRef.current?.clientWidth || 0;
+            const nextHeight = containerRef.current?.clientHeight || 0;
+            if (workerRef.current && nextWidth && nextHeight) {
+                workerRef.current.postMessage({
+                    type: 'RESIZE',
+                    payload: { width: nextWidth, height: nextHeight }
+                });
+            }
+        });
+
+        if (resizeTimeoutRef.current) clearTimeout(resizeTimeoutRef.current);
+        resizeTimeoutRef.current = setTimeout(() => {
+            const nextWidth = containerRef.current?.clientWidth || 0;
+            const nextHeight = containerRef.current?.clientHeight || 0;
+            if (workerRef.current && nextWidth && nextHeight) {
+                workerRef.current.postMessage({
+                    type: 'RESIZE',
+                    payload: { width: nextWidth, height: nextHeight }
+                });
+            }
+        }, 120);
+    };
+
     useEffect(() => {
         if (!canvasRef.current) return;
 
@@ -115,54 +154,7 @@ const WorkerFFTChart = forwardRef(({
             workerCleanupTimerRef.current = null;
         }
 
-        if (!workerRef.current) {
-            if (!canvasRef.current.transferControlToOffscreen) {
-                console.error("OffscreenCanvas not supported!");
-                return;
-            }
-
-            try {
-                const worker = new Worker(new URL('../../workers/fft-chart.worker.js', import.meta.url), { type: 'module' });
-                workerRef.current = worker;
-
-                if (!isTransferred.current) {
-                    const offscreen = canvasRef.current.transferControlToOffscreen();
-                    isTransferred.current = true;
-
-                    worker.postMessage({
-                        type: 'INIT',
-                        payload: {
-                            canvas: offscreen,
-                            width: containerRef.current.clientWidth,
-                            height: containerRef.current.clientHeight,
-                            config: {
-                                channelIndex,
-                                color,
-                                freqMin: Number(frequencyFrom),
-                                freqMax: Number(frequencyTo),
-                                manualRange: effectiveRange.toString(),
-                                ...config
-                            }
-                        }
-                    }, [offscreen]);
-
-                    worker.onmessage = (e) => {
-                        const { type, payload, idPromise } = e.data;
-                        if (type === 'STATS') {
-                            setStats(payload);
-                            if (onStatsChange) onStatsChange(payload);
-                        } else if (type === 'GET_SAMPLES_RESULT' && pendingRequests.current.has(idPromise)) {
-                            const resolve = pendingRequests.current.get(idPromise);
-                            pendingRequests.current.delete(idPromise);
-                            resolve(payload);
-                        }
-                    };
-                }
-            } catch (err) {
-                console.error("Failed to init FFT worker:", err);
-            }
-        } else {
-            const worker = workerRef.current;
+        const bindWorkerMessages = (worker) => {
             worker.onmessage = (e) => {
                 const { type, payload, idPromise } = e.data;
                 if (type === 'STATS') {
@@ -174,7 +166,7 @@ const WorkerFFTChart = forwardRef(({
                     resolve(payload);
                 }
             };
-        }
+        };
 
         const observer = new ResizeObserver((entries) => {
             for (const entry of entries) {
@@ -187,7 +179,72 @@ const WorkerFFTChart = forwardRef(({
         });
         observer.observe(containerRef.current);
 
+        const initWhenSized = () => {
+            const width = containerRef.current?.clientWidth || 0;
+            const height = containerRef.current?.clientHeight || 0;
+
+            if (!width || !height) {
+                initRafRef.current = requestAnimationFrame(initWhenSized);
+                return;
+            }
+
+            if (!workerRef.current) {
+                if (!canvasRef.current.transferControlToOffscreen) {
+                    console.error("OffscreenCanvas not supported!");
+                    return;
+                }
+
+                try {
+                    const worker = new Worker(new URL('../../workers/fft-chart.worker.js', import.meta.url), { type: 'module' });
+                    workerRef.current = worker;
+                    bindWorkerMessages(worker);
+
+                    if (!isTransferred.current) {
+                        const offscreen = canvasRef.current.transferControlToOffscreen();
+                        isTransferred.current = true;
+
+                        worker.postMessage({
+                            type: 'INIT',
+                            payload: {
+                                canvas: offscreen,
+                                width,
+                                height,
+                                config: {
+                                    channelIndex,
+                                    color,
+                                    freqMin: Number(frequencyFrom),
+                                    freqMax: Number(frequencyTo),
+                                    manualRange: effectiveRange.toString(),
+                                    ...config
+                                }
+                            }
+                        }, [offscreen]);
+                    }
+                } catch (err) {
+                    console.error("Failed to init FFT worker:", err);
+                }
+            } else {
+                bindWorkerMessages(workerRef.current);
+            }
+
+            scheduleResizeSync();
+        };
+
+        initWhenSized();
+
         return () => {
+            if (initRafRef.current) {
+                cancelAnimationFrame(initRafRef.current);
+                initRafRef.current = null;
+            }
+            if (resizeRafRef.current) {
+                cancelAnimationFrame(resizeRafRef.current);
+                resizeRafRef.current = null;
+            }
+            if (resizeTimeoutRef.current) {
+                clearTimeout(resizeTimeoutRef.current);
+                resizeTimeoutRef.current = null;
+            }
             workerCleanupTimerRef.current = setTimeout(() => {
                 if (workerRef.current) {
                     workerRef.current.terminate();
