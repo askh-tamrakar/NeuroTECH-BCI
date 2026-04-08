@@ -1,8 +1,9 @@
 /**
  * MusicHandler - Specialized handler for brain-responsive music playback.
  * 
- * This handler manages background music with dynamic audio filters
- * that react to mental states (Focus, Calm, Stress, Drowsy).
+ * Supports state-folder-based playback: loads tracks from organized folders
+ * (calm/, focus/, stress/, relaxed/, drowsy/) and plays random tracks
+ * based on detected mental state.
  */
 class MusicHandler {
     constructor() {
@@ -15,15 +16,41 @@ class MusicHandler {
         this.isPlaying = false;
         this.initialized = false;
         this.currentSourceUrl = null;
-        
+        this.currentState = null;
+
+        // State folder track cache: { state: [url, ...] }
+        this.stateTracks = {};
+        this.baseAudioPath = '/Resources/audio/eeg_soundtrack';
+
         // State effects configuration
         this.effects = {
             'Focus': { filterType: 'highpass', frequency: 100, detune: 0, playbackRate: 1.05, volume: 0.3 },
             'Calm': { filterType: 'lowpass', frequency: 800, detune: 0, playbackRate: 0.95, volume: 0.2 },
-            'Relax': { filterType: 'lowpass', frequency: 1200, detune: 0, playbackRate: 0.9, volume: 0.2 },
-            'Stress': { filterType: 'highpass', frequency: 1200, detune: 100, playbackRate: 1.1, volume: 0.25 },
+            'Relaxed': { filterType: 'lowpass', frequency: 1200, detune: 0, playbackRate: 0.9, volume: 0.2 },
+            'Stressed': { filterType: 'highpass', frequency: 1200, detune: 100, playbackRate: 1.1, volume: 0.25 },
             'Drowsy': { filterType: 'allpass', frequency: 1000, detune: 0, playbackRate: 1.15, volume: 0.4 },
             'Neutral': { filterType: 'allpass', frequency: 20000, detune: 0, playbackRate: 1.0, volume: 0.3 }
+        };
+
+        // Known tracks per state folder (static manifest to avoid directory listing)
+        this._manifest = {
+            calm: [
+                'andriig-nature-calm-music-507173.mp3',
+                'mandakimdk-xylophone-and-forest-307174.mp3',
+            ],
+            focus: [
+                'kaden_cook-countdown-219722.mp3',
+                'kandlaker-funk-rock-2-226325.mp3',
+            ],
+            stress: [
+                'aberrantrealities-dark-desolation-ambience-219091.mp3',
+            ],
+            relaxed: [
+                'krasnoshchok-background-music-soft-calm-404429.mp3',
+            ],
+            drowsy: [
+                'meditativetiger-stress-melt-gentle-singing-bowl-waves-489168.mp3',
+            ],
         };
     }
 
@@ -46,7 +73,11 @@ class MusicHandler {
             this.analyser.connect(this.ctx.destination);
             
             this.initialized = true;
-            console.log('MusicHandler initialized');
+
+            // Build state track URLs from manifest
+            for (const [folder, files] of Object.entries(this._manifest)) {
+                this.stateTracks[folder] = files.map(f => `${this.baseAudioPath}/${folder}/${f}`);
+            }
         } catch (e) {
             console.error('MusicHandler: AudioContext failed', e);
         }
@@ -70,10 +101,55 @@ class MusicHandler {
             const response = await fetch(url);
             const arrayBuffer = await response.arrayBuffer();
             this.buffer = await this.ctx.decodeAudioData(arrayBuffer);
-            console.log('MusicHandler: Track loaded');
         } catch (e) {
             console.error('MusicHandler: Failed to load track', e);
         }
+    }
+
+    /** Get tracks for a state folder name */
+    getTracksForState(state) {
+        const folderMap = {
+            'Focus': 'focus', 'Calm': 'calm', 'Relaxed': 'relaxed',
+            'Stressed': 'stress', 'Drowsy': 'drowsy', 'Neutral': 'calm',
+        };
+        const folder = folderMap[state] || 'calm';
+        return this.stateTracks[folder] || [];
+    }
+
+    /** Load and play a random track from the given state folder */
+    async playStateTrack(state, volume) {
+        const tracks = this.getTracksForState(state);
+        if (tracks.length === 0) return;
+
+        const url = tracks[Math.floor(Math.random() * tracks.length)];
+        this.stop();
+        await this.loadTrack(url);
+        this.currentState = state;
+
+        if (this.buffer) {
+            this.source = this.ctx.createBufferSource();
+            this.source.buffer = this.buffer;
+            this.source.loop = true;
+            this.source.connect(this.filterNode);
+
+            // Seek to random position
+            const offset = Math.random() * this.buffer.duration;
+            this.source.start(0, offset);
+            this.isPlaying = true;
+
+            // Apply volume based on stateLevel (0-100)
+            const vol = typeof volume === 'number' ? Math.max(0, Math.min(1, volume / 100)) : 0.3;
+            this.gainNode.gain.setTargetAtTime(vol, this.ctx.currentTime, 0.3);
+        }
+
+        this.applyStateEffect(state);
+    }
+
+    /** Update volume based on state level (0-100) */
+    setStateVolume(level) {
+        if (!this.gainNode || !this.ctx) return;
+        const vol = Math.max(0.05, Math.min(1, level / 100));
+        this.gainNode.gain.setTargetAtTime(vol, this.ctx.currentTime, 0.3);
     }
 
     play() {
@@ -89,7 +165,7 @@ class MusicHandler {
 
     stop() {
         if (this.source) {
-            this.source.stop();
+            try { this.source.stop(); } catch (_) {}
             this.source.disconnect();
             this.source = null;
         }

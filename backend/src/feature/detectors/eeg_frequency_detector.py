@@ -40,8 +40,26 @@ class EEGFrequencyDetector:
             # Typical FBCCA bands: [8*i, 88] Hz
             low = max(0.5, 8.0 * (i + 1))
             high = min(self.sampling_rate / 2 - 1, 88.0)
-            b, a = butter(4, [low, high], btype='bandpass', fs=self.sampling_rate)
-            self.subband_filters.append((b, a))
+            self.subband_filters.append(self._design_bandpass_filter(low, high))
+
+    def _design_bandpass_filter(self, low: float, high: float):
+        nyquist = self.sampling_rate / 2.0
+        if nyquist <= 1.0:
+            return None
+
+        low = max(0.5, float(low))
+        high = min(float(high), nyquist - 1.0)
+
+        if low >= high or low >= nyquist or high <= 0.0:
+            return None
+
+        try:
+            return butter(4, [low, high], btype='bandpass', fs=self.sampling_rate)
+        except TypeError:
+            normalized_band = [low / nyquist, high / nyquist]
+            if not 0.0 < normalized_band[0] < normalized_band[1] < 1.0:
+                return None
+            return butter(4, normalized_band, btype='bandpass')
 
     def _generate_ref(self, f):
         """Creates sine/cosine reference signals (fundamental + harmonics)"""
@@ -75,23 +93,28 @@ class EEGFrequencyDetector:
         # If single channel, reshape to (samples, 1)
         if raw_data.ndim == 1:
             raw_data = raw_data.reshape(-1, 1)
+
+        if not any(filter_coeffs is not None for filter_coeffs in self.subband_filters):
+            return None
             
         target_scores = []
         
         # FBCCA Logic
         for ref in self.references:
-            weighted_corr = 0
-            for k in range(self.num_subbands):
-                b, a = self.subband_filters[k]
+            weighted_corr = 0.0
+            for weight, filter_coeffs in zip(self.subband_weights, self.subband_filters):
+                if filter_coeffs is None:
+                    continue
+
+                b, a = filter_coeffs
                 # Filter the signal for this sub-band
-                y = filtfilt(b, a, raw_data, axis=0)
-                
-                # Compute CCA
                 try:
+                    y = filtfilt(b, a, raw_data, axis=0)
                     self.cca.fit(y, ref)
                     x_score, y_score = self.cca.transform(y, ref)
                     corr = np.corrcoef(x_score[:, 0], y_score[:, 0])[0, 1]
-                    weighted_corr += self.subband_weights[k] * (corr ** 2)
+                    if np.isfinite(corr):
+                        weighted_corr += weight * (corr ** 2)
                 except Exception:
                     continue
             

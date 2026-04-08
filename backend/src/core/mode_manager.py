@@ -177,6 +177,7 @@ class ModeManager:
                     "scores": scores.tolist(),
                     "source_channel": self.channel_index,
                     "preset": self.preset,
+                    "eeg_mapped": self.has_eeg_channel(),
                 }
                 
             elif self.mode == "frontal" and self.app_module:
@@ -193,9 +194,29 @@ class ModeManager:
                     "output": result,
                     "source_channel": self.channel_index,
                     "preset": self.preset,
+                    "eeg_mapped": self.has_eeg_channel(),
                 }
                 
         return None
 
     def get_channel_index(self):
         return self.channel_index
+
+    def has_eeg_channel(self):
+        """Check if any channel in sensor config is mapped to EEG."""
+        mapping = config_manager.get_channel_mapping() or {}
+        for ch_key, info in mapping.items():
+            if str(info.get("sensor", "")).upper() == "EEG" and info.get("enabled", True):
+                return True
+        return False
+
+    def start_meditation_session(self, duration_sec=300):
+        """Start a timed meditation session."""
+        if self.app_module and hasattr(self.app_module, 'start_session'):
+            self.app_module.start_session(duration_sec)
+
+    def stop_meditation_session(self):
+        """Stop meditation session and return detailed results."""
+        if self.app_module and hasattr(self.app_module, 'stop_session'):
+            return self.app_module.stop_session()
+        return {"message": "No active meditation module"}

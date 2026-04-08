@@ -1,23 +1,17 @@
 import React from 'react';
 import {
-    Settings, Play, Square, Activity, MousePointer2, Zap,
-    History, Menu, ChevronLeft, Gamepad2, Mouse, Trash2, Power
+    Play, Square, Activity,
+    History, Gamepad2, Trash2
 } from 'lucide-react';
 
-/**
- * BubbleSidebar — page-specific controls sidebar for BubbleGameView.
- * Props: onBackToMenu, mouseMode, setMouseMode,
- *        difficulty, setDifficulty, realTimeFreq, globalRunning, containerRef
- */
 const BubbleSidebar = ({
-    mouseMode, setMouseMode,
-    difficulty, setDifficulty,
-    realTimeFreq,
+    stressScore,
     focusScore,
     globalRunning,
     containerRef,
 }) => {
-    const dashOffset = 201 - (Math.min(100, focusScore || 0) / 100) * 201;
+    const focusDash = 201 - (Math.min(100, focusScore || 0) / 100) * 201;
+    const stressDash = 201 - (Math.min(100, stressScore || 0) / 100) * 201;
 
     return (
         <div className="flex-grow flex flex-col p-4 gap-4 font-mono transition-opacity duration-300 w-full shrink-0 overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:'none'] [&::-webkit-scrollbar]:hidden">
@@ -25,7 +19,7 @@ const BubbleSidebar = ({
                 <Gamepad2 size={18} className="text-[var(--primary)]" />
                 <div>
                     <h3 className="text-[12px] font-black uppercase tracking-[3px] text-[var(--primary)]">Bubble Game</h3>
-                    <p className="text-[10px] font-bold uppercase tracking-[2px] text-[var(--muted)]/70">Sensor control panel</p>
+                    <p className="text-[10px] font-bold uppercase tracking-[2px] text-[var(--muted)]/70">Neural control panel</p>
                 </div>
             </div>
 
@@ -36,40 +30,41 @@ const BubbleSidebar = ({
                 </button>
             </div>
 
-            {/* Game Mode */}
+            {/* Neural Metrics */}
             <div className="bg-[var(--bg)]/50 border border-[var(--primary)]/20 rounded-xl p-3 shrink-0 flex flex-col gap-3">
                 <h4 className="text-[10px] font-bold text-[var(--muted)]/80 uppercase tracking-widest flex items-center gap-2">
-                    <Settings size={14} /> Control Mode
+                    <Activity size={14} /> Neural Metrics
                 </h4>
-                <div className="flex gap-2 w-full p-1 bg-[var(--surface)] rounded-lg border border-[var(--border)]">
-                    <button
-                        id="mode-indicator-switch"
-                        onClick={() => setMouseMode(false)}
-                        className={`flex-1 py-1.5 rounded-md text-[11px] font-bold tracking-widest uppercase transition-all flex items-center justify-center gap-2 ${!mouseMode ? 'bg-[var(--primary)]/20 text-[var(--primary)] shadow-[0_0_8px_rgba(var(--primary-rgb),0.3)]' : 'text-[var(--muted)] hover:bg-white/5'}`}
-                    >
-                        <Zap size={14} /> SENSOR
-                    </button>
-                    <button
-                        onClick={() => setMouseMode(true)}
-                        className={`flex-1 py-1.5 rounded-md text-[11px] font-bold tracking-widest uppercase transition-all flex items-center justify-center gap-2 ${mouseMode ? 'bg-amber-500/20 text-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.3)]' : 'text-[var(--muted)] hover:bg-white/5'}`}
-                    >
-                        <Mouse size={14} /> MANUAL
-                    </button>
+                <div className="flex justify-around">
+                    {/* Focus Ring */}
+                    <div className="relative w-[80px] h-[80px]">
+                        <svg viewBox="0 0 80 80" className="w-full h-full -rotate-90">
+                            <circle cx="40" cy="40" r="32" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="7" />
+                            <circle cx="40" cy="40" r="32" fill="none" stroke="var(--primary)" strokeWidth="7"
+                                strokeLinecap="round" strokeDasharray="201" strokeDashoffset={focusDash}
+                                style={{ transition: 'stroke-dashoffset 0.3s ease-out', filter: 'drop-shadow(0 0 4px var(--primary))' }} />
+                        </svg>
+                        <div className="absolute inset-0 flex flex-col items-center justify-center">
+                            <span className="font-display font-black text-lg text-white drop-shadow-md">{focusScore || 0}%</span>
+                            <span className="text-[7px] font-bold tracking-widest text-[var(--primary)] uppercase opacity-80">FOCUS</span>
+                        </div>
+                    </div>
+                    {/* Stress Ring */}
+                    <div className="relative w-[80px] h-[80px]">
+                        <svg viewBox="0 0 80 80" className="w-full h-full -rotate-90">
+                            <circle cx="40" cy="40" r="32" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="7" />
+                            <circle cx="40" cy="40" r="32" fill="none" stroke="#f43f5e" strokeWidth="7"
+                                strokeLinecap="round" strokeDasharray="201" strokeDashoffset={stressDash}
+                                style={{ transition: 'stroke-dashoffset 0.3s ease-out', filter: 'drop-shadow(0 0 4px #f43f5e)' }} />
+                        </svg>
+                        <div className="absolute inset-0 flex flex-col items-center justify-center">
+                            <span className="font-display font-black text-lg text-white drop-shadow-md">{stressScore || 0}%</span>
+                            <span className="text-[7px] font-bold tracking-widest text-red-400 uppercase opacity-80">STRESS</span>
+                        </div>
+                    </div>
                 </div>
-
-                <h4 className="text-[10px] font-bold text-[var(--muted)]/80 uppercase tracking-widest flex items-center gap-2 mt-3">
-                    <Activity size={14} /> Difficulty Level
-                </h4>
-                <div className="flex gap-2 w-full p-1 bg-[var(--surface)] rounded-lg border border-[var(--border)] mb-1">
-                    {[1, 2, 3].map(lvl => (
-                        <button
-                            key={lvl}
-                            onClick={() => setDifficulty(lvl)}
-                            className={`flex-1 py-1.5 rounded-md text-[11px] font-bold tracking-widest uppercase transition-all flex items-center justify-center gap-2 ${difficulty === lvl ? 'bg-[var(--primary)]/20 text-[var(--primary)] shadow-[0_0_8px_rgba(var(--primary-rgb),0.3)]' : 'text-[var(--muted)] hover:bg-white/5'}`}
-                        >
-                            LVL {lvl}
-                        </button>
-                    ))}
+                <div className="text-[9px] text-center text-[var(--muted)]/60 tracking-wider">
+                    {stressScore > 70 ? 'High stress = more bubbles' : focusScore > 60 ? 'High focus = auto-popping' : 'Relax or focus to play'}
                 </div>
             </div>
 
@@ -96,19 +91,6 @@ const BubbleSidebar = ({
                             <span id={`pk-${b.id}`} className="text-[9px] w-6 text-right font-black text-amber-500/80">0%</span>
                         </div>
                     ))}
-                </div>
-                <div className="h-px w-full bg-white/5 my-4" />
-                <div className="relative w-[100px] h-[100px] mx-auto">
-                    <svg viewBox="0 0 80 80" className="w-full h-full -rotate-90">
-                        <circle cx="40" cy="40" r="32" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="8" />
-                        <circle id="bd-attn-fill" cx="40" cy="40" r="32" fill="none" stroke="var(--primary)" strokeWidth="8"
-                            strokeLinecap="round" strokeDasharray="201" strokeDashoffset={dashOffset}
-                            style={{ transition: 'stroke-dashoffset 0.3s ease-out', filter: 'drop-shadow(0 0 4px var(--primary))' }} />
-                    </svg>
-                    <div className="absolute inset-0 flex flex-col items-center justify-center">
-                        <span id="bd-attn-val" className="font-display font-black text-2xl text-white drop-shadow-md">{focusScore || 0}%</span>
-                        <span className="text-[8px] font-bold tracking-widest text-[var(--primary)] uppercase mt-0.5 opacity-80">FOCUS</span>
-                    </div>
                 </div>
             </div>
 

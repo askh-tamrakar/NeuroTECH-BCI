@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Music, Volume2, VolumeX, Pause, Play, Headphones, FastForward, Activity, RotateCcw } from 'lucide-react';
+import { Music, Volume2, VolumeX, Pause, Play, Headphones, FastForward, Activity, RotateCcw, AlertTriangle } from 'lucide-react';
 import '../../../styles/views/MusicView.css';
 import MusicSidebar from '../sidebar/MusicSidebar';
 import { useSidebar } from './SidebarContext';
@@ -65,52 +65,47 @@ const MusicView = ({ result, onNavigate }) => {
   const animationRef = useRef(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
+  const [eegMapped, setEegMapped] = useState(true);
+  const lastStateRef = useRef(null);
 
+  // Extract output data from result
+  const output = result?.output || result || {};
+  const currentState = output.state || result?.state || 'Neutral';
+  const stateLevel = output.state_level ?? 50;
+  const stressScore = output.stress_score ?? 0;
+  const focusScore = output.focus_score ?? 0;
   // State-to-Color Mapping for Visuals
   const stateTheme = useMemo(() => {
-    const s = result?.state || 'Neutral';
-    switch (s) {
+    switch (currentState) {
       case 'Focus': return { primary: '#0ea5e9', secondary: '#38bdf8', accent: '#7dd3fc', glow: 'rgba(14, 165, 233, 0.5)' };
       case 'Calm': return { primary: '#a855f7', secondary: '#d946ef', accent: '#e879f9', glow: 'rgba(168, 85, 247, 0.5)' };
-      case 'Relax': return { primary: '#22c55e', secondary: '#4ade80', accent: '#86efac', glow: 'rgba(34, 197, 94, 0.5)' };
-      case 'Stress': return { primary: '#f43f5e', secondary: '#fb7185', accent: '#fda4af', glow: 'rgba(244, 63, 94, 0.5)' };
+      case 'Relaxed': return { primary: '#22c55e', secondary: '#4ade80', accent: '#86efac', glow: 'rgba(34, 197, 94, 0.5)' };
+      case 'Stressed': return { primary: '#f43f5e', secondary: '#fb7185', accent: '#fda4af', glow: 'rgba(244, 63, 94, 0.5)' };
       case 'Drowsy': return { primary: '#f59e0b', secondary: '#fbbf24', accent: '#fcd34d', glow: 'rgba(245, 158, 11, 0.5)' };
       default: return { primary: '#94a3b8', secondary: '#cbd5e1', accent: '#e2e8f0', glow: 'rgba(148, 163, 184, 0.3)' };
     }
-  }, [result?.state]);
+  }, [currentState]);
 
-  // ── REAL-TIME METRIC DERIVATIONS ──
-  const liveMetrics = useMemo(() => {
-    const features = result?.features || {};
-    const bandMix = result?.band_mix || {};
-
-    // Frequency Gain: alpha relative power (relaxation/focus intensity) as a 0–100% value
-    const alphaRel = features.alpha_rel ?? bandMix.alpha ?? null;
-    const freqGain = alphaRel !== null ? Math.round(alphaRel * 100) : null;
-
-    // Dominant Wave: pick the highest-powered band
-    const bands = {
-      Delta: features.delta ?? 0,
-      Theta: features.theta ?? 0,
-      Alpha: features.alpha ?? 0,
-      Beta:  features.beta  ?? 0,
-    };
-    const dominantWave = Object.entries(bands).reduce(
-      (best, [k, v]) => (v > best[1] ? [k, v] : best),
-      ['—', -1]
-    )[0];
-
-    const state = result?.state || null;
-
-    return { freqGain, dominantWave, state };
-  }, [result]);
+  // Dominant wave from band_powers
+  const dominantWave = useMemo(() => {
+    const bp = result?.band_powers;
+    if (!bp || bp.length < 5) return '—';
+    const labels = ['Delta', 'Theta', 'Alpha', 'Beta', 'Gamma'];
+    let maxIdx = 0;
+    for (let i = 1; i < 5; i++) { if (bp[i] > bp[maxIdx]) maxIdx = i; }
+    return labels[maxIdx];
+  }, [result?.band_powers]);
 
   const { setSidebarSlot } = useSidebar();
+
+  useEffect(() => {
+    if (result && result.eeg_mapped !== undefined) setEegMapped(result.eeg_mapped);
+  }, [result]);
 
   const togglePlayback = async () => {
     if (!isPlaying) {
       await musicHandler.resume();
-      musicHandler.play();
+      await musicHandler.playStateTrack(currentState, stateLevel);
     } else {
       musicHandler.stop();
     }
@@ -126,17 +121,19 @@ const MusicView = ({ result, onNavigate }) => {
         setIsMuted={setIsMuted}
         result={result}
         stateTheme={stateTheme}
+        stressScore={stressScore}
+        focusScore={focusScore}
+        currentState={currentState}
+        stateLevel={stateLevel}
       />
     );
     return () => setSidebarSlot(null);
-  }, [isPlaying, isMuted, result, stateTheme, setSidebarSlot]);
+  }, [isPlaying, isMuted, result, stateTheme, stressScore, focusScore, currentState, stateLevel, setSidebarSlot]);
 
-  // Track initialization
+  // Init handler
   useEffect(() => {
     const loadAndInit = async () => {
       await musicHandler.init();
-      // Using the specific file found in the project
-      await musicHandler.loadTrack('/data/audio/Fed_Up_Slowed__Reverb_-_Ghostemane_1772539057.mp3');
     };
     loadAndInit();
 
@@ -146,18 +143,30 @@ const MusicView = ({ result, onNavigate }) => {
     };
   }, []);
 
-  // State Response
+  // State change → switch track from state folder
   useEffect(() => {
-    if (result?.state) {
-      musicHandler.applyStateEffect(result.state);
+    if (!isPlaying || !currentState) return;
+    if (currentState !== lastStateRef.current) {
+      lastStateRef.current = currentState;
+      musicHandler.playStateTrack(currentState, stateLevel);
+    } else {
+      // Same state, just adjust volume based on level
+      musicHandler.setStateVolume(stateLevel);
     }
-  }, [result?.state]);
+  }, [currentState, stateLevel, isPlaying]);
+
+  // Apply DSP effects for state
+  useEffect(() => {
+    if (currentState) {
+      musicHandler.applyStateEffect(currentState);
+    }
+  }, [currentState]);
 
   useEffect(() => {
-    if (musicHandler.audioElement) {
-      musicHandler.audioElement.muted = isMuted;
+    if (musicHandler.gainNode && musicHandler.ctx) {
+      musicHandler.gainNode.gain.setTargetAtTime(isMuted ? 0 : stateLevel / 100, musicHandler.ctx.currentTime, 0.2);
     }
-  }, [isMuted]);
+  }, [isMuted, stateLevel]);
 
   // Visualizer Loop (Terrain Mesh Waves)
   useEffect(() => {
@@ -260,25 +269,53 @@ const MusicView = ({ result, onNavigate }) => {
       </div>
 
 
+      {/* ── EEG WARNING BANNER ── */}
+      {!eegMapped && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[300] flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-500/20 border border-amber-500/40 backdrop-blur-md">
+          <AlertTriangle size={16} className="text-amber-400" />
+          <span className="text-xs font-bold text-amber-300 tracking-wider">Please map an EEG sensor in Settings for accurate data</span>
+        </div>
+      )}
+
       {/* ── PARAMETER CLUSTER (Bottom Left) ── */}
       <div className="absolute bottom-40 left-12 z-10">
         <div className="parameter-cluster">
 
-          {/* Frequency Gain — live alpha band power */}
+          {/* Focus Score */}
           <div className="parameter-item">
             <div className="parameter-label-row">
-              <span className="parameter-label">Frequency Gain</span>
-              <span className="parameter-value" style={{ color: stateTheme.primary }}>
-                {liveMetrics.freqGain !== null ? `${liveMetrics.freqGain}%` : '—'}
+              <span className="parameter-label">Focus</span>
+              <span className="parameter-value" style={{ color: '#0ea5e9' }}>
+                {Math.round(focusScore)}%
               </span>
             </div>
             <div className="parameter-progress-bg">
               <div
                 className="parameter-progress-fill"
                 style={{
-                  width: liveMetrics.freqGain !== null ? `${liveMetrics.freqGain}%` : '0%',
-                  backgroundColor: stateTheme.primary,
-                  boxShadow: `0 0 10px ${stateTheme.primary}44`,
+                  width: `${Math.min(100, focusScore)}%`,
+                  backgroundColor: '#0ea5e9',
+                  boxShadow: '0 0 10px rgba(14,165,233,0.4)',
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Stress Score */}
+          <div className="parameter-item">
+            <div className="parameter-label-row">
+              <span className="parameter-label">Stress</span>
+              <span className="parameter-value" style={{ color: '#f43f5e' }}>
+                {Math.round(stressScore)}%
+              </span>
+            </div>
+            <div className="parameter-progress-bg">
+              <div
+                className="parameter-progress-fill"
+                style={{
+                  width: `${Math.min(100, stressScore)}%`,
+                  backgroundColor: '#f43f5e',
+                  boxShadow: '0 0 10px rgba(244,63,94,0.4)',
                 }}
               />
             </div>
@@ -289,16 +326,8 @@ const MusicView = ({ result, onNavigate }) => {
             <div className="parameter-label-row">
               <span className="parameter-label">Dominant Wave</span>
               <span className="parameter-value" style={{ color: stateTheme.secondary }}>
-                {liveMetrics.dominantWave}
+                {dominantWave}
               </span>
-            </div>
-            <div
-              className="text-[8px] tracking-widest uppercase mt-0.5"
-              style={{ color: `${stateTheme.secondary}cc` }}
-            >
-              {liveMetrics.dominantWave !== '—'
-                ? `${liveMetrics.dominantWave} wave active`
-                : 'Awaiting signal...'}
             </div>
           </div>
 
@@ -309,13 +338,16 @@ const MusicView = ({ result, onNavigate }) => {
               <span
                 className="parameter-value px-2 py-0.5 rounded-full text-black text-[8px] font-black tracking-widest uppercase"
                 style={{
-                  backgroundColor: liveMetrics.state ? stateTheme.primary : '#334155',
-                  boxShadow: liveMetrics.state ? `0 0 12px ${stateTheme.primary}66` : 'none',
+                  backgroundColor: stateTheme.primary,
+                  boxShadow: `0 0 12px ${stateTheme.primary}66`,
                   color: '#000',
                 }}
               >
-                {liveMetrics.state || 'No Signal'}
+                {currentState}
               </span>
+            </div>
+            <div className="text-[8px] tracking-widest uppercase mt-0.5" style={{ color: `${stateTheme.secondary}cc` }}>
+              Level: {stateLevel}%
             </div>
           </div>
 

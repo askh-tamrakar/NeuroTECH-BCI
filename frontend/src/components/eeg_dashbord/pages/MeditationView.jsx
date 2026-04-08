@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { useTheme } from '../../../contexts/ThemeContext';
-import { Play, Wind, Power, Zap, Volume2 } from 'lucide-react';
+import { Play, Wind, Power, Zap, Volume2, AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import FFTWorker from '../../../workers/fft.worker.js?worker';
@@ -10,13 +10,13 @@ import { useSidebar } from './SidebarContext';
 
 /* ── REAL SOUNDSCAPE TRACKS ────────────────────── */
 const TRACKS = [
-  { id: 'stress_melt', label: 'Singing Bowl Waves', file: '/Resources/eeg_music/meditativetiger-stress-melt-gentle-singing-bowl-waves-489168.mp3', category: 'meditation' },
-  { id: 'nature_calm', label: 'Nature Calm', file: '/Resources/eeg_music/andriig-nature-calm-music-507173.mp3', category: 'meditation' },
-  { id: 'xylophone', label: 'Xylophone & Forest', file: '/Resources/eeg_music/mandakimdk-xylophone-and-forest-307174.mp3', category: 'meditation' },
-  { id: 'soft_calm', label: 'Soft Calm Background', file: '/Resources/eeg_music/krasnoshchok-background-music-soft-calm-404429.mp3', category: 'focus' },
-  { id: 'dark_ambient', label: 'Dark Desolation', file: '/Resources/eeg_music/aberrantrealities-dark-desolation-ambience-219091.mp3', category: 'focus' },
-  { id: 'funk_rock', label: 'Funk Rock', file: '/Resources/eeg_music/kandlaker-funk-rock-2-226325.mp3', category: 'focus' },
-  { id: 'countdown', label: 'Countdown', file: '/Resources/eeg_music/kaden_cook-countdown-219722.mp3', category: 'focus' },
+  { id: 'stress_melt', label: 'Singing Bowl Waves', file: '/Resources/audio/meditation/meditativetiger-stress-melt-gentle-singing-bowl-waves-489168.mp3', category: 'meditation' },
+  { id: 'nature_calm', label: 'Nature Calm', file: '/Resources/audio/meditation/andriig-nature-calm-music-507173.mp3', category: 'meditation' },
+  { id: 'soft_calm', label: 'Soft Calm Background', file: '/Resources/audio/meditation/krasnoshchok-background-music-soft-calm-404429.mp3', category: 'meditation' },
+  { id: 'xylophone', label: 'Xylophone & Forest', file: '/Resources/audio/eeg_soundtrack/calm/mandakimdk-xylophone-and-forest-307174.mp3', category: 'focus' },
+  { id: 'dark_ambient', label: 'Dark Desolation', file: '/Resources/audio/eeg_soundtrack/stress/aberrantrealities-dark-desolation-ambience-219091.mp3', category: 'focus' },
+  { id: 'funk_rock', label: 'Funk Rock', file: '/Resources/audio/eeg_soundtrack/focus/kandlaker-funk-rock-2-226325.mp3', category: 'focus' },
+  { id: 'countdown', label: 'Countdown', file: '/Resources/audio/eeg_soundtrack/focus/kaden_cook-countdown-219722.mp3', category: 'focus' },
 ];
 
 /* ── DAILY WISDOM QUOTES ───────────────────────── */
@@ -46,10 +46,16 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
   const containerRef = useRef(null);
   const resultRef = useRef(null);
   const wsEventRef = useRef(null);
+  const [eegMapped, setEegMapped] = useState(true);
+  const [sessionResults, setSessionResults] = useState(null);
   
   // Keep resultRef fresh for the requestAnimationFrame loop
   useEffect(() => {
     resultRef.current = result;
+  }, [result]);
+
+  useEffect(() => {
+    if (result && result.eeg_mapped !== undefined) setEegMapped(result.eeg_mapped);
   }, [result]);
 
   // Keep wsEventRef fresh — captures raw eeg_prediction events with full feature set
@@ -546,22 +552,27 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
       }
 
       // ── Focus & Stress live values ────────────────────────────────
-      // Focus = alpha/theta dominance over beta  (0-100)
-      // Stress = beta dominance, inverse of calm (0-100)
+      // Prefer backend-computed values from result.output
       const ws2  = wsEventRef.current;
       const res2 = resultRef.current;
+      const out2 = res2?.output || {};
       const feat2 = ws2?.features || res2?.features;
 
-      // Focus & Stress also using spectra-derived features for consistency
-      const activeCh2 = (ws2?.source_channel !== undefined) ? String(ws2.source_channel) : selectedChannelRef.current;
-      const currentSp = spectraRef.current[activeCh2] || spectraRef.current[selectedChannelRef.current] || Object.values(spectraRef.current)[0] || [];
       let focusVal  = 0;
       let stressVal = 0;
 
-      if (!wsUrlRef.current || ws2?.status === 'disconnected' || res2?.status === 'disconnected') {
+      // Use backend-computed scores if available
+      if (out2.focus_score !== undefined) {
+        focusVal = Math.round(out2.focus_score);
+        stressVal = Math.round(out2.stress_score ?? 0);
+      } else if (!wsUrlRef.current || ws2?.status === 'disconnected' || res2?.status === 'disconnected') {
          focusVal = 0;
          stressVal = 0;
-      } else if (currentSp.length > 0) {
+      } else {
+        // Spectra-derived fallback
+        const activeCh2 = (ws2?.source_channel !== undefined) ? String(ws2.source_channel) : selectedChannelRef.current;
+        const currentSp = spectraRef.current[activeCh2] || spectraRef.current[selectedChannelRef.current] || Object.values(spectraRef.current)[0] || [];
+        if (currentSp.length > 0) {
          let delta = 0, theta = 0, alpha = 0, beta = 0;
          currentSp.forEach(d => {
             if (d.freq >= 1 && d.freq < 4) delta += d.power;
@@ -575,16 +586,17 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
          const thetaRel = theta / total2;
          focusVal  = Math.round(Math.min(100, Math.max(0, (alphaRel + thetaRel * 0.5) * 200)));
          stressVal = Math.round(Math.min(100, Math.max(0, betaRel * 300)));
-      } else if (feat2?.alpha !== undefined) {
-        const total2 = (feat2.delta||0) + (feat2.theta||0) + (feat2.alpha||0) + (feat2.beta||0) + 1e-6;
-        const alphaRel = (feat2.alpha||0) / total2;
-        const betaRel  = (feat2.beta||0)  / total2;
-        const thetaRel = (feat2.theta||0) / total2;
-        focusVal  = Math.round(Math.min(100, Math.max(0, (alphaRel + thetaRel * 0.5) * 200)));
-        stressVal = Math.round(Math.min(100, Math.max(0, betaRel * 300)));
-      } else if (res2?.meditation_score !== undefined) {
-        focusVal  = Math.round(res2.meditation_score || 0);
-        stressVal = Math.round(Math.max(0, 100 - focusVal));
+        } else if (feat2?.alpha !== undefined) {
+          const total2 = (feat2.delta||0) + (feat2.theta||0) + (feat2.alpha||0) + (feat2.beta||0) + 1e-6;
+          const alphaRel = (feat2.alpha||0) / total2;
+          const betaRel  = (feat2.beta||0)  / total2;
+          const thetaRel = (feat2.theta||0) / total2;
+          focusVal  = Math.round(Math.min(100, Math.max(0, (alphaRel + thetaRel * 0.5) * 200)));
+          stressVal = Math.round(Math.min(100, Math.max(0, betaRel * 300)));
+        } else if (res2?.meditation_score !== undefined) {
+          focusVal  = Math.round(res2.meditation_score || 0);
+          stressVal = Math.round(Math.max(0, 100 - focusVal));
+        }
       }
 
       const fv = $('med-focus-val');
@@ -671,6 +683,13 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
       sessionStart = Date.now();
       sessionRunning = true; lastTS = null;
 
+      // Notify backend
+      fetch('/api/meditation/session/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ duration_minutes: (presetMin || presetSecs / 60) }),
+      }).catch(() => {});
+
       // Update Expanded Button
       const btn = $('med-session-btn');
       if (btn) {
@@ -703,6 +722,17 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
       const mm = String(Math.floor(elapsed / 60)).padStart(2, '0');
       const ss = String(elapsed % 60).padStart(2, '0');
       const avgCalm = calmSamples > 0 ? Math.round((calmAcc / calmSamples) * 100) : 0;
+
+      // Call backend for detailed results
+      fetch('/api/meditation/session/stop', { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+          if (data.results) {
+            setSessionResults(data.results);
+          }
+        })
+        .catch(() => {});
+
       saveSession({ duration: `${mm}:${ss}`, avgCalm, cycles: cycleCount, mode: eegMode === 'ws' ? 'LIVE' : 'SIM' });
 
       // Update Expanded Button
@@ -807,6 +837,68 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
 
   return (
     <div className="w-full h-full flex bg-bg overflow-hidden relative" ref={containerRef}>
+
+      {/* ── EEG WARNING BANNER ── */}
+      {!eegMapped && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[300] flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-500/20 border border-amber-500/40 backdrop-blur-md">
+          <AlertTriangle size={16} className="text-amber-400" />
+          <span className="text-xs font-bold text-amber-300 tracking-wider">Please map an EEG sensor in Settings for accurate data</span>
+        </div>
+      )}
+
+      {/* ── SESSION RESULTS OVERLAY ── */}
+      {sessionResults && (
+        <div className="absolute inset-0 z-[200] flex items-center justify-center bg-[var(--bg)]/90 backdrop-blur-xl">
+          <div className="bg-[var(--surface)] border border-[var(--primary)]/30 rounded-2xl p-6 max-w-md w-[90%] shadow-2xl">
+            <h2 className="font-display text-2xl font-black text-white tracking-widest mb-4 text-center">SESSION RESULTS</h2>
+            <div className="grid grid-cols-2 gap-3 mb-4">
+              <div className="bg-[var(--primary)]/5 border border-[var(--primary)]/20 rounded-lg p-3 text-center">
+                <div className="text-[9px] tracking-[3px] text-[var(--primary)] opacity-70 mb-1">QUALITY</div>
+                <div className="font-display text-xl font-bold text-white">{sessionResults.quality_score ?? 0}%</div>
+              </div>
+              <div className="bg-[var(--primary)]/5 border border-[var(--primary)]/20 rounded-lg p-3 text-center">
+                <div className="text-[9px] tracking-[3px] text-[var(--primary)] opacity-70 mb-1">DURATION</div>
+                <div className="font-display text-xl font-bold text-white">{sessionResults.duration_seconds ? `${Math.round(sessionResults.duration_seconds)}s` : '—'}</div>
+              </div>
+              <div className="bg-cyan-500/5 border border-cyan-500/20 rounded-lg p-3 text-center">
+                <div className="text-[9px] tracking-[3px] text-cyan-400 opacity-70 mb-1">AVG FOCUS</div>
+                <div className="font-display text-xl font-bold text-cyan-400">{sessionResults.avg_focus ?? 0}%</div>
+              </div>
+              <div className="bg-red-500/5 border border-red-500/20 rounded-lg p-3 text-center">
+                <div className="text-[9px] tracking-[3px] text-red-400 opacity-70 mb-1">AVG STRESS</div>
+                <div className="font-display text-xl font-bold text-red-400">{sessionResults.avg_stress ?? 0}%</div>
+              </div>
+              <div className="bg-green-500/5 border border-green-500/20 rounded-lg p-3 text-center">
+                <div className="text-[9px] tracking-[3px] text-green-400 opacity-70 mb-1">AVG CALM</div>
+                <div className="font-display text-xl font-bold text-green-400">{sessionResults.avg_calm ?? 0}%</div>
+              </div>
+              <div className="bg-amber-500/5 border border-amber-500/20 rounded-lg p-3 text-center">
+                <div className="text-[9px] tracking-[3px] text-amber-400 opacity-70 mb-1">SAMPLES</div>
+                <div className="font-display text-xl font-bold text-amber-400">{sessionResults.total_samples ?? 0}</div>
+              </div>
+            </div>
+            {sessionResults.state_breakdown && (
+              <div className="mb-4">
+                <div className="text-[9px] tracking-[3px] text-[var(--muted)] mb-2">STATE BREAKDOWN</div>
+                <div className="flex flex-col gap-1">
+                  {Object.entries(sessionResults.state_breakdown).map(([state, pct]) => (
+                    <div key={state} className="flex items-center gap-2">
+                      <span className="text-[10px] font-bold text-white/70 w-16">{state}</span>
+                      <div className="flex-1 h-1.5 bg-white/5 rounded-full overflow-hidden">
+                        <div className="h-full bg-[var(--primary)] rounded-full" style={{ width: `${pct}%` }} />
+                      </div>
+                      <span className="text-[10px] font-bold text-white/60 w-8 text-right">{pct}%</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            <button onClick={() => setSessionResults(null)} className="w-full py-3 rounded-xl text-sm font-black uppercase tracking-[3px] border-2 border-[var(--primary)] bg-[var(--primary)]/10 text-white hover:bg-[var(--primary)]/20 transition-all">
+              CLOSE
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ══ CENTER AREA: Main Charts ═══════════════════════════════ */}
       <div className="flex-grow flex flex-col transition-all duration-300">

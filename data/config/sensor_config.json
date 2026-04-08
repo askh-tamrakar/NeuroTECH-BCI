@@ -1,34 +1,19 @@
 {
-  "sampling_rate": 512,
+  "active_models": {
+    "EEG": "Neo",
+    "EOG": "dino-ml"
+  },
   "channel_mapping": {
     "ch0": {
       "enabled": true,
-      "sensor": "EMG",
-      "label": "Fp1 / Oz (Ref: A1, A2)"
+      "label": "Fp1 / Oz (Ref: A1, A2)",
+      "sensor": "EMG"
     },
     "ch1": {
       "enabled": true,
-      "sensor": "EOG",
-      "label": "UNUSED"
+      "label": "UNUSED",
+      "sensor": "EEG"
     }
-  },
-  "active_models": {
-    "EMG": "Neptune",
-    "EOG": "dino-ml",
-    "EEG": "Neo"
-  },
-  "adc_settings": {
-    "resolution_bits": 14,
-    "vref_mv": 3300
-  },
-  "ui_settings": {
-    "showGrid": true,
-    "timeWindowMs": 10000
-  },
-  "display": {
-    "timeWindowMs": 10000,
-    "showGrid": true,
-    "scannerX": 0
   },
   "num_channels": 2
 }

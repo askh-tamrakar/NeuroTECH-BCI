@@ -150,3 +150,57 @@ def detect_stress_metrics(feature_vector):
         "break_recommendation": break_rec,
         "breathing_suggestion": suggestion
     }
+
+
+def detect_mind_state(feature_vector):
+    """Detect the dominant state of mind from EEG features.
+    Optimized for single-channel Pz placement (A1/A2 reference).
+
+    Returns dict with:
+      - state: str (Focus, Calm, Relaxed, Stressed, Drowsy, Neutral)
+      - state_level: int (0-100, intensity of the detected state)
+      - all_states: dict mapping state name -> confidence (0-100)
+    """
+    delta = _safe(feature_vector, 0)
+    theta = _safe(feature_vector, 1)
+    alpha = _safe(feature_vector, 2)
+    beta = _safe(feature_vector, 3)
+    gamma = _safe(feature_vector, 4)
+    calm_index = _safe(feature_vector, 9)
+    stress_index = _safe(feature_vector, 10)
+    engagement_index = _safe(feature_vector, 11)
+
+    total = delta + theta + alpha + beta + gamma + 1e-6
+    p_delta = delta / total
+    p_theta = theta / total
+    p_alpha = alpha / total
+    p_beta = beta / total
+    p_gamma = gamma / total
+
+    # Confidence scores (0-100) for each state
+    focus_conf = min(100, int((p_beta * 0.6 + min(engagement_index, 2.5) / 2.5 * 0.4) * 150))
+    calm_conf = min(100, int((p_alpha * 0.5 + min(calm_index, 5.0) / 5.0 * 0.4) * 140))
+    relaxed_conf = min(100, int((p_alpha * 0.4 + p_theta * 0.3) * 160))
+    stressed_conf = min(100, int((p_beta * 0.35 + p_gamma * 0.3 + min(stress_index, 3.0) / 3.0 * 0.35) * 140))
+    drowsy_conf = min(100, int((p_delta * 0.45 + p_theta * 0.4) * 150))
+
+    all_states = {
+        "Focus": focus_conf,
+        "Calm": calm_conf,
+        "Relaxed": relaxed_conf,
+        "Stressed": stressed_conf,
+        "Drowsy": drowsy_conf,
+    }
+
+    dominant = max(all_states, key=all_states.get)
+    level = all_states[dominant]
+
+    if level < 20:
+        dominant = "Neutral"
+        level = 50
+
+    return {
+        "state": dominant,
+        "state_level": level,
+        "all_states": all_states,
+    }
