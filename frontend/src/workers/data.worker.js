@@ -5,15 +5,9 @@ import { getSocketIoConnection } from '../utils/runtimeConnection';
 let socket = null;
 const broadcast = new BroadcastChannel('bci-data-stream');
 
-// State for timestamp interpolation (similar to what was in LiveView)
+// State for timestamp interpolation
 let lastTs = 0;
 let isPaused = false;
-
-// Throttling state for main-thread notifications
-let pendingSamplesBuffer = [];
-let lastStreamName = '';
-let throttleTimeout = null;
-const THROTTLE_MS = 50; // 20Hz updates for UI/Recording
 
 self.onmessage = (e) => {
     const { type, payload } = e.data;
@@ -70,93 +64,65 @@ function connect(url) {
 
         const samples = batchData.samples;
         const totalSamples = samples.length;
-        const samplingRate = batchData.sample_rate || 1000;
-        const sampleIntervalMs = 1000 / samplingRate;
+        const now = Date.now();
 
-        // We assume backend provides `sample.timestamp` in seconds (epoch) or relative time
-        // The most robust way to ensure no backwards overlaps is to trust the sample count
-        // and strictly increment by sampleIntervalMs from the last known valid timestamp.
-        
-        let batchStartTs = 0;
-        
+        // Wall-clock timestamp spreading:
+        // The backend may send fewer samples per batch than the declared rate
+        // (e.g. pull_sample + sleep on Windows yields ~2 samples per 33ms batch
+        // instead of ~17 at 512Hz). If we space by 1/sampleRate, signal time
+        // falls far behind wall-clock time and the chart appears frozen.
+        //
+        // Fix: spread samples evenly between lastTs and Date.now().
+        // This keeps signal time == wall-clock time regardless of how many
+        // samples arrive per batch.
+
+        let batchStart;
+
         if (lastTs === 0) {
-             batchStartTs = Date.now() - (totalSamples * sampleIntervalMs);
+            // First batch — use declared rate for the initial spread
+            const samplingRate = batchData.sample_rate || 512;
+            batchStart = now - (totalSamples * (1000 / samplingRate));
         } else {
-             const now = Date.now();
-             const expectedStart = now - (totalSamples * sampleIntervalMs);
-             
-             // Only hard-reset on genuine disconnect (>5s gap between batches)
-             // This avoids the straight-line artifacts caused by timestamp discontinuities.
-             // Normal network jitter (up to a few seconds) is absorbed by keeping
-             // timestamps strictly monotonic from lastTs.
-             if (Math.abs(lastTs - expectedStart) > 5000) {
-                 batchStartTs = expectedStart;
-             } else {
-                 // Strict continuous sequence — no gaps, no dashes
-                 batchStartTs = lastTs;
-             }
+            batchStart = lastTs;
         }
 
-        const interpolatedSamples = samples.map((sample, idx) => {
-            const ts = batchStartTs + (idx * sampleIntervalMs);
-            lastTs = ts + sampleIntervalMs;
-            return {
-                ...sample,
-                timestamp: ts
-            };
+        // Clamp the span so a reconnection gap doesn't stretch samples over seconds
+        const MAX_SPAN_MS = 200;
+        const rawSpan = now - batchStart;
+        const span = Math.min(Math.max(rawSpan, 1), MAX_SPAN_MS);
+        const adjustedStart = now - span;
+
+        const timestampedSamples = samples.map((sample, idx) => {
+            const ts = adjustedStart + ((idx + 1) / totalSamples) * span;
+            return { ...sample, timestamp: ts };
         });
 
-        // Broadcast to all listening workers (SignalWorker, ChartWorker, etc.)
-        // This remains REAL-TIME (no throttle) for smooth charts
+        lastTs = timestampedSamples[timestampedSamples.length - 1].timestamp;
+
+        // Broadcast to chart/signal workers via BroadcastChannel (real-time)
         broadcast.postMessage({
             type: 'DATA_BATCH',
             streamName: batchData.stream_name,
-            samples: interpolatedSamples
+            samples: timestampedSamples,
         });
 
-        // Buffer for throttled main-thread updates
-        bufferBatchForMainThread(interpolatedSamples, batchData.stream_name);
-    });
-
-    function bufferBatchForMainThread(samples, streamName) {
-        pendingSamplesBuffer = pendingSamplesBuffer.concat(samples);
-        lastStreamName = streamName;
-
-        if (!throttleTimeout) {
-            throttleTimeout = setTimeout(flushBufferToMainThread, THROTTLE_MS);
-        }
-    }
-
-    function flushBufferToMainThread() {
-        if (pendingSamplesBuffer.length === 0) {
-            throttleTimeout = null;
-            return;
-        }
-
-        const lastSample = pendingSamplesBuffer[pendingSamplesBuffer.length - 1];
-        const totalCount = pendingSamplesBuffer.length;
-
-        // Notify main thread for recording (full high-frequency array)
+        // Forward full batch to main thread immediately for recording
         self.postMessage({
             type: 'RECORD_BATCH',
-            payload: {
-                samples: pendingSamplesBuffer
-            }
+            payload: { samples: timestampedSamples },
         });
 
-        // Also notify main thread for UI elements (timer, stats, etc.)
+        // Lightweight UI update
+        const lastSample = timestampedSamples[timestampedSamples.length - 1];
         self.postMessage({
             type: 'UI_UPDATE',
             payload: {
-                streamName: lastStreamName,
+                streamName: batchData.stream_name,
                 lastSample: lastSample,
-                sampleCount: totalCount
-            }
+                sampleCount: totalSamples,
+            },
         });
-
-        pendingSamplesBuffer = [];
-        throttleTimeout = null;
-    }
+    });
 
     socket.on('bio_event', (eventData) => {
         self.postMessage({ type: 'EVENT', payload: eventData });

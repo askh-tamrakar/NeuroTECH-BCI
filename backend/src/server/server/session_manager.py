@@ -15,29 +15,16 @@ class SessionManager:
         
         self.data_store = {
             'EMG': {},
-            'EOG': {},
-            'EEG': {}
+            'EOG': {}
         }
         # Counts per label
         self.counts = {
             'EMG': {},
-            'EOG': {},
-            'EEG': {}
+            'EOG': {}
         }
         self.prediction_active = {
             'EMG': False,
-            'EOG': False,
-            'EEG': False
-        }
-        self.collection_context = {
-            'EMG': None,
-            'EOG': None,
-            'EEG': None
-        }
-        self.collection_runtime = {
-            'EMG': {},
-            'EOG': {},
-            'EEG': {}
+            'EOG': False
         }
         
     def start_recording(self, sensor_type, label, session_name="Default"):
@@ -51,17 +38,19 @@ class SessionManager:
         # Note: We do this synchronously; in prod maybe async? 
         # SQLite is fast enough.
         self.current_table_name = db_manager.create_session_table(sensor_type, session_name)
-        print(f"Started {sensor_type} rec on table: {self.current_table_name}")
+        print(f"[SessionManager] Started {sensor_type} rec on table: {self.current_table_name}")
 
         if label not in self.counts[sensor_type]:
             self.counts[sensor_type][label] = 0
             self.data_store[sensor_type][label] = []
             
     def stop_recording(self):
-        # Mark recording as stopped but keep session/table metadata until the
-        # caller finishes post-processing and persists the buffered windows.
-        self.is_recording = False
-        return self.current_table_name
+        # We don't reset table name here immediately because we need it for saving
+        # Logic: stop_recording flag, but keep table name until save is done?
+        # Actually API calls stop_recording() then saves using state? 
+        # No, api_emg_stop calls stop_recording() at start.
+        # We should return the table name before resetting.
+        pass # Allow API to access state before reset
         
     def reset_recording_state(self):
         self.is_recording = False
@@ -88,34 +77,5 @@ class SessionManager:
             "recording": self.is_recording and self.recording_type == sensor_type,
             "current_label": self.current_label if self.recording_type == sensor_type else "",
             "counts": self.counts.get(sensor_type, {}),
-            "session": self.current_session_name if self.recording_type == sensor_type else None,
-            "collection_context": self.collection_context.get(sensor_type),
+            "session": self.current_session_name if self.recording_type == sensor_type else None
         }
-
-    def start_collection_context(self, sensor_type, **context):
-        sensor = str(sensor_type).upper()
-        self.collection_context[sensor] = {"sensor": sensor, **context}
-        self.collection_runtime[sensor] = {}
-
-    def stop_collection_context(self, sensor_type):
-        sensor = str(sensor_type).upper()
-        if sensor in self.collection_context:
-            self.collection_context[sensor] = None
-        if sensor in self.collection_runtime:
-            self.collection_runtime[sensor] = {}
-
-    def get_collection_context(self, sensor_type):
-        return self.collection_context.get(str(sensor_type).upper())
-
-    def get_collection_runtime(self, sensor_type):
-        return self.collection_runtime.get(str(sensor_type).upper(), {})
-
-    def set_collection_runtime_value(self, sensor_type, key, value):
-        sensor = str(sensor_type).upper()
-        if sensor not in self.collection_runtime:
-            self.collection_runtime[sensor] = {}
-        self.collection_runtime[sensor][key] = value
-
-    def get_collection_runtime_value(self, sensor_type, key, default=None):
-        sensor = str(sensor_type).upper()
-        return self.collection_runtime.get(sensor, {}).get(key, default)

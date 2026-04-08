@@ -3,7 +3,7 @@ import { getPowerSpectrum } from '../utils/fft';
 const broadcast = new BroadcastChannel('bci-data-stream');
 
 const FFT_WINDOW_SIZE = 1024; // Power of 2 required by FFT algorithm
-const SAMPLE_RATE = 1000;
+const SAMPLE_RATE = 512;
 let channelBuffers = {};
 let throttleLastFired = 0;
 

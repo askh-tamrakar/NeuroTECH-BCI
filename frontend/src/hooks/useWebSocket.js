@@ -136,8 +136,17 @@ export function useWebSocket(url = '') {
       }
     })
 
+    let lastBatchUpdate = 0
     socketRef.current.on('bio_data_batch', (batchData) => {
       if (!batchData?.samples?.length) return
+
+      // Throttle main-thread state updates to ~4Hz to avoid excessive React re-renders.
+      // Chart rendering is handled entirely by the worker pipeline (data.worker →
+      // BroadcastChannel → signal/chart workers), so the main thread only needs
+      // occasional updates for status indicators and recording hooks.
+      const now = performance.now()
+      if (now - lastBatchUpdate < 250) return
+      lastBatchUpdate = now
 
       const lastSample = batchData.samples[batchData.samples.length - 1]
       const rawPayload = {

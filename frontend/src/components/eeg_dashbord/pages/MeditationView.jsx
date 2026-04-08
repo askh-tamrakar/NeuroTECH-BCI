@@ -45,12 +45,17 @@ const PRESETS = [3, 5, 10, 15];
 const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => {
   const containerRef = useRef(null);
   const resultRef = useRef(null);
+  const wsEventRef = useRef(null);
   
   // Keep resultRef fresh for the requestAnimationFrame loop
   useEffect(() => {
     resultRef.current = result;
   }, [result]);
 
+  // Keep wsEventRef fresh — captures raw eeg_prediction events with full feature set
+  useEffect(() => {
+    wsEventRef.current = wsEvent;
+  }, [wsEvent]);
   const { currentTheme } = useTheme();
   const themeRef = useRef(currentTheme);
 
@@ -79,6 +84,25 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
 
   /* ── FFT WORKER STATE ──────────────────────── */
   const [spectra, setSpectra] = useState({});
+  const [selectedChannel, setSelectedChannel] = useState('0');
+
+  // Keep spectraRef fresh — used to drive the radar chart from the LIVE FFT graph data
+  const spectraRef = useRef({});
+  useEffect(() => {
+    spectraRef.current = spectra;
+  }, [spectra]);
+
+  // Keep selectedChannelRef fresh for the interval closure
+  const selectedChannelRef = useRef('0');
+  useEffect(() => {
+    selectedChannelRef.current = selectedChannel;
+  }, [selectedChannel]);
+
+  // Keep wsUrlRef fresh to detect disconnections in the loop
+  const wsUrlRef = useRef(wsUrl);
+  useEffect(() => {
+    wsUrlRef.current = wsUrl;
+  }, [wsUrl]);
 
   useEffect(() => {
     if (!wsUrl) return;
@@ -88,7 +112,14 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
     const fftWorker = new FFTWorker();
     fftWorker.onmessage = (e) => {
         if (e.data.type === 'FFT_RESULT') {
-            setSpectra(e.data.payload);
+            setSpectra(prev => {
+                // Auto-select first channel if currently selected key is absent
+                const keys = Object.keys(e.data.payload);
+                if (keys.length > 0) {
+                    setSelectedChannel(ch => (e.data.payload[ch] ? ch : keys[0]));
+                }
+                return e.data.payload;
+            });
         }
     };
 
@@ -96,6 +127,7 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
         dataWorker.postMessage({ type: 'DISCONNECT' });
         dataWorker.terminate();
         fftWorker.terminate();
+        setSpectra({}); // clear when disconnected
     };
   }, [wsUrl]);
 
@@ -219,14 +251,14 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
         </div>
 
         <div className="flex w-full flex-col gap-1 rounded-2xl border border-[var(--border)] bg-[var(--bg)]/60 px-1.5 py-2">
-          <span className="text-center text-[8px] font-black uppercase tracking-[2px] text-[var(--muted)]">Presets</span>
-          <div className="grid grid-cols-2 gap-1">
+          <span className="text-center text-[8px] font-black uppercase tracking-[2px] text-[var(--muted)] mb-1">Timer</span>
+          <div className="flex flex-col gap-1">
             {PRESETS.map((min) => (
               <button
                 key={min}
                 type="button"
                 onClick={() => containerRef.current?.presetHandler(min)}
-                className="rounded-lg border border-[var(--border)] bg-[var(--surface)]/60 px-1 py-1.5 text-[8px] font-black uppercase tracking-[1.5px] text-[var(--muted)] hover:border-primary/40 hover:text-primary"
+                className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)]/60 py-2 text-[9px] font-black uppercase tracking-[1.5px] text-[var(--muted)] hover:border-primary/50 hover:bg-primary/10 hover:text-primary transition-all"
                 title={`Set ${min} minute session`}
               >
                 {min}m
@@ -327,9 +359,14 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
       const line1 = isLeft ? tc('--graph-line-1') : tc('--primary');
       const gridCol = tc('--graph-grid', 'rgba(255,255,255,0.06)');
 
-      // Grid rings
+      // Grid rings — 5 rings: 0, 25, 50, 75, 100
+      // INNER is the fraction for the "0" baseline ring (no-signal pentagon)
+      const INNER = 0.12;
+      const ringFracs  = [INNER, INNER + 0.22, INNER + 0.44, INNER + 0.66, 1.0];
+      const ringLabels = ['0', '25', '50', '75', '100'];
+
       ctx.save();
-      [0.25, 0.5, 0.75, 1.0].forEach(frac => {
+      ringFracs.forEach((frac, ri) => {
         ctx.beginPath();
         angles.forEach((a, i) => {
           const x = cx + Math.cos(a) * R * frac;
@@ -337,17 +374,19 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
           i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
         });
         ctx.closePath();
-        ctx.strokeStyle = frac === 1
-          ? hex2rgba(primary, 0.25)
-          : hex2rgba(gridCol, 0.8);
-        ctx.lineWidth = frac === 1 ? 1.2 : 0.7;
+        ctx.strokeStyle = frac === 1.0
+          ? hex2rgba(primary, 0.30)
+          : frac === INNER
+            ? hex2rgba(primary, 0.50)   // inner "0" ring is brighter — it's the baseline
+            : hex2rgba(gridCol, 0.8);
+        ctx.lineWidth = frac === 1.0 ? 1.2 : frac === INNER ? 1.0 : 0.6;
         ctx.stroke();
 
-        // Numeric labels (25, 50, 75, 100)
+        // Numeric labels
         ctx.font = 'bold 9px "Share Tech Mono", monospace';
-        ctx.fillStyle = hex2rgba(primary, 0.7);
+        ctx.fillStyle = hex2rgba(primary, frac === INNER ? 0.9 : 0.6);
         ctx.textAlign = 'center';
-        ctx.fillText((frac * 100).toFixed(0), cx, cy - R * frac - 3);
+        ctx.fillText(ringLabels[ri], cx, cy - R * frac - 3);
       });
 
       // Spokes
@@ -360,13 +399,14 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
         ctx.stroke();
       });
 
-      // Data polygon
+      // Data polygon — remapped so norm=0 sits ON the 0-ring, norm=1 reaches outer edge
       const total = bands.reduce((a, b) => a + b, 0) || 100;
-      const norm = bands.map(v => v / total);
+      const norm  = bands.map(v => v / total);
 
       ctx.beginPath();
       angles.forEach((a, i) => {
-        const r = R * norm[i];
+        // Map: 0 → INNER ring, 1 → full radius
+        const r = (INNER + norm[i] * (1 - INNER)) * R;
         const x = cx + Math.cos(a) * r;
         const y = cy + Math.sin(a) * r;
         i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
@@ -385,20 +425,45 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
       ctx.stroke();
       ctx.shadowBlur = 0;
 
-      // Vertex dots + labels
+      // Band label colors — neon palette per wave type
+      const bandColors = [
+        '#4f8eff', // Delta — blue
+        '#a855f7', // Theta — purple
+        '#22c55e', // Alpha — green
+        '#00e5ff', // Beta  — cyan
+        '#f59e0b', // Gamma — amber
+      ];
+
+      // Vertex dots + highlighted labels
       const textCol = tc('--graph-text', tc('--muted'));
       angles.forEach((a, i) => {
         const r = R * norm[i];
         const x = cx + Math.cos(a) * r;
         const y = cy + Math.sin(a) * r;
-        ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI * 2);
-        ctx.fillStyle = line1; ctx.fill();
 
-        const lx = cx + Math.cos(a) * (R + 16);
-        const ly = cy + Math.sin(a) * (R + 16);
-        ctx.font = '9px "Share Tech Mono", monospace';
-        ctx.fillStyle = hex2rgba(textCol, 0.75);
-        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        // Glowing dot at data vertex
+        ctx.beginPath(); ctx.arc(x, y, 3.5, 0, Math.PI * 2);
+        ctx.fillStyle = bandColors[i];
+        ctx.shadowBlur = 12; ctx.shadowColor = bandColors[i];
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
+        // Label position — further out from center
+        const lx = cx + Math.cos(a) * (R + 22);
+        const ly = cy + Math.sin(a) * (R + 22);
+
+        // Semi-transparent badge background
+        ctx.font = 'bold 10px "Orbitron", "Share Tech Mono", monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        const labelW = ctx.measureText(labels[i]).width + 10;
+        ctx.fillStyle = 'rgba(0,0,0,0.55)';
+        ctx.beginPath();
+        ctx.roundRect(lx - labelW / 2, ly - 8, labelW, 16, 4);
+        ctx.fill();
+
+        // Label text — no glow
+        ctx.fillStyle = bandColors[i];
         ctx.fillText(labels[i], lx, ly);
       });
       ctx.restore();
@@ -408,20 +473,51 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
       eegMode = 'ws';
       if (fetchInterval) clearInterval(fetchInterval);
       fetchInterval = setInterval(() => {
-        const res = resultRef.current;
-        if (res?.band_powers?.length >= 5) {
-          // Use absolute backend band powers - radar normalizes them via ratio automatically
-          // We can apply a small log baseline so delta doesn't 100% crush the UI visually, 
-          // or just pass them raw as requested by user's raw band matching rule
-          rawBands = [...res.band_powers];
+        const ws  = wsEventRef.current;  // raw eeg_prediction — has full features
+        const res = resultRef.current;   // processed result  — has state/band_mix/score
+
+        // If disconnected from backend, force wave bands to 0 immediately
+        if (!wsUrlRef.current || ws?.status === 'disconnected' || res?.status === 'disconnected') {
+           rawBands = [0, 0, 0, 0, 0];
+           calmSignal = 0;
+           return;
         }
 
-        if (res?.meditation_score !== undefined) {
-          calmSignal = Math.max(0, Math.min(1, res.meditation_score / 100));
-        } else if (res?.band_mix) {
-           // Fallback to calculate base calm from mix if score is omitted for some reason
-           const { alpha, theta, beta } = res.band_mix;
-           calmSignal = Math.max(0, Math.min(1, (alpha + theta * 0.5) / (beta + 0.1) * 0.4));
+        // ── BAND POWERS ──────────────────────────────────────────────────────
+        // Compute REAL band powers directly from the live FFT spectra
+        // Use the explicit source channel if backend provides it, otherwise fallback
+        const activeCh = (ws?.source_channel !== undefined) ? String(ws.source_channel) : selectedChannelRef.current;
+        const currentSp = spectraRef.current[activeCh] || spectraRef.current[selectedChannelRef.current] || Object.values(spectraRef.current)[0] || [];
+        
+        if (currentSp.length > 0) {
+          let delta = 0, theta = 0, alpha = 0, beta = 0;
+          currentSp.forEach(d => {
+            if (d.freq >= 1 && d.freq < 4) delta += d.power;
+            else if (d.freq >= 4 && d.freq < 8) theta += d.power;
+            else if (d.freq >= 8 && d.freq < 13) alpha += d.power;
+            else if (d.freq >= 13 && d.freq <= 30) beta += d.power;
+          });
+          
+          // Use raw powers instead of log — radar normalizes them anyway
+          rawBands = [delta, theta, alpha, beta, 0];
+          
+          // ── CALM SIGNAL ──────────────────────────────────────────────────────
+          const total = delta + theta + alpha + beta + 1e-6;
+          const alphaRel = alpha / total;
+          const betaRel  = beta / total;
+          const thetaRel = theta / total;
+          
+          // Calm = high alpha/theta, low beta
+          calmSignal = Math.max(0, Math.min(1, (alphaRel + thetaRel * 0.5) * 1.5 - (betaRel * 0.5)));
+        } else {
+          // Fallback to wsEvent.features if FFT stream not ready
+          const feat = ws?.features || res?.features;
+          if (feat?.delta !== undefined) {
+            rawBands = [feat.delta||0, feat.theta||0, feat.alpha||0, feat.beta||0, 0];
+            const alphaRel = feat.alpha_rel || 0;
+            const betaRel  = feat.beta_rel  || 0;
+            calmSignal = Math.max(0, Math.min(1, alphaRel * 1.5 - betaRel * 0.5));
+          }
         }
       }, 60);
     }
@@ -504,6 +600,53 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
           orb.style.boxShadow = '0 0 40px var(--primary)';
         }
       }
+
+      // ── Focus & Stress live values ────────────────────────────────
+      // Focus = alpha/theta dominance over beta  (0-100)
+      // Stress = beta dominance, inverse of calm (0-100)
+      const ws2  = wsEventRef.current;
+      const res2 = resultRef.current;
+      const feat2 = ws2?.features || res2?.features;
+
+      // Focus & Stress also using spectra-derived features for consistency
+      const activeCh2 = (ws2?.source_channel !== undefined) ? String(ws2.source_channel) : selectedChannelRef.current;
+      const currentSp = spectraRef.current[activeCh2] || spectraRef.current[selectedChannelRef.current] || Object.values(spectraRef.current)[0] || [];
+      let focusVal  = 0;
+      let stressVal = 0;
+
+      if (!wsUrlRef.current || ws2?.status === 'disconnected' || res2?.status === 'disconnected') {
+         focusVal = 0;
+         stressVal = 0;
+      } else if (currentSp.length > 0) {
+         let delta = 0, theta = 0, alpha = 0, beta = 0;
+         currentSp.forEach(d => {
+            if (d.freq >= 1 && d.freq < 4) delta += d.power;
+            else if (d.freq >= 4 && d.freq < 8) theta += d.power;
+            else if (d.freq >= 8 && d.freq < 13) alpha += d.power;
+            else if (d.freq >= 13 && d.freq <= 30) beta += d.power;
+         });
+         const total2 = delta + theta + alpha + beta + 1e-6;
+         const alphaRel = alpha / total2;
+         const betaRel  = beta / total2;
+         const thetaRel = theta / total2;
+         focusVal  = Math.round(Math.min(100, Math.max(0, (alphaRel + thetaRel * 0.5) * 200)));
+         stressVal = Math.round(Math.min(100, Math.max(0, betaRel * 300)));
+      } else if (feat2?.alpha !== undefined) {
+        const total2 = (feat2.delta||0) + (feat2.theta||0) + (feat2.alpha||0) + (feat2.beta||0) + 1e-6;
+        const alphaRel = (feat2.alpha||0) / total2;
+        const betaRel  = (feat2.beta||0)  / total2;
+        const thetaRel = (feat2.theta||0) / total2;
+        focusVal  = Math.round(Math.min(100, Math.max(0, (alphaRel + thetaRel * 0.5) * 200)));
+        stressVal = Math.round(Math.min(100, Math.max(0, betaRel * 300)));
+      } else if (res2?.meditation_score !== undefined) {
+        focusVal  = Math.round(res2.meditation_score || 0);
+        stressVal = Math.round(Math.max(0, 100 - focusVal));
+      }
+
+      const fv = $('med-focus-val');
+      if (fv) fv.textContent = focusVal;
+      const sv = $('med-stress-val');
+      if (sv) sv.textContent = stressVal;
 
       // Sidebar indicators
       const colCalm = $('med-col-calm-val');
@@ -737,7 +880,6 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
                   <span id="med-dominant-val" className="text-[10px] font-black tracking-[2px] uppercase">Alpha</span>
                 </div>
               </div>
-              <div className="med-chart-label">Global EEG Power</div>
               <canvas id="med-radar" className="med-radar-canvas" />
             </div>
 

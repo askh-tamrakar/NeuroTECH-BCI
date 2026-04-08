@@ -1,5 +1,5 @@
 {
-  "sampling_rate": 1000,
+  "sampling_rate": 512,
   "channel_mapping": {
     "ch0": {
       "enabled": true,

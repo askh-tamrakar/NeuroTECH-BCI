@@ -1,603 +1,318 @@
-import json
+from flask import Blueprint, jsonify, request
 import time
-import uuid
 import numpy as np
-import pandas as pd
-from fastapi import APIRouter, Body
-from fastapi.responses import JSONResponse
 from src.server.server.state import state
-from src.server.server.config_manager import (
-    load_calibration_config,
-    load_config,
-    save_calibration_config,
-    save_config,
-)
+from src.server.server.config_manager import load_config, save_config
 from src.server.server.extensions import socketio
 from src.database.db_manager import db_manager
 from src.server.server.lsl_service import extract_emg_features, extract_emg_features as extract_features_for_sensor
 # Note: original code routed `extract_features_for_sensor` to specific functions.
 # We need to reimplement that routing or import it.
 # EOG features are also needed.
-from src.server.server.lsl_service import extract_eog_features, extract_eeg_features
+from src.server.server.lsl_service import extract_eog_features
 from scipy import stats as scipy_stats
 
 # Imports for ML logic
-from src.learning.emg_trainer import (
-    train_emg_model,
-    list_saved_models as list_saved_emg_models, 
-    delete_model as delete_emg_model, 
-    load_model as load_emg_model, 
-    get_model_tree_structure
+from src.learning.model_trainer import (
+    train_model, train_emg_model, train_eog_model,
+    evaluate_saved_model, list_saved_models, delete_model, load_model, get_model_tree_structure
 )
 from src.learning.eog_trainer import (
-    train_eog_model, 
+    train_eog_model, evaluate_saved_eog_model, 
     list_saved_models as list_saved_eog_models, 
     delete_model as delete_eog_model, 
     load_model as load_eog_model
 )
-from src.learning.eeg_lda_trainer import train_eeg_lda_model
-from src.config.window_config import SESSION_CONFIG
-from src.feature.extractors.rps_extractor import EMG_BASE_FEATURES, EMG_FEATURE_COLUMNS
-from src.server.server.services.training_job_service import (
-    create_training_job as _create_training_job,
-    job_snapshot as _job_snapshot,
-    request_training_job_cancel as _request_training_job_cancel,
-    run_training_job as _run_training_job,
-)
 
-training_bp = APIRouter()
-EMG_BURST_WINDOWS = 5
-EMG_BURST_STRIDE_MS = 150.0
+training_bp = Blueprint('training', __name__)
 
-
-def _persist_calibration_summary(sensor: str, result: dict, windows: list[dict], session_name: str | None = None):
-    calibration_cfg = load_calibration_config()
-    sensor_key = str(sensor).upper()
-    now_iso = time.strftime("%Y-%m-%dT%H:%M:%S")
-
-    windows_per_label = {}
-    for window in windows:
-        action = window.get("action") or window.get("label")
-        if not action:
-            continue
-        windows_per_label[action] = windows_per_label.get(action, 0) + 1
-
-    sensor_history = calibration_cfg.get(sensor_key, {})
-    sensor_history.update({
-        "sensor": sensor_key,
-        "calibrated": True,
-        "last_calibrated_at": now_iso,
-        "session_name": session_name,
-        "window_count": int(len(windows)),
-        "windows_per_label": windows_per_label,
-        "recommended_windows_per_label": result.get("recommended_samples"),
-        "accuracy_before": result.get("accuracy_before"),
-        "accuracy_after": result.get("accuracy_after"),
-        "updated_thresholds": result.get("updated_thresholds", {}),
-    })
-    calibration_cfg[sensor_key] = sensor_history
-    save_calibration_config(calibration_cfg)
-
-
-def _json(payload, status_code: int = 200):
-    if status_code == 200:
-        return payload
-    return JSONResponse(content=payload, status_code=status_code)
-
-
-def _normalize_eeg_label(label):
-    raw = str(label).strip()
-    lowered = raw.lower()
-    mapping = {
-        'rest': 0,
-        '0': 0,
-        't1': 1,
-        'target 1': 1,
-        'concentration': 1,
-        '1': 1,
-        't2': 2,
-        'target 2': 2,
-        'relaxation': 2,
-        '2': 2,
-        't3': 3,
-        'target 3': 3,
-        '3': 3,
-        't4': 4,
-        'target 4': 4,
-        '4': 4,
-        't5': 5,
-        'target 5': 5,
-        '5': 5,
-        't6': 6,
-        'target 6': 6,
-        '6': 6,
-    }
-    return mapping.get(lowered, 0)
-
-
-def _safe_socket_emit(event_name, payload):
-    try:
-        if getattr(socketio, "server", None) is not None:
-            socketio.emit(event_name, payload)
-    except Exception:
-        pass
-
-
-def _error_response(message, status_code=400, **extra):
-    payload = {"error": message}
-    if extra:
-        payload.update(extra)
-    return payload, status_code
-
-
-def _emit_job_update(job_id):
-    snapshot = _job_snapshot(job_id)
-    if snapshot:
-        _safe_socket_emit('training_job_update', snapshot)
-
-
-
-def _emg_window_params(sr, metadata, samples):
-    explicit_window_ms = metadata.get('windowMs') or metadata.get('sessionWindowMs') or metadata.get('window_ms')
-    explicit_capture_ms = metadata.get('captureWindowMs') or metadata.get('capture_window_ms')
-    selected_window_ms = float(explicit_window_ms or ((len(samples) / max(sr, 1)) * 1000.0))
-    selected_window_samples = max(1, int((selected_window_ms / 1000.0) * sr))
-    stride_samples = max(1, int((EMG_BURST_STRIDE_MS / 1000.0) * sr))
-    expected_capture_samples = selected_window_samples + stride_samples * (EMG_BURST_WINDOWS - 1)
-    capture_samples = expected_capture_samples
-    capture_window_ms = float((capture_samples / sr) * 1000.0)
-
-    if explicit_capture_ms is not None:
-        capture_window_ms = float(explicit_capture_ms)
-        capture_samples = max(1, int((capture_window_ms / 1000.0) * sr))
-
-    is_valid_burst = abs(capture_samples - expected_capture_samples) <= max(2, stride_samples // 10)
-    return selected_window_ms, selected_window_samples, stride_samples, capture_samples, capture_window_ms, is_valid_burst
-
-
-def _resolve_serial_id(raw_value):
-    try:
-        if raw_value in (None, ""):
-            return 0
-        return int(float(raw_value))
-    except (TypeError, ValueError):
-        return 0
-
-
-def _normalize_eog_label(label):
-    raw = str(label).strip()
-    lowered = raw.lower()
-    mapping = {
-        'rest': 0,
-        '0': 0,
-        'singleblink': 1,
-        'single_blink': 1,
-        'single blink': 1,
-        '1': 1,
-        'doubleblink': 2,
-        'double_blink': 2,
-        'double blink': 2,
-        '2': 2,
-    }
-    return mapping.get(lowered, 0)
-
-def extract_features_wrapper(sensor: str, samples: list, sr: int = 1000) -> dict:
+def extract_features_wrapper(sensor: str, samples: list, sr: int = 512) -> dict:
     """Route to sensor-specific feature extraction."""
     sensor = sensor.upper()
     if sensor == "EMG":
         return extract_emg_features(samples, sr)
     elif sensor == "EOG":
         return extract_eog_features(samples, sr)
-    elif sensor == "EEG":
-        return extract_eeg_features(samples, sr)
     else:
         return extract_emg_features(samples, sr)
 
-@training_bp.post('/api/train-emg-rf')
-def api_train_emg(payload: dict | None = Body(default=None)):
+@training_bp.route('/api/train-emg-rf', methods=['POST'])
+def api_train_emg():
     try:
-        params = payload or {}
+        params = request.get_json() or {}
         target_table = params.get('table_name', 'emg_windows')
         
         if target_table == 'ALL':
             target_table = 'emg_windows'
 
-        n_est = int(params.get('n_estimators', 200))
-        max_d = params.get('max_depth')
-        if max_d == 'None' or max_d is None: max_d = 15
-        else: max_d = int(max_d)
-        
-        # New parameters for splitting and folds
-        train_split = float(params.get('train_split', 0.7))
-        val_split = float(params.get('val_split', 0.15))
-        test_split = float(params.get('test_split', 0.15))
-        n_folds = int(params.get('n_folds', 1))
-        
-        min_impurity_decrease = float(params.get('min_impurity_decrease', 0.0))
-        model_name = params.get('model_name', 'emg_rf_model')
-        
-        job = _create_training_job("EMG", model_name)
-        _run_training_job(
-            job["job_id"],
-            train_emg_model,
-            {
-                "n_estimators": n_est,
-                "max_depth": max_d,
-                "min_impurity_decrease": min_impurity_decrease,
-                "n_estimators_min": params.get("n_estimators_min"),
-                "n_estimators_max": params.get("n_estimators_max"),
-                "max_depth_min": params.get("max_depth_min"),
-                "max_depth_max": params.get("max_depth_max"),
-                "min_impurity_decrease_min": params.get("min_impurity_decrease_min"),
-                "min_impurity_decrease_max": params.get("min_impurity_decrease_max"),
-                "search_resolution": params.get("search_resolution", 1),
-                "train_split": train_split,
-                "val_split": val_split,
-                "test_split": test_split,
-                "n_folds": n_folds,
-                "table_name": target_table,
-                "model_name": model_name,
-            },
-            on_success=lambda _result, _kwargs: state.rps_detector.load_model(model_name, verbose=False) if state.rps_detector else None,
-        )
-        return {
-            "job_id": job["job_id"],
-            "status": job["status"],
-            "sensor": "EMG",
-            "model_name": model_name,
-        }
-    except Exception as e:
-        return _json({"error": str(e)}, 500)
+        try:
+            conn = db_manager.connect('EMG')
+            cursor = conn.cursor()
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (target_table,))
+            if not cursor.fetchone():
+                 return jsonify({"error": f"Table {target_table} not found"}), 404
+                 
+            n = conn.execute(f"SELECT COUNT(*) FROM {target_table}").fetchone()[0]
+            conn.close()
+            
+            print(f"[Training] Train Request on {target_table}. Contains {n} samples.")
+            if n == 0:
+                return jsonify({"error": "Database is empty (0 samples). Please Record Data and hit Stop."}), 400
+        except Exception as e:
+            print(f"[Training] DB Check failed: {e}")
 
-@training_bp.post('/api/train-eog-rf')
-def api_train_eog(payload: dict | None = Body(default=None)):
-    try:
-        params = payload or {}
         n_est = int(params.get('n_estimators', 100))
         max_d = params.get('max_depth')
-        table_name = params.get('table_name') 
+        if max_d == 'None' or max_d is None: max_d = None
+        else: max_d = int(max_d)
+        
+        test_size = float(params.get('test_size', 0.2))
+        min_impurity_decrease = float(params.get('min_impurity_decrease', 0.0))
+        
+        model_name = params.get('model_name', 'emg_rf')
+        
+        result = train_emg_model(
+            n_estimators=n_est, 
+            max_depth=max_d, 
+            min_impurity_decrease=min_impurity_decrease,
+            test_size=test_size, 
+            table_name=target_table, 
+            model_name=model_name
+        )
+        if "error" in result:
+             return jsonify(result), 400
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@training_bp.route('/api/train-eog-rf', methods=['POST'])
+def api_train_eog():
+    try:
+        params = request.get_json() or {}
+        n_est = int(params.get('n_estimators', 100))
+        max_d = params.get('max_depth')
+        table_name = params.get('table_name') # Extract session table name
         if table_name == 'ALL': table_name = 'eog_windows'
         model_name = params.get('model_name', 'eog_rf')
 
         if max_d == 'None' or max_d is None: max_d = None
         else: max_d = int(max_d)
         
-        train_split = float(params.get('train_split', 0.7))
-        val_split = float(params.get('val_split', 0.15))
-        test_split = float(params.get('test_split', 0.15))
-        n_folds = int(params.get('n_folds', 1))
-        
+        test_size = float(params.get('test_size', 0.2))
         min_impurity_decrease = float(params.get('min_impurity_decrease', 0.0))
         
-        job = _create_training_job("EOG", model_name)
-        _run_training_job(
-            job["job_id"],
-            train_eog_model,
-            {
-                "n_estimators": n_est,
-                "max_depth": max_d,
-                "min_impurity_decrease": min_impurity_decrease,
-                "n_estimators_min": params.get("n_estimators_min"),
-                "n_estimators_max": params.get("n_estimators_max"),
-                "max_depth_min": params.get("max_depth_min"),
-                "max_depth_max": params.get("max_depth_max"),
-                "min_impurity_decrease_min": params.get("min_impurity_decrease_min"),
-                "min_impurity_decrease_max": params.get("min_impurity_decrease_max"),
-                "search_resolution": params.get("search_resolution", 1),
-                "train_split": train_split,
-                "val_split": val_split,
-                "test_split": test_split,
-                "n_folds": n_folds,
-                "table_name": table_name or "eog_windows",
-                "model_name": model_name,
-            },
+        result = train_eog_model(
+            n_estimators=n_est, 
+            max_depth=max_d, 
+            min_impurity_decrease=min_impurity_decrease,
+            test_size=test_size, 
+            table_name=table_name, 
+            model_name=model_name
         )
-        return {
-            "job_id": job["job_id"],
-            "status": job["status"],
-            "sensor": "EOG",
-            "model_name": model_name,
-        }
+        if "error" in result:
+             return jsonify(result), 400
+        return jsonify(result)
     except Exception as e:
-        return _json({"error": str(e)}, 500)
+        return jsonify({"error": str(e)}), 500
 
 
-@training_bp.post('/api/train-eeg-lda')
-def api_train_eeg_lda(payload: dict | None = Body(default=None)):
+@training_bp.route('/api/model/evaluate', methods=['POST'])
+def api_eval_emg():
+    params = request.get_json() or {}
+    table_name = params.get('table_name') 
+    model_name = params.get('model_name')
+    # Default to EMG for backward compat on this endpoint if not specified
+    res = evaluate_saved_model(sensor='EMG', table_name=table_name, model_name=model_name)
+    if "error" in res:
+        return jsonify(res), 400
+    return jsonify(res)
+
+@training_bp.route('/api/model/evaluate/eog', methods=['POST'])
+def api_eval_eog():
+    params = request.get_json() or {}
+    table_name = params.get('table_name')
+    model_name = params.get('model_name')
+    res = evaluate_saved_eog_model(table_name=table_name, model_name=model_name)
+    if "error" in res:
+        return jsonify(res), 400
+    return jsonify(res)
+
+@training_bp.route('/api/models/emg', methods=['GET'])
+def api_list_models():
+    """List all saved EMG models (Inlined logic for stability)."""
     try:
-        params = payload or {}
-        table_name = params.get('table_name', 'eeg_windows')
-        if table_name == 'ALL':
-            table_name = 'eeg_windows'
+        # models = list_saved_models()
+        # Inline Listing Logic
+        from pathlib import Path
+        import json
         
-        train_split = float(params.get('train_split', 0.7))
-        val_split = float(params.get('val_split', 0.15))
-        test_split = float(params.get('test_split', 0.15))
-        n_folds = int(params.get('n_folds', 1))
-
-        model_name = params.get('model_name', 'eeg_lda')
-        solver = params.get('solver', 'eigen')
-        shrinkage = params.get('shrinkage', 'auto')
-        tol = float(params.get('tol', params.get('tol_min', 0.0001)))
-
-        job = _create_training_job("EEG", model_name)
-        _run_training_job(
-            job["job_id"],
-            train_eeg_lda_model,
-            {
-                "table_name": table_name,
-                "train_split": train_split,
-                "val_split": val_split,
-                "test_split": test_split,
-                "n_folds": n_folds,
-                "model_name": model_name,
-                "solver": solver,
-                "shrinkage": shrinkage,
-                "tol": tol,
-                "tol_min": params.get("tol_min"),
-                "tol_max": params.get("tol_max"),
-                "search_resolution": params.get("search_resolution", 1),
-            },
-        )
-        return {
-            "job_id": job["job_id"],
-            "status": job["status"],
-            "sensor": "EEG",
-            "model_name": model_name,
-        }
+        # Path: src/web/server/routes/training_routes.py -> root is 5 levels up?
+        # root/src/web/server/routes
+        # Actually simplest is to find 'data' from common anchor?
+        # Let's rely on relative path from this file.
+        # this_file = .../src/web/server/routes/training_routes.py
+        # root is parents[4]
+        PROJ_ROOT = Path(__file__).resolve().parent.parent.parent.parent.parent
+        MODELS_DIR = PROJ_ROOT / "frontend" / "public" / "data" / "EMG" / "models"
+        
+        # Get active model to mark it
+        from src.utils.config import config_manager
+        active_name = config_manager.get_active_model('EMG')
+        
+        models = []
+        if MODELS_DIR.exists():
+            all_files = list(MODELS_DIR.glob("*.joblib"))
+            for p in all_files:
+                if p.name.endswith("_scaler.joblib"): continue
+                
+                name = p.stem
+                meta_path = MODELS_DIR / f"{name}_meta.json"
+                meta = {}
+                if meta_path.exists():
+                    try:
+                        with open(meta_path, 'r') as f: meta = json.load(f)
+                    except: pass
+                
+                models.append({
+                    "name": name,
+                    "path": str(p),
+                    "created_at": meta.get("created_at"),
+                    "accuracy": meta.get("accuracy"),
+                    "hyperparameters": {k:v for k,v in meta.items() if k not in ["created_at", "accuracy"]},
+                    "active": (name == active_name)
+                })
+            models.sort(key=lambda x: x.get("created_at") or "", reverse=True)
+            
+        return jsonify(models)
     except Exception as e:
-        return _json({"error": str(e)}, 500)
+        import traceback
+        tb = traceback.format_exc()
+        print(f"[Training] ❌ Error listing EMG models: {tb}")
+        return jsonify({"error": str(e), "traceback": tb}), 500
 
-
-@training_bp.get('/api/train-jobs/{job_id}')
-def api_get_training_job(job_id):
-    job = _job_snapshot(job_id)
-    if not job:
-        return _json({"error": "Training job not found"}, 404)
-    return job
-
-
-@training_bp.post('/api/train-jobs/{job_id}/cancel')
-def api_cancel_training_job(job_id):
-    job = _request_training_job_cancel(job_id)
-    if not job:
-        return _json({"error": "Training job not found"}, 404)
-    return job
-
-
-@training_bp.get('/api/models/emg')
-def api_list_emg_models():
-    """List all saved EMG models."""
-    try:
-        models = list_saved_emg_models()
-        return models
-    except Exception as e:
-        return _json({"error": str(e)}, 500)
-
-@training_bp.get('/api/models/eog')
+@training_bp.route('/api/models/eog', methods=['GET'])
 def api_list_eog_models():
     """List all saved EOG models."""
     try:
         # Use existing EOG trainer which is known good
         models = list_saved_eog_models()
-        return models
+        return jsonify(models)
     except Exception as e:
         import traceback
         tb = traceback.format_exc()
-        print(f"❌ Error listing EOG models: {tb}")
-        return _json({"error": str(e), "traceback": tb}, 500)
+        print(f"[Training] ❌ Error listing EOG models: {tb}")
+        return jsonify({"error": str(e), "traceback": tb}), 500
 
-@training_bp.get('/api/models/{sensor}')
+@training_bp.route('/api/models/<sensor>', methods=['GET'])
 def api_list_models_generic(sensor):
     """List all saved models for a sensor (Generic Route)."""
     try:
-        sensor_upper = sensor.upper()
-        if sensor_upper == 'EMG':
-            return api_list_emg_models()
-        elif sensor_upper == 'EOG':
+        if sensor.upper() == 'EMG':
+            return api_list_models()
+        elif sensor.upper() == 'EOG':
             return api_list_eog_models()
-        elif sensor_upper == 'EEG':
-            # EEG models are managed via emg_trainer.list_saved_models('EEG') or similar
-            # Actually, emg_trainer.py has a generic list_saved_models(sensor)
-            return list_saved_emg_models('EEG')
         else:
-            return _json({"error": f"Unknown sensor type {sensor}"}, 400)
+            return jsonify({"error": f"Unknown sensor type {sensor}"}), 400
     except Exception as e:
-        return _json({"error": str(e)}, 500)
+        return jsonify({"error": str(e)}), 500
 
 
 
-@training_bp.delete('/api/models/emg/{model_name}')
-def api_delete_emg_model_endpoint(model_name):
+@training_bp.route('/api/models/emg/<model_name>', methods=['DELETE'])
+def api_delete_model(model_name):
     """Delete a specific EMG model."""
     try:
-        result = delete_emg_model('EMG', model_name)
+        result = delete_model('EMG', model_name)
         if "errors" in result and result["errors"]:
-             return _json(result, 400)
-        return result
+             return jsonify(result), 400 # Partial success or fail
+        return jsonify(result)
     except Exception as e:
-        return _json({"error": str(e)}, 500)
+        return jsonify({"error": str(e)}), 500
 
-@training_bp.delete('/api/models/eog/{model_name}')
+@training_bp.route('/api/models/eog/<model_name>', methods=['DELETE'])
 def api_delete_eog_model(model_name):
     """Delete a specific EOG model."""
     try:
         result = delete_eog_model(model_name)
         if "errors" in result and result["errors"]:
-             return _json(result, 400)
-        return result
+             return jsonify(result), 400 
+        return jsonify(result)
     except Exception as e:
-        return _json({"error": str(e)}, 500)
+        return jsonify({"error": str(e)}), 500
 
-
-@training_bp.post('/api/emg/calibrate-scaler')
-def api_calibrate_emg_scaler(payload: dict | None = Body(default=None)):
-    try:
-        from src.calibration.calibration_manager import calibration_manager
-        params = payload or {}
-        table_name = params.get('table_name', 'emg_windows')
-        model_name = params.get('model_name', 'emg_rf_model')
-        if table_name == 'ALL':
-            table_name = 'emg_windows'
-
-        conn = db_manager.connect('EMG')
-        cursor = conn.cursor()
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table_name,))
-        if not cursor.fetchone():
-            conn.close()
-            return _json({"error": f"Table {table_name} not found"}, 404)
-
-        rows = pd.read_sql_query(f"SELECT * FROM {table_name}", conn)
-        conn.close()
-
-        if rows.empty:
-            return _json({"error": "No EMG rows available for scaler calibration"}, 400)
-
-        feature_rows = rows.to_dict(orient='records')
-        scaler_path = calibration_manager.calibrate_emg_scaler(feature_rows, model_name=model_name)
-        try:
-            from src.utils.config import config_manager
-            config_manager.set_active_model('EMG', model_name)
-            if state.rps_detector:
-                state.rps_detector.load_model(model_name, verbose=False)
-        except Exception:
-            pass
-        return {"status": "success", "table_name": table_name, "scaler_path": scaler_path, "samples": len(feature_rows)}
-    except Exception as e:
-        return _json({"error": str(e)}, 500)
-
-@training_bp.post('/api/eog/calibrate-scaler')
-def api_calibrate_eog_scaler(payload: dict | None = Body(default=None)):
-    try:
-        from src.calibration.calibration_manager import calibration_manager
-        params = payload or {}
-        table_name = params.get('table_name', 'eog_windows')
-        model_name = params.get('model_name', 'eog_rf')
-        if table_name == 'ALL':
-            table_name = 'eog_windows'
-
-        conn = db_manager.connect('EOG')
-        cursor = conn.cursor()
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table_name,))
-        if not cursor.fetchone():
-            conn.close()
-            return _json({"error": f"Table {table_name} not found"}, 404)
-
-        rows = pd.read_sql_query(f"SELECT * FROM {table_name}", conn)
-        conn.close()
-
-        if rows.empty:
-            return _json({"error": "No EOG rows available for scaler calibration"}, 400)
-
-        feature_rows = rows.to_dict(orient='records')
-        scaler_path = calibration_manager.calibrate_eog_scaler(feature_rows, model_name=model_name)
-        try:
-            from src.utils.config import config_manager
-            config_manager.set_active_model('EOG', model_name)
-        except Exception:
-            pass
-        return {"status": "success", "table_name": table_name, "scaler_path": scaler_path, "samples": len(feature_rows)}
-    except Exception as e:
-        return _json({"error": str(e)}, 500)
-
-@training_bp.delete('/api/models/{sensor}/{model_name}')
-def api_delete_model_generic(sensor, model_name):
-    """Delete a specific model for any supported sensor."""
-    try:
-        sensor_upper = sensor.upper()
-        if sensor_upper == 'EOG':
-            result = delete_eog_model(model_name)
-        elif sensor_upper == 'EMG':
-            result = delete_emg_model('EMG', model_name)
-        elif sensor_upper == 'EEG':
-            result = delete_emg_model('EEG', model_name)
-        else:
-            return _json({"error": f"Unsupported sensor {sensor}"}, 400)
-
-        if "errors" in result and result["errors"]:
-            return _json(result, 400)
-        return result
-    except Exception as e:
-        return _json({"error": str(e)}, 500)
-
-@training_bp.post('/api/models/emg/load')
-def api_load_emg_model_endpoint(payload: dict | None = Body(default=None)):
+@training_bp.route('/api/models/emg/load', methods=['POST'])
+def api_load_model():
     """Load a specific EMG model to be active."""
     try:
-        params = payload or {}
+        params = request.get_json() or {}
         model_name = params.get('model_name')
         if not model_name:
-            return _json({"error": "model_name required"}, 400)
+            return jsonify({"error": "model_name required"}), 400
             
-        result = load_emg_model('EMG', model_name)
+        result = load_model('EMG', model_name)
         if "error" in result:
-             return _json(result, 400)
+             return jsonify(result), 400
         
         # Update Real-time Detector
         if state.rps_detector:
-            print(f"Reloading RPS Detector with {model_name}")
+            print(f"[Training] Reloading RPS Detector with {model_name}")
             state.rps_detector.load_model(model_name, verbose=False)
             
-        return result
+        return jsonify(result)
     except Exception as e:
-        return _json({"error": str(e)}, 500)
+        return jsonify({"error": str(e)}), 500
 
-@training_bp.post('/api/models/eog/load')
-def api_load_eog_model(payload: dict | None = Body(default=None)):
+@training_bp.route('/api/models/eog/load', methods=['POST'])
+def api_load_eog_model():
     """Load a specific EOG model to be active."""
     try:
-        params = payload or {}
+        params = request.get_json() or {}
         model_name = params.get('model_name')
         if not model_name:
-            return _json({"error": "model_name required"}, 400)
+            return jsonify({"error": "model_name required"}), 400
             
         result = load_eog_model(model_name)
         if "error" in result:
-             return _json(result, 400)
+             return jsonify(result), 400
              
         # Update Persisted Config so Router sees it
         try:
              from src.utils.config import config_manager
              config_manager.set_active_model('EOG', model_name)
-             print(f"Set active EOG model to {model_name}")
+             print(f"[Training] Set active EOG model to {model_name}")
         except Exception as e:
-             print(f"Warning: Failed to update config manager: {e}")
+             print(f"[Training] Warning: Failed to update config manager: {e}")
             
-        return result
+        return jsonify(result)
     except Exception as e:
-        return _json({"error": str(e)}, 500)
+        return jsonify({"error": str(e)}), 500
 
-@training_bp.post('/api/models/{sensor}/load')
-def api_load_model_generic(sensor, payload: dict | None = Body(default=None)):
+@training_bp.route('/api/models/<sensor>/load', methods=['POST'])
+def api_load_model_generic(sensor):
     """Load a specific model (Generic)."""
     try:
-        params = payload or {}
+        params = request.get_json() or {}
         model_name = params.get('model_name')
         if not model_name:
-            return _json({"error": "model_name required"}, 400)
+            return jsonify({"error": "model_name required"}), 400
 
-        sensor_upper = sensor.upper()
-        if sensor_upper == 'EOG':
-            result = load_eog_model(model_name)
-        else:
-            result = load_emg_model(sensor_upper, model_name)
-
+        result = load_model(sensor, model_name)
         if "error" in result:
-             return _json(result, 400)
+             return jsonify(result), 400
         
         # Update Real-time Detector
-        if sensor_upper == 'EMG' and state.rps_detector:
+        if sensor.upper() == 'EMG' and state.rps_detector:
              state.rps_detector.load_model(model_name, verbose=False)
 
-        return result
+        return jsonify(result)
     except Exception as e:
-        return _json({"error": str(e)}, 500)
+        return jsonify({"error": str(e)}), 500
 
-@training_bp.post('/api/model/tree')
-def api_get_tree(payload: dict | None = Body(default=None)):
+@training_bp.route('/api/model/tree', methods=['POST'])
+def api_get_tree():
     """Get a specific tree structure."""
     try:
-        params = payload or {}
+        params = request.get_json() or {}
         model_name = params.get('model_name')
         tree_index = int(params.get('tree_index', 0))
         # Infer sensor or pass it? For now, we iterate or try EMG default logic if model_name matches active
@@ -608,243 +323,168 @@ def api_get_tree(payload: dict | None = Body(default=None)):
         
         result = get_model_tree_structure(sensor=sensor, model_name=model_name, tree_index=tree_index)
         if "error" in result:
-             return _json(result, 400)
-        return result
+             return jsonify(result), 400
+        return jsonify(result)
     except Exception as e:
-        return _json({"error": str(e)}, 500)
+        return jsonify({"error": str(e)}), 500
 
 
-def _save_window_payload(payload):
+@training_bp.route('/api/window', methods=['POST'])
+def api_save_window():
+    """Accept a recorded window, save as CSV/DB, compute features and update config thresholds."""
     try:
+        from src.calibration.calibration_manager import calibration_manager
+        
+        payload = request.get_json()
         if not payload:
-            return _error_response("No payload provided", 400)
+            return jsonify({"error": "No payload provided"}), 400
 
         sensor = payload.get('sensor')
         action = payload.get('action')
         samples = payload.get('samples')
-        metadata = payload.get('metadata', {}) or {}
+        timestamps = payload.get('timestamps', None)
 
         if sensor is None or action is None or samples is None:
-            return _error_response("Missing required fields: sensor, action, samples", 400)
+            return jsonify({"error": "Missing required fields: sensor, action, samples"}), 400
 
-        sr = state.config.get('sampling_rate', 1000) if state.config else 1000
-        sensor_upper = str(sensor).upper()
+        # Compute features
+        sr = state.config.get('sampling_rate', 512) if state.config else 512
+        features = extract_features_wrapper(sensor, samples, sr)
 
-        sub_windows = []
-        session_name = payload.get('session_name', 'Manual_Windows')
-        table_name = db_manager.create_session_table(sensor, session_name)
-        session_id = str(int(time.time() * 1000))
-        trial_id = metadata.get('trial') or (db_manager.next_trial_id(sensor_upper, table_name) if sensor_upper in {'EMG', 'EEG'} else None)
-        serial_id = _resolve_serial_id(metadata.get('serial_id'))
-        if sensor_upper == 'EOG' and serial_id <= 0:
-            serial_id = db_manager.next_serial_id(table_name)
+        ts = time.time()
 
-        if sensor_upper == 'EMG':
-            selected_window_ms, selected_window_samples, stride_samples, capture_samples, capture_window_ms, is_valid_burst = _emg_window_params(sr, metadata, samples)
-            raw_samples = np.asarray(samples).flatten()
-            if (not is_valid_burst) or len(raw_samples) < capture_samples:
-                return _error_response(
-                    f"Discarded EMG window: expected a valid {EMG_BURST_WINDOWS}-sample burst "
-                    f"({int(selected_window_ms)}ms slices, {int(capture_window_ms)}ms capture)",
-                    422
-                )
-            db_manager.save_session_metadata('EMG', table_name, {
-                "sensor": "EMG",
-                "table_name": table_name,
-                "session_name": session_name,
-                "storage_format": "compact_emg_v3",
-                "feature_columns": EMG_FEATURE_COLUMNS,
-                "channel_index": int(metadata.get('channelIndex', payload.get('channel', 0)) or 0),
-                "sample_count": int(selected_window_samples),
-                "sampling_rate": float(sr),
-                "window_ms": float(selected_window_ms),
-                "training_window_ms": float(selected_window_ms),
-                "capture_window_ms": float(capture_window_ms),
-                "session_window_ms": float(selected_window_ms),
-                "session_overlap": float(metadata.get('sessionOverlap', 0) or 0),
-                "session_stride_ms": float(metadata.get('sessionStrideMs', EMG_BURST_STRIDE_MS) or EMG_BURST_STRIDE_MS),
-                "gap_ms": float(metadata.get('gapMs', 0) or 0),
-                "source": metadata.get('source', 'frontend_auto_window'),
-            })
-            for offset in range(0, capture_samples - selected_window_samples + 1, stride_samples):
-                sub_windows.append(raw_samples[offset: offset + selected_window_samples].tolist())
-            if len(sub_windows) != EMG_BURST_WINDOWS:
-                return _error_response(
-                    f"Discarded EMG window: burst slicing produced {len(sub_windows)} samples instead of {EMG_BURST_WINDOWS}",
-                    422
-                )
-        elif sensor_upper == 'EEG':
-            resolved_window_ms = float(metadata.get('windowMs') or ((len(samples) / sr) * 1000.0))
-            resolved_target_frequency = float(metadata.get('targetFrequency', metadata.get('frequency', 0)) or 0)
-            db_manager.save_session_metadata('EEG', table_name, {
-                "sensor": "EEG",
-                "table_name": table_name,
-                "session_name": session_name,
-                "storage_format": "compact_eeg_v1",
-                "channel_index": int(metadata.get('channelIndex', payload.get('channel', 0)) or 0),
-                "sample_count": int(metadata.get('sampleCount') or len(samples) or 0),
-                "sampling_rate": float(sr),
-                "window_ms": resolved_window_ms,
-                "target_frequency": resolved_target_frequency,
-                "source": metadata.get('source', 'ssvep_collector'),
-            })
-            sub_windows.append(samples)
-        else:
-            sub_windows.append(samples)
+        # Load config and update thresholds
+        cfg = state.config or load_config()
+        cfg_features = cfg.setdefault('features', {})
+        sensor_features = cfg_features.setdefault(sensor, {})
         
-        last_features = None
-        prev_features = None
-        for current_samples in sub_windows:
-            if sensor_upper == 'EMG':
-                features = extract_emg_features(current_samples, sr, prev_features=prev_features)
-                features['trial'] = trial_id
-                features['sample_count'] = int(len(current_samples))
-                features['window_ms'] = float(selected_window_ms)
-                features['capture_window_ms'] = float(capture_window_ms)
-                features['sampling_rate'] = float(sr)
-                features['session_window_ms'] = float(selected_window_ms)
-                features['session_stride_ms'] = float(EMG_BURST_STRIDE_MS)
-                features['source'] = metadata.get('source', 'frontend_auto_window')
-                prev_features = {key: features.get(key, 0.0) for key in EMG_FEATURE_COLUMNS if not key.startswith('d_')}
-            elif sensor_upper == 'EEG':
-                features = extract_eeg_features(current_samples, sr)
-                features['trial'] = trial_id
-                features['sample_count'] = int(len(current_samples))
-                features['window_ms'] = float(metadata.get('windowMs') or ((len(current_samples) / sr) * 1000.0))
-                features['channel_index'] = int(metadata.get('channelIndex', payload.get('channel', 0)) or 0)
-                features['target_frequency'] = float(metadata.get('targetFrequency', metadata.get('frequency', 0)) or 0)
-            else:
-                features = extract_features_wrapper(sensor, current_samples, sr)
-                if sensor_upper == 'EOG':
-                    features['serial_id'] = serial_id
-
-            ts = time.time()
-            features['timestamp'] = ts
-            features['metadata_json'] = json.dumps({
-                **metadata,
-                "trial": trial_id,
-                "serial_id": serial_id,
-                "session_name": session_name,
-            })
-            last_features = features
-
-            if sensor_upper == 'EMG':
-                label_value = int(action) if str(action).isdigit() else {
-                    'rest': 0, 'rock': 1, 'paper': 2, 'scissors': 3
-                }.get(str(action).lower(), 0)
-                db_manager.insert_emg_window(features, label_value, session_id=session_id, table_name=table_name)
-                if "merge" not in table_name.lower():
-                    db_manager.insert_emg_window(features, label_value, session_id=session_id, table_name="emg_windows")
-            elif sensor_upper == 'EOG':
-                label_value = _normalize_eog_label(action)
-                db_manager.insert_eog_window(features, label_value, session_id=session_id, table_name=table_name)
-                if "merge" not in table_name.lower():
-                    db_manager.insert_eog_window(features, label_value, session_id=session_id, table_name="eog_windows")
-            elif sensor_upper == 'EEG':
-                label_value = _normalize_eeg_label(action)
-                db_manager.insert_eeg_window(features, label_value, session_id=session_id, table_name=table_name)
-                if "merge" not in table_name.lower():
-                    db_manager.insert_eeg_window(features, label_value, session_id=session_id, table_name="eeg_windows")
-
-        final_response = {
-            "status": "saved",
-            "sensor": sensor_upper,
-            "table": table_name,
-            "windows_saved": len(sub_windows),
-            "trial": trial_id,
-            "serial_id": serial_id if sensor_upper == 'EOG' else None,
+        # Session handling
+        session_name = payload.get('session_name', 'Manual_Windows')
+        if not session_name: session_name = 'Manual_Windows'
+        
+        table_name = db_manager.create_session_table(sensor, session_name)
+        
+        label_map = {
+            'Rest': 0, 'Rock': 1, 'Paper': 2, 'Scissors': 3, 
+            'SingleBlink': 1, 'DoubleBlink': 2, 
+            'Concentration': 1, 'Relaxation': 2,
+            'Target 1': 1, 'Target 2': 2, 'Target 3': 3,
+            'Target 4': 4, 'Target 5': 5, 'Target 6': 6
         }
-        if last_features:
-            final_response["features"] = last_features
-            
-        return final_response
+        label_int = label_map.get(action, -1)
+        if label_int == -1 and action.isdigit():
+             label_int = int(action)
+        if label_int == -1: label_int = 0
+        
+        if sensor.upper() == 'EMG':
+            db_manager.insert_window(features, label_int, session_id=str(int(ts)), table_name=table_name)
+            # Also insert into the global evaluation table (skip if merged session)
+            if "merge" not in table_name.lower():
+                db_manager.insert_window(features, label_int, session_id=str(int(ts)), table_name="emg_windows")
+        elif sensor.upper() == 'EOG':
+            db_manager.insert_eog_window(features, label_int, session_id=str(int(ts)), table_name=table_name)
+            # Also insert into the global evaluation table (skip if merged session)
+            if "merge" not in table_name.lower():
+                db_manager.insert_eog_window(features, label_int, session_id=str(int(ts)), table_name="eog_windows")
+
+        # Update Config Logic (Auto-Calibration on fly)
+        action_entry = sensor_features.setdefault(action, {})
+        updated = {}
+
+        for k, val in features.items():
+            old_range = action_entry.get(k)
+            if isinstance(old_range, list) and len(old_range) == 2:
+                lo, hi = float(old_range[0]), float(old_range[1])
+                new_lo = min(lo, val)
+                new_hi = max(hi, val)
+                action_entry[k] = [new_lo, new_hi]
+                updated[k] = [new_lo, new_hi]
+            else:
+                if val == 0:
+                    new_lo, new_hi = 0.0, 0.0
+                else:
+                    new_lo = val * 0.9
+                    new_hi = val * 1.1
+                action_entry[k] = [new_lo, new_hi]
+                updated[k] = [new_lo, new_hi]
+
+        # Disable saving config to disk on EVERY window to prevent Continuous Reload loops
+        # save_success = save_config(cfg)
+        save_success = True
+        
+        # --- PREDICTION / DETECTION LOGIC ---
+        detected = False
+        predicted_label = "Unknown"
+        
+        # 1. Try ML Model first (Priority for EMG)
+        if sensor.upper() == 'EMG' and state.rps_detector:
+            try:
+                # Use stateless prediction for test windows
+                pred_label, pred_conf = state.rps_detector.predict_instant(features)
+                
+                # If confidence is reasonable, use it
+                if pred_label != "Unknown" and pred_conf > 0.4:
+                    predicted_label = pred_label
+                    # Match if label matches action
+                    detected = (predicted_label == action)
+                else:
+                    predicted_label = "Rest" if pred_label == "Rest" else "Unknown"
+                    detected = False
+                    
+            except Exception as e:
+                print(f"[Training] ML params prediction failed: {e}")
+                
+        # 2. Try Threshold Detection (Fallback or for EOG/EEG)
+        # If we didn't get a confident ML prediction (or simpler sensor)
+        if predicted_label == "Unknown" or sensor.upper() != 'EMG':
+             is_det = calibration_manager.detect_signal(sensor, action, features, cfg)
+             detected = is_det
+             if detected:
+                 predicted_label = action
+             else:
+                 # If we already have a prediction (e.g. from EMG low conf), keep it or overwrite?
+                 # ideally for EOG/EEG if validation fails, it's "Rest" or "Miss"
+                 if predicted_label == "Unknown": saved_pred = "Rest"
+                 else: saved_pred = predicted_label
+                 predicted_label = saved_pred
+
+        result = {
+            "status": "saved",
+            "features": features,
+            "config_updated": save_success,
+            "db_table": table_name,
+            "detected": detected,
+            "predicted_label": predicted_label
+        }
+
+        try:
+            socketio.emit('window_saved', {"sensor": sensor, "action": action, "features": features})
+        except Exception:
+            pass
+
+        print(f"[Training] 💾 Window saved to DB: {table_name}. Prediction: {predicted_label} (Match: {detected})")
+        return jsonify(result)
 
     except Exception as e:
         import traceback
         tb = traceback.format_exc()
-        print(f"❌ Error saving window: {tb}")
-        return _error_response(str(e), 500, traceback=tb)
+        print(f"[Training] ❌ Error saving window: {tb}")
+        return jsonify({"error": str(e), "traceback": tb}), 500
 
 
-@training_bp.post('/api/window')
-def api_save_window(payload: dict | None = Body(default=None)):
-    """Accept a recorded window, save as CSV/DB, compute features and update config thresholds."""
-    response = _save_window_payload(payload)
-    if isinstance(response, tuple):
-        result, status = response
-        return _json(result, status)
-    return response
-
-
-@training_bp.post('/api/windows/batch')
-def api_save_windows_batch(payload: dict | None = Body(default=None)):
-    """Persist multiple windows in one request to reduce collection/save latency."""
-    try:
-        payload = payload or {}
-        windows = payload.get('windows') or []
-        if not windows:
-            return _json({"error": "No windows provided"}, 400)
-
-        shared_sensor = payload.get('sensor')
-        shared_session_name = payload.get('session_name') or payload.get('sessionName')
-        shared_mode = payload.get('mode')
-
-        results = []
-        saved_count = 0
-        error_count = 0
-
-        for index, window in enumerate(windows):
-            window_payload = dict(window or {})
-            if shared_sensor and not window_payload.get('sensor'):
-                window_payload['sensor'] = shared_sensor
-            if shared_session_name and not (window_payload.get('session_name') or window_payload.get('sessionName')):
-                window_payload['session_name'] = shared_session_name
-            if shared_mode and not window_payload.get('mode'):
-                window_payload['mode'] = shared_mode
-
-            response = _save_window_payload(window_payload)
-            if isinstance(response, tuple):
-                result, status = response
-            else:
-                result = response
-                status = 200
-            results.append({
-                "index": index,
-                "id": window_payload.get('id'),
-                **result,
-            })
-            if status >= 400:
-                error_count += 1
-            else:
-                saved_count += 1
-
-        response_status = 200 if error_count == 0 else (207 if saved_count > 0 else 400)
-        response_state = "success" if error_count == 0 else ("partial_success" if saved_count > 0 else "error")
-        return _json({
-            "status": response_state,
-            "saved_count": saved_count,
-            "error_count": error_count,
-            "results": results,
-        }, response_status)
-    except Exception as e:
-        import traceback
-        tb = traceback.format_exc()
-        return _json({"error": str(e), "traceback": tb}, 500)
-
-
-@training_bp.post('/api/calibrate')
-def api_calibrate(payload: dict | None = Body(default=None)):
+@training_bp.route('/api/calibrate', methods=['POST'])
+def api_calibrate():
     """Calibrate detection thresholds based on collected windows."""
     try:
+        payload = request.get_json()
         if not payload:
-            return _json({"error": "No payload provided"}, 400)
+            return jsonify({"error": "No payload provided"}), 400
         
-        sensor = str(payload.get('sensor', '')).upper()
+        sensor = payload.get('sensor')
         windows = payload.get('windows', [])
-        session_name = payload.get('session_name') or payload.get('sessionName')
         
         if not sensor or not windows:
-            return _json({"error": "Missing sensor or windows"}, 400)
+            return jsonify({"error": "Missing sensor or windows"}), 400
         
         windows_by_action = {}
         for w in windows:
@@ -859,7 +499,7 @@ def api_calibrate(payload: dict | None = Body(default=None)):
                 })
         
         if not windows_by_action:
-            return _json({"error": "No valid windows with features found"}, 400)
+            return jsonify({"error": "No valid windows with features found"}), 400
         
         total_before = len(windows)
         correct_before = sum(1 for w in windows if w.get('status') == 'correct')
@@ -956,14 +596,15 @@ def api_calibrate(payload: dict | None = Body(default=None)):
             "recommended_samples": recommended_samples,
             "config_saved": save_success
         }
-
-        _persist_calibration_summary(sensor, result, windows, session_name=session_name)
         
-        _safe_socket_emit('config_updated', {"sensor": sensor})
+        try:
+            socketio.emit('config_updated', {"sensor": sensor})
+        except Exception:
+            pass
         
-        print(f"🎯 Calibration complete: {sensor} | Acc: {accuracy_before:.1%} -> {accuracy_after:.1%}")
-        return result
+        print(f"[Training] 🎯 Calibration complete: {sensor} | Acc: {accuracy_before:.1%} -> {accuracy_after:.1%}")
+        return jsonify(result)
     
     except Exception as e:
-        print(f"❌ Calibration error: {e}")
-        return _json({"error": str(e)}, 500)
+        print(f"[Training] ❌ Calibration error: {e}")
+        return jsonify({"error": str(e)}), 500

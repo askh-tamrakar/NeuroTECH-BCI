@@ -36,9 +36,9 @@ class DesktopReceiver:
         try:
             self.stream_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.stream_socket.connect(('localhost', 6000))
-            print("✅ Connected to Stream Manager (Raw)")
+            print("[Receiver] ✅ Connected to Stream Manager (Raw)")
         except Exception as e:
-            print(f"⚠️ Could not connect to Stream Manager: {e}")
+            print(f"[Receiver] ⚠️ Could not connect to Stream Manager: {e}")
             self.stream_socket = None
 
 
@@ -48,16 +48,16 @@ class DesktopReceiver:
         self.server_sock.bind(('0.0.0.0', self.port))
         self.server_sock.listen(1)
         
-        print(f"🎧 Listening on 0.0.0.0:{self.port}")
-        print("Press Ctrl+C to stop.")
+        print(f"[Receiver] 🎧 Listening on 0.0.0.0:{self.port}")
+        print("[Receiver] Press Ctrl+C to stop.")
         
         threading.Thread(target=self._stats_loop, daemon=True).start()
         
         try:
             while self.running:
-                print("Waiting for mobile connection...")
+                print("[Receiver] Waiting for mobile connection...")
                 client, addr = self.server_sock.accept()
-                print(f"✅ Connected to {addr}")
+                print(f"[Receiver] ✅ Connected to {addr}")
                 self._handle_client(client)
         except KeyboardInterrupt:
             pass
@@ -127,16 +127,16 @@ class DesktopReceiver:
                     del buffer[:i]
                     
         except Exception as e:
-            print(f"Error: {e}")
+            print(f"[Receiver] Error: {e}")
         finally:
-            print("❌ Client disconnected")
+            print("[Receiver] ❌ Client disconnected")
             conn.close()
 
     def _stats_loop(self):
         while self.running:
             time.sleep(1)
             if self.stats["packets"] > 0:
-                print(f"Rate: {self.stats['packets']} samples/sec | Total: {self.stats['bytes']/1024:.1f} KB")
+                print(f"[Receiver] Rate: {self.stats['packets']} samples/sec | Total: {self.stats['bytes']/1024:.1f} KB")
                 self.stats["packets"] = 0
 
 if __name__ == "__main__":

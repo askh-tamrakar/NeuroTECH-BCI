@@ -133,9 +133,7 @@ function addData(newPoints) {
     //    Backward jumps freeze the stream (monotonicity filter rejects all) — must reset.
     const newestIncoming = newPoints[newPoints.length - 1].time;
     if (lastTsHead > 0 && newestIncoming < lastTsHead - 1000) {
-        // Backward jump: new data is >1s behind our head — accept new timeline
-        points = [];
-        envelopeState = 0;
+        // Backward jump: accept new timeline without clearing visible data
         lastTsHead = 0;
         isOffsetInitialized = false;
     }

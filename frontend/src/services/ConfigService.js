@@ -2,7 +2,7 @@ import { fetchWithBase } from '../utils/runtimeConnection'
 
 const CONFIG_KEY = 'biosignals-config'
 const CONFIG_DEFAULTS = {
-    sampling_rate: 1000,
+    sampling_rate: 512,
     channel_mapping: {
         ch0: {
             sensor: 'EMG',

@@ -1,46 +1,91 @@
-from fastapi import APIRouter, Body
-from fastapi.responses import JSONResponse
+from flask import Blueprint, jsonify, request
+from pathlib import Path
+import json
+import os
 
-from src.server.server.services.file_service import list_recordings, load_recording, save_recording_session
+recording_bp = Blueprint('recording', __name__)
 
+# Paths
+# src/web/server/routes/recording_routes.py -> ../../../../ = root
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent.parent
+PROCESSED_DATA_DIR = PROJECT_ROOT / "frontend" / "public" / "data" / "recordings"
 
-recording_bp = APIRouter()
-
-
-def _error_response(error: str, status_code: int = 500):
-    return JSONResponse({"error": error}, status_code=status_code)
-
-
-@recording_bp.post("/api/record")
-def api_record_session(payload: dict | None = Body(default=None)):
+@recording_bp.route('/api/record', methods=['POST'])
+def api_record_session():
+    """Save a recorded session to disk."""
     try:
-        result = save_recording_session(payload)
-        if isinstance(result, tuple):
-            body, status_code = result
-            return JSONResponse(body, status_code=status_code)
-        return result
+        data = request.get_json()
+        if not data or 'filename' not in data or 'payload' not in data:
+            return jsonify({"error": "Invalid request payload"}), 400
+
+        filename = data['filename']
+        payload = data['payload']
+
+        # Path protection: ensure filename is safe
+        safe_filename = os.path.basename(filename)
+        if not safe_filename.endswith('.json'):
+            safe_filename += '.json'
+
+        PROCESSED_DATA_DIR.mkdir(parents=True, exist_ok=True)
+        
+        filepath = PROCESSED_DATA_DIR / safe_filename
+
+        with open(filepath, 'w') as f:
+            json.dump(payload, f, indent=2)
+
+        print(f"[Recording_Routes] 💾 Session saved: {filepath}")
+        return jsonify({
+            "status": "success",
+            "message": f"Session saved to {safe_filename}",
+            "path": str(filepath)
+        })
     except Exception as e:
-        print(f"Error recording session: {e}")
-        return _error_response(str(e))
+        print(f"[Recording_Routes] ❌ Error recording session: {e}")
+        return jsonify({"error": str(e)}), 500
 
 
-@recording_bp.get("/api/recordings")
+@recording_bp.route('/api/recordings', methods=['GET'])
 def api_list_recordings():
+    """List all available recordings in data/processed."""
     try:
-        return list_recordings()
+        print(f"[Recording_Routes] 🔍 Checking for recordings in: {PROCESSED_DATA_DIR}")
+        if not PROCESSED_DATA_DIR.exists():
+            print(f"[Recording_Routes] 📂 Directory not found: {PROCESSED_DATA_DIR}")
+            return jsonify([])
+
+        recordings = []
+        for file in PROCESSED_DATA_DIR.glob('*.json'):
+            stat = file.stat()
+            recordings.append({
+                "name": file.name,
+                "size": stat.st_size,
+                "created": stat.st_ctime,
+                "type": file.name.split('__')[0]
+            })
+            
+        # Sort by creation time (newest first)
+        recordings.sort(key=lambda x: x['created'], reverse=True)
+        return jsonify(recordings)
     except Exception as e:
-        print(f"Error listing recordings: {e}")
-        return _error_response(str(e))
+        print(f"[Recording_Routes] ❌ Error listing recordings: {e}")
+        return jsonify({"error": str(e)}), 500
 
 
-@recording_bp.get("/api/recordings/{filepath:path}")
-def api_get_recording(filepath):
+@recording_bp.route('/api/recordings/<filename>', methods=['GET'])
+def api_get_recording(filename):
+    """Get the content of a specific recording."""
     try:
-        result = load_recording(filepath)
-        if isinstance(result, tuple):
-            body, status_code = result
-            return JSONResponse(body, status_code=status_code)
-        return result
+        # Path protection: ensure filename is safe
+        safe_filename = os.path.basename(filename)
+        filepath = PROCESSED_DATA_DIR / safe_filename
+
+        if not filepath.exists():
+            return jsonify({"error": "Recording not found"}), 404
+
+        with open(filepath, 'r') as f:
+            data = json.load(f)
+
+        return jsonify(data)
     except Exception as e:
-        print(f"Error getting recording: {e}")
-        return _error_response(str(e))
+        print(f"[Recording_Routes] ❌ Error getting recording: {e}")
+        return jsonify({"error": str(e)}), 500

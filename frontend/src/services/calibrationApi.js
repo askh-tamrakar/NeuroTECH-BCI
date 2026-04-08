@@ -50,7 +50,7 @@ export const CalibrationApi = {
                     EEG: { profiles: { Concentration: { power: 10 }, Relaxation: { power: 5 } } }
                 },
                 filters: {},
-                sampling_rate: 1000
+                sampling_rate: 512
             };
         }
         return response.json();

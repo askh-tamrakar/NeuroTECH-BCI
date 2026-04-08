@@ -16,8 +16,6 @@ import socket
 import struct
 
 from typing import List, Tuple, Dict, Optional
-from ..utils.logging_cfg import get_logger
-log = get_logger(__name__)
 
 # UTF-8 encoding for standard output to avoid UnicodeEncodeError in some terminals
 try:
@@ -51,15 +49,13 @@ except ImportError:
     from src.processing.eog_processor import EOGFilterProcessor
     from src.processing.eeg_processor import EEGFilterProcessor
 
-from src.utils.paths import get_config_dir
-
-CONFIG_DIR = get_config_dir()
-CONFIG_PATH = CONFIG_DIR / "sensor_config.json"
-FILTER_CONFIG_PATH = CONFIG_DIR / "filter_config.json"
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+CONFIG_PATH = PROJECT_ROOT / "config" / "sensor_config.json"
+FILTER_CONFIG_PATH = PROJECT_ROOT / "config" / "filter_config.json"
 RAW_STREAM_NAME = "BioSignals-Raw-uV"
 PROCESSED_STREAM_NAME = "BioSignals-Processed"
 RELOAD_INTERVAL = 2.0
-DEFAULT_SR = 1000
+DEFAULT_SR = 512
 
 
 def load_config() -> dict:
@@ -71,9 +67,14 @@ def load_config() -> dict:
             "ch1": {"sensor": "EOG", "enabled": True}
         },
         "filters": {
-            "EMG": {"bandpass_order": 4, "notch_enabled": True, "notch_freq": 50, "notch_q": 30.0, "bandpass_enabled": True, "bandpass_low": 20, "bandpass_high": 250, "envelope_enabled": True, "envelope_cutoff": 8.0, "envelope_order": 4},
-            "EOG": {"bandpass_enabled": True, "bandpass_low": 0.5, "bandpass_high": 10.0, "bandpass_order": 4, "notch_enabled": False, "notch_freq": 50.0, "notch_q": 30.0},
-            "EEG": {"bandpass_enabled": True, "bandpass_low": 1.0, "bandpass_high": 45.0, "bandpass_order": 4, "notch_enabled": True, "notch_freq": 50.0, "notch_q": 30.0}
+            "EMG": {"cutoff": 70.0, "order": 4, "notch_enabled": False, "notch_freq": 50, "bandpass_enabled": False, "bandpass_low": 20, "bandpass_high": 250, "envelope_enabled": True, "envelope_cutoff": 10.0, "envelope_order": 4},
+            "EOG": {"cutoff": 10.0, "order": 4},
+            "EEG": {
+                "filters": [
+                    {"type": "notch", "freq": 50.0, "Q": 30},
+                    {"type": "bandpass", "low": 0.5, "high": 45.0, "order": 4}
+                ]
+            }
         }
     }
     
@@ -90,7 +91,7 @@ def load_config() -> dict:
             if "channel_mapping" in sensor_cfg:
                 cfg["channel_mapping"] = sensor_cfg["channel_mapping"]
         except Exception as e:
-            log.error(f"[Router] Failed to load sensor config ({CONFIG_PATH}): {e} — using defaults")
+            print(f"[Router] Failed to load sensor config ({CONFIG_PATH}): {e} — using defaults")
 
     # 2. Load Filter Config
     if FILTER_CONFIG_PATH.exists():
@@ -101,9 +102,9 @@ def load_config() -> dict:
             if "filters" in filter_cfg:
                 cfg["filters"] = filter_cfg["filters"]
         except Exception as e:
-            log.error(f"[Router] Failed to load filter config ({FILTER_CONFIG_PATH}): {e} — using defaults")
+            print(f"[Router] Failed to load filter config ({FILTER_CONFIG_PATH}): {e} — using defaults")
     else:
-        log.warn(f"Filter config not found ({FILTER_CONFIG_PATH}) — using defaults")
+        print(f"[Router] Filter config not found ({FILTER_CONFIG_PATH}) — using defaults")
 
     return cfg
 
@@ -146,7 +147,7 @@ def parse_channel_map(info: pylsl.StreamInfo) -> List[Tuple[int, str, str]]:
         if idx_map:
             return idx_map
     except Exception as e:
-        log.warn(f"[Router] ⚠️ XML parsing warning: {e}")
+        print(f"[Router] ⚠️ XML parsing warning: {e}")
     
     # Fallback
     try:
@@ -173,8 +174,8 @@ class FilterRouter:
         self.channel_mapping: Dict[int, Dict] = {}
         self.num_channels = 0
         self.running = False
-        self._config_lock = threading.RLock()
-        # self._start_config_watcher() <-- Moved to run() to avoid startup race conditions
+        self._config_lock = threading.Lock()
+        self._start_config_watcher()
     
     def _start_config_watcher(self):
         """Start background thread to monitor config changes."""
@@ -183,10 +184,8 @@ class FilterRouter:
     
     def _config_watcher(self):
         """Background thread: Monitor config file for changes."""
-        # Initialize with current hashes to avoid immediate re-configuration on startup
-        current_cfg = load_config()
-        last_cfg_hash = get_config_hash(current_cfg.get("filters", {}))
-        last_map_hash = get_config_hash(current_cfg.get("channel_mapping", {}))
+        last_cfg_hash = ""
+        last_map_hash = ""
         
         while True:
             try:
@@ -200,14 +199,14 @@ class FilterRouter:
                     
                     # 1. Channel mapping changed? Reconfigure pipeline
                     if map_hash != last_map_hash:
-                        log.info("Channel mapping changed - reconfiguring pipeline...")
+                        print("[Router] [CONFIG] Channel mapping changed - reconfiguring pipeline...")
                         self._configure_pipeline()
                         last_map_hash = map_hash
                         last_cfg_hash = cfg_hash
                     
                     # 2. Only filter params changed? Update processors
                     elif cfg_hash != last_cfg_hash:
-                        log.info("Filter parameters updated - updating processors...")
+                        print("[Router] [CONFIG] Filter parameters updated - updating processors...")
                         for p in self.channel_processors.values():
                             if p and hasattr(p, 'update_config'):
                                 p.update_config(self.config, self.sr)
@@ -216,149 +215,191 @@ class FilterRouter:
                 time.sleep(RELOAD_INTERVAL)
             
             except Exception as e:
-                log.error(f"[Router] ⚠️ Config watcher error: {e}")
+                print(f"[Router] ⚠️ Config watcher error: {e}")
                 time.sleep(RELOAD_INTERVAL)
     
-    def resolve_raw_stream(self, timeout: float = 10.0) -> bool:
-        """Resolve and connect to raw LSL stream with retry loop (10s timeout)."""
+    def resolve_raw_stream(self, timeout: float = 3.0) -> bool:
+        """Resolve and connect to raw LSL stream."""
         if not LSL_AVAILABLE:
-            log.error("[Router] ❌ pylsl not installed.")
+            print("[Router] ❌ pylsl not installed.")
             return False
+        
+        try:
+            print("[Router] 🔍 Searching for raw LSL stream...")
+            streams = pylsl.resolve_streams(wait_time=0.5)
+            target = None
             
-        start_time = time.time()
-        while (time.time() - start_time) < timeout:
-            try:
-                log.debug(f"Searching for raw LSL stream (Timeout remaining: {timeout - (time.time() - start_time):.1f}s)...")
-                streams = pylsl.resolve_streams(wait_time=0.5)
-                target = None
-                
-                # 1. Exact name match
+            # 1. Exact name match
+            for s in streams:
+                if s.name() == RAW_STREAM_NAME:
+                    target = s
+                    break
+            
+            # 2. Heuristic match (contains "raw" or "uv")
+            if not target:
                 for s in streams:
-                    if s.name() == RAW_STREAM_NAME:
+                    if "raw" in s.name().lower() or "uv" in s.name().lower():
                         target = s
                         break
-                
-                # 2. Heuristic match (contains "raw" or "uv")
-                if not target:
-                    for s in streams:
-                        if "raw" in s.name().lower() or "uv" in s.name().lower():
-                            target = s
-                            break
-                
-                if target:
-                    self.inlet = pylsl.StreamInlet(target, max_buflen=1, recover=True)
-                    self.raw_index_map = parse_channel_map(self.inlet.info())
-                    log.info(f"Connected to raw stream: {target.name()}")
-                    log.debug(f"[Router]    Channels: {len(self.raw_index_map)} @ {target.nominal_srate()} Hz")
-                    self._configure_pipeline()
-                    return True
-                
-                time.sleep(0.5)
-            except Exception as e:
-                log.warning(f"Resolution retry error: {e}")
-                time.sleep(0.5)
-
-        log.error(f"Could not find raw stream '{RAW_STREAM_NAME}' within {timeout}s.")
-        return False
+            
+            if target:
+                self.inlet = pylsl.StreamInlet(target, max_buflen=1, recover=True)
+                self.raw_index_map = parse_channel_map(self.inlet.info())
+                print(f"[Router] [OK] Connected to raw stream: {target.name()}")
+                print(f"[Router]    Channels: {len(self.raw_index_map)} @ {target.nominal_srate()} Hz")
+                self._configure_pipeline()
+                return True
+            
+            print("[Router] [ERROR] Could not find raw stream")
+            return False
+        
+        except Exception as e:
+            print(f"[Router] [ERROR] Resolution error: {e}")
+            return False
     
     def _configure_pipeline(self):
         """
         Configure processing pipeline based on current config.
+        
+        This is the IMPROVED version that handles all cases:
+        - Both channels different sensors (EMG + EOG) ✅
+        - Both channels same sensor (EMG + EMG) ✅
+        - Disabled channels (pass-through with metadata) ✅
+        - Missing channel config (defaults applied) ✅
         """
+        
+        # Clean up old configuration
+        self.channel_processors = {}
+        self.channel_mapping = {}
+        
+        # ========== IMPROVED: Explicitly close old outlet ==========
+        # Connect to Stream Manager (Processed)
+        if self.stream_socket:
+            try:
+                self.stream_socket.close()
+            except:
+                pass
+        self.stream_socket = None
+        self.stream_connected = False
+        
+        # Retry connection loop to avoid startup race conditions
+        max_retries = 5
+        for attempt in range(max_retries):
+            try:
+                self.stream_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                self.stream_socket.connect(('localhost', 6001))
+                self.stream_connected = True
+                print(f"[Router] ✅ Connected to Stream Manager (Processed)")
+                break
+            except Exception as e:
+                print(f"[Router] ⚠️ Could not connect to Stream Manager (Attempt {attempt+1}/{max_retries}): {e}")
+                time.sleep(1.0)
+                
+        if not self.stream_connected:
+             print("[Router] ❌ Failed to connect to Stream Manager after multiple retries. Data will be dropped.")
+        
+        mapping_cfg = self.config.get("channel_mapping", {})
+        num_channels = len(self.raw_index_map)
+        
+        if num_channels == 0:
+            print("[Router] [WARNING] No channels found in raw stream!")
+            return
+        
+        self.num_channels = num_channels
+        print(f"[Router] 📍 Configuring pipeline for {num_channels} channels...")
+        
+        # ========== IMPROVED: Handle all mapping cases ==========
         try:
-            with self._config_lock:
-                # Preserve old processors to avoid destroying filter states (zi) on mapping changes
-                old_processors = self.channel_processors
-                self.channel_processors = {}
-                self.channel_mapping = {}
+            for i in range(num_channels):
+                ch_key = f"ch{i}"
                 
-                # ========== IMPROVED: Keep socket alive if already connected ==========
-                if not self.stream_socket or not self.stream_connected:
-                    max_retries = 5
-                    for attempt in range(max_retries):
-                        try:
-                            self.stream_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                            self.stream_socket.connect(('127.0.0.1', 6001))
-                            self.stream_connected = True
-                            log.info(f"Connected to Stream Manager (Processed)")
-                            break
-                        except Exception as e:
-                            log.debug(f"[Router] ⚠️ Could not connect to Stream Manager (Attempt {attempt+1}/{max_retries}): {e}")
-                            time.sleep(1.0)
-                        
-                if not self.stream_connected:
-                     log.error("Failed to connect to Stream Manager. Data will be dropped.")
-                
-                mapping_cfg = self.config.get("channel_mapping", {})
-                num_channels = len(self.raw_index_map)
-                
-                if num_channels == 0:
-                    log.warning("No channels found in raw stream!")
-                    return
-                
-                self.num_channels = num_channels
-                print(f"[TRACE] Configuring loop for {num_channels} channels...", flush=True)
-                log.debug(f"[Router] 📍 Configuring pipeline for {num_channels} channels...")
-                
-                for i in range(num_channels):
-                    try:
-                        ch_key = f"ch{i}"
-                        if ch_key in mapping_cfg:
-                            cinfo = mapping_cfg[ch_key]
-                            enabled = cinfo.get("enabled", True)
-                            sensor_type = str(cinfo.get("sensor", "UNKNOWN")).upper()
-                            
-                            self.channel_mapping[i] = {
-                                "sensor": sensor_type,
-                                "enabled": enabled,
-                                "label": f"{sensor_type}_{i}",
-                                "processor": sensor_type
-                            }
-                            
-                            if not enabled:
-                                self.channel_processors[i] = None
-                                print(f"[Router] [{i}] → (DISABLED) | Key: {ch_key}")
-                                continue
-
-                            existing_proc = old_processors.get(i)
-                            if existing_proc and existing_proc.__class__.__name__.startswith(sensor_type):
-                                self.channel_processors[i] = existing_proc
-                                if hasattr(existing_proc, 'update_config'):
-                                    existing_proc.update_config(self.config, self.sr)
-                                print(f"[Router] [{i}] → {sensor_type} (REUSED Processor) | Key: {ch_key}")
-                            else:
-                                if sensor_type == "EMG":
-                                    self.channel_processors[i] = EMGFilterProcessor(self.config, self.sr, channel_key=ch_key)
-                                    print(f"[Router] [{i}] → EMG (EMG Processor)")
-                                elif sensor_type == "EOG":
-                                    self.channel_processors[i] = EOGFilterProcessor(self.config, self.sr, channel_key=ch_key)
-                                    print(f"[Router] [{i}] → EOG (EOG Processor)")
-                                elif sensor_type == "EEG":
-                                    self.channel_processors[i] = EEGFilterProcessor(self.config, self.sr, channel_key=ch_key)
-                                    print(f"[Router] [{i}] → EEG (EEG Processor)")
-                                else:
-                                    self.channel_processors[i] = None
-                                    print(f"[Router] [{i}] → {sensor_type} (Pass-through)")
-                        else:
-                            print(f"[Router] [{i}] → UNMAPPED (Pass-through)")
-                            self.channel_mapping[i] = {"sensor": "UNMAPPED", "enabled": True, "label": f"RAW_{i}", "processor": None}
-                            self.channel_processors[i] = None
-                    except Exception as e:
-                        print(f"[Router] ❌ [ERROR] Failed to configure channel {i} ({ch_key}): {e}")
+                # CASE 1: Channel in config
+                if ch_key in mapping_cfg:
+                    cinfo = mapping_cfg[ch_key]
+                    enabled = cinfo.get("enabled", True)
+                    sensor_type = cinfo.get("sensor", "UNKNOWN").upper()
+                    
+                    # CASE 2: Channel disabled
+                    if not enabled:
+                        print(f" [{i}] → {sensor_type} (DISABLED - Pass-through)")
+                        self.channel_mapping[i] = {
+                            "sensor": sensor_type,
+                            "enabled": False,
+                            "label": f"RAW_{i}",
+                            "processor": None
+                        }
                         self.channel_processors[i] = None
+                        continue
+                    
+                    # CASE 3: Channel enabled with processor
+                    self.channel_mapping[i] = {
+                        "sensor": sensor_type,
+                        "enabled": True,
+                        "label": f"{sensor_type}_{i}",
+                        "processor": sensor_type
+                    }
+                    
+                    # Create processor instance for this channel
+                    if sensor_type == "EMG":
+                        self.channel_processors[i] = EMGFilterProcessor(self.config, self.sr, channel_key=ch_key)
+                        print(f" [{i}] → EMG (EMG Processor) | Key: {ch_key}")
+                    
+                    elif sensor_type == "EOG":
+                        self.channel_processors[i] = EOGFilterProcessor(self.config, self.sr, channel_key=ch_key)
+                        print(f" [{i}] → EOG (EOG Processor) | Key: {ch_key}")
+                    
+                    elif sensor_type == "EEG":
+                        self.channel_processors[i] = EEGFilterProcessor(self.config, self.sr, channel_key=ch_key)
+                        print(f" [{i}] → EEG (EEG Processor) | Key: {ch_key}")
+                    
+                    else:
+                        # Unknown type - pass-through
+                        self.channel_processors[i] = None
+                        print(f" [{i}] → {sensor_type} (Unknown - Pass-through)")
                 
-                if LSL_AVAILABLE and num_channels > 0:
-                    try:
-                        # Signalling success to orchestrator with unbuffered print
-                        log.info(f"Pipeline configured successfully (Routing to Stream Manager)")
-                        print("Pipeline configured successfully", flush=True)
-                    except Exception as e:
-                        print(f"[Router] [ERROR] Error in final config: {e}")
-        except Exception as big_e:
-            import traceback
-            tb = traceback.format_exc()
-            log.error(f"[Router] ❌ CRASH in _configure_pipeline: {big_e}\n{tb}")
-            print(f"[ERROR] CRASH in _configure_pipeline: {big_e}")
+                # CASE 4: Channel NOT in config - Apply default
+                else:
+                    print(f" [{i}] → UNMAPPED (applying default: pass-through)")
+                    self.channel_mapping[i] = {
+                        "sensor": "UNMAPPED",
+                        "enabled": True,
+                        "label": f"RAW_{i}",
+                        "processor": None
+                    }
+                    self.channel_processors[i] = None
+        except Exception as e:
+            print(f"[Router] [ERROR] Pipeline configuration error: {e}")
+            return
+        
+        # ========== Create Unified LSL Outlet ==========
+        
+        if LSL_AVAILABLE and num_channels > 0:
+            try:
+                info = pylsl.StreamInfo(
+                    name=PROCESSED_STREAM_NAME,
+                    type="BioSignals",
+                    channel_count=num_channels,
+                    nominal_srate=self.sr,
+                    channel_format='float32',
+                    source_id="BioSignals-Processed-Source"
+                )
+                
+                # Add channel descriptions
+                chns = info.desc().append_child("channels")
+                for i in range(num_channels):
+                    ch_info = self.channel_mapping.get(i, {})
+                    ch = chns.append_child("channel")
+                    ch.append_child_value("label", ch_info.get("label", f"ch{i}"))
+                    ch.append_child_value("type", ch_info.get("sensor", "UNKNOWN"))
+                    ch.append_child_value("enabled", "true" if ch_info.get("enabled", True) else "false")
+                
+                # self.outlet = pylsl.StreamOutlet(info)
+                # print(f"[Router] [OUTLET] Publishing unified stream: {PROCESSED_STREAM_NAME}")
+                # print(f"[Router]    Channels: {num_channels} @ {self.sr} Hz")
+                print(f"[Router] [OK] Pipeline configured successfully (Routing to Stream Manager)")
+                
+            except Exception as e:
+                print(f"[Router] [ERROR] Error configuring pipeline: {e}")
 
     
     def run(self):
@@ -370,114 +411,62 @@ class FilterRouter:
         if not self.stream_connected:
              print("[Router] [WARNING] Not connected to Stream Manager - data will not be published")
 
-        # Start background config monitor only after main thread has reached a stable state
-        self._start_config_watcher()
-
-        # Set socket to non-blocking with a small timeout to avoid stalling
-        # the processing loop if the downstream consumer is slow
-        if self.stream_socket:
-            try:
-                self.stream_socket.settimeout(0.05)  # 50ms send timeout
-                # Increase send buffer to absorb transient slowdowns
-                self.stream_socket.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 65536)
-            except Exception as e:
-                log.warning(f"[Router] Could not set socket options: {e}")
         
         self.running = True
-        log.info("Starting processing loop...")
+        print("[Router] [START] Starting processing loop...")
+        print("[Router] Press Ctrl+C to stop\n")
         
         sample_count = 0
         error_count = 0
-        _send_errors = 0
-        _max_send_errors = 10  # Consecutive errors before reconnect
-        
-        # Pre-compute struct format string (stays constant while num_channels is fixed)
-        _cached_num_ch = self.num_channels
-        _header = struct.pack('<BB', 0xAA, _cached_num_ch)
-        _fmt = f'<{_cached_num_ch}f'
         
         try:
             while self.running:
-                # Pull larger chunks - 50ms worth of data at 1kHz = 50 samples
-                # This reduces per-iteration overhead significantly
-                samples, timestamps = self.inlet.pull_chunk(timeout=0.05, max_samples=64)
+                # Pull raw sample
+                raw_sample, ts = self.inlet.pull_sample(timeout=1.0)
                 
-                if not samples:
-                    continue
-                
-                # Take a snapshot of processors under lock, then process OUTSIDE lock
-                with self._config_lock:
-                    num_ch = self.num_channels
-                    processors = dict(self.channel_processors)
-                
-                # Update cached struct format if channel count changed
-                if num_ch != _cached_num_ch:
-                    _cached_num_ch = num_ch
-                    _header = struct.pack('<BB', 0xAA, _cached_num_ch)
-                    _fmt = f'<{_cached_num_ch}f'
-                
-                num_samples = len(samples)
-                # Convert to numpy array for efficient slicing (Samples x Channels)
-                data_arr = np.array(samples, dtype=float)
-                processed_arr = np.zeros_like(data_arr)
-                
-                for ch_idx in range(num_ch):
-                    ch_data = data_arr[:, ch_idx]
-                    processor = processors.get(ch_idx)
-                    
-                    if processor and hasattr(processor, 'process_batch'):
-                        processed_arr[:, ch_idx] = processor.process_batch(ch_data)
-                    elif processor:
-                        # Fallback for processors without process_batch
-                        for s_idx in range(num_samples):
-                            processed_arr[s_idx, ch_idx] = processor.process_sample(ch_data[s_idx])
-                    else:
-                        processed_arr[:, ch_idx] = ch_data
-                
-                # Prepare batch payload - pre-allocate bytearray for efficiency
-                sample_size = 2 + num_ch * 4  # header(2) + floats
-                batch_payload = bytearray(num_samples * sample_size)
-                offset = 0
-                for s_idx in range(num_samples):
-                    batch_payload[offset:offset+2] = _header
-                    offset += 2
-                    struct.pack_into(_fmt, batch_payload, offset, *processed_arr[s_idx])
-                    offset += num_ch * 4
-                
-                sample_count += num_samples
-
-                # Push batch OUTSIDE the config lock to avoid blocking config updates
-                if self.stream_connected and self.stream_socket and batch_payload:
+                if raw_sample is not None and len(raw_sample) == self.num_channels:
                     try:
-                        self.stream_socket.sendall(batch_payload)
-                        _send_errors = 0
-                    except socket.timeout:
-                        # Socket send buffer is full - downstream is slow
-                        _send_errors += 1
-                        if _send_errors >= _max_send_errors:
-                            log.warning(f"[Router] Stream Manager too slow, {_send_errors} consecutive timeouts")
-                            _send_errors = 0
-                    except Exception as e:
-                        print(f"[Router] Stream push error: {e}")
-                        self.stream_connected = False
-                        # Attempt reconnect
-                        try:
-                            self.stream_socket.close()
-                        except:
-                            pass
-                        try:
-                            self.stream_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                            self.stream_socket.settimeout(0.05)
-                            self.stream_socket.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 65536)
-                            self.stream_socket.connect(('127.0.0.1', 6001))
-                            self.stream_connected = True
-                            log.info("[Router] Reconnected to Stream Manager")
-                        except Exception:
-                            self.stream_socket = None
+                        with self._config_lock:
+                            # Process each channel through its processor
+                            processed_sample = []
+                            
+                            for ch_idx in range(self.num_channels):
+                                raw_val = raw_sample[ch_idx]
+                                processor = self.channel_processors.get(ch_idx)
+                                
+                                if processor:
+                                    # ✅ Channel has processor - apply it
+                                    filtered_val = processor.process_sample(raw_val)
+                                else:
+                                    # ✅ Channel disabled or unmapped - pass through
+                                    # print(f"[Router] [WARNING] Channel {ch_idx} disabled or unmapped - passing through")
+                                    filtered_val = raw_val
+                                
+                                processed_sample.append(filtered_val)
+                            
+                            # ✅ Push ALL channels to Stream Manager
+                            if self.stream_connected and self.stream_socket:
+                                try:
+                                    # Protocol: [0xAA] [Count] [Floats...]
+                                    count = len(processed_sample)
+                                    header = struct.pack('<BB', 0xAA, count)
+                                    payload = struct.pack(f'<{count}f', *processed_sample)
+                                    self.stream_socket.sendall(header + payload)
+                                except Exception as e:
+                                    print(f"[Router] Stream push error: {e}")
+                                    self.stream_connected = False
 
-                # Log progress occasionally
-                if sample_count % max(self.sr * 5, 1) < num_samples:
-                    log.debug(f"[Router] ✅ {sample_count} samples processed (Batched)")
+                            sample_count += 1
+                            
+                            # Log progress every 512 samples (1 second at 512 Hz)
+                            # Log progress every 5 seconds (approx 2560 samples at 512 Hz)
+                            if sample_count % 2560 == 0:
+                                print(f"[Router] ✅ {sample_count} samples processed")
+                    
+                    except Exception as e:
+                        error_count += 1
+                        # Always log errors as requested
+                        print(f"[Router] [WARNING] Error processing sample: {e}")
         
         except KeyboardInterrupt:
             print("\n[Router] [STOP] Stopping...")
@@ -523,6 +512,7 @@ def main():
     else:
         print("[Router] ❌ Could not resolve raw stream")
         print("[Router] Make sure acquisition_app is running first")
+
 
 if __name__ == "__main__":
     main()

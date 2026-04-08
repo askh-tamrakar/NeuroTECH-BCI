@@ -6,8 +6,6 @@ import sys
 import os
 import time
 import struct
-import json
-import tempfile
 import numpy as np
 
 # Ensure we can import sibling packages
@@ -17,8 +15,6 @@ if src_dir not in sys.path:
     sys.path.insert(0, src_dir)
 
 from src.acquisition.lsl_streams import LSLStreamer, LSL_AVAILABLE
-from src.utils.config import config_manager
-from src.utils.paths import get_runtime_state_dir
 
 class StreamManagerApp:
     def __init__(self, root):
@@ -29,6 +25,7 @@ class StreamManagerApp:
         # Configuration
         self.port = 6000
         self.is_running = False
+        self.is_running = False
         self.server_socket_raw = None
         self.server_socket_proc = None
         self.server_socket_events = None
@@ -36,8 +33,6 @@ class StreamManagerApp:
         self.raw_clients = []
         self.client_socket = None
         self.packet_count = 0
-        self.status_path = get_runtime_state_dir() / "stream_manager_status.json"
-        self._last_status_write_error = 0.0
         
         # LSL
         self.lsl_stream = None
@@ -49,101 +44,44 @@ class StreamManagerApp:
         # Initialize LSL
         if LSL_AVAILABLE:
             try:
-                # Load Dynamic Mapping from Config
-                mapping = config_manager.get_channel_mapping()
-                sampling_rate = config_manager.get_sampling_rate()
-                num_channels = 2 # Hardcoded to 2 based on 8-byte packet protocol
-                
-                channel_types = []
-                channel_labels = []
-                
-                for i in range(num_channels):
-                    ch_info = mapping.get(f"ch{i}", {})
-                    sensor = ch_info.get("sensor", "UNKNOWN")
-                    label = ch_info.get("label", f"{sensor}_{i}")
-                    channel_types.append(sensor)
-                    channel_labels.append(label)
-                
                 self.lsl_stream = LSLStreamer(
                     "BioSignals-Raw-uV",
-                    channel_types=channel_types,
-                    channel_labels=channel_labels,
-                    channel_count=num_channels,
-                    nominal_srate=sampling_rate
+                    channel_types=["EMG", "EOG"],
+                    channel_labels=["EMG_0", "EOG_1"],
+                    channel_count=2,
+                    nominal_srate=512
                 )
-                self.log(f"✅ LSL Stream 'BioSignals-Raw-uV' created ({', '.join(channel_labels)}).")
+                self.log("✅ LSL Stream 'BioSignals-Raw-uV' created.")
 
+                # Initialize Events Stream (Required for System Pipeline Readiness)
+                # FIX: Do NOT create the LSL stream here. FeatureRouter creates the REAL 'BioSignals-Events'.
+                # Creating it here causes a Duplicate Stream issue where Web Server connects to this empty one.
+                # import pylsl
+                # info = pylsl.StreamInfo('BioSignals-Events', 'Markers', 1, 0, 'string', 'BioSignals-Events-Ind')
+                # self.lsl_events = pylsl.StreamOutlet(info)
+                
                 # MAGIC STRING required by pipeline.py (Keep this!)
-                print(f"Created stream 'BioSignals-Events'", flush=True)
-                self.log("✅ LSL Stream 'BioSignals-Events' reported ready.")
+                print(f"[{time.strftime('%H:%M:%S')}] [StreamManager] Created stream 'BioSignals-Events'")
+                self.log("✅ LSL Stream 'BioSignals-Events' (Placeholder) reported ready.")
 
-                # Initialize Processed Stream
+                # Initialize Processed Stream (Received via TCP 6001 from Filter Router)
+                # Note: We assume 2 channels for now as per default config.
+                # Ideally, this should remain dynamic, but LSL StreamInfo requires fixed channel count at init.
+                # If Filter Router changes channels, we might misalignment.
+                # For now, we stick to default 2 channels (EMG, EOG).
                 self.lsl_processed = LSLStreamer(
                     "BioSignals-Processed",
-                    channel_types=channel_types,
-                    channel_labels=[f"{label}_filt" for label in channel_labels],
-                    channel_count=num_channels,
-                    nominal_srate=sampling_rate
+                    channel_types=["EMG", "EOG"],
+                    channel_labels=["EMG_filt", "EOG_filt"],
+                    channel_count=2,
+                    nominal_srate=512
                 )
-                self.log(f"✅ LSL Stream 'BioSignals-Processed' created.")
+                self.log("✅ LSL Stream 'BioSignals-Processed' created.")
 
             except Exception as e:
                 self.log(f"❌ Error creating LSL stream: {e}")
         else:
             self.log("❌ LSL library not found (pylsl).")
-        
-        # Auto-Start Server for Pipeline Compatibility
-        self.start_server()
-
-    def _write_runtime_status(self):
-        payload = {
-            "running": bool(self.is_running),
-            "raw_ingress_client_count": len(self.raw_clients),
-            "packet_count": self.packet_count,
-            "updated_at": time.time(),
-        }
-        temp_path = None
-        try:
-            self.status_path.parent.mkdir(parents=True, exist_ok=True)
-            fd, temp_name = tempfile.mkstemp(
-                prefix=f"{self.status_path.stem}_",
-                suffix=".tmp",
-                dir=self.status_path.parent,
-            )
-            temp_path = temp_name
-            with os.fdopen(fd, "w", encoding="utf-8") as handle:
-                json.dump(payload, handle, indent=2)
-                handle.flush()
-                os.fsync(handle.fileno())
-
-            for _ in range(5):
-                try:
-                    os.replace(temp_path, self.status_path)
-                    temp_path = None
-                    return
-                except PermissionError:
-                    time.sleep(0.05)
-                except FileNotFoundError:
-                    temp_path = None
-                    return
-                except Exception:
-                    raise
-
-            now = time.time()
-            if now - self._last_status_write_error >= 5:
-                self._last_status_write_error = now
-                self.log("Status write skipped: runtime status file is temporarily busy.")
-        except Exception as exc:
-            now = time.time()
-            if now - self._last_status_write_error >= 5:
-                self._last_status_write_error = now
-                self.log(f"Status write error: {exc}")
-        finally:
-            if temp_path:
-                try:
-                    os.remove(temp_path)
-                except OSError:
-                    pass
 
     @staticmethod
     def get_local_ip():
@@ -177,6 +115,9 @@ class StreamManagerApp:
         self.status_label = ttk.Label(status_frame, textvariable=self.status_var, font=("Helvetica", 12))
         self.status_label.pack(pady=10)
         
+        # Auto-Start Server for Pipeline Compatibility
+        self.start_server()
+        
         self.connection_var = tk.StringVar(value="No Client Connected")
         ttk.Label(status_frame, textvariable=self.connection_var).pack(pady=5)
         
@@ -184,10 +125,10 @@ class StreamManagerApp:
         btn_frame = ttk.Frame(self.root)
         btn_frame.pack(pady=10)
         
-        self.btn_start = ttk.Button(btn_frame, text="Start Server (Port 6000)", command=self.start_server, state="disabled")
+        self.btn_start = ttk.Button(btn_frame, text="Start Server (Port 6000)", command=self.start_server)
         self.btn_start.pack(side="left", padx=5)
         
-        self.btn_stop = ttk.Button(btn_frame, text="Stop Server", command=self.stop_server)
+        self.btn_stop = ttk.Button(btn_frame, text="Stop Server", command=self.stop_server, state="disabled")
         self.btn_stop.pack(side="left", padx=5)
         
         # Log
@@ -218,7 +159,7 @@ class StreamManagerApp:
             self.log_text.config(state="disabled")
         
         self.root.after_idle(_update_ui)
-        print(message, flush=True) # Mirror to stdout for system integration
+        print(f"[{timestamp}] {message}") # Mirror to stdout for system integration
 
     def start_server(self):
         if self.is_running:
@@ -229,7 +170,6 @@ class StreamManagerApp:
             return
 
         self.is_running = True
-        self._write_runtime_status()
         self.btn_start.config(state="disabled")
         self.btn_stop.config(state="normal")
         self.status_var.set(f"Listening on Ports 6000, 6001, 6002...")
@@ -258,7 +198,6 @@ class StreamManagerApp:
         self.server_socket_raw = None
         self.server_socket_proc = None
         self.server_socket_events = None
-        self._write_runtime_status()
 
         self.status_var.set("Stopped")
         self.connection_var.set("No Client Connected")
@@ -290,19 +229,18 @@ class StreamManagerApp:
                         # Spin off a thread for EACH client to avoid blocking
                         t = threading.Thread(target=self._handle_client, args=(conn, addr), daemon=True)
                         t.start()
-                        self.raw_clients.append((conn, addr))
-                        self._write_runtime_status()
-                        self.root.after_idle(lambda: self.connection_var.set(f"Connected (Raw): {len(self.raw_clients)} clients"))
+                        self.raw_clients.append(addr)
+                        self.connection_var.set(f"Connected (Raw): {len(self.raw_clients)} clients")
                         
                     elif name == "Processed":
                         self.log(f"Processed Source connected from {addr}")
                         t = threading.Thread(target=self._handle_processed_client, args=(conn, addr), daemon=True)
                         t.start()
                         
-                    elif name == "Events":
-                        self.log(f"Events Source connected from {addr} (Relay Mode)")
-                        t = threading.Thread(target=self._handle_relay_client, args=(conn, addr), daemon=True)
-                        t.start()
+                    else:
+                        # For Events, just accept and hold (threaded to avoid block)
+                        self.log(f"{name} Client connected from {addr}")
+                        pass 
                     
                 except socket.timeout:
                     continue
@@ -311,16 +249,6 @@ class StreamManagerApp:
                     
         except Exception as e:
             self.log(f"{name} Server Error on {port}: {e}")
-
-    @staticmethod
-    def _recv_exact(conn, size):
-        data = bytearray()
-        while len(data) < size:
-            chunk = conn.recv(size - len(data))
-            if not chunk:
-                return None
-            data.extend(chunk)
-        return bytes(data)
             
     def _handle_client(self, conn, addr):
         """
@@ -336,10 +264,6 @@ class StreamManagerApp:
         half_vref = vref / 2.0
         scale = vref / (1 << adc_bits)
         
-        # For Batching
-        batch_size = 10
-        sample_buffer = []
-
         try:
             while self.is_running:
                 data = conn.recv(1024)
@@ -367,7 +291,17 @@ class StreamManagerApp:
                     if len(buffer) < req_len:
                         break
                         
+                    # Parse Packet
+                    # >B(Sync1)B(Sync2)B(Counter)H(CH0)H(CH1)B(End)
+                    # We are at index 0 with 0xC7
+                    
                     try:
+                        # 0: C7, 1: 7C, 2: Counter, 3-4: CH0, 5-6: CH1, 7: 01
+                        # Struct format: Big endian unsigned shorts for CH0, CH1
+                        # Skip syncs (2 bytes)
+                        # Read Counter (1 byte)
+                        # Read CH0 (2 bytes)
+                        # Read CH1 (2 bytes)
                         counter = buffer[2]
                         ch0_raw = (buffer[3] << 8) | buffer[4]
                         ch1_raw = (buffer[5] << 8) | buffer[6]
@@ -379,20 +313,12 @@ class StreamManagerApp:
                             ch0_uv = (ch0_raw * scale) - half_vref
                             ch1_uv = (ch1_raw * scale) - half_vref
                             
-                            # Add to batch buffer
-                            sample_buffer.append([ch0_uv, ch1_uv])
-                            
-                            # Push if batch is full
-                            if len(sample_buffer) >= batch_size:
-                                self.lsl_stream.push_chunk(sample_buffer)
-                                sample_buffer = []
-                                
-                            # Optional: Log occasionally
+                            # Push to LSL
+                            self.lsl_stream.push_sample([ch0_uv, ch1_uv])
+                            # Optional: Log occasionally?
                             if self.packet_count % 2560 == 0:
-                                self.log(f"P: {counter} | {ch0_uv:.2f} uV (Batched)") 
+                                self.log(f"P: {counter} | {ch0_uv:.2f} uV") 
                             self.packet_count += 1
-                            if self.packet_count % 32 == 0:
-                                self._write_runtime_status()
                             
                         # Consume packet
                         buffer = buffer[8:]
@@ -400,21 +326,13 @@ class StreamManagerApp:
                     except Exception as e:
                         self.log(f"Parse error: {e}")
                         buffer = buffer[1:] # Skip 1 byte and retry
-            
-            # Push remaining samples on disconnect
-            if sample_buffer:
-                self.lsl_stream.push_chunk(sample_buffer)
                         
-        except (ConnectionResetError, BrokenPipeError):
-            # Silent on disconnect
-            pass
         except Exception as e:
             self.log(f"Client connection error ({addr}): {e}")
         finally:
             conn.close()
-            # Remove from list
-            self.raw_clients = [c for c in self.raw_clients if c[1] != addr]
-            self._write_runtime_status()
+            if addr in self.raw_clients:
+                self.raw_clients.remove(addr)
             self.root.after_idle(lambda: self.connection_var.set(f"Connected (Raw): {len(self.raw_clients)} clients"))
             self.log(f"Raw Client disconnected: {addr}")
 
@@ -422,97 +340,42 @@ class StreamManagerApp:
         """
         Handles data from Filter Router (Port 6001).
         Protocol: [0xAA (Sync)] [Count (1 Byte)] [Float 1...N]
-        Uses buffered reading for efficiency with high-frequency data.
         """
-        buffer = b""
         try:
             while self.is_running:
-                # Read in larger chunks for efficiency
-                data = conn.recv(4096)
-                if not data:
+                # 1. Read Header (2 bytes)
+                header = conn.recv(2)
+                if not header or len(header) < 2:
                     break
                 
-                buffer += data
+                sync, count = header[0], header[1]
                 
-                # Process all complete packets in buffer
-                while len(buffer) >= 2:
-                    sync = buffer[0]
+                if sync != 0xAA:
+                    # Sync lost - drain a bit
+                    continue
+
+                # 2. Read Payload (Count * 4 bytes)
+                payload_size = count * 4
+                data = b""
+                while len(data) < payload_size:
+                    chunk = conn.recv(payload_size - len(data))
+                    if not chunk:
+                        return
+                    data += chunk
+                
+                # 3. Process
+                fmt = f'<{count}f'
+                samples = struct.unpack(fmt, data)
+                
+                # Push to LSL Processed Stream
+                if self.lsl_processed:
+                    self.lsl_processed.push_sample(samples)
                     
-                    if sync != 0xAA:
-                        # Sync lost - scan forward for 0xAA
-                        idx = buffer.find(b'\xAA', 1)
-                        if idx == -1:
-                            buffer = b""
-                            break
-                        buffer = buffer[idx:]
-                        continue
-                    
-                    count = buffer[1]
-                    packet_size = 2 + count * 4
-                    
-                    if len(buffer) < packet_size:
-                        break  # Wait for more data
-                    
-                    # Parse payload
-                    payload_data = buffer[2:packet_size]
-                    fmt = f'<{count}f'
-                    samples = struct.unpack(fmt, payload_data)
-                    
-                    # Push to LSL Processed Stream
-                    if self.lsl_processed:
-                        self.lsl_processed.push_sample(samples)
-                    
-                    buffer = buffer[packet_size:]
-                    
-        except (ConnectionResetError, BrokenPipeError):
-            # Silent on disconnect
-            pass
         except Exception as e:
             self.log(f"Processed Handler Error: {e}")
         finally:
             conn.close()
             self.log(f"Processed Source disconnected: {addr}")
-
-    def _handle_relay_client(self, conn, addr):
-        """
-        Relays incoming data from Port 6002 to all Port 6000 clients (phones).
-        This port is used by ServoController to send DEG commands.
-        """
-        buffer = b""
-        try:
-            while self.is_running:
-                data = conn.recv(1024)
-                if not data:
-                    break
-                
-                buffer += data
-                
-                # If there's a newline, it's a command like "DEG 90\n"
-                while b'\n' in buffer:
-                    line_end = buffer.find(b'\n')
-                    msg = buffer[:line_end].decode('ascii', errors='ignore').strip()
-                    if msg:
-                        self.log(f"Control: {msg}")
-                    
-                    # Relay the full command including newline to raw clients (ESP32/Arduino)
-                    relay_data = buffer[:line_end+1]
-                    if self.raw_clients:
-                        for r_conn, r_addr in self.raw_clients:
-                            try:
-                                r_conn.sendall(relay_data)
-                            except:
-                                pass
-                    
-                    buffer = buffer[line_end+1:]
-
-        except (ConnectionResetError, BrokenPipeError):
-            # Silent on disconnect
-            pass
-        except Exception as e:
-            self.log(f"Relay Handler Error: {e}")
-        finally:
-            conn.close()
-            self.log(f"Relay Source disconnected: {addr}")
 
 def main():
     root = tk.Tk()

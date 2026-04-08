@@ -2,10 +2,8 @@ import time
 import json
 import logging
 import numpy as np
-import joblib
 from pathlib import Path
 from typing import Dict, List, Any, Optional
-from sklearn.preprocessing import StandardScaler
 
 # Import Config Manager
 try:
@@ -19,12 +17,7 @@ except ImportError:
 
 # Import Feature Extractors
 from feature.extractors.blink_extractor import BlinkExtractor
-from feature.extractors.rps_extractor import RPSExtractor, EMG_FEATURE_COLUMNS
-
-EOG_FEATURE_COLUMNS = [
-    'amplitude', 'duration_ms', 'rise_time_ms', 'fall_time_ms',
-    'asymmetry', 'peak_count', 'kurtosis', 'skewness'
-]
+from feature.extractors.rps_extractor import RPSExtractor
 # Future: from feature.extractors.eeg_extractor import EEGExtractor
 
 # Set up logging
@@ -40,42 +33,6 @@ class CalibrationManager:
     def __init__(self):
         self.project_root = Path(__file__).resolve().parent.parent.parent
         self.data_dir = self.project_root / "frontend" / "public" / "data"
-        self.models_dir = self.data_dir / "EMG" / "models"
-        self.models_dir.mkdir(parents=True, exist_ok=True)
-        self.eog_models_dir = self.data_dir / "EOG" / "models"
-        self.eog_models_dir.mkdir(parents=True, exist_ok=True)
-        self.emg_running_mean: Dict[str, float] = {}
-        self.emg_running_var: Dict[str, float] = {}
-        self.emg_running_count = 0
-        self.eog_running_mean: Dict[str, float] = {}
-        self.eog_running_var: Dict[str, float] = {}
-        self.eog_running_count = 0
-
-    def prime_emg_running_stats_from_scaler(self, scaler, feature_columns: Optional[List[str]] = None):
-        columns = list(feature_columns or EMG_FEATURE_COLUMNS)
-        mean_values = getattr(scaler, "mean_", None)
-        scale_values = getattr(scaler, "scale_", None)
-        if mean_values is None or scale_values is None or len(mean_values) != len(columns):
-            return
-
-        self.emg_running_mean = {col: float(mean_values[idx]) for idx, col in enumerate(columns)}
-        self.emg_running_var = {
-            col: float(max(scale_values[idx], 1e-6) ** 2) for idx, col in enumerate(columns)
-        }
-        self.emg_running_count = max(self.emg_running_count, len(columns))
-
-    def prime_eog_running_stats_from_scaler(self, scaler, feature_columns: Optional[List[str]] = None):
-        columns = list(feature_columns or EOG_FEATURE_COLUMNS)
-        mean_values = getattr(scaler, "mean_", None)
-        scale_values = getattr(scaler, "scale_", None)
-        if mean_values is None or scale_values is None or len(mean_values) != len(columns):
-            return
-
-        self.eog_running_mean = {col: float(mean_values[idx]) for idx, col in enumerate(columns)}
-        self.eog_running_var = {
-            col: float(max(scale_values[idx], 1e-6) ** 2) for idx, col in enumerate(columns)
-        }
-        self.eog_running_count = max(self.eog_running_count, len(columns))
     
     def _sanitize_features(self, features: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -98,7 +55,7 @@ class CalibrationManager:
                 clean[k] = v
         return clean
 
-    def extract_features(self, sensor: str, samples: List[float], sr: int = 1000) -> Dict[str, Any]:
+    def extract_features(self, sensor: str, samples: List[float], sr: int = 512) -> Dict[str, Any]:
         """
         Route feature extraction to the appropriate static method.
         """
@@ -141,7 +98,7 @@ class CalibrationManager:
                     if range_val[0] <= val <= range_val[1]:
                         match_count += 1
                     else:
-                        logger.debug(f"❌ Feature Mismatch: {feat_name}={val:.4f} not in {range_val}")
+                        logger.debug(f"[Calibration] ❌ Feature Mismatch: {feat_name}={val:.4f} not in {range_val}")
                 # Check for single minimum (e.g. amplitude > X)
                 elif isinstance(range_val, (int, float)):
                      total_features += 1
@@ -149,7 +106,7 @@ class CalibrationManager:
                      if val >= range_val:
                          match_count += 1
                      else:
-                         logger.debug(f"❌ Threshold Mismatch: {feat_name}={val:.4f} < {range_val}")
+                         logger.debug(f"[Calibration] ❌ Threshold Mismatch: {feat_name}={val:.4f} < {range_val}")
 
         if total_features > 0:
             # Allow some fuzziness? 
@@ -159,82 +116,6 @@ class CalibrationManager:
             return score >= 0.8 # Require 80% match
             
         return False
-
-    def calibrate_emg_scaler(self, feature_matrix: List[Dict[str, Any]], model_name: str = "emg_rf_model") -> str:
-        rows = []
-        for feats in feature_matrix:
-            rows.append([float(feats.get(col, 0.0)) for col in EMG_FEATURE_COLUMNS])
-
-        if not rows:
-            raise ValueError("No EMG features provided for scaler calibration")
-
-        scaler = StandardScaler()
-        scaler.fit(np.asarray(rows, dtype=float))
-
-        scaler_path = self.models_dir / f"{model_name}_scaler.joblib"
-        joblib.dump(scaler, scaler_path)
-        return str(scaler_path)
-
-    def calibrate_eog_scaler(self, feature_matrix: List[Dict[str, Any]], model_name: str = "eog_rf") -> str:
-        rows = []
-        for feats in feature_matrix:
-            rows.append([float(feats.get(col, 0.0)) for col in EOG_FEATURE_COLUMNS])
-
-        if not rows:
-            raise ValueError("No EOG features provided for scaler calibration")
-
-        scaler = StandardScaler()
-        scaler.fit(np.asarray(rows, dtype=float))
-
-        scaler_path = self.eog_models_dir / f"{model_name}_scaler.joblib"
-        joblib.dump(scaler, scaler_path)
-        return str(scaler_path)
-
-    def update_emg_running_stats(self, features: Dict[str, Any], alpha: float = 0.01, feature_columns: Optional[List[str]] = None):
-        self.emg_running_count += 1
-        for key in feature_columns or EMG_FEATURE_COLUMNS:
-            value = float(features.get(key, 0.0))
-            old_mean = self.emg_running_mean.get(key, value)
-            old_var = self.emg_running_var.get(key, 0.0)
-            new_mean = (1.0 - alpha) * old_mean + alpha * value
-            delta = value - new_mean
-            new_var = (1.0 - alpha) * old_var + alpha * (delta * delta)
-            self.emg_running_mean[key] = new_mean
-            self.emg_running_var[key] = new_var
-
-    def normalize_emg_features_online(self, features: Dict[str, Any], feature_columns: Optional[List[str]] = None) -> Dict[str, Any]:
-        normalized = dict(features)
-        for key in feature_columns or EMG_FEATURE_COLUMNS:
-            mean = self.emg_running_mean.get(key)
-            var = self.emg_running_var.get(key)
-            if mean is None:
-                continue
-            std = max(np.sqrt(var), 1e-6)
-            normalized[key] = float((features.get(key, 0.0) - mean) / std)
-        return normalized
-
-    def update_eog_running_stats(self, features: Dict[str, Any], alpha: float = 0.01, feature_columns: Optional[List[str]] = None):
-        self.eog_running_count += 1
-        for key in feature_columns or EOG_FEATURE_COLUMNS:
-            value = float(features.get(key, 0.0))
-            old_mean = self.eog_running_mean.get(key, value)
-            old_var = self.eog_running_var.get(key, 0.0)
-            new_mean = (1.0 - alpha) * old_mean + alpha * value
-            delta = value - new_mean
-            new_var = (1.0 - alpha) * old_var + alpha * (delta * delta)
-            self.eog_running_mean[key] = new_mean
-            self.eog_running_var[key] = new_var
-
-    def normalize_eog_features_online(self, features: Dict[str, Any], feature_columns: Optional[List[str]] = None) -> Dict[str, Any]:
-        normalized = dict(features)
-        for key in feature_columns or EOG_FEATURE_COLUMNS:
-            mean = self.eog_running_mean.get(key)
-            var = self.eog_running_var.get(key)
-            if mean is None:
-                continue
-            std = max(np.sqrt(var), 1e-6)
-            normalized[key] = float((features.get(key, 0.0) - mean) / std)
-        return normalized
             
 
     def save_window(self, payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -276,7 +157,7 @@ class CalibrationManager:
 
         # 3. Extract Features
         config = config_manager.get_all_configs()
-        sr = config.get('sampling_rate', 1000)
+        sr = config.get('sampling_rate', 512)
         
         features = self.extract_features(sensor, samples, sr)
         

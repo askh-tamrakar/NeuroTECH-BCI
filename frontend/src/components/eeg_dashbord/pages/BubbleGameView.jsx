@@ -37,6 +37,7 @@ const BubbleGameView = ({ result, isConnected }) => {
   useEffect(() => {
     setSidebarSlot(
       <BubbleSidebar
+
         mouseMode={mouseMode}
         setMouseMode={setMouseMode}
         difficulty={difficulty}

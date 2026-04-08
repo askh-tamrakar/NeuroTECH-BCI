@@ -1,18 +1,18 @@
 {
   "active_models": {
-    "EMG": "Neurobench",
+    "EEG": null,
     "EOG": "dino-ml"
   },
   "channel_mapping": {
     "ch0": {
-      "sensor": "EMG",
+      "enabled": true,
       "label": "EMG_0",
-      "enabled": true
+      "sensor": "EMG"
     },
     "ch1": {
-      "sensor": "EOG",
+      "enabled": true,
       "label": "EOG_1",
-      "enabled": true
+      "sensor": "EOG"
     }
   },
   "display": {
@@ -21,11 +21,5 @@
     "timeWindowMs": 10000
   },
   "num_channels": 2,
-  "sampling_rate": 1000.0,
-  "baud": 230400,
-  "serial_port": "",
-  "connection_mode": "WiFi",
-  "target_ip": "10.232.218.237",
-  "target_port": 6000,
-  "binary": true
+  "sampling_rate": 512
 }

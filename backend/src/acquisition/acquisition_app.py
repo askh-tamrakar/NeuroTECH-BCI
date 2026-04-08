@@ -69,9 +69,10 @@ class AcquisitionApp:
         self.config = self._load_config()
         
         # Paths
-        from utils.paths import get_base_data_dir, get_config_dir
-        self.save_path = get_base_data_dir() / "EMG" / "raw" / "session"
-        self.config_path = get_config_dir() / "sensor_config.json"
+        # Resolve project root relative to this file: src/acquisition -> src -> root
+        project_root = Path(__file__).resolve().parent.parent.parent
+        self.save_path = project_root / "frontend" / "public" / "data" / "EMG" / "raw" / "session"
+        self.config_path = project_root / "config" / "sensor_config.json"
         
         # Serial reader & parser
         self.serial_reader = None
@@ -97,7 +98,6 @@ class AcquisitionApp:
         # Stream Manager Connection
         self.stream_socket = None
         self.stream_connected = False
-        self.stream_command_buffer = ""
 
 
         # Processed Data Stream State
@@ -119,7 +119,7 @@ class AcquisitionApp:
             self.config.get("ui_settings", {}).get("window_seconds", 5.0)
         )
         self.buffer_size = int(
-            self.config.get("sampling_rate", 1000) * self.window_seconds
+            self.config.get("sampling_rate", 512) * self.window_seconds
         )
         
         # Ring buffers (Raw)
@@ -166,32 +166,32 @@ class AcquisitionApp:
             import urllib.request
             import urllib.error
             
-            url = "http://localhost:5005/api/config"
+            url = "http://localhost:5000/api/config"
             with urllib.request.urlopen(url, timeout=0.5) as response:
                 if response.status == 200:
                     data = json.loads(response.read().decode())
-                    print("✅ Loaded config from API")
+                    print("[App] ✅ Loaded config from API")
                     return data
         except Exception as e:
-            print(f"⚠️ API load failed ({e}), falling back to files")
+            print(f"[App] ⚠️ API load failed ({e}), falling back to files")
         
         # 2. Fall back to file-based config using config_manager
         try:
             sensor_cfg = config_manager.sensor_config.get_all()
             if sensor_cfg:
-                print("✅ Loaded config from sensor_config.json")
+                print("[App] ✅ Loaded config from sensor_config.json")
                 return sensor_cfg
         except Exception as e:
-            print(f"⚠️ File load failed: {e}")
+            print(f"[App] ⚠️ File load failed: {e}")
         
         # 3. Fall back to defaults
-        print("Using default configuration")
+        print("[App] Using default configuration")
         return self._default_config()
 
     def _default_config(self) -> dict:
         """Default configuration with proper structure."""
         return {
-            "sampling_rate": 1000,
+            "sampling_rate": 512,
             "channel_mapping": {
                 "ch0": {
                     "sensor": "EMG",
@@ -236,7 +236,7 @@ class AcquisitionApp:
                 del sensor_config["features"]
             
             # Update specific fields controlled by this UI
-            sensor_config["sampling_rate"] = self.config.get("sampling_rate", 1000)
+            sensor_config["sampling_rate"] = self.config.get("sampling_rate", 512)
             
             # Update Channel Mapping
             channel_mapping = sensor_config.get("channel_mapping", {})
@@ -260,7 +260,7 @@ class AcquisitionApp:
                 
              # Save
             if config_manager.save_sensor_config(sensor_config):
-                print("✅ Sensor config saved")
+                print("[App] ✅ Sensor config saved")
             else:
                  raise Exception("Failed to save sensor config")
 
@@ -287,12 +287,12 @@ class AcquisitionApp:
 
             # Save
             if config_manager.save_calibration_config(calibration_config):
-                print("✅ Calibration config saved")
+                print("[App] ✅ Calibration config saved")
             else:
-                 print("⚠️ Warning: Calibration config save failed")
+                 print("[App] ⚠️ Warning: Calibration config save failed")
 
         except Exception as e:
-            print(f"❌ Error saving configs: {e}")
+            print(f"[App] ❌ Error saving configs: {e}")
             messagebox.showerror("Error", f"Failed to save config: {e}")
             return
     
@@ -309,7 +309,7 @@ class AcquisitionApp:
                 # Let's construct the facade object to push
                 facade = config_manager.get_all_configs()
                 
-                url = "http://localhost:5005/api/config"
+                url = "http://localhost:5000/api/config"
                 req = urllib.request.Request(
                     url,
                     data=json.dumps(facade).encode('utf-8'),
@@ -319,10 +319,10 @@ class AcquisitionApp:
                 
                 with urllib.request.urlopen(req, timeout=1) as response:
                     if response.status == 200:
-                        print(f"📤 Config pushed to API: {response.status}")
+                        print(f"[App] 📤 Config pushed to API: {response.status}")
             
             except Exception as e:
-                print(f"⚠️ Could not push to API: {e}")
+                print(f"[App] ⚠️ Could not push to API: {e}")
         
         import threading
         threading.Thread(
@@ -331,7 +331,7 @@ class AcquisitionApp:
             daemon=True
         ).start()
         
-        print("✅ Configuration saved successfully")
+        print("[App] ✅ Configuration saved successfully")
         messagebox.showinfo("Success", "Configuration saved successfully")
 
     def start_sync_thread(self):
@@ -350,12 +350,12 @@ class AcquisitionApp:
                     # Don't interrupt if we are actively recording/streaming to avoid jitter
                     # (optional trade-off)
                     
-                    url = "http://localhost:5005/api/config"
+                    url = "http://localhost:5000/api/config"
                     # Short timeout to avoid blocking threads for long
                     with urllib.request.urlopen(url, timeout=0.2) as response:
                         if response.status == 200:
                             if consecutive_errors > 0:
-                                print(f"✅ Sync connection restored")
+                                print(f"[App] ✅ Sync connection restored")
                             consecutive_errors = 0
                             
                             new_cfg = json.loads(response.read().decode())
@@ -365,14 +365,14 @@ class AcquisitionApp:
                             new_map = new_cfg.get("channel_mapping", {})
                             
                             if json.dumps(current_map, sort_keys=True) != json.dumps(new_map, sort_keys=True):
-                                print(f"🔄 Remote config change detected!")
+                                print(f"[App] 🔄 Remote config change detected!")
                                 self.root.after(0, self.update_config_from_remote, new_cfg)
                                 
                 except Exception as e:
                     consecutive_errors += 1
                     # Only print the error the first time it happens (or if it changes), to avoid spam
                     if consecutive_errors == 1:
-                        print(f"Sync loop warning: {e} (Supressing further errors until connection restored)")
+                        print(f"[App] Sync loop warning: {e} (Supressing further errors until connection restored)")
         
         threading.Thread(target=loop, daemon=True).start()
 
@@ -383,19 +383,19 @@ class AcquisitionApp:
 
         def discover():
             self.searching_processed = True
-            print("🔍 Searching for Processed Stream...")
+            print("[App] 🔍 Searching for Processed Stream...")
             while self.processed_inlet is None:
                 streams = pylsl.resolve_streams(wait_time=1.0)
                 for s in streams:
                     if s.name() == self.processed_stream_name:
                         try:
                             self.processed_inlet = pylsl.StreamInlet(s, max_buflen=5)
-                            print(f"✅ Connected to {self.processed_stream_name}")
+                            print(f"[App] ✅ Connected to {self.processed_stream_name}")
                             # Only enable toggle if we found the stream
                             self.root.after(0, lambda: self.view_toggle.config(state="normal"))
                             return
                         except Exception as e:
-                            print(f"Error connecting to processed stream: {e}")
+                            print(f"[App] Error connecting to processed stream: {e}")
                 time.sleep(2)
             self.searching_processed = False
 
@@ -413,7 +413,7 @@ class AcquisitionApp:
         if "ch1" in mapping:
             self.ch1_var.set(mapping["ch1"].get("sensor", "EOG"))
             
-        print("UI Updated from Remote")
+        print("[App] UI Updated from Remote")
 
     def _build_ui(self):
         """Build the entire UI"""
@@ -575,7 +575,7 @@ class AcquisitionApp:
     def on_view_toggle(self):
         """Handle view toggle change"""
         mode = self.view_var.get()
-        print(f"View switched to: {mode}")
+        print(f"[App] View switched to: {mode}")
         if mode == "Processed" and self.processed_inlet is None:
             messagebox.showwarning("Stream Not Found", "Processed stream not connected yet.")
             self.view_var.set("Raw")
@@ -674,15 +674,13 @@ class AcquisitionApp:
             self.stream_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             # Port 6000 is for RAW data as defined in stream_manager.py
             self.stream_socket.connect(('localhost', 6000))
-            self.stream_socket.setblocking(False)
             self.stream_connected = True
-            self.stream_command_buffer = ""
             if getattr(self, '_stream_error_logged', False):
                 self._stream_error_logged = False
-            print("✅ Connected to Stream Manager (Raw)")
+            print("[App] ✅ Connected to Stream Manager (Raw)")
         except Exception as e:
             if not getattr(self, '_stream_error_logged', False):
-                print(f"⚠️ Could not connect to Stream Manager: {e}")
+                print(f"[App] ⚠️ Could not connect to Stream Manager: {e}")
                 self._stream_error_logged = True
             self.stream_connected = False
             self.stream_socket = None
@@ -704,8 +702,7 @@ class AcquisitionApp:
                 pass
             self.stream_socket = None
             self.stream_connected = False
-            self.stream_command_buffer = ""
-            print("Disconnected from Stream Manager")
+            print("[App] Disconnected from Stream Manager")
 
         
         self.status_label.config(text="❌ Disconnected", foreground="red")
@@ -818,7 +815,7 @@ class AcquisitionApp:
                 "timestamp": self.session_start_time.isoformat(),
                 "duration_seconds": (datetime.now() - self.session_start_time).total_seconds(),
                 "total_packets": self.packet_count,
-                "sampling_rate_hz": self.config.get("sampling_rate", 1000),
+                "sampling_rate_hz": self.config.get("sampling_rate", 512),
                 "channel_0_type": self.ch0_type,
                 "channel_1_type": self.ch1_type
             },
@@ -836,27 +833,6 @@ class AcquisitionApp:
     def main_loop(self):
         """Main acquisition and update loop (Optimized)"""
         try:
-            if self.stream_connected and self.stream_socket and self.serial_reader:
-                try:
-                    while True:
-                        incoming = self.stream_socket.recv(1024)
-                        if not incoming:
-                            self.stream_connected = False
-                            break
-
-                        self.stream_command_buffer += incoming.decode('ascii', errors='ignore')
-                        while '\n' in self.stream_command_buffer:
-                            line, self.stream_command_buffer = self.stream_command_buffer.split('\n', 1)
-                            command = line.strip()
-                            if command:
-                                print(f"Relay command received: {command}")
-                                self.serial_reader.send_command(command)
-                except BlockingIOError:
-                    pass
-                except Exception as e:
-                    print(f"Stream command receive error: {e}")
-                    self.stream_connected = False
-
             # --- 0. CHECK ARDUINO MESSAGES (Switches) ---
             if self.serial_reader:
                 while True:
@@ -865,18 +841,18 @@ class AcquisitionApp:
                         break
                     
                     # DEBUG: Print everything we get
-                    print(f"DEBUG: Processing message '{msg}'")
+                    print(f"[App] DEBUG: Processing message '{msg}'")
 
                     if "SWITCH_2_PRESSED" in msg:
                         # SW2: Start Acquisition & Pipeline
-                        print("🎮 Switch 2 Pressed -> Starting...")
+                        print("[App] 🎮 Switch 2 Pressed -> Starting...")
                         if not self.is_acquiring:
                             self.start_acquisition()
                         
                         # Start Pipeline if not running
                         if self.pipeline_process is None:
                             try:
-                                print("🚀 Launching Full Pipeline (pipeline.py)...")
+                                print("[App] 🚀 Launching Full Pipeline (pipeline.py)...")
                                 # Launch independent python process
                                 cmd = [sys.executable, "pipeline.py"]
                                 self.pipeline_process = subprocess.Popen(
@@ -885,17 +861,17 @@ class AcquisitionApp:
                                     creationflags=subprocess.CREATE_NEW_CONSOLE # Windows specific: Open new terminal
                                 )
                             except Exception as e:
-                                print(f"❌ Failed to launch pipeline: {e}")
+                                print(f"[App] ❌ Failed to launch pipeline: {e}")
 
                     elif "SWITCH_1_PRESSED" in msg:
                         # SW1: Stop Acquisition & Pipeline
-                        print("🛑 Switch 1 Pressed -> Stopping...")
+                        print("[App] 🛑 Switch 1 Pressed -> Stopping...")
                         if self.is_acquiring:
                             self.stop_acquisition()
                         
                         # Kill Pipeline
                         if self.pipeline_process:
-                            print("💀 Killing Filter Pipeline...")
+                            print("[App] 💀 Killing Filter Pipeline...")
                             self.pipeline_process.terminate()
                             self.pipeline_process = None
 
@@ -927,7 +903,7 @@ class AcquisitionApp:
                                 byte_data = b"".join(batch_raw)
                                 self.stream_socket.sendall(byte_data)
                             except Exception as e:
-                                print(f"Stream send error: {e}")
+                                print(f"[App] Stream send error: {e}")
                                 self.stream_connected = False
 
                         
@@ -975,7 +951,7 @@ class AcquisitionApp:
                             self.proc_buffer_ptr = (self.proc_buffer_ptr + 1) % self.buffer_size
                             
                 except Exception as e:
-                    print(f"Processed stream error: {e}")
+                    print(f"[App] Processed stream error: {e}")
 
             # Update UI labels
             self.packet_label.config(text=str(self.packet_count))

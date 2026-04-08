@@ -1,46 +1,53 @@
-from fastapi import APIRouter, Body
-from fastapi.responses import JSONResponse
-
-from src.server.server.services.config_service import get_config, reset_runtime_config, save_runtime_config
+from flask import Blueprint, jsonify, request
 from src.server.server.state import state
+from src.server.server.config_manager import load_config, save_config
+from src.server.server.extensions import socketio
 
+config_bp = Blueprint('config', __name__)
 
-config_bp = APIRouter()
-
-
-def _error_response(error: str, status_code: int = 500):
-    return JSONResponse({"error": error}, status_code=status_code)
-
-
-@config_bp.get("/api/config")
+@config_bp.route('/api/config', methods=['GET'])
 def api_get_config():
-    return get_config()
+    """Get current configuration."""
+    config = state.config or load_config()
+    return jsonify(config)
 
-
-@config_bp.post("/api/config")
-def api_save_config(payload: dict | None = Body(default=None)):
+@config_bp.route('/api/config', methods=['POST'])
+def api_save_config():
+    """Save configuration to disk."""
     try:
-        return save_runtime_config(payload)
+        config = request.get_json()
+        if not config:
+            return jsonify({"error": "No config provided"}), 400
+
+        # Validate structure
+        if "channel_mapping" not in config:
+            config["channel_mapping"] = load_config().get("channel_mapping", {})
+
+        # Save to disk
+        success = save_config(config)
+        
+        # Broadcast to all connected clients
+        socketio.emit('config_updated', {
+            "status": "saved",
+            "config": config
+        })
+
+        return jsonify({
+            "status": "ok",
+            "saved": success,
+            "config": config
+        })
     except Exception as e:
-        print(f"Error saving config: {e}")
-        return _error_response(str(e))
+        print(f"[Config_Routes] ❌ Error saving config: {e}")
+        return jsonify({"error": str(e)}), 500
 
-
-@config_bp.post("/api/mode")
-def api_set_mode(payload: dict | None = Body(default=None)):
-    try:
-        data = payload or {}
-        preset = data.get("preset")
-        view = data.get("view")
-        state.mode_manager.set_preset_and_view(preset, view)
-        return {"status": "ok", "preset": preset, "view": view}
-    except Exception as e:
-        return _error_response(str(e))
-
-
-@config_bp.delete("/api/config")
+@config_bp.route('/api/config', methods=['DELETE'])
 def api_delete_config():
+    """Reset to default configuration."""
     try:
-        return reset_runtime_config()
+        defaults = load_config()
+        save_config(defaults)
+        socketio.emit('config_updated', {"status": "reset"})
+        return jsonify({"status": "ok", "message": "Config reset to defaults"})
     except Exception as e:
-        return _error_response(str(e))
+        return jsonify({"error": str(e)}), 500

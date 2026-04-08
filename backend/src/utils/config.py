@@ -15,7 +15,6 @@ Provides:
 
 import json
 import os
-import tempfile
 import threading
 import time
 from pathlib import Path
@@ -23,26 +22,8 @@ from typing import Dict, Any, Optional
 import logging
 
 # Set up logging
-from .logging_cfg import get_logger
-logger = get_logger(__name__)
-
-
-def _atomic_write_json(path: Path, payload: Dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, temp_name = tempfile.mkstemp(prefix=f"{path.stem}_", suffix=".tmp", dir=path.parent)
-    temp_path = Path(temp_name)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            json.dump(payload, handle, indent=2)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(temp_path, path)
-    finally:
-        if temp_path.exists():
-            try:
-                temp_path.unlink()
-            except OSError:
-                pass
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 class ConfigWatcher:
@@ -71,28 +52,14 @@ class ConfigWatcher:
                 logger.warning(f"⚠️ {self.name} file not found: {self.config_path}")
                 return False
 
-            config = None
-            last_error = None
-            for attempt in range(2):
-                try:
-                    with open(self.config_path, "r", encoding="utf-8") as f:
-                        config = json.load(f)
-                    break
-                except json.JSONDecodeError as exc:
-                    last_error = exc
-                    if attempt == 0:
-                        time.sleep(0.1)
-                        continue
-                    raise
-
-            if config is None:
-                raise last_error if last_error is not None else ValueError("Config load returned no data")
+            with open(self.config_path, "r", encoding="utf-8") as f:
+                config = json.load(f)
 
             with self._lock:
                 self._config_cache = config
                 self._last_modified = os.path.getmtime(self.config_path)
 
-            logger.debug(f"✅ {self.name} loaded: {self.config_path}")
+            logger.info(f"✅ {self.name} loaded: {self.config_path}")
             return True
 
         except json.JSONDecodeError as e:
@@ -120,7 +87,7 @@ class ConfigWatcher:
 
                 # File was modified
                 if current_mtime != self._last_modified:
-                    logger.info(f"♻️ {self.name} changed — reloading...")
+                    logger.info(f"📁 {self.name} changed — reloading...")
                     self._load_config()
 
                 time.sleep(1)
@@ -196,10 +163,11 @@ class ConfigWriter:
             # Create directory if needed
             self.config_path.parent.mkdir(parents=True, exist_ok=True)
 
-            # Write file atomically so watchers do not see truncated JSON.
-            _atomic_write_json(self.config_path, config)
+            # Write file
+            with open(self.config_path, "w", encoding="utf-8") as f:
+                json.dump(config, f, indent=2)
 
-            logger.info(f"💾 {self.name} saved: {self.config_path}")
+            logger.info(f"✅ {self.name} saved: {self.config_path}")
             return True
 
         except json.JSONDecodeError as e:
@@ -258,7 +226,7 @@ class ConfigManager:
 
     # ============== SENSOR CONFIG ==============
 
-    def get_sampling_rate(self, default: int = 1000) -> int:
+    def get_sampling_rate(self, default: int = 512) -> int:
         """Get sampling rate from sensor config."""
         return int(self.sensor_config.get("sampling_rate", default))
 
@@ -355,28 +323,17 @@ class ConfigManager:
 
     # ============== DETECTION STATE ==============
 
-    def get_detection_config(self) -> Dict[str, Any]:
-        """Read full detection routing config from file."""
+    def get_detection_state(self) -> bool:
+        """Read detection active state from file."""
         state_path = self.config_dir / "detection_state.json"
         try:
             if state_path.exists():
                 with open(state_path, 'r') as f:
                     data = json.load(f)
-                    if isinstance(data, dict):
-                        return {
-                            "active": bool(data.get("active", False)),
-                            "target": data.get("target")
-                        }
-            return {"active": False, "target": None}
+                    return data.get("active", False)
+            return False
         except:
-            return {"active": False, "target": None}
-
-    def get_detection_state(self) -> bool:
-        return self.get_detection_config().get("active", False)
-
-    def get_detection_target(self) -> Optional[str]:
-        target = self.get_detection_config().get("target")
-        return str(target).upper() if target else None
+            return False
 
     # ============== FACADE (UNIFIED) ==============
 
@@ -423,9 +380,8 @@ class ConfigManager:
 # Global instances - use these throughout the application
 # ============================================================
 
-from .paths import get_config_dir
-
-CONFIG_DIR = get_config_dir()
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+CONFIG_DIR = PROJECT_ROOT / "config"
 
 # Create global manager
 config_manager = ConfigManager(CONFIG_DIR)

@@ -364,7 +364,7 @@ export default function LiveView({ wsData, wsEvent, config, isPaused, wsUrl, rec
                     freqMin: fftFreqRange.min,
                     freqMax: fftFreqRange.max,
                     unitMode: channelConfig[chIdx]?.unitMode || 'amplitude',
-                    sampleRate: config?.sampling_rate || 1000,
+                    sampleRate: config?.sampling_rate || 512,
                     disabled: !isEnabled,
                   }}
                   onStatsChange={(stats) => setFftStatsByChannel(prev => ({ ...prev, [chIdx]: stats }))}

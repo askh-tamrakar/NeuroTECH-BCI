@@ -784,7 +784,7 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
                 sessionStrideMs: EMG_BURST_STRIDE_MS,
                 strideMs: EMG_BURST_STRIDE_MS,
                 gapMs: EMG_COLLECTION_GAP_MS,
-                samplingRate: Number(config?.sampling_rate || 1000),
+                samplingRate: Number(config?.sampling_rate || 512),
                 source: 'frontend_auto_window',
             };
         }
@@ -1773,7 +1773,7 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
             freqMax: Number(fftFreqRange?.max || 50),
             themeAxisColor: axisColor,
             unitMode: 'amplitude',
-            sampleRate: Number(config?.sampling_rate || 1000),
+            sampleRate: Number(config?.sampling_rate || 512),
         };
     }, [activeChannelIndex, customLineColor, zoom, manualYRange, fftFreqRange, currentTheme, config]);
 

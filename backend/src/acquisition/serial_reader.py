@@ -4,10 +4,9 @@ SerialPacketReader - Fixed & Production-Ready
 - Robust threaded serial reader with packet sync
 - Proper connection management
 - Complete parenthesis and error handling
-- Drop notification via callback on queue overflow
 """
 
-from typing import Optional, Dict, Callable
+from typing import Optional, Dict
 import time
 import queue
 import threading
@@ -23,8 +22,7 @@ class SerialPacketReader:
         sync2: int = 0x7C, 
         end_byte: int = 0x01,
         connect_timeout: float = 3.0, 
-        max_queue: int = 10000,
-        on_drop_callback: Optional[Callable[[int], None]] = None
+        max_queue: int = 10000
     ):
         """Initialize serial reader"""
         self.port = port
@@ -38,13 +36,10 @@ class SerialPacketReader:
         self.is_running = False
         self.data_queue: queue.Queue = queue.Queue(maxsize=max_queue)
         self.message_queue: queue.Queue = queue.Queue(maxsize=100) # Queue for text messages
-        self.on_drop_callback = on_drop_callback
 
         # Stats
         self.packets_received = 0
         self.packets_dropped = 0
-        self._drop_burst_count = 0      # Consecutive drops in current burst
-        self._last_drop_log_time = 0.0   # Rate-limit drop warnings
         self.sync_errors = 0
         self.bytes_received = 0
         self.duplicates = 0
@@ -57,7 +52,7 @@ class SerialPacketReader:
     def connect(self) -> bool:
         """Connect to serial port"""
         try:
-            print(f"Connecting to {self.port} at {self.baud} baud...")
+            print(f"[SerialReader] Connecting to {self.port} at {self.baud} baud...")
             self.ser = serial.Serial(
                 self.port,
                 self.baud,
@@ -67,7 +62,7 @@ class SerialPacketReader:
                 parity=serial.PARITY_NONE
             )
             
-            print(f"Port opened, waiting {self.connect_timeout}s for Arduino...")
+            print(f"[SerialReader] Port opened, waiting {self.connect_timeout}s for Arduino...")
             time.sleep(self.connect_timeout)
             
             # Clear buffers
@@ -77,10 +72,10 @@ class SerialPacketReader:
             except Exception:
                 pass
             
-            print(f"✅ Connected to {self.port}")
+            print(f"[SerialReader] ✅ Connected to {self.port}")
             return True
         except Exception as e:
-            print(f"❌ Connection failed: {e}")
+            print(f"[SerialReader] ❌ Connection failed: {e}")
             return False
 
     def disconnect(self):
@@ -99,7 +94,7 @@ class SerialPacketReader:
         self.is_running = True
         self._read_thread = threading.Thread(target=self._read_loop, daemon=True)
         self._read_thread.start()
-        print("Reading thread started")
+        print("[SerialReader] Reading thread started")
 
     def stop(self):
         """Stop reading thread"""
@@ -116,7 +111,7 @@ class SerialPacketReader:
             self.ser.flush()
             return True
         except Exception as e:
-            print(f"Send failed: {e}")
+            print(f"[SerialReader] Send failed: {e}")
             return False
 
     def _read_loop(self):
@@ -137,7 +132,7 @@ class SerialPacketReader:
                 else:
                     time.sleep(0.001)
             except Exception as e:
-                print(f"Read error: {e}")
+                print(f"[SerialReader] Read error: {e}")
                 time.sleep(0.05)
 
     def _process_buffer(self, buffer: bytearray):
@@ -168,7 +163,7 @@ class SerialPacketReader:
                     # Attempt to decode as text
                     text_msg = line.decode('utf-8')
                     if text_msg.startswith("MSG:") or text_msg.startswith("ACQUISITION_") or "CHANNEL" in text_msg or text_msg.startswith("UNO-"):
-                        print(f"{text_msg}")
+                        print(f"[Arduino] {text_msg}")
                         # Put in queue
                         try:
                             self.message_queue.put_nowait(text_msg)
@@ -206,24 +201,8 @@ class SerialPacketReader:
                         self.data_queue.put_nowait(packet_bytes)
                         self.packets_received += 1
                         self.last_packet_time = time.time()
-                        # Reset drop burst counter on successful enqueue
-                        if self._drop_burst_count > 0:
-                            self._drop_burst_count = 0
                     except queue.Full:
                         self.packets_dropped += 1
-                        self._drop_burst_count += 1
-                        # Rate-limited warning: log at most once per second
-                        now = time.time()
-                        if now - self._last_drop_log_time >= 1.0:
-                            print(f"⚠️ Queue overflow: {self._drop_burst_count} packets dropped "
-                                  f"(total: {self.packets_dropped}, queue full at {self.data_queue.maxsize})")
-                            self._last_drop_log_time = now
-                            # Notify via callback if registered
-                            if self.on_drop_callback:
-                                try:
-                                    self.on_drop_callback(self.packets_dropped)
-                                except Exception:
-                                    pass
                     i += self.packet_len
                 else:
                     # Bad end byte
