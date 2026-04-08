@@ -45,18 +45,24 @@ const PRESETS = [3, 5, 10, 15];
 const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => {
   const containerRef = useRef(null);
   const resultRef = useRef(null);
+<<<<<<< HEAD
   const wsEventRef = useRef(null);
+=======
+>>>>>>> eeg-application-dashboard
   
   // Keep resultRef fresh for the requestAnimationFrame loop
   useEffect(() => {
     resultRef.current = result;
   }, [result]);
 
+<<<<<<< HEAD
   // Keep wsEventRef fresh — captures raw eeg_prediction events with full feature set
   useEffect(() => {
     wsEventRef.current = wsEvent;
   }, [wsEvent]);
 
+=======
+>>>>>>> eeg-application-dashboard
   const { currentTheme } = useTheme();
   const themeRef = useRef(currentTheme);
 
@@ -356,11 +362,19 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
         ctx.lineWidth = frac === 1.0 ? 1.2 : frac === INNER ? 1.0 : 0.6;
         ctx.stroke();
 
+<<<<<<< HEAD
         // Numeric labels
         ctx.font = 'bold 9px "Share Tech Mono", monospace';
         ctx.fillStyle = hex2rgba(primary, frac === INNER ? 0.9 : 0.6);
         ctx.textAlign = 'center';
         ctx.fillText(ringLabels[ri], cx, cy - R * frac - 3);
+=======
+        // Numeric labels (25, 50, 75, 100)
+        ctx.font = 'bold 9px "Share Tech Mono", monospace';
+        ctx.fillStyle = hex2rgba(primary, 0.7);
+        ctx.textAlign = 'center';
+        ctx.fillText((frac * 100).toFixed(0), cx, cy - R * frac - 3);
+>>>>>>> eeg-application-dashboard
       });
 
       // Spokes
@@ -447,6 +461,7 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
       eegMode = 'ws';
       if (fetchInterval) clearInterval(fetchInterval);
       fetchInterval = setInterval(() => {
+<<<<<<< HEAD
         const ws  = wsEventRef.current;  // raw eeg_prediction — has full features
         const res = resultRef.current;   // processed result  — has state/band_mix/score
 
@@ -488,6 +503,22 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
         } else if (res?.band_mix) {
           const { alpha = 0, theta = 0, beta = 0.1 } = res.band_mix;
           calmSignal = Math.max(0, Math.min(1, (alpha + theta * 0.5) / (beta + 0.1) * 0.4));
+=======
+        const res = resultRef.current;
+        if (res?.band_powers?.length >= 5) {
+          // Use absolute backend band powers - radar normalizes them via ratio automatically
+          // We can apply a small log baseline so delta doesn't 100% crush the UI visually, 
+          // or just pass them raw as requested by user's raw band matching rule
+          rawBands = [...res.band_powers];
+        }
+
+        if (res?.meditation_score !== undefined) {
+          calmSignal = Math.max(0, Math.min(1, res.meditation_score / 100));
+        } else if (res?.band_mix) {
+           // Fallback to calculate base calm from mix if score is omitted for some reason
+           const { alpha, theta, beta } = res.band_mix;
+           calmSignal = Math.max(0, Math.min(1, (alpha + theta * 0.5) / (beta + 0.1) * 0.4));
+>>>>>>> eeg-application-dashboard
         }
       }, 60);
     }

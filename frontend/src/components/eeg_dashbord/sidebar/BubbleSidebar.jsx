@@ -20,9 +20,15 @@ const BubbleSidebar = ({
     const dashOffset = 201 - (Math.min(100, focusScore || 0) / 100) * 201;
 
     return (
+<<<<<<< HEAD
         <div className="flex-grow flex flex-col p-4 gap-4 font-mono transition-opacity duration-300 w-full shrink-0 overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:'none'] [&::-webkit-scrollbar]:hidden">
             <div className="flex items-center gap-3 rounded-xl border border-[var(--primary)]/20 bg-[var(--bg)]/40 px-3 py-2.5 shrink-0">
                 <Gamepad2 size={18} className="text-[var(--primary)]" />
+=======
+        <div className="flex-grow flex flex-col p-4 gap-4 font-mono transition-opacity duration-300 w-full shrink-0 overflow-y-auto scrollbar-hide">
+            {/* Header */}
+            <div className="flex items-center justify-between shrink-0 mb-1">
+>>>>>>> eeg-application-dashboard
                 <div>
                     <h3 className="text-[12px] font-black uppercase tracking-[3px] text-[var(--primary)]">Bubble Game</h3>
                     <p className="text-[10px] font-bold uppercase tracking-[2px] text-[var(--muted)]/70">Sensor control panel</p>

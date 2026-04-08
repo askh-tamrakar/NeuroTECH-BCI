@@ -1,4 +1,9 @@
 {
+<<<<<<< HEAD
   "active": false,
   "target": null
+=======
+  "active": true,
+  "target": "EOG"
+>>>>>>> eeg-application-dashboard
 }

@@ -1,5 +1,12 @@
 {
   "running": true,
+<<<<<<< HEAD
   "raw_ingress_client_count": 1,
   "packet_count": 1779648,
   "updated_at": 1775587981.7804563
+=======
+  "raw_ingress_client_count": 0,
+  "packet_count": 0,
+  "updated_at": 1775584783.203066
+}
+>>>>>>> eeg-application-dashboard

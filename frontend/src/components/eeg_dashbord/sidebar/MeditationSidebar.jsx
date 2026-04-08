@@ -84,15 +84,24 @@ const MeditationSidebar = ({
 
     return (
         <div className="flex-grow flex flex-col p-4 gap-4 font-mono transition-opacity duration-300 w-full shrink-0 overflow-hidden">
+<<<<<<< HEAD
             <div className="flex items-center gap-3 rounded-xl border border-primary/20 bg-bg/40 px-3 py-2.5 shrink-0">
                 <Wind size={22} className="text-primary" />
+=======
+            {/* Header */}
+            <div className="flex items-center justify-between shrink-0 mb-1">
+>>>>>>> eeg-application-dashboard
                 <div>
                     <h3 className="text-[16px] font-bold text-text tracking-[2px]">NEURO TRAINER</h3>
                     <p className="text-[10px] font-bold uppercase tracking-[2px] text-muted/70">Meditation control center</p>
                 </div>
             </div>
 
+<<<<<<< HEAD
             <div className="flex flex-col gap-4 h-full overflow-y-auto pb-10 [scrollbar-width:none] [-ms-overflow-style:'none'] [&::-webkit-scrollbar]:hidden">
+=======
+            <div className="flex flex-col gap-4 h-full overflow-y-auto scrollbar-hide pb-10">
+>>>>>>> eeg-application-dashboard
 
                 {/* Start Session Button */}
                 <div className="shrink-0">

@@ -4,6 +4,56 @@
   background: radial-gradient(circle at 50% 0%, #0d1a1f 0%, #050a0c 100%);
   position: relative;
   overflow: hidden;
+<<<<<<< HEAD
+=======
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── WIREFRAME MESH BACKGROUND ── */
+.music-mesh-surface {
+  position: absolute;
+  bottom: -20%;
+  left: -20%;
+  right: -20%;
+  height: 80%;
+  background-image: 
+    linear-gradient(rgba(0, 229, 255, 0.1) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 229, 255, 0.1) 1px, transparent 1px);
+  background-size: 60px 40px;
+  transform: perspective(800px) rotateX(60deg);
+  mask-image: radial-gradient(ellipse at center, black 20%, transparent 80%);
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* ── GLOWING HALO ARC ── */
+.music-halo-arc {
+  position: absolute;
+  top: 10%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(80vw, 700px);
+  height: min(80vw, 700px);
+  border: 2px solid rgba(0, 229, 255, 0.4);
+  border-radius: 50%;
+  box-shadow: 0 0 40px rgba(0, 229, 255, 0.1), inset 0 0 40px rgba(0, 229, 255, 0.1);
+  mask-image: linear-gradient(to bottom, black 40%, transparent 90%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ── VISUALIZER HEADER ── */
+.visualizer-preview-header {
+  position: absolute;
+  top: 80px;
+  left: 80px;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.demo-mode-badge {
+>>>>>>> eeg-application-dashboard
   display: flex;
   flex-direction: column;
   /* Gentle zoom-out so all elements fit comfortably */
@@ -74,6 +124,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+<<<<<<< HEAD
 }
 
 .parameter-label {
@@ -118,6 +169,42 @@
   animation: neon-pulse 2s infinite ease-in-out;
 }
 
+=======
+  gap: 8px;
+  color: #a3e635; /* Lime/Green */
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  margin-bottom: 8px;
+}
+
+.demo-dot {
+  width: 6px;
+  height: 6px;
+  background: #a3e635;
+  border-radius: 50%;
+  box-shadow: 0 0 8px #a3e635;
+}
+
+.visualizer-title {
+  font-size: clamp(2.5rem, 6vw, 4.5rem);
+  font-weight: 700;
+  color: #ffffff;
+  margin: 0;
+  line-height: 1;
+}
+
+.visualizer-subtext {
+  font-size: 14px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.4);
+  letter-spacing: 2px;
+  margin-top: 15px;
+  line-height: 1.6;
+}
+
+>>>>>>> eeg-application-dashboard
 /* ── LAYOUT UTILS ── */
 .ml-80 {
   margin-left: 20rem; /* Matches 80 * 0.25rem */

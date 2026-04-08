@@ -14,8 +14,13 @@
     "EOG": {
       "notch_enabled": true,
       "bandpass_enabled": true,
+<<<<<<< HEAD
       "bandpass_high": 10,
       "bandpass_low": 1.1,
+=======
+      "bandpass_high": 8,
+      "bandpass_low": 0.4,
+>>>>>>> eeg-application-dashboard
       "notch_freq": 50,
       "bandpass_order": 4
     },
@@ -23,7 +28,11 @@
       "cutoff": 0.1,
       "bandpass_enabled": true,
       "notch_enabled": true,
+<<<<<<< HEAD
       "bandpass_high": 50,
+=======
+      "bandpass_high": 30,
+>>>>>>> eeg-application-dashboard
       "notch": "50Hz",
       "bandpass_low": 1,
       "notch_freq": 50,

@@ -173,16 +173,26 @@ const MusicView = ({ result, onNavigate }) => {
 
       ctx.clearRect(0, 0, width, height);
 
+<<<<<<< HEAD
       // REDUCED Line Count for "Cleaner" Look
       const lineCount = 20; 
       const startY = height * 0.9;
 
       ctx.lineWidth = 0.8;
+=======
+      // Draw dense mountain lines from back to front
+      const lineCount = 40; 
+      const stepY = height / (lineCount * 1.8);
+      const startY = height * 0.95;
+
+      ctx.lineWidth = 1.0;
+>>>>>>> eeg-application-dashboard
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
 
       for (let i = lineCount; i >= 0; i--) {
         const z = i / lineCount;
+<<<<<<< HEAD
         const yBase = startY - (z * height * 0.5);
         const alpha = (1 - z) * 0.6;
         
@@ -208,6 +218,42 @@ const MusicView = ({ result, onNavigate }) => {
           else ctx.lineTo(x, y);
         }
 
+=======
+        const yBase = startY - (z * height * 0.6);
+        const alpha = (1 - z) * 0.8;
+        
+        ctx.strokeStyle = `rgba(0, 229, 255, ${alpha})`;
+        // Create a fill for the mountain face
+        ctx.fillStyle = `rgba(10, 26, 31, ${alpha * 0.8})`; 
+        
+        ctx.beginPath();
+
+        const segmentCount = 60;
+        const segmentWidth = width / segmentCount;
+
+        for (let j = 0; j <= segmentCount; j++) {
+          const x = j * segmentWidth;
+          
+          // Audio influence
+          const binIdx = Math.floor((j / segmentCount) * (freqData.length * 0.4));
+          const val = freqData[binIdx] || 0;
+          
+          // Complex Wave: Frequency + Multi-frequency Sine + Offset
+          const audioPeak = (val / 255) * 120 * (1 - z);
+          const noise = Math.sin(j * 0.15 + (offset * (1 + z)) + (i * 0.5)) * 25 * (1 - z);
+          const noise2 = Math.cos(j * 0.05 - (offset * 0.5)) * 10 * (1 - z);
+          
+          const y = yBase - audioPeak - noise - noise2;
+
+          if (j === 0) {
+            ctx.moveTo(x, y);
+          } else {
+            ctx.lineTo(x, y);
+          }
+        }
+
+        // Close the path to fill the mountain floor
+>>>>>>> eeg-application-dashboard
         ctx.lineTo(width, height);
         ctx.lineTo(0, height);
         ctx.closePath();
@@ -241,11 +287,16 @@ const MusicView = ({ result, onNavigate }) => {
           width: '100%',
           height: '100%',
           pointerEvents: 'none',
+<<<<<<< HEAD
           zIndex: 5,
+=======
+          zIndex: 2,
+>>>>>>> eeg-application-dashboard
           opacity: 0.9,
           maskImage: 'radial-gradient(ellipse at bottom, black 60%, transparent 95%)'
         }}
       />
+<<<<<<< HEAD
 
       {/* ── BACKGROUND REFINEMENTS FROM PREVIEW ── */}
       <div className="absolute inset-0 z-0 opacity-40">
@@ -365,6 +416,8 @@ const MusicView = ({ result, onNavigate }) => {
           <span className="font-bold text-[8px] tracking-[0.2em] uppercase opacity-60">Next Mode</span>
         </button>
       </div>
+=======
+>>>>>>> eeg-application-dashboard
     </div>
   );
 };
