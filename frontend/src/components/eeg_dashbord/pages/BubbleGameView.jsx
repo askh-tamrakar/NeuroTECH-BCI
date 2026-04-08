@@ -79,7 +79,7 @@ const BubbleGameView = ({ result, isConnected }) => {
 
         <div className="flex w-full flex-col gap-1 rounded-2xl border border-[var(--border)] bg-[var(--bg)]/60 px-1.5 py-2">
           <span className="text-center text-[8px] font-black uppercase tracking-[2px] text-[var(--muted)]">Level</span>
-          <div className="grid grid-cols-3 gap-1">
+          <div className="flex flex-col gap-1">
             {[1, 2, 3].map((lvl) => (
               <button
                 key={lvl}
@@ -145,6 +145,7 @@ const BubbleGameView = ({ result, isConnected }) => {
     let bubblesPopped = 0, bubblesMissed = 0;
     let sessionStart = 0;
     let peakBands = [0, 0, 0, 0, 0];
+    let currentCalmSignal = 0;
 
     // Ensure we are in 'ws' mode if connected
     if (isConnectedRef.current) eegMode = 'ws';
@@ -219,50 +220,35 @@ const BubbleGameView = ({ result, isConnected }) => {
         const event = resultRef.current;
         if (!event) return;
 
-        // Correct extraction logic for the current backend format
-        const features = event.features || event.output?.features || event.band_powers ? {
-          alpha_rel: event.features?.alpha_rel || (event.band_powers ? event.band_powers[2] / 100 : 0),
-          theta_rel: event.features?.theta_rel || (event.band_powers ? event.band_powers[1] / 100 : 0),
-          beta_rel: event.features?.beta_rel || (event.band_powers ? event.band_powers[3] / 100 : 0),
-          rest_ratio: event.features?.rest_ratio || (event.meditation_score ? event.meditation_score / 100 : 0)
-        } : {};
+        const features = event.features || {};
+        const total = (features.delta||0) + (features.theta||0) + (features.alpha||0) + (features.beta||0) + 1e-6;
         
-        const ch = event.source_channel !== undefined ? `ch${event.source_channel}` : (event.channel || 'ch0');
-        const currentCh = activeChannelRef.current;
+        let alphaRel = features.alpha_rel || 0;
+        let betaRel = features.beta_rel || 0;
+        let thetaRel = features.theta_rel || 0;
 
-        // Support channel selection
-        if (currentCh === 'Fp1' || currentCh === 'ch0') { if (ch !== 'ch0' && ch !== 'Fp1') return; }
-        if (currentCh === 'Oz' || currentCh === 'ch1') { if (ch !== 'ch1' && ch !== 'Oz') return; }
-
-        let val = 0;
-        const alpha = features.alpha_rel ?? 0;
-        const theta = features.theta_rel ?? 0;
-        const beta = features.beta_rel ?? 0;
-
-        if (currentCh === 'alpha') val = alpha * 100;
-        else if (currentCh === 'theta') val = theta * 100;
-        else if (currentCh === 'beta') val = beta * 100;
-        else if (event.meditation_score !== undefined) val = event.meditation_score;
-        else {
-          // Default Focus logic: Beta / (Theta + Alpha)
-          const ratio = beta / (theta + alpha + 0.01);
-          val = Math.min(100, ratio * 50);
-        }
-
-        // Final sanity check for raw band powers
-        if (!val && event.band_powers && event.band_powers.length >= 4) {
+        if (total > 1e-5) {
+          alphaRel = (features.alpha||0) / total;
+          betaRel = (features.beta||0) / total;
+          thetaRel = (features.theta||0) / total;
+        } else if (event.band_powers && event.band_powers.length >= 4) {
           const bp = event.band_powers;
-          const sum = bp.reduce((a, b) => a + b, 0);
-          if (sum > 0) {
-            if (currentCh === 'alpha') val = (bp[2] / sum) * 100;
-            else if (currentCh === 'theta') val = (bp[1] / sum) * 100;
-            else if (currentCh === 'beta') val = (bp[3] / sum) * 100;
-            else val = (bp[3] / (bp[1] + bp[2] + 0.01)) * 50;
-          }
+          const sum = bp.reduce((a, b) => a + b, 0) + 1e-6;
+          thetaRel = bp[1] / sum;
+          alphaRel = bp[2] / sum;
+          betaRel = bp[3] / sum;
         }
 
-        rawSignal = val;
-        eegSignal = Math.max(0, Math.min(1, val / 100));
+        // Meditation calm (spawns bubbles)
+        const calmVal = Math.max(0, Math.min(1, alphaRel * 1.5 + thetaRel * 0.5 - betaRel * 0.5));
+        
+        // Focus (attention, beta) (pops bubbles)
+        const focusVal = Math.max(0, Math.min(1, betaRel * 2.0));
+
+        rawSignal = focusVal * 100;
+        eegSignal = focusVal; 
+        currentCalmSignal = calmVal;
+
         updateEEGUI();
       }, 60);
     }
@@ -387,7 +373,7 @@ const BubbleGameView = ({ result, isConnected }) => {
 
       let diff = difficultyRef.current || 1;
 
-      const radius = 18 + Math.random() * 22 + (type === 'bomb' ? 10 : 0);
+      const radius = 35 + Math.random() * 40 + (type === 'bomb' ? 15 : 0);
       bubbles.push({
         x: radius + Math.random() * (W - radius * 2), y: H + radius, r: radius,
         speed: 0.6 + Math.random() * 0.8 + level * 0.12 + (diff - 1) * 0.8,
@@ -484,7 +470,15 @@ const BubbleGameView = ({ result, isConnected }) => {
     let spawnTimer = 0;
     function spawnRate() {
       const diff = difficultyRef.current || 1;
-      return Math.max(15, 80 - level * 5 - (diff - 1) * 20);
+      const isManualMode = mouseModeRef.current;
+      if (isManualMode) {
+        // Classic game mechanics for manual mode
+        return Math.max(15, 80 - level * 5 - (diff - 1) * 20);
+      } else {
+        // EEG mechanics for sensor mode: calm spawns faster
+        let base = 120 - currentCalmSignal * 90;
+        return Math.max(8, base - level * 5 - (diff - 1) * 20);
+      }
     }
 
     let bgStars = [];
