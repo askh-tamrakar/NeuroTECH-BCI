@@ -63,14 +63,14 @@ const Brain3D = React.memo(() => {
 
     if (!webGLAvailable) {
         return (
-            <div className="relative w-[120px] h-[80px] m-0 p-0 flex items-center justify-center cursor-help" title="WebGL not supported or hardware acceleration disabled">
+            <div className="relative w-[160px] h-[100px] m-0 p-0 flex items-center justify-center cursor-help" title="WebGL not supported or hardware acceleration disabled">
                 {fallbackUI}
             </div>
         );
     }
 
     return (
-        <div className="relative w-[120px] h-[80px] group transition-all duration-500 m-0 p-0">
+        <div className="relative w-[160px] h-[100px] group transition-all duration-500 m-0 p-0">
             <ThreeErrorBoundary fallback={fallbackUI}>
                 <Suspense fallback={
                     <div className="w-full h-full flex items-center justify-center text-[10px] text-muted font-mono uppercase tracking-widest animate-pulse">
@@ -79,7 +79,7 @@ const Brain3D = React.memo(() => {
                 }>
                     <Canvas
                         shadows
-                        camera={{ position: [0, 0.2, 2.0], fov: 25 }} // Slightly further back and up
+                        camera={{ position: [0, 0.2, 1.6], fov: 25 }} // Moved camera closer for a larger appearance
                         gl={{ antialias: true, alpha: true }}
                         style={{ background: 'transparent', margin: 0, padding: 0, overflow: 'visible' }}
                         onError={(e) => {
