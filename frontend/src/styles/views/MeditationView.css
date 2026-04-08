@@ -37,21 +37,28 @@
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
+
 .med-section-icon {
   font-size: 14px;
   color: var(--primary);
   text-shadow: 0 0 8px var(--primary);
 }
+
 .med-section-title {
   font-family: 'Orbitron', sans-serif;
-  font-size: 10px; font-weight: 700; letter-spacing: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 3px;
   color: var(--primary);
   text-shadow: 0 0 8px var(--primary);
   text-transform: uppercase;
 }
+
 .med-section-sub {
-  font-size: 8px; letter-spacing: 2px;
-  color: var(--muted); opacity: .6;
+  font-size: 8px;
+  letter-spacing: 2px;
+  color: var(--muted);
+  opacity: .6;
   margin-left: 2px;
 }
 
@@ -63,11 +70,17 @@
   flex-direction: column;
   border-right: 1px solid var(--border);
   position: relative;
+  /* Darkened background for the radar chart */
+  background: rgba(0, 0, 0, 0.55);
 }
-.med-chart-panel:last-child { border-right: none; }
+
+.med-chart-panel:last-child {
+  border-right: none;
+}
 
 .med-chart-label {
-  font-size: 9px; letter-spacing: 3px;
+  font-size: 9px;
+  letter-spacing: 3px;
   color: var(--primary);
   text-align: center;
   padding: 7px 0 4px;
@@ -101,11 +114,16 @@
   min-height: 0;
   position: relative;
 }
-.med-wave-row:last-child { border-bottom: none; }
+
+.med-wave-row:last-child {
+  border-bottom: none;
+}
 
 .med-wave-label {
-  font-size: 8px; letter-spacing: 2px;
-  color: var(--muted); opacity: .6;
+  font-size: 8px;
+  letter-spacing: 2px;
+  color: var(--muted);
+  opacity: .6;
   padding: 4px 12px 2px;
   flex-shrink: 0;
 }
@@ -120,39 +138,57 @@
 /* Calm signal overlay bar */
 .med-calm-bar-wrap {
   position: absolute;
-  right: 10px; top: 6px;
-  display: flex; align-items: center; gap: 6px;
-  font-size: 8px; letter-spacing: 1px; color: var(--muted);
+  right: 10px;
+  top: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 8px;
+  letter-spacing: 1px;
+  color: var(--muted);
 }
+
 .med-calm-track {
-  width: 70px; height: 4px;
+  width: 70px;
+  height: 4px;
   background: var(--panel-bg);
-  border-radius: 2px; overflow: hidden;
+  border-radius: 2px;
+  overflow: hidden;
 }
+
 .med-calm-fill {
-  height: 100%; border-radius: 2px; width: 0%;
+  height: 100%;
+  border-radius: 2px;
+  width: 0%;
   background: var(--primary);
   box-shadow: 0 0 6px var(--primary);
   transition: width .15s ease-out;
 }
+
 .med-calm-pct {
   color: var(--primary);
-  font-weight: bold; width: 28px;
+  font-weight: bold;
+  width: 28px;
 }
 
 /* Grid overlay for charts */
 .med-chart-panel::before {
   content: '';
-  position: absolute; inset: 0;
+  position: absolute;
+  inset: 0;
   background-image:
-    linear-gradient(var(--graph-grid, rgba(255,255,255,.05)) 1px, transparent 1px),
-    linear-gradient(90deg, var(--graph-grid, rgba(255,255,255,.05)) 1px, transparent 1px);
+    linear-gradient(var(--graph-grid, rgba(255, 255, 255, .05)) 1px, transparent 1px),
+    linear-gradient(90deg, var(--graph-grid, rgba(255, 255, 255, .05)) 1px, transparent 1px);
   background-size: 32px 32px;
   pointer-events: none;
   z-index: 0;
   opacity: 0.35;
 }
-.med-radar-canvas { position: relative; z-index: 1; }
+
+.med-radar-canvas {
+  position: relative;
+  z-index: 1;
+}
 
 /* ── MIXER SLIDERS ───────────────────────── */
 input[type=range].accent-primary::-webkit-slider-thumb {
@@ -163,7 +199,8 @@ input[type=range].accent-primary::-webkit-slider-thumb {
   background: var(--primary);
   box-shadow: 0 0 8px var(--primary);
   cursor: pointer;
-  margin-top: -4px; /* Centers thumb on track */
+  margin-top: -4px;
+  /* Centers thumb on track */
 }
 
 input[type=range].accent-primary::-moz-range-thumb {
@@ -189,12 +226,15 @@ input[type=range].accent-primary::-webkit-slider-runnable-track {
   scrollbar-width: thin;
   scrollbar-color: var(--primary) transparent;
 }
+
 .med-sidebar-scroll::-webkit-scrollbar {
   width: 4px;
 }
+
 .med-sidebar-scroll::-webkit-scrollbar-track {
   background: transparent;
 }
+
 .med-sidebar-scroll::-webkit-scrollbar-thumb {
   background-color: var(--primary);
   border-radius: 20px;
@@ -203,8 +243,17 @@ input[type=range].accent-primary::-webkit-slider-runnable-track {
 
 /* ── NOW-PLAYING BAR ANIMATION ───────────────── */
 @keyframes musicbar {
-  0%, 100% { transform: scaleY(0.4); opacity: 0.6; }
-  50%       { transform: scaleY(1.0); opacity: 1.0; }
+
+  0%,
+  100% {
+    transform: scaleY(0.4);
+    opacity: 0.6;
+  }
+
+  50% {
+    transform: scaleY(1.0);
+    opacity: 1.0;
+  }
 }
 
 /* ── DOMINANT WAVE INDICATOR ─────────────────── */
@@ -216,6 +265,15 @@ input[type=range].accent-primary::-webkit-slider-runnable-track {
 }
 
 @keyframes dominantPulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.85; transform: scale(1.02); }
+
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 0.85;
+    transform: scale(1.02);
+  }
 }

@@ -119,43 +119,320 @@
 .eeg-overview-container {
   display: flex;
   flex-direction: column;
-  padding: 10px;
+  align-items: flex-start;
+  justify-content: flex-start;
+  padding: 20px 36px 16px;
+  height: 100%;
+  text-align: left;
+  overflow: hidden;
 }
 
 .eeg-overview-title {
-  font-size: 2.5rem;
-  font-weight: 700;
-  margin: 0 0 10px 0;
-  background: linear-gradient(135deg, #fff 0%, #aaa 100%);
+  font-size: 2.8rem;
+  font-weight: 900;
+  margin: 0 0 6px;
+  font-family: 'Outfit', sans-serif;
+  letter-spacing: -0.04em;
+  background: linear-gradient(135deg, #fff 0%, #888 100%);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
+  width: 100%;
+  max-width: 100%;
+  text-align: left;
+  flex-shrink: 0;
 }
 
 .eeg-overview-subtitle {
-  font-size: 1.1rem;
-  color: #aaa;
-  margin-bottom: 40px;
+  font-size: 1rem;
+  color: rgba(255, 255, 255, 0.4);
+  margin-bottom: 16px;
+  font-weight: 400;
+  max-width: 100%;
+  width: 100%;
+  text-align: left;
+  flex-shrink: 0;
 }
 
 .eeg-app-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 24px;
-  padding-bottom: 40px;
+  grid-template-columns: repeat(2, 1fr);
+  grid-template-rows: 1fr 1fr;
+  gap: 32px;
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  padding-bottom: 24px;
+  transform-style: preserve-3d;
+  perspective: 2000px;
 }
 
 .eeg-app-card {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  border-radius: 16px;
-  padding: 24px;
+  background: rgba(255, 255, 255, 0.02);
+  backdrop-filter: blur(60px);
+  -webkit-backdrop-filter: blur(60px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 40px;
+  padding: 40px 48px;
   cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+  height: 100%;
+  width: 100%;
+  min-height: 0;
+  text-align: center;
+  box-shadow:
+    0 24px 48px rgba(0, 0, 0, 0.4),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+
+@keyframes meshGradient {
+  0% {
+    background-position: 0% 50%;
+  }
+
+  50% {
+    background-position: 100% 50%;
+  }
+
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.decoration-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(60px);
+  opacity: 0.2;
+  z-index: 0;
+  pointer-events: none;
+  transition: all 1s ease;
+}
+
+.orb-1 {
+  width: 300px;
+  height: 300px;
+  top: -150px;
+  right: -150px;
+  background: var(--theme-color);
+}
+
+.orb-2 {
+  width: 200px;
+  height: 200px;
+  bottom: -100px;
+  left: -100px;
+  background: var(--theme-color);
+}
+
+.eeg-app-card:hover .decoration-orb {
+  opacity: 0.4;
+  transform: scale(1.2) translate(20px, -20px);
+}
+
+.card-shimmer {
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(to right,
+      transparent,
+      rgba(255, 255, 255, 0.05),
+      transparent);
+  transform: skewX(-25deg);
+  pointer-events: none;
+  z-index: 5;
+}
+
+.eeg-app-card:hover .card-shimmer {
+  animation: shimmerEffect 1.5s infinite;
+}
+
+@keyframes shimmerEffect {
+  100% {
+    left: 200%;
+  }
+}
+
+/* Base Decoration Layer */
+.eeg-card-decoration {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  opacity: 0.15;
+  transition: all 0.6s ease;
+  z-index: 0;
+}
+
+/* Theme: Music */
+.card-music {
+  --theme-color: #a855f7;
+  --theme-bg: linear-gradient(135deg, rgba(168, 85, 247, 0.15) 0%, rgba(99, 102, 241, 0.02) 100%);
+}
+
+.card-music .eeg-app-icon {
+  background: linear-gradient(135deg, #b066ff, #6366f1);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow:
+    inset 0 4px 6px rgba(255, 255, 255, 0.4),
+    inset 0 -6px 12px rgba(0, 0, 0, 0.3),
+    0 15px 35px rgba(168, 85, 247, 0.5);
+  animation: musicPulse 3s ease-in-out infinite;
+}
+
+@keyframes musicPulse {
+
+  0%,
+  100% {
+    transform: scale(1);
+    filter: brightness(1)
+  }
+
+  50% {
+    transform: scale(1.05);
+    filter: brightness(1.2)
+  }
+}
+
+.card-music .orb-1 {
+  background: radial-gradient(circle, #a855f7, transparent);
+  opacity: 0.15;
+}
+
+.card-music:hover {
+  border-color: #a855f7;
+  box-shadow: 0 0 50px rgba(168, 85, 247, 0.2);
+}
+
+/* Theme: Meditation */
+.card-meditation {
+  --theme-color: #10b981;
+  --theme-bg: linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(59, 130, 246, 0.02) 100%);
+}
+
+.card-meditation .eeg-app-icon {
+  background: linear-gradient(135deg, #34d399, #2563eb);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow:
+    inset 0 4px 6px rgba(255, 255, 255, 0.4),
+    inset 0 -6px 12px rgba(0, 0, 0, 0.3),
+    0 15px 35px rgba(16, 185, 129, 0.5);
+  animation: meditationBreath 4s ease-in-out infinite;
+}
+
+@keyframes meditationBreath {
+
+  0%,
+  100% {
+    box-shadow: inset 0 4px 6px rgba(255, 255, 255, 0.4), inset 0 -6px 12px rgba(0, 0, 0, 0.3), 0 15px 35px rgba(16, 185, 129, 0.3);
+  }
+
+  50% {
+    box-shadow: inset 0 4px 6px rgba(255, 255, 255, 0.5), inset 0 -6px 12px rgba(0, 0, 0, 0.3), 0 25px 50px rgba(16, 185, 129, 0.7);
+  }
+}
+
+.card-meditation .orb-1 {
+  background: radial-gradient(circle, #10b981, transparent);
+  opacity: 0.15;
+}
+
+.card-meditation:hover {
+  border-color: #10b981;
+  box-shadow: 0 0 50px rgba(16, 185, 129, 0.2);
+}
+
+/* Theme: Bubble Game */
+.card-bubble {
+  --theme-color: #0ea5e9;
+  --theme-bg: linear-gradient(135deg, rgba(14, 165, 233, 0.15) 0%, rgba(45, 212, 191, 0.02) 100%);
+}
+
+.card-bubble .eeg-app-icon {
+  background: linear-gradient(135deg, #38bdf8, #14b8a6);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow:
+    inset 0 4px 6px rgba(255, 255, 255, 0.4),
+    inset 0 -6px 12px rgba(0, 0, 0, 0.3),
+    0 15px 35px rgba(14, 165, 233, 0.5);
+  animation: bubbleFloat 4s ease-in-out infinite;
+}
+
+@keyframes bubbleFloat {
+
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+    border-radius: 24px;
+  }
+
+  50% {
+    transform: translateY(-8px) scale(1.02);
+    border-radius: 28px;
+  }
+}
+
+.card-bubble .orb-1 {
+  background: radial-gradient(circle, #0ea5e9, transparent);
+  opacity: 0.15;
+}
+
+.card-bubble:hover {
+  border-color: #0ea5e9;
+  box-shadow: 0 0 50px rgba(14, 165, 233, 0.2);
+}
+
+/* Theme: SSVEP */
+.card-ssvep {
+  --theme-color: #f59e0b;
+  --theme-bg: linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, rgba(239, 68, 68, 0.02) 100%);
+}
+
+.card-ssvep .eeg-app-icon {
+  background: linear-gradient(135deg, #fbbf24, #ef4444);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow:
+    inset 0 4px 6px rgba(255, 255, 255, 0.4),
+    inset 0 -6px 12px rgba(0, 0, 0, 0.3),
+    0 15px 35px rgba(245, 158, 11, 0.5);
+  animation: ssvepFlash 5s linear infinite;
+}
+
+@keyframes ssvepFlash {
+
+  0%,
+  100% {
+    filter: saturate(1) brightness(1);
+  }
+
+  50% {
+    filter: saturate(1.5) brightness(1.3);
+  }
+}
+
+.card-ssvep .orb-1 {
+  background: radial-gradient(circle, #f59e0b, transparent);
+  opacity: 0.15;
+}
+
+.card-ssvep:hover {
+  border-color: #f59e0b;
+  box-shadow: 0 0 50px rgba(245, 158, 11, 0.2);
 }
 
 .eeg-view-icon {
@@ -179,42 +456,72 @@
 }
 
 .eeg-app-card:hover {
-  background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 193, 7, 0.4);
-  transform: translateY(-4px);
-  box-shadow: 0 8px 24px rgba(255, 193, 7, 0.15);
+  background: var(--theme-bg);
+  background-size: 200% 200%;
+  animation: meshGradient 6s ease infinite;
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow:
+    0 50px 100px rgba(0, 0, 0, 0.5),
+    0 0 50px rgba(var(--theme-color-rgb, 255, 255, 255), 0.1);
 }
 
 .eeg-app-icon {
-  width: 56px;
-  height: 56px;
-  border-radius: 14px;
-  background: rgba(255, 193, 7, 0.1);
-  color: var(--accent, #FFC107);
+  width: 96px;
+  height: 96px;
+  border-radius: 28px;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 20px;
-  transition: all 0.3s ease;
+  margin-bottom: 24px;
+  transition: all 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.5);
+  position: relative;
+  z-index: 10;
+  transform-style: preserve-3d;
 }
 
 .eeg-app-card:hover .eeg-app-icon {
-  background: rgba(255, 193, 7, 0.2);
-  transform: scale(1.05);
+  transform: translateZ(60px) rotateY(-15deg) scale(1.15);
+  box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5);
 }
 
-.eeg-app-card h3 {
-  margin: 0 0 10px 0;
-  font-size: 1.25rem;
+.card-title-premium {
+  margin: 0 0 12px 0;
+  font-size: 1.8rem;
   color: #fff;
-  font-weight: 600;
+  font-family: 'Outfit', sans-serif;
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+  z-index: 10;
+  text-align: center;
+  text-shadow: 0 12px 24px rgba(0, 0, 0, 0.4);
 }
 
-.eeg-app-card p {
+.eeg-app-card:hover .card-title-premium {
+  transform: translateZ(40px) translateX(15px);
+  color: #fff;
+}
+
+.card-desc-premium {
   margin: 0;
-  font-size: 0.95rem;
-  color: #888;
-  line-height: 1.5;
+  font-size: 1.05rem;
+  color: rgba(255, 255, 255, 0.5);
+  line-height: 1.6;
+  font-weight: 400;
+  transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  max-width: 90%;
+  margin-left: auto;
+  margin-right: auto;
+  position: relative;
+  z-index: 10;
+  text-align: center;
+}
+
+.eeg-app-card:hover .card-desc-premium {
+  color: rgba(255, 255, 255, 0.7);
+  transform: translateZ(20px) translateX(15px);
 }
 
 .eeg-progress-track {
@@ -297,8 +604,10 @@
 .sidebar-wrapper {
   position: relative;
   width: 100%;
-  height: 100%;   /* fills the flex-1 space from the parent flex column */
-  overflow: hidden;  /* keep this so hidden panel doesn't peek */
+  height: 100%;
+  /* fills the flex-1 space from the parent flex column */
+  overflow: hidden;
+  /* keep this so hidden panel doesn't peek */
 }
 
 .sidebar-panel {
