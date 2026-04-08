@@ -5,36 +5,36 @@ import { useGLTF, OrbitControls, Stage } from '@react-three/drei';
 import { Brain } from 'lucide-react';
 
 function Model({ url }) {
-  const { scene } = useGLTF(url);
-  const meshRef = useRef();
+    const { scene } = useGLTF(url);
+    const meshRef = useRef();
 
-  // Smooth rotation
-  useFrame((state, delta) => {
-    if (meshRef.current) {
-      meshRef.current.rotation.y += delta * 0.5;
-    }
-  });
+    // Smooth rotation
+    useFrame((state, delta) => {
+        if (meshRef.current) {
+            meshRef.current.rotation.y += delta * 0.5;
+        }
+    });
 
-  return (
-    <primitive
-      ref={meshRef}
-      object={scene}
-      position={[0, -0.2, 0]} // Shift model down slightly
-    />
-  );
+    return (
+        <primitive
+            ref={meshRef}
+            object={scene}
+            position={[0, -0.2, 0]} // Shift model down slightly
+        />
+    );
 }
 
 // Simple Error Boundary for the 3D Canvas
 class ThreeErrorBoundary extends React.Component {
-  constructor(props) {
-    super(props);
-    this.state = { hasError: false };
-  }
-  static getDerivedStateFromError() { return { hasError: true }; }
-  render() {
-    if (this.state.hasError) return this.props.fallback;
-    return this.props.children;
-  }
+    constructor(props) {
+        super(props);
+        this.state = { hasError: false };
+    }
+    static getDerivedStateFromError() { return { hasError: true }; }
+    render() {
+        if (this.state.hasError) return this.props.fallback;
+        return this.props.children;
+    }
 }
 
 const Brain3D = React.memo(() => {
@@ -44,7 +44,7 @@ const Brain3D = React.memo(() => {
         const checkWebGL = () => {
             try {
                 const canvas = document.createElement('canvas');
-                const isAvailable = !!(window.WebGLRenderingContext && 
+                const isAvailable = !!(window.WebGLRenderingContext &&
                     (canvas.getContext('webgl') || canvas.getContext('experimental-webgl')));
                 setWebGLAvailable(isAvailable);
             } catch (e) {
@@ -70,7 +70,7 @@ const Brain3D = React.memo(() => {
     }
 
     return (
-        <div className="relative w-[120px] h-[80px] group transition-all duration-500 m-0 p-0">
+        <div className="relative w-[140px] h-[90px] group transition-all duration-500 m-0 p-0">
             <ThreeErrorBoundary fallback={fallbackUI}>
                 <Suspense fallback={
                     <div className="w-full h-full flex items-center justify-center text-[10px] text-muted font-mono uppercase tracking-widest animate-pulse">
@@ -79,7 +79,7 @@ const Brain3D = React.memo(() => {
                 }>
                     <Canvas
                         shadows
-                        camera={{ position: [0, 0.2, 2.0], fov: 25 }} // Slightly further back and up
+                        camera={{ position: [0, 0.2, 2.0], fov: 20 }} // Slightly further back and up
                         gl={{ antialias: true, alpha: true }}
                         style={{ background: 'transparent', margin: 0, padding: 0, overflow: 'visible' }}
                         onError={(e) => {
@@ -112,5 +112,5 @@ export default Brain3D;
 // Preload the model to ensure it's cached correctly (safe even if WebGL fails later)
 try {
     useGLTF.preload('/Resources/NeuroTECH.glb');
-} catch (e) {}
+} catch (e) { }
 
