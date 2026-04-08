@@ -156,14 +156,14 @@ const EEGDashboardContent = ({ wsEvent, isConnected, wsUrl }) => {
       {/* ── TOGGLE BUTTON ── */}
       <button
         onClick={() => setSidebarVisible(prev => !prev)}
-        className={`absolute top-4 z-[100] p-1.5 rounded-md bg-[var(--surface)]/80 backdrop-blur-md border border-[var(--primary)]/30 text-[var(--text)] shadow-lg transition-all duration-500 hover:bg-[var(--primary)]/20 ${sidebarVisible ? 'left-[calc(21rem+1rem)]' : 'left-4'}`}
+        className={`absolute top-1/2 -translate-y-1/2 z-[100] p-2 rounded-r-md bg-[var(--surface)]/90 backdrop-blur-md border border-l-0 border-[var(--primary)]/30 text-[var(--text)] shadow-lg transition-all duration-500 hover:bg-[var(--primary)]/20 ${sidebarVisible ? 'left-[21rem]' : 'left-0'}`}
         title={sidebarVisible ? "Hide Sidebar" : "Show Sidebar"}
       >
-        {sidebarVisible ? <ChevronLeft size={20} /> : <ChevronRight size={20} />}
+        {sidebarVisible ? <ChevronLeft size={24} /> : <ChevronRight size={24} />}
       </button>
 
       {/* ── DUAL SIDEBAR SYSTEM ── */}
-      <div className={`${sidebarVisible ? 'w-[21rem] border-r opacity-100' : 'w-0 border-r-0 opacity-0'} bg-[var(--surface)] border-[var(--border)] shrink-0 flex flex-col h-full z-20 relative transition-all duration-500 overflow-hidden`}>
+      <div className={`${sidebarVisible ? 'w-[21rem] border-r border-[var(--border)] opacity-100 translate-x-0' : 'w-0 border-none opacity-0 -translate-x-full'} bg-[var(--surface)] shrink-0 flex flex-col h-full z-20 relative transition-all duration-500 overflow-hidden`}>
 
         {/* Sidebar content — flex-1 allows it to grow and inner panel handles scroll */}
         <div className="sidebar-wrapper flex-1 min-h-0">
