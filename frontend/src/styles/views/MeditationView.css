@@ -64,7 +64,7 @@
   border-right: 1px solid var(--border);
   position: relative;
   /* Darkened background for the radar chart */
-  background: rgba(0, 0, 0, 0.55);
+  background: rgba(0, 0, 0, 0.40);
 }
 .med-chart-panel:last-child { border-right: none; }
 
@@ -121,8 +121,6 @@
 
 /* Calm signal overlay bar */
 .med-calm-bar-wrap {
-  position: absolute;
-  right: 10px; top: 6px;
   display: flex; align-items: center; gap: 6px;
   font-size: 8px; letter-spacing: 1px; color: var(--muted);
 }
@@ -152,7 +150,7 @@
   background-size: 32px 32px;
   pointer-events: none;
   z-index: 0;
-  opacity: 0.35;
+  opacity: 0.20;
 }
 .med-radar-canvas { position: relative; z-index: 1; }
 

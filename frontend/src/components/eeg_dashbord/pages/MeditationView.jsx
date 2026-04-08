@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { useTheme } from '../../../contexts/ThemeContext';
-import { Play, Wind, Power, Zap, Volume2 } from 'lucide-react';
+import { Play, Wind, Power, Zap, Volume2, Radio } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 import FFTWorker from '../../../workers/fft.worker.js?worker';
 import '../../../styles/views/MeditationView.css';
 import MeditationSidebar from '../sidebar/MeditationSidebar';
@@ -57,6 +57,8 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
     wsEventRef.current = wsEvent;
   }, [wsEvent]);
 
+
+
   const { currentTheme } = useTheme();
   const themeRef = useRef(currentTheme);
 
@@ -85,6 +87,25 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
 
   /* ── FFT WORKER STATE ──────────────────────── */
   const [spectra, setSpectra] = useState({});
+  const [selectedChannel, setSelectedChannel] = useState('0');
+
+  // Keep spectraRef fresh — used to drive the radar chart from the LIVE FFT graph data
+  const spectraRef = useRef({});
+  useEffect(() => {
+    spectraRef.current = spectra;
+  }, [spectra]);
+
+  // Keep selectedChannelRef fresh for the interval closure
+  const selectedChannelRef = useRef('0');
+  useEffect(() => {
+    selectedChannelRef.current = selectedChannel;
+  }, [selectedChannel]);
+
+  // Keep wsUrlRef fresh to detect disconnections in the loop
+  const wsUrlRef = useRef(wsUrl);
+  useEffect(() => {
+    wsUrlRef.current = wsUrl;
+  }, [wsUrl]);
 
   useEffect(() => {
     if (!wsUrl) return;
@@ -94,7 +115,14 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
     const fftWorker = new FFTWorker();
     fftWorker.onmessage = (e) => {
         if (e.data.type === 'FFT_RESULT') {
-            setSpectra(e.data.payload);
+            setSpectra(prev => {
+                // Auto-select first channel if currently selected key is absent
+                const keys = Object.keys(e.data.payload);
+                if (keys.length > 0) {
+                    setSelectedChannel(ch => (prev[ch] ? ch : keys[0]));
+                }
+                return e.data.payload;
+            });
         }
     };
 
@@ -280,7 +308,7 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
     let sessionStart = 0;
     let presetSecs = 5 * 60; // default 5 min
     let calmSignal = 0;
-    let rawBands = [20, 20, 25, 20, 15];
+    let rawBands = [20, 20, 25, 20, 0]; // gamma always 0
 
     let breathTick = 0;
     let cycleCount = 0;
@@ -409,36 +437,50 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
       ];
 
       // Vertex dots + highlighted labels
-      const textCol = tc('--graph-text', tc('--muted'));
       angles.forEach((a, i) => {
-        const r = R * norm[i];
+        // CORRECTED: use same remapped radius as the polygon
+        const r = (INNER + norm[i] * (1 - INNER)) * R;
         const x = cx + Math.cos(a) * r;
         const y = cy + Math.sin(a) * r;
 
         // Glowing dot at data vertex
-        ctx.beginPath(); ctx.arc(x, y, 3.5, 0, Math.PI * 2);
+        ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI * 2);
         ctx.fillStyle = bandColors[i];
-        ctx.shadowBlur = 12; ctx.shadowColor = bandColors[i];
+        ctx.shadowBlur = 16; ctx.shadowColor = bandColors[i];
         ctx.fill();
         ctx.shadowBlur = 0;
 
-        // Label position — further out from center
-        const lx = cx + Math.cos(a) * (R + 22);
-        const ly = cy + Math.sin(a) * (R + 22);
+        // Label position — far enough out so they never overlap the polygon
+        const labelDist = R * 1.22 + 18;
+        const lx = cx + Math.cos(a) * labelDist;
+        const ly = cy + Math.sin(a) * labelDist;
 
-        // Semi-transparent badge background
-        ctx.font = 'bold 10px "Orbitron", "Share Tech Mono", monospace';
+        ctx.font = 'bold 13px "Orbitron", "Share Tech Mono", monospace';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        const labelW = ctx.measureText(labels[i]).width + 10;
-        ctx.fillStyle = 'rgba(0,0,0,0.55)';
+
+        // Percentage value — gamma (index 4) always shows 0
+        const pct = i === 4 ? 0 : Math.round(norm[i] * 100);
+        const labelText = labels[i];
+        const pctText = `${pct}%`;
+
+        // Badge background sized for two lines
+        const labelW = Math.max(ctx.measureText(labelText).width, ctx.measureText(pctText).width) + 16;
+        ctx.fillStyle = 'rgba(0,0,0,0.65)';
         ctx.beginPath();
-        ctx.roundRect(lx - labelW / 2, ly - 8, labelW, 16, 4);
+        ctx.roundRect(lx - labelW / 2, ly - 14, labelW, 28, 6);
         ctx.fill();
 
-        // Label text — no glow
+        // Band name
         ctx.fillStyle = bandColors[i];
-        ctx.fillText(labels[i], lx, ly);
+        ctx.shadowBlur = 6; ctx.shadowColor = bandColors[i];
+        ctx.fillText(labelText, lx, ly - 4);
+        ctx.shadowBlur = 0;
+
+        // Percentage in dimmer text
+        ctx.font = 'bold 10px "Share Tech Mono", monospace';
+        ctx.fillStyle = `${bandColors[i]}cc`;
+        ctx.fillText(pctText, lx, ly + 10);
       });
       ctx.restore();
     }
@@ -450,44 +492,48 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
         const ws  = wsEventRef.current;  // raw eeg_prediction — has full features
         const res = resultRef.current;   // processed result  — has state/band_mix/score
 
-        // ── BAND POWERS ──────────────────────────────────────────────────────
-        // Priority 1: wsEvent.features (eeg_prediction) — has ALL 4 bands raw
-        const feat = ws?.features || res?.features;
-        if (feat?.delta !== undefined) {
-          // Log-scale so large delta doesn't visually crush theta/alpha/beta
-          rawBands = [
-            Math.log1p(feat.delta || 0),
-            Math.log1p(feat.theta || 0),
-            Math.log1p(feat.alpha || 0),
-            Math.log1p(feat.beta  || 0),
-            0, // gamma — keep at 0 per user request
-          ];
-        }
-        // Priority 2: band_powers array from mode result
-        else if (res?.band_powers?.length >= 4) {
-          rawBands = [
-            Math.log1p(res.band_powers[0] || 0),
-            Math.log1p(res.band_powers[1] || 0),
-            Math.log1p(res.band_powers[2] || 0),
-            Math.log1p(res.band_powers[3] || 0),
-            0,
-          ];
-        }
-        // Priority 3: radar_bands (pre-computed, already scaled)
-        else if (res?.radar_bands?.length >= 4) {
-          rawBands = [...res.radar_bands.slice(0, 4), 0];
+        // If disconnected from backend, force wave bands to 0 immediately
+        if (!wsUrlRef.current || ws?.status === 'disconnected' || res?.status === 'disconnected') {
+           rawBands = [0, 0, 0, 0, 0];
+           calmSignal = 0;
+           return;
         }
 
-        // ── CALM SIGNAL ──────────────────────────────────────────────────────
-        if (res?.meditation_score !== undefined) {
-          calmSignal = Math.max(0, Math.min(1, res.meditation_score / 100));
-        } else if (feat?.alpha_rel !== undefined) {
-          const alphaRel = feat.alpha_rel || 0;
-          const betaRel  = feat.beta_rel  || 0;
-          calmSignal = Math.max(0, Math.min(1, alphaRel * 1.5 - betaRel * 0.5));
-        } else if (res?.band_mix) {
-          const { alpha = 0, theta = 0, beta = 0.1 } = res.band_mix;
-          calmSignal = Math.max(0, Math.min(1, (alpha + theta * 0.5) / (beta + 0.1) * 0.4));
+        // ── BAND POWERS ──────────────────────────────────────────────────────
+        // Compute REAL band powers directly from the live FFT spectra
+        // Use the explicit source channel if backend provides it, otherwise fallback
+        const activeCh = (ws?.source_channel !== undefined) ? String(ws.source_channel) : selectedChannelRef.current;
+        const currentSp = spectraRef.current[activeCh] || spectraRef.current[selectedChannelRef.current] || Object.values(spectraRef.current)[0] || [];
+        
+        if (currentSp.length > 0) {
+          let delta = 0, theta = 0, alpha = 0, beta = 0;
+          currentSp.forEach(d => {
+            if (d.freq >= 1 && d.freq < 4) delta += d.power;
+            else if (d.freq >= 4 && d.freq < 8) theta += d.power;
+            else if (d.freq >= 8 && d.freq < 13) alpha += d.power;
+            else if (d.freq >= 13 && d.freq <= 30) beta += d.power;
+          });
+          
+          // Use raw powers instead of log — radar normalizes them anyway
+          rawBands = [delta, theta, alpha, beta, 0];
+          
+          // ── CALM SIGNAL ──────────────────────────────────────────────────────
+          const total = delta + theta + alpha + beta + 1e-6;
+          const alphaRel = alpha / total;
+          const betaRel  = beta / total;
+          const thetaRel = theta / total;
+          
+          // Calm = high alpha/theta, low beta
+          calmSignal = Math.max(0, Math.min(1, (alphaRel + thetaRel * 0.5) * 1.5 - (betaRel * 0.5)));
+        } else {
+          // Fallback to wsEvent.features if FFT stream not ready
+          const feat = ws?.features || res?.features;
+          if (feat?.delta !== undefined) {
+            rawBands = [feat.delta||0, feat.theta||0, feat.alpha||0, feat.beta||0, 0];
+            const alphaRel = feat.alpha_rel || 0;
+            const betaRel  = feat.beta_rel  || 0;
+            calmSignal = Math.max(0, Math.min(1, alphaRel * 1.5 - betaRel * 0.5));
+          }
         }
       }, 60);
     }
@@ -571,7 +617,54 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
         }
       }
 
-      // Sidebar indicators
+      // ── Focus & Stress live values ────────────────────────────────
+      // Focus = alpha/theta dominance over beta  (0-100)
+      // Stress = beta dominance, inverse of calm (0-100)
+      const ws2  = wsEventRef.current;
+      const res2 = resultRef.current;
+      const feat2 = ws2?.features || res2?.features;
+
+      // Focus & Stress also using spectra-derived features for consistency
+      const activeCh2 = (ws2?.source_channel !== undefined) ? String(ws2.source_channel) : selectedChannelRef.current;
+      const currentSp = spectraRef.current[activeCh2] || spectraRef.current[selectedChannelRef.current] || Object.values(spectraRef.current)[0] || [];
+      let focusVal  = 0;
+      let stressVal = 0;
+
+      if (!wsUrlRef.current || ws2?.status === 'disconnected' || res2?.status === 'disconnected') {
+         focusVal = 0;
+         stressVal = 0;
+      } else if (currentSp.length > 0) {
+         let delta = 0, theta = 0, alpha = 0, beta = 0;
+         currentSp.forEach(d => {
+            if (d.freq >= 1 && d.freq < 4) delta += d.power;
+            else if (d.freq >= 4 && d.freq < 8) theta += d.power;
+            else if (d.freq >= 8 && d.freq < 13) alpha += d.power;
+            else if (d.freq >= 13 && d.freq <= 30) beta += d.power;
+         });
+         const total2 = delta + theta + alpha + beta + 1e-6;
+         const alphaRel = alpha / total2;
+         const betaRel  = beta / total2;
+         const thetaRel = theta / total2;
+         focusVal  = Math.round(Math.min(100, Math.max(0, (alphaRel + thetaRel * 0.5) * 200)));
+         stressVal = Math.round(Math.min(100, Math.max(0, betaRel * 300)));
+      } else if (feat2?.alpha !== undefined) {
+        const total2 = (feat2.delta||0) + (feat2.theta||0) + (feat2.alpha||0) + (feat2.beta||0) + 1e-6;
+        const alphaRel = (feat2.alpha||0) / total2;
+        const betaRel  = (feat2.beta||0)  / total2;
+        const thetaRel = (feat2.theta||0) / total2;
+        focusVal  = Math.round(Math.min(100, Math.max(0, (alphaRel + thetaRel * 0.5) * 200)));
+        stressVal = Math.round(Math.min(100, Math.max(0, betaRel * 300)));
+      } else if (res2?.meditation_score !== undefined) {
+        focusVal  = Math.round(res2.meditation_score || 0);
+        stressVal = Math.round(Math.max(0, 100 - focusVal));
+      }
+
+      const fv = $('med-focus-val');
+      if (fv) fv.textContent = focusVal;
+      const sv = $('med-stress-val');
+      if (sv) sv.textContent = stressVal;
+
+      // ── Sidebar indicators ────────────────────────────────────────
       const colCalm = $('med-col-calm-val');
       if (colCalm) colCalm.textContent = (calmSignal * 100).toFixed(0);
       const expCalm = $('med-exp-calm-val');
@@ -653,7 +746,7 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
       // Update Expanded Button
       const btn = $('med-session-btn');
       if (btn) {
-        btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-square"><rect width="18" height="18" x="3" y="3" rx="2"/></svg> Stop`;
+        btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-square"><rect width="18" height="18" x="3" y="3" rx="2"/></svg> END SESSION`;
         btn.className = 'w-full py-2.5 rounded-xl text-base font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-2 border-2 bg-red-500/10 border-red-500/50 text-red-500 hover:bg-red-500/20';
       }
 
@@ -664,7 +757,7 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
         $('med-col-play')?.classList.add('hidden');
         $('med-col-stop')?.classList.remove('hidden');
         const tt = $('med-col-tooltip-session');
-        if (tt) tt.textContent = 'Stop Session';
+        if (tt) tt.textContent = 'End Session';
       }
 
       // Update Phase Badge Styling
@@ -772,7 +865,9 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
       });
     };
 
-    startLiveStream(); // start cleanly waiting for live stream
+    // Auto-start EEG data reading as soon as the component mounts.
+    // The session toggle only controls the breathing timer, not data flow.
+    startLiveStream();
     animId = requestAnimationFrame(loop);
 
     return () => {
@@ -843,67 +938,117 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
             </div>
           </div>
 
-          {/* Bottom FFT Chart */}
-          <div className="med-waves-col" style={{ height: '38%', padding: '15px' }}>
-            <div className="flex justify-between items-end mb-2 w-full">
-               <div className="med-wave-label tracking-widest text-[10px] uppercase font-black text-muted opacity-100">
-                 Power Spectrum (FFT)
-               </div>
-               <div className="med-calm-bar-wrap shrink-0" style={{ width: '120px' }}>
-                 <span style={{ fontSize: '9px', fontWeight: '900' }}>CALM</span>
-                 <div className="med-calm-track">
-                   <div className="med-calm-fill" id="med-calm-fill" />
-                 </div>
-                 <span className="med-calm-pct" id="med-calm-pct" style={{ color: 'var(--primary)', fontWeight: '900', width: '28px', opacity: '1' }}>0%</span>
-               </div>
+          {/* Bottom FFT Chart — FFTView style */}
+          <div className="med-waves-col" style={{ height: '38%', padding: '15px 20px' }}>
+
+            {/* ── Header row ── */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+              {/* Left: icon + title */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ padding: '7px', background: 'rgba(168,85,247,0.12)', borderRadius: '10px', display: 'flex' }}>
+                  <Radio size={16} color="#a855f7" />
+                </div>
+                <span style={{ backgroundImage: 'linear-gradient(135deg,#a855f7,#d946ef)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', fontSize: '11px', fontWeight: '800', letterSpacing: '3px', fontFamily: 'Orbitron,sans-serif', textTransform: 'uppercase' }}>
+                  Power Spectrum (FFT)
+                </span>
+              </div>
+
+              {/* Right: calm bar only */}
+              <div className="med-calm-bar-wrap shrink-0" style={{ width: '110px' }}>
+                <span style={{ fontSize: '9px', fontWeight: '900' }}>CALM</span>
+                <div className="med-calm-track">
+                  <div className="med-calm-fill" id="med-calm-fill" />
+                </div>
+                <span className="med-calm-pct" id="med-calm-pct" style={{ color: 'var(--primary)', fontWeight: '900', width: '28px', opacity: '1' }}>0%</span>
+              </div>
             </div>
-            
-            <div className="flex-grow w-full relative">
+
+            {/* ── Chart area ── */}
+            <div style={{ flexGrow: 1, position: 'relative', background: 'rgba(0,0,0,0.20)', borderRadius: '14px', border: '1px solid rgba(168,85,247,0.15)', padding: '10px 6px 4px', overflow: 'hidden', minHeight: 0 }} className="flex-grow w-full">
               {(() => {
-                 const chKey = wsEvent?.source_channel !== undefined ? String(wsEvent.source_channel) : '0';
-                 const data = spectra[chKey] || spectra['0'] || spectra['1'] || Object.values(spectra)[0];
+                 const activeCh = wsEvent?.source_channel !== undefined ? String(wsEvent.source_channel) : selectedChannel;
+                 const data = spectra[activeCh] || spectra[selectedChannel] || Object.values(spectra)[0];
                  const chartData = data ? data.filter(d => d.freq >= 1 && d.freq <= 50) : [];
-                 
+
+                 // Find the peak point (highest power)
+                 const peak = chartData.reduce((best, d) => (!best || d.power > best.power ? d : best), null);
+
                  return chartData.length > 0 ? (
-                    <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={chartData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.15)" vertical={false} />
-                            <XAxis
-                                dataKey="freq"
-                                stroke="#9ca3af"
-                                tick={{ fill: '#9ca3af', fontSize: 10, fontWeight: 'bold' }}
-                                tickCount={25}
-                                type="number"
-                                domain={[1, 50]}
-                            />
-                            <YAxis
-                                stroke="#9ca3af"
-                                tick={{ fill: '#9ca3af', fontSize: 10, fontWeight: 'bold' }}
-                                tickFormatter={(val) => val.toExponential(0)}
-                                width={40}
-                            />
-                            <Tooltip
-                                contentStyle={{ backgroundColor: 'rgba(0,0,0,0.8)', border: '1px solid var(--primary)', borderRadius: '8px' }}
-                                itemStyle={{ color: 'var(--primary)', fontWeight: 'bold' }}
-                                labelStyle={{ color: '#fff' }}
-                                formatter={(value) => [value.toExponential(2), 'Power']}
-                                labelFormatter={(label) => `${label} Hz`}
-                            />
-                            <Line
-                                type="monotone"
-                                dataKey="power"
-                                stroke="var(--primary)"
-                                strokeWidth={2}
-                                dot={false}
-                                activeDot={{ r: 4, fill: 'var(--bg)', stroke: 'var(--primary)', strokeWidth: 2 }}
-                                isAnimationActive={false}
-                            />
-                        </LineChart>
-                    </ResponsiveContainer>
+                   <>
+                     <ResponsiveContainer width="100%" height="100%">
+                         <LineChart data={chartData} margin={{ top: 5, right: 12, left: 8, bottom: 18 }}>
+                             <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
+                             <XAxis
+                                 dataKey="freq"
+                                 stroke="#9ca3af"
+                                 tick={{ fill: '#9ca3af', fontSize: 10, fontWeight: 'bold' }}
+                                 tickCount={25}
+                                 type="number"
+                                 domain={[1, 50]}
+                                 label={{ value: 'Frequency (Hz)', position: 'insideBottom', offset: -10, fill: '#9ca3af', fontSize: 10 }}
+                             />
+                             <YAxis
+                                 stroke="#9ca3af"
+                                 tick={{ fill: '#9ca3af', fontSize: 10, fontWeight: 'bold' }}
+                                 tickFormatter={(val) => val.toExponential(1)}
+                                 width={48}
+                                 label={{ value: 'Power', angle: -90, position: 'insideLeft', fill: '#9ca3af', fontSize: 10 }}
+                             />
+                             <Tooltip
+                                 contentStyle={{ backgroundColor: 'rgba(0,0,0,0.85)', border: '1px solid #a855f7', borderRadius: '8px' }}
+                                 itemStyle={{ color: '#a855f7', fontWeight: 'bold' }}
+                                 labelStyle={{ color: '#fff' }}
+                                 formatter={(value) => [value.toExponential(2), 'Power']}
+                                 labelFormatter={(label) => `${label} Hz`}
+                             />
+                             <Line
+                                 type="monotone"
+                                 dataKey="power"
+                                 stroke="#a855f7"
+                                 strokeWidth={2}
+                                 dot={(props) => {
+                                   if (!peak) return null;
+                                   const { cx, cy, payload } = props;
+                                   if (payload.freq !== peak.freq) return null;
+                                   return (
+                                     <g key={`peak-dot-${peak.freq}`}>
+                                       {/* outer glow ring */}
+                                       <circle cx={cx} cy={cy} r={10} fill="rgba(245,158,11,0.15)" stroke="rgba(245,158,11,0.4)" strokeWidth={1} />
+                                       {/* inner dot */}
+                                       <circle cx={cx} cy={cy} r={5} fill="#f59e0b" stroke="#fff" strokeWidth={1.5} />
+                                       {/* crosshair lines */}
+                                       <line x1={cx} y1={cy - 14} x2={cx} y2={cy - 7} stroke="#f59e0b" strokeWidth={1} strokeDasharray="2 2" />
+                                       <line x1={cx} y1={cy + 7} x2={cx} y2={cy + 14} stroke="#f59e0b" strokeWidth={1} strokeDasharray="2 2" />
+                                     </g>
+                                   );
+                                 }}
+                                 activeDot={{ r: 5, fill: '#d946ef', stroke: '#fff', strokeWidth: 2 }}
+                                 isAnimationActive={false}
+                             />
+                             {/* No ReferenceLine — peak shown as glowing dot above */}
+                         </LineChart>
+                     </ResponsiveContainer>
+
+                     {/* Peak info badge */}
+                     {peak && (
+                       <div style={{ position: 'absolute', top: '10px', left: '58px', background: 'rgba(0,0,0,0.70)', padding: '3px 10px', borderRadius: '8px', border: '1px solid rgba(245,158,11,0.45)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                         <span style={{ fontSize: '0.65rem', color: '#9ca3af', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '1px' }}>Peak</span>
+                         <span style={{ fontSize: '0.75rem', fontWeight: '900', color: '#f59e0b', fontFamily: 'Orbitron, monospace', textShadow: '0 0 8px rgba(245,158,11,0.7)' }}>{peak.freq.toFixed(1)} Hz</span>
+                         <span style={{ fontSize: '0.65rem', color: '#9ca3af' }}>·</span>
+                         <span style={{ fontSize: '0.7rem', fontWeight: '700', color: '#fcd34d' }}>{peak.power.toExponential(1)}</span>
+                       </div>
+                     )}
+
+                     {/* Live Render badge */}
+                     <div style={{ position: 'absolute', top: '10px', right: '14px', background: 'rgba(0,0,0,0.65)', padding: '3px 9px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.10)' }}>
+                       <span style={{ fontSize: '0.72rem', color: '#9ca3af' }}>Live Render: </span>
+                       <span style={{ fontSize: '0.72rem', fontWeight: 'bold', color: '#22c55e' }}>Active</span>
+                     </div>
+                   </>
                  ) : (
                     <div className="w-full h-full flex flex-col items-center justify-center opacity-50">
-                        <div className="inline-block w-6 h-6 border-2 border-t-primary border-r-primary border-b-transparent border-l-transparent rounded-full animate-spin mb-2" />
-                        <span className="text-xs text-muted">Waiting for raw EEG stream...</span>
+                        <div className="loader-circle" style={{ borderTopColor: '#a855f7', width: '24px', height: '24px', borderWidth: '2px' }} />
+                        <span className="text-xs text-muted" style={{ marginTop: '10px' }}>Waiting for EEG stream from worker…</span>
                     </div>
                  );
               })()}
