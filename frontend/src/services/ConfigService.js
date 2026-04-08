@@ -1,21 +1,28 @@
+import { fetchWithBase } from '../utils/runtimeConnection'
+
 const CONFIG_KEY = 'biosignals-config'
 const CONFIG_DEFAULTS = {
-    sampling_rate: 512,
+    sampling_rate: 1000,
     channel_mapping: {
         ch0: {
             sensor: 'EMG',
             enabled: true
         },
         ch1: {
-            sensor: 'EEG',
+            sensor: 'EMG',
             enabled: true
         }
     },
     filters: {
         EMG: {
             type: 'high_pass',
-            cutoff: 70.0,
-            order: 4
+            cutoff: 20.0,
+            order: 4,
+            notch_enabled: true,
+            notch_freq: 50,
+            bandpass_enabled: true,
+            bandpass_low: 20,
+            bandpass_high: 250
         },
         EOG: {
             type: 'low_pass',
@@ -58,7 +65,23 @@ export const ConfigService = {
             const cached = localStorage.getItem(CONFIG_KEY)
             if (cached) {
                 console.log('✅ Config loaded from localStorage')
-                const config = JSON.parse(cached)
+                let config = JSON.parse(cached)
+
+                // We merge with defaults to fill missing keys
+                if (!config.channel_mapping) {
+                    config = { ...CONFIG_DEFAULTS, ...config }
+                }
+
+                // --- FIX: Clean up old 4-channel configurations from cache ---
+                if (config.channel_mapping) {
+                    delete config.channel_mapping.ch2;
+                    delete config.channel_mapping.ch3;
+                }
+
+                // Ensure num_channels is up to date
+                config.num_channels = 2
+
+                // -----------------------------------------------------------
 
                 // Background sync with backend (non-blocking)
                 this.syncFromBackend().catch(e => {
@@ -74,7 +97,7 @@ export const ConfigService = {
         // If no cache, try to load from backend (if endpoint exists)
         try {
             console.log('📡 Fetching config from backend...')
-            const response = await fetch('/api/config')
+            const response = await fetchWithBase('/api/config')
 
             if (response.status === 404) {
                 console.log('ℹ️ Backend /api/config endpoint not available (older web_server.py)')
@@ -132,7 +155,7 @@ export const ConfigService = {
      */
     async syncFromBackend() {
         try {
-            const response = await fetch('/api/config')
+            const response = await fetchWithBase('/api/config')
 
             if (response.status === 404) {
                 console.log('ℹ️ Backend endpoint not available')
@@ -160,7 +183,7 @@ export const ConfigService = {
      */
     async saveToBackend(config) {
         try {
-            const response = await fetch('/api/config', {
+            const response = await fetchWithBase('/api/config', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -198,7 +221,7 @@ export const ConfigService = {
 
             // Also notify backend if endpoint exists
             try {
-                await fetch('/api/config', { method: 'DELETE' }).catch(() => { })
+                await fetchWithBase('/api/config', { method: 'DELETE' }).catch(() => { })
             } catch (e) {
                 console.warn('⚠️ Could not notify backend of config clear')
             }

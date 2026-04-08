@@ -1,0 +1,247 @@
+# src/acquisition/serial_reader.py
+"""
+SerialPacketReader - Fixed & Production-Ready
+- Robust threaded serial reader with packet sync
+- Proper connection management
+- Complete parenthesis and error handling
+"""
+
+from typing import Optional, Dict
+import time
+import queue
+import threading
+import serial
+
+class SerialPacketReader:
+    def __init__(
+        self, 
+        port: str, 
+        baud: int = 230400, 
+        packet_len: int = 8,
+        sync1: int = 0xC7, 
+        sync2: int = 0x7C, 
+        end_byte: int = 0x01,
+        connect_timeout: float = 3.0, 
+        max_queue: int = 10000
+    ):
+        """Initialize serial reader"""
+        self.port = port
+        self.baud = baud
+        self.packet_len = packet_len
+        self.sync1 = sync1
+        self.sync2 = sync2
+        self.end_byte = end_byte
+        self.connect_timeout = connect_timeout
+        self.ser: Optional[serial.Serial] = None
+        self.is_running = False
+        self.data_queue: queue.Queue = queue.Queue(maxsize=max_queue)
+        self.message_queue: queue.Queue = queue.Queue(maxsize=100) # Queue for text messages
+
+        # Stats
+        self.packets_received = 0
+        self.packets_dropped = 0
+        self.sync_errors = 0
+        self.bytes_received = 0
+        self.duplicates = 0
+        self.last_packet_time = None
+        self.last_trigger_time = 0  # For soft debounce
+        
+        # Internal
+        self._read_thread: Optional[threading.Thread] = None
+
+    def connect(self) -> bool:
+        """Connect to serial port"""
+        try:
+            print(f"Connecting to {self.port} at {self.baud} baud...")
+            self.ser = serial.Serial(
+                self.port,
+                self.baud,
+                timeout=0.1,
+                bytesize=serial.EIGHTBITS,
+                stopbits=serial.STOPBITS_ONE,
+                parity=serial.PARITY_NONE
+            )
+            
+            print(f"Port opened, waiting {self.connect_timeout}s for Arduino...")
+            time.sleep(self.connect_timeout)
+            
+            # Clear buffers
+            try:
+                self.ser.reset_input_buffer()
+                self.ser.reset_output_buffer()
+            except Exception:
+                pass
+            
+            print(f"✅ Connected to {self.port}")
+            return True
+        except Exception as e:
+            print(f"❌ Connection failed: {e}")
+            return False
+
+    def disconnect(self):
+        """Disconnect from serial port"""
+        self.is_running = False
+        if self.ser and getattr(self.ser, "is_open", False):
+            try:
+                self.ser.close()
+            except Exception:
+                pass
+
+    def start(self):
+        """Start reading thread"""
+        if self.is_running:
+            return
+        self.is_running = True
+        self._read_thread = threading.Thread(target=self._read_loop, daemon=True)
+        self._read_thread.start()
+        print("Reading thread started")
+
+    def stop(self):
+        """Stop reading thread"""
+        self.is_running = False
+        if self._read_thread:
+            self._read_thread.join(timeout=0.1)
+
+    def send_command(self, cmd: str) -> bool:
+        """Send command to device"""
+        if not (self.ser and getattr(self.ser, "is_open", False)):
+            return False
+        try:
+            self.ser.write(f"{cmd}\n".encode())
+            self.ser.flush()
+            return True
+        except Exception as e:
+            print(f"Send failed: {e}")
+            return False
+
+    def _read_loop(self):
+        """Main reading loop"""
+        buffer = bytearray()
+        while self.is_running:
+            if not (self.ser and getattr(self.ser, "is_open", False)):
+                time.sleep(0.1)
+                continue
+            try:
+                available = self.ser.in_waiting
+                if available:
+                    chunk = self.ser.read(min(available, 4096))
+                    if chunk:
+                        self.bytes_received += len(chunk)
+                        buffer.extend(chunk)
+                        self._process_buffer(buffer)
+                else:
+                    time.sleep(0.001)
+            except Exception as e:
+                print(f"Read error: {e}")
+                time.sleep(0.05)
+
+    def _process_buffer(self, buffer: bytearray):
+        """Process incoming buffer for valid packets (Mixed Text/Binary)"""
+        
+        # 0. Clean up (remove >)
+        # Use find/del loop to safely remove bytes in-place
+        while True:
+            idx = buffer.find(b'>')
+            if idx == -1:
+                break
+            del buffer[idx:idx+1]
+
+        # 1. First, check for text messages (terminated by \n)
+        # We only look for text if we are NOT mid-packet synced or if the buffer start looks like text
+        
+        # Simple heuristic: scan for newline. 
+        # If found, check if the preceding bytes are printable ASCII.
+        # This handles "MSG:..." sent by Arduino.
+        
+        newline_idx = buffer.find(b'\n')
+        while newline_idx != -1:
+            # Check if this segment looks like a text message
+            # Limit message length check to avoid misinterpreting binary data as massive text
+            if newline_idx < 128: 
+                line = buffer[:newline_idx].strip()
+                try:
+                    # Attempt to decode as text
+                    text_msg = line.decode('utf-8')
+                    if text_msg.startswith("MSG:") or text_msg.startswith("ACQUISITION_") or "CHANNEL" in text_msg or text_msg.startswith("UNO-"):
+                        print(f"{text_msg}")
+                        # Put in queue
+                        try:
+                            self.message_queue.put_nowait(text_msg)
+                        except queue.Full:
+                            pass
+                            
+                        # Remove this line from buffer
+                        del buffer[:newline_idx + 1]
+                        # Search again from start
+                        newline_idx = buffer.find(b'\n')
+                        continue
+                    else:
+                        # GARBAGE PURGE: Text found, but not a valid message (e.g. "ESSED" tail)
+                        # We must delete it to unblock the buffer!
+                        del buffer[:newline_idx + 1]
+                        newline_idx = buffer.find(b'\n')
+                        continue
+
+                except Exception:
+                    # Not valid text, ignore
+                    pass
+            
+            # If we are here, it wasn't a valid text message, or was too long/binary.
+            # Stop text scanning to let binary parser handle it
+            break
+
+        # 2. Binary Parsing
+        i = 0
+        while i <= len(buffer) - self.packet_len:
+            if buffer[i] == self.sync1 and buffer[i+1] == self.sync2:
+                # Candidate packet
+                if buffer[i + self.packet_len - 1] == self.end_byte:
+                    packet_bytes = bytes(buffer[i : i + self.packet_len])
+                    try:
+                        self.data_queue.put_nowait(packet_bytes)
+                        self.packets_received += 1
+                        self.last_packet_time = time.time()
+                    except queue.Full:
+                        self.packets_dropped += 1
+                    i += self.packet_len
+                else:
+                    # Bad end byte
+                    i += 1
+                    self.sync_errors += 1
+            else:
+                # Not synced
+                i += 1
+                self.sync_errors += 1
+        
+        # Remove processed binary bytes
+        if i > 0:
+            del buffer[:i]
+
+    def get_packet(self, timeout: float = 0.1) -> Optional[bytes]:
+        """Get next packet from queue"""
+        try:
+            return self.data_queue.get(timeout=timeout)
+        except queue.Empty:
+            return None
+            
+    def get_message(self) -> Optional[str]:
+        """Get next text message from queue"""
+        try:
+            return self.message_queue.get_nowait()
+        except queue.Empty:
+            return None
+
+    def get_stats(self) -> Dict:
+        """Get reader statistics"""
+        elapsed = time.time() - self.last_packet_time if self.last_packet_time else 0
+        rate = self.packets_received / elapsed if elapsed > 0 else 0
+        speed_kbps = (self.bytes_received / elapsed / 1024) if elapsed > 0 else 0
+        return {
+            "packets_received": self.packets_received,
+            "packets_dropped": self.packets_dropped,
+            "sync_errors": self.sync_errors,
+            "duplicates": self.duplicates,
+            "rate_hz": rate,
+            "speed_kbps": speed_kbps,
+            "queue_size": self.data_queue.qsize(),
+        }

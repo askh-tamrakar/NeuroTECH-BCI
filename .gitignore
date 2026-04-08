@@ -1,11 +1,14 @@
 logs/
 node_modules/
 **/node_modules/
+
+# Agent skills — auto-downloaded from GitHub, tracked by skills-lock.json
+.agents/skills/
 *.log
 .env
 .DS_Store
 .venv/
-__pycache__/
+*__pycache__/
 *.pyc
 .vscode/
 .idea/
@@ -18,7 +21,8 @@ htmlcov/
 .pytest_cache/
 .ipynb_checkpoints/
 *.sqlite3
-*.db
 *.bak
-
-data/processed/windows/
+data/processed/windows
+DIY-Muscle-BioAmp-Shield-main/
+*.mp4
+rejected_models/

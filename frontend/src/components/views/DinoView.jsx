@@ -1,8 +1,64 @@
-import React, { useState, useEffect, useRef } from 'react'
-import '../../styles/DinoView.css'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
+import '../../styles/views/DinoView.css'
+import CameraPanel from '../ui/panels/CameraPanel'
+import CustomSelect from '../ui/inputs/CustomSelect'
+import Counter from '../ui/display/Counter'
+import {
+    ScanEye, SlidersHorizontal, ArrowUp, Pause, Play, Trash2, Wifi, WifiOff, Save, Skull, Trophy, Keyboard, Eye, Gamepad2, Globe, Sparkles, Atom, Ruler, Settings, RotateCcw, ScrollText, Timer, Weight, MoveVertical,
+    MoveHorizontal, Maximize, ArrowDownToLine, Grid, Sun, Moon, Cloud, Star, TreePine, Leaf, Hand,
+    Layers, Zap, Clock, ChevronDown, Activity, Target, Radio, Signal, Circle, Camera, Menu, BrainCircuit, Check, X, ChevronRight, ChevronLeft
+} from 'lucide-react'
+import { soundHandler } from '../../handlers/SoundHandler'
+import { buildApiUrl } from '../../utils/runtimeConnection'
 
-export default function DinoView({ wsData, wsEvent, isPaused }) {
+const getEventEmoji = (type) => {
+    switch (type) {
+        case 'jump': return '⬆️';
+        case 'blink': return '👁️';
+        case 'keyboard': return '⌨️';
+        case 'toggle': return '⏯️';
+        case 'connection': return '🟢';
+        case 'disconnect': return '🔴';
+        case 'settings': return '⚙️';
+        case 'gameover': return '💀';
+        case 'highscore': return '🏆';
+        default: return '📝';
+    }
+};
+
+const resolveColorVar = (styles, initialProp, fallbackProp1, fallbackProp2) => {
+    let val = styles.getPropertyValue(initialProp).trim();
+    if (!val && fallbackProp1) val = styles.getPropertyValue(fallbackProp1).trim();
+    if (!val && fallbackProp2) val = styles.getPropertyValue(fallbackProp2).trim();
+
+    let depth = 0;
+    while (val && val.includes('var(') && depth < 5) {
+        const match = val.match(/var\(([^)]+)\)/);
+        if (match) {
+            val = styles.getPropertyValue(match[1].trim()).trim();
+        } else {
+            break;
+        }
+        depth++;
+    }
+    return val;
+};
+
+export default function DinoView({ isConnected, wsEvent, isPaused }) {
+    const normalizeModelName = useCallback((name) => String(name || '').toLowerCase().replace(/[^a-z0-9]/g, ''), []);
+
+    const togglePrediction = useCallback((active) => {
+        fetch(buildApiUrl(`/api/eog/predict/${active ? 'start' : 'stop'}`), { method: 'POST' })
+            .catch(err => console.error("EOG prediction toggle failed:", err));
+    }, []);
+
     // Game state
+    const [cactusJump, setCactusJump] = useState(0)
+    const [bestCactusJump, setBestCactusJump] = useState(
+        parseInt(localStorage.getItem('dino_best_cactus')) || 0
+    )
+    const [isNewJumpRecord, setIsNewJumpRecord] = useState(false)
+    const [isNewScoreRecord, setIsNewScoreRecord] = useState(false)
     const [gameState, setGameState] = useState('ready') // ready, playing, paused, gameOver
     const [score, setScore] = useState(0)
     const [highScore, setHighScore] = useState(
@@ -10,27 +66,65 @@ export default function DinoView({ wsData, wsEvent, isPaused }) {
     )
     const [eyeState, setEyeState] = useState('open') // open, blink, double-blink
     const [showSettings, setShowSettings] = useState(false)
+    const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
+    const [models, setModels] = useState([]) // EOG Models
+    const [feedbackPrompt, setFeedbackPrompt] = useState(null)
+    const [feedbackSaving, setFeedbackSaving] = useState(false)
 
     // Game settings (easy mode default)
     const DEFAULT_SETTINGS = {
-        GRAVITY: 0.4,
-        JUMP_STRENGTH: -10,
+        GRAVITY: 1,
+        JUMP_STRENGTH: -16,
         GROUND_OFFSET: 60,
-        DINO_WIDTH: 44,
-        DINO_HEIGHT: 47,
-        OBSTACLE_WIDTH: 20,
-        OBSTACLE_MIN_HEIGHT: 40,
-        OBSTACLE_MAX_HEIGHT: 60,
-        GAME_SPEED: 1.8,
-        SPAWN_INTERVAL: 1150,
+        DINO_WIDTH: 62,
+        DINO_HEIGHT: 66,
+        OBSTACLE_WIDTH: 28,
+        OBSTACLE_MIN_HEIGHT: 56,
+        OBSTACLE_MAX_HEIGHT: 84,
+        GAME_SPEED: 9.4,
+        SPAWN_INTERVAL: 1100,
         CANVAS_WIDTH: 800,
         CANVAS_HEIGHT: 376,
         CYCLE_DURATION: 100,
-        JUMP_DISTANCE: 150,
+        JUMP_DISTANCE: 300,
+        ENABLE_MANUAL_CONTROLS: true,
+        CONTROL_CHANNEL: 'any',
+        DETECTION_METHOD: 'ML', // Or 'ML'
+        ACTIVE_MODEL: 'dino ml',
+        OBSTACLE_BONUS_FACTOR: 0.015,
+
+        // Visual Customization
+        ENABLE_TREES: true,
+        TREES_DENSITY: 0.7,
+        TREES_SIZE: 1.2,
+        TREES_LAYERS: 10,
+
+        ENABLE_CLOUDS: true,
+        CLOUDS_DENSITY: 2,
+        CLOUDS_SIZE: 0.9,
+        CLOUDS_LAYERS: 10,
+
+        ENABLE_STARS: true,
+        STARS_DENSITY: 1,
+        STARS_SIZE: 1.1,
+        STARS_LAYERS: 10,
+
+        ENABLE_BUSHES: true,
+        BUSHES_DENSITY: 0.8,
+        BUSHES_SIZE: 0.7,
+        BUSHES_LAYERS: 7,
+
+        ENABLE_DAY_NIGHT_CYCLE: true,
+        FIXED_TIME: 0.25, // Noon default
+
+        ENABLE_MOON_PHASES: true,
+        ENABLE_AUTO_MOON_CYCLE: true,
+        MOON_CYCLE_DAYS: 30, // Days for full phase cycle (15 days to Full)
+        MOON_PHASE: 0.5 // 0.0=New, 0.5=Full, 1.0=New
     }
 
     const [settings, setSettings] = useState(() => {
-        const saved = localStorage.getItem('dino_settings')
+        const saved = localStorage.getItem('dino_settings_v6')
         if (saved) {
             try {
                 return { ...DEFAULT_SETTINGS, ...JSON.parse(saved) }
@@ -42,7 +136,21 @@ export default function DinoView({ wsData, wsEvent, isPaused }) {
     })
     const [savedMessage, setSavedMessage] = useState('')
 
+
+    // --- Event Logging System ---
+    const [eventLogs, setEventLogs] = useState([])
+    const logEvent = useCallback((msg, type = 'info') => {
+        const time = new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })
+        setEventLogs(prev => [{
+            id: Date.now() + Math.random(),
+            time,
+            text: msg,
+            type
+        }, ...prev].slice(0, 50))
+    }, [])
+
     // Refs for game state (to avoid stale closures)
+    const containerRef = useRef(null) // Container for ResizeObserver
     const canvasRef = useRef(null)
     const animationRef = useRef(null)
     const gameStateRef = useRef('ready')
@@ -50,14 +158,29 @@ export default function DinoView({ wsData, wsEvent, isPaused }) {
     const velocityRef = useRef(0)
     const obstaclesRef = useRef([])
     const scoreRef = useRef(0)
-    const lastSpawnRef = useRef(0)
+    const lastSpawnTimestampRef = useRef(0)
     const blinkPressTimeRef = useRef(0)
+    const pendingBlinkTimeoutRef = useRef(null) // New ref for double-blink timer
     const leftEyeRef = useRef(null)
-
     const rightEyeRef = useRef(null)
     const distanceRef = useRef(0) // Track distance for parallax
+    const pendingActionFeedbackRef = useRef(null)
 
-    const settingsRef = useRef(DEFAULT_SETTINGS)
+    const settingsRef = useRef(settings)
+    const highScoreRef = useRef(highScore)
+    const bestCactusJumpRef = useRef(bestCactusJump)
+
+    useEffect(() => {
+        settingsRef.current = settings
+    }, [settings])
+
+    useEffect(() => {
+        highScoreRef.current = highScore
+    }, [highScore])
+
+    useEffect(() => {
+        bestCactusJumpRef.current = bestCactusJump
+    }, [bestCactusJump])
 
     // Visuals Refs
     const gameTimeRef = useRef(0) // 0 to 1 (0=dawn, 0.25=noon, 0.5=dusk, 0.75=midnight)
@@ -126,863 +249,1242 @@ export default function DinoView({ wsData, wsEvent, isPaused }) {
 
     useEffect(() => {
         settingsRef.current = settings
-    }, [settings])
 
-    // Listen for WebSocket Events (Blinks)
+        // When method changes to ML, ensure a model is selected
+        if (settings.DETECTION_METHOD === 'ML' && models.length > 0) {
+            // Priority: dino-ml > currently selected > active on backend > first available
+            const preferred = models.find(m => normalizeModelName(m.name) === 'dinoml');
+            const current = models.find(m => m.name === settings.ACTIVE_MODEL);
+            const activeOnBackend = models.find(m => m.active);
+
+            const targetModel = preferred || current || activeOnBackend || models[0];
+
+            if (settings.ACTIVE_MODEL !== targetModel.name) {
+                handleSettingChange('ACTIVE_MODEL', targetModel.name);
+            }
+        }
+
+    }, [settings, models, normalizeModelName])
+
+    // Load available EOG models
     useEffect(() => {
-        if (!wsEvent) return;
+        fetch(buildApiUrl('/api/models/eog'))
+            .then(res => res.json())
+            .then(data => {
+                setModels(data);
+                if (data.length > 0) {
+                    const dinoModel = data.find(m => normalizeModelName(m.name) === 'dinoml');
+                    const activeModel = data.find(m => m.active);
 
-        if (wsEvent.event === 'BLINK') {
-            console.log("🦖 Dino: Blink Event Received via Logic Pipeline!");
-            handleEOGBlink();
-        }
-    }, [wsEvent]);
-
-    // Handle EOG blink detection
-    const handleEOGBlink = () => {
-        const now = Date.now()
-        const timeSinceLastPress = now - blinkPressTimeRef.current
-
-        if (75 < timeSinceLastPress && timeSinceLastPress < 400) {
-            //handleDoublePress()
-        } else {
-            handleSinglePress()
-        }
-
-        console.log(" timeSinceLastPress ", timeSinceLastPress);
-        blinkPressTimeRef.current = now
-    }
-
-    // Keyboard controls (hidden from UI but still functional for testing)
-    useEffect(() => {
-        const handleKeyDown = (e) => {
-            if (e.code === 'Space' || e.key === ' ') {
-                e.preventDefault()
-                const now = Date.now()
-                const timeSinceLastPress = now - blinkPressTimeRef.current
-
-                if (timeSinceLastPress < 500) {
-                    handleDoublePress()
-                } else {
-                    handleSinglePress()
-                }
-                blinkPressTimeRef.current = now
-            }
-        }
-
-        window.addEventListener('keydown', handleKeyDown)
-        return () => window.removeEventListener('keydown', handleKeyDown)
-    }, [])
-
-    // Single press - Jump
-    const handleSinglePress = () => {
-        // Eye blink animation
-        triggerSingleBlink()
-
-        const currentState = gameStateRef.current
-        const { JUMP_STRENGTH } = settingsRef.current
-
-        if (currentState === 'ready') {
-            setGameState('playing')
-            setScore(0)
-            scoreRef.current = 0
-            dinoYRef.current = 0
-            velocityRef.current = 0
-            obstaclesRef.current = []
-            velocityRef.current = 0
-            obstaclesRef.current = []
-            lastSpawnRef.current = Date.now()
-            distanceRef.current = 0
-            // Don't reset gameTimeRef to allow day/night to continue or we could reset it. 
-            // Let's keep it continuous or reset. Continuous is fine.
-        } else if (currentState === 'playing' && Math.abs(dinoYRef.current) < 0.1) {
-            // Jump uses direct Y-velocity from settings
-            const { JUMP_STRENGTH } = settingsRef.current
-            velocityRef.current = JUMP_STRENGTH
-        } else if (currentState === 'gameOver') {
-            // Restart game
-            setGameState('playing')
-            setScore(0)
-            scoreRef.current = 0
-            dinoYRef.current = 0
-            velocityRef.current = 0
-            obstaclesRef.current = []
-            obstaclesRef.current = []
-            lastSpawnRef.current = Date.now()
-            distanceRef.current = 0
-        }
-    }
-
-    // Double press - Pause/Resume
-    const handleDoublePress = () => {
-        // Double eye blink animation
-        triggerDoubleBlink()
-
-        const currentState = gameStateRef.current
-        if (currentState === 'playing') {
-            setGameState('paused')
-        } else if (currentState === 'paused') {
-            setGameState('playing')
-        }
-    }
-
-    // Eye blink animations 
-    // Single blink
-    const triggerSingleBlink = () => {
-        setEyeState('blink')
-        if (leftEyeRef.current && rightEyeRef.current) {
-            leftEyeRef.current.classList.remove('blink', 'double-blink')
-            rightEyeRef.current.classList.remove('blink', 'double-blink')
-            void leftEyeRef.current.offsetWidth // Force reflow
-            leftEyeRef.current.classList.add('blink')
-            rightEyeRef.current.classList.add('blink')
-        }
-        setTimeout(() => {
-            setEyeState('open')
-            if (leftEyeRef.current && rightEyeRef.current) {
-                leftEyeRef.current.classList.remove('blink')
-                rightEyeRef.current.classList.remove('blink')
-            }
-        }, 300)
-    }
-
-    // Double blink
-    const triggerDoubleBlink = () => {
-        setEyeState('double-blink')
-        if (leftEyeRef.current && rightEyeRef.current) {
-            leftEyeRef.current.classList.remove('blink', 'double-blink')
-            rightEyeRef.current.classList.remove('blink', 'double-blink')
-            void leftEyeRef.current.offsetWidth // Force reflow
-            leftEyeRef.current.classList.add('double-blink')
-            rightEyeRef.current.classList.add('double-blink')
-        }
-        setTimeout(() => {
-            setEyeState('open')
-            if (leftEyeRef.current && rightEyeRef.current) {
-                leftEyeRef.current.classList.remove('double-blink')
-                rightEyeRef.current.classList.remove('double-blink')
-            }
-        }, 600)
-    }
-
-    // Draw dinosaur
-    const drawDino = (ctx, x, y, color, eyeColor) => {
-        const { DINO_WIDTH, DINO_HEIGHT } = settingsRef.current
-
-        ctx.save()
-        ctx.fillStyle = color
-
-        // Scale factor relative to default size
-        const scaleX = DINO_WIDTH / 44
-        const scaleY = DINO_HEIGHT / 47
-
-        // Helper to scale coordinates (Rounded for crisp pixel art)
-        const sX = (v) => Math.floor(x + (v * scaleX))
-        const sY = (v) => Math.floor(y + (v * scaleY))
-        const sW = (v) => Math.floor(v * scaleX)
-        const sH = (v) => Math.floor(v * scaleY)
-
-        // Note: Using a simplified scaler for drawing to match custom dimensions 
-        // Logic below uses explicit offsets which might look stretched if aspect ratio changes heavily
-        // For now, simply scaling the draw commands
-
-        // Body
-        ctx.fillRect(Math.floor(x + 6 * scaleX), Math.floor(y + 20 * scaleY), Math.ceil(25 * scaleX), Math.ceil(17 * scaleY))
-
-        // Head
-        ctx.fillRect(Math.floor(x + 31 * scaleX), Math.floor(y + 14 * scaleY), Math.ceil(13 * scaleX), Math.ceil(13 * scaleY))
-
-        // Neck
-        ctx.fillRect(Math.floor(x + 25 * scaleX), Math.floor(y + 17 * scaleY), Math.ceil(6 * scaleX), Math.ceil(10 * scaleY))
-
-        // Tail
-        ctx.beginPath()
-        ctx.moveTo(Math.floor(x + 6 * scaleX), Math.floor(y + 25 * scaleY))
-        ctx.lineTo(Math.floor(x), Math.floor(y + 32 * scaleY))
-        ctx.lineTo(Math.floor(x + 6 * scaleX), Math.floor(y + 32 * scaleY))
-        ctx.fill()
-
-        // Eye
-        ctx.fillStyle = eyeColor
-        if (eyeState === 'open') {
-            ctx.fillRect(Math.floor(x + 36 * scaleX), Math.floor(y + 18 * scaleY), Math.ceil(2 * scaleX), Math.ceil(2 * scaleY))
-        } else {
-            ctx.fillRect(Math.floor(x + 36 * scaleX), Math.floor(y + 19 * scaleY), Math.ceil(2 * scaleX), Math.ceil(1 * scaleY))
-        }
-
-        // Legs (animated)
-        ctx.fillStyle = color
-        const legOffset = Math.floor(Date.now() / 100) % 2 === 0 ? 0 : 2
-
-        // Front leg
-        ctx.fillRect(Math.floor(x + 24 * scaleX), Math.floor(y + 37 * scaleY), Math.ceil(4 * scaleX), Math.ceil((10 - legOffset) * scaleY))
-
-        // Back leg
-        ctx.fillRect(Math.floor(x + 14 * scaleX), Math.floor(y + 37 * scaleY), Math.ceil(4 * scaleX), Math.ceil((10 + legOffset) * scaleY))
-
-        // Arms
-        ctx.fillRect(Math.floor(x + 28 * scaleX), Math.floor(y + 24 * scaleY), Math.ceil(2 * scaleX), Math.ceil(6 * scaleY))
-
-        ctx.restore()
-    }
-
-    // Draw cactus
-    const drawCactus = (ctx, x, y, width, height, color, borderColor) => {
-        ctx.save()
-        ctx.fillStyle = color
-        ctx.strokeStyle = borderColor
-        ctx.lineWidth = 2
-
-        // Main trunk
-        const trunkWidth = Math.floor(width * 0.6)
-        const trunkX = Math.floor(x + (width - trunkWidth) / 2)
-        const trunkH = Math.floor(height)
-        const _y = Math.floor(y)
-
-        ctx.fillRect(trunkX, _y, trunkWidth, trunkH)
-        ctx.strokeRect(trunkX, _y, trunkWidth, trunkH)
-
-        // Left arm
-        const armHeight = Math.floor(height * 0.4)
-        const armWidth = Math.floor(width * 0.3)
-        const leftArmX = Math.floor(trunkX - armWidth)
-        const leftArmY = Math.floor(y + height * 0.3)
-        const armConnW = Math.floor(trunkWidth * 0.3)
-
-        ctx.fillRect(leftArmX, leftArmY, armWidth, armHeight)
-        ctx.strokeRect(leftArmX, leftArmY, armWidth, armHeight)
-        ctx.fillRect(leftArmX + armWidth, leftArmY, armConnW, armWidth)
-        ctx.strokeRect(leftArmX + armWidth, leftArmY, armConnW, armWidth)
-
-        // Right arm
-        const rightArmX = Math.floor(trunkX + trunkWidth)
-        const rightArmY = Math.floor(y + height * 0.5)
-        const rightArmH = Math.floor(armHeight * 0.8)
-
-        ctx.fillRect(rightArmX, rightArmY, armWidth, rightArmH)
-        ctx.strokeRect(rightArmX, rightArmY, armWidth, rightArmH)
-        ctx.fillRect(Math.floor(trunkX + trunkWidth * 0.7), rightArmY, armConnW, armWidth)
-        ctx.strokeRect(Math.floor(trunkX + trunkWidth * 0.7), rightArmY, armConnW, armWidth)
-
-        ctx.restore()
-    }
-
-    // --- Visual Helpers ---
-
-    // Simplified to just return theme background since we want strict theme colors now
-    const getSkyColor = (time, themeBg) => {
-        return themeBg
-    }
-
-
-
-    const drawPixelCircle = (ctx, cx, cy, radius, color) => {
-        ctx.fillStyle = color
-        const r = Math.floor(radius)
-        const _cx = Math.floor(cx)
-        const _cy = Math.floor(cy)
-        // Simple circle approximation using blocks
-        // We will draw it row by row
-        for (let y = -r; y <= r; y++) {
-            for (let x = -r; x <= r; x++) {
-                if (x * x + y * y <= r * r) {
-                    // Make it blocky: round to nearest 2 pixels or just draw 1x1 rect depending on scale
-                    // To make it look "pixel art", we can just fill rect
-                    ctx.fillRect(_cx + x, _cy + y, 1, 1)
-                }
-            }
-        }
-    }
-
-    // Helper for "big pixel" drawing (e.g. 4x4 blocks)
-    const drawBlockyCircle = (ctx, cx, cy, size, color, pixelSize = 4) => {
-        ctx.fillStyle = color
-        const radius = Math.floor(size / 2)
-
-        for (let y = -radius; y <= radius; y++) {
-            for (let x = -radius; x <= radius; x++) {
-                // Determine if this block is inside the circle
-                if (x * x + y * y <= radius * radius) {
-                    ctx.fillRect(Math.floor(cx + x * pixelSize), Math.floor(cy + y * pixelSize), pixelSize, pixelSize)
-                }
-            }
-        }
-    }
-
-    const drawSky = (ctx, width, height, time, primaryColor, textColor, bgColor, surfaceColor, borderColor, mutedColor) => {
-        // Background
-        ctx.fillStyle = getSkyColor(time, bgColor)
-        ctx.fillRect(0, 0, width, height)
-
-        const centerX = width / 2
-        const centerY = height + 100
-        const radius = width * 0.6
-
-        // Sun
-        if (time > 0.05 && time < 0.65) {
-            const sunAngle = ((time - 0.1) / 0.5) * Math.PI // 0 to PI
-            const sunX = centerX - Math.cos(sunAngle) * radius
-            const sunY = centerY - Math.sin(sunAngle) * radius * 0.9
-
-            // Draw Pixel Art Sun
-            // Core
-            drawBlockyCircle(ctx, sunX, sunY, 14, primaryColor, 4)
-            // Rays (simple blocks around)
-            ctx.fillStyle = primaryColor
-            // ctx.fillRect(sunX - 2, sunY - 40, 4, 10) // etc... simplify for now
-        }
-
-        // Moon
-        if (time > 0.55 || time < 0.15) {
-            let moonTime = time - 0.6
-            if (moonTime < 0) moonTime += 1
-            const moonAngle = (moonTime / 0.5) * Math.PI
-            const moonX = centerX - Math.cos(moonAngle) * radius
-            const moonY = centerY - Math.sin(moonAngle) * radius * 0.9
-
-            // Draw Pixel Art Moon (Crescent-ish or just square-ish circle)
-            drawBlockyCircle(ctx, moonX, moonY, 12, textColor, 4)
-
-            // Crater
-            ctx.fillStyle = bgColor
-            ctx.fillRect(moonX - 12, moonY - 8, 8, 8)
-            ctx.fillRect(moonX + 4, moonY + 8, 4, 4)
-        }
-
-        // Stars (Night only)
-        if (time > 0.6 || time < 0.1) {
-            const baseOpacity = (time > 0.7 || time < 0.05) ? 1 : 0.5
-            ctx.fillStyle = mutedColor // Stars are subtle now
-            starsRef.current.forEach(star => {
-                const flicker = Math.sin(Date.now() / 200 + star.blinkOffset) * 0.3 + 0.7
-                if (Math.random() > 0.1) { // Slight noise
-                    ctx.globalAlpha = baseOpacity * flicker
-                    const s = Math.ceil(star.size) // Make sure it's integer for crisp edges
-                    // Star shape: Cross or Dot
-                    if (s > 2) {
-                        ctx.fillRect(star.x - s, star.y, s * 3, s)
-                        ctx.fillRect(star.x, star.y - s, s, s * 3)
-                    } else {
-                        ctx.fillRect(star.x, star.y, s * 2, s * 2)
+                    // Prioritize the Dino model if no model is set or if the default placeholder is still selected
+                    if (!settings.ACTIVE_MODEL || normalizeModelName(settings.ACTIVE_MODEL) === 'dinoml') {
+                        const target = dinoModel || activeModel || data[0];
+                        handleSettingChange('ACTIVE_MODEL', target.name);
                     }
                 }
             })
-            ctx.globalAlpha = 1.0
-        }
+            .catch(err => console.error("Failed to load EOG models:", err));
+    }, [normalizeModelName]);
 
-        // Clouds (Always visible but tinted)
-        // Use mutedColor for clouds so they are distinct but background
-        ctx.fillStyle = mutedColor
-        ctx.globalAlpha = 0.4 // Subtle
-
-        cloudsRef.current.forEach(cloud => {
-            // Pixel Art Cloud: 3 overlapping rectangles
-            const w = Math.floor(cloud.width)
-            const h = Math.floor(w * 0.4)
-            const cx = Math.floor(cloud.x)
-            const cy = Math.floor(cloud.y)
-
-            // Base
-            ctx.fillRect(cx, cy, w, h)
-            // Top hump
-            ctx.fillRect(Math.floor(cx + w * 0.2), Math.floor(cy - h * 0.6), Math.ceil(w * 0.4), Math.ceil(h * 0.8))
-            // Smaller hump
-            ctx.fillRect(Math.floor(cx + w * 0.5), Math.floor(cy - h * 0.4), Math.ceil(w * 0.3), Math.ceil(h * 0.6))
-
-            // Update cloud pos
-            cloud.x -= cloud.speed
-            if (cloud.x + w < 0) {
-                cloud.x = width + Math.random() * 100
-                cloud.y = Math.random() * 100 + 20
-            }
-        })
-        ctx.globalAlpha = 1.0
-    }
-
-    const drawTrees = (ctx, width, groundY, mutedColor) => {
-        ctx.fillStyle = mutedColor
-        // Trees are background, so maybe 0.7 alpha?
-        ctx.globalAlpha = 0.5
-        treesRef.current.forEach(tree => {
-            const tx = Math.floor(tree.x)
-            const ty = Math.floor(groundY - tree.height)
-            const tw = Math.floor(tree.width)
-            const th = Math.floor(tree.height)
-
-            if (tx + tw > 0 && tx < width) {
-                // Trunk
-                const trunkW = Math.max(4, Math.floor(tw * 0.3))
-                ctx.fillRect(Math.floor(tx + (tw - trunkW) / 2), ty + Math.floor(th * 0.5), trunkW, Math.floor(th * 0.5))
-
-                // Foliage
-                if (tree.type === 'pine') {
-                    // Triangle-ish (stepped)
-                    ctx.fillRect(tx, ty + Math.floor(th * 0.2), tw, Math.floor(th * 0.3))
-                    ctx.fillRect(Math.floor(tx + tw * 0.1), ty, Math.ceil(tw * 0.8), Math.floor(th * 0.4))
-                } else {
-                    // Round-ish
-                    ctx.fillRect(tx, ty, tw, Math.floor(th * 0.6))
-                    ctx.fillRect(Math.floor(tx - tw * 0.2), ty + Math.floor(th * 0.1), Math.ceil(tw * 1.4), Math.floor(th * 0.4))
-                }
-            }
-        })
-        ctx.globalAlpha = 1.0
-    }
-
-    const drawTerrain = (ctx, width, height, groundY, surfaceColor, borderColor, mutedColor) => {
-        // Draw below ground area
-        const groundHeight = height - groundY
-
-        ctx.fillStyle = surfaceColor // Use surface color for ground body
-        ctx.fillRect(0, Math.floor(groundY), width, Math.floor(groundHeight))
-
-        // Top grass/dirt line
-        ctx.fillStyle = borderColor
-        ctx.fillRect(0, Math.floor(groundY), width, 10)
-
-        // Random stone speckles pattern (simple static)
-        ctx.fillStyle = mutedColor // Speckles are muted, not border color (too harsh)
-        // Just draw some deterministic noise if we wanted, but static random rects are cheaper
-        // For scrolling effect, we need an offset.
-        // Let's rely on a global offset or simply texture pattern.
-        // Since we don't have a camera x scroll variable for terrain texturing, we can just make it static or subtle.
-        // Let's make it static for now as requested "static" but wait, user said "make the apear below the Eye Blink Tracker... static".
-        // He said "add terrain". Let's add some static variation.
-
-        // We will make 3 layers of "stones" that technically don't scroll with dino (since dino moves in place),
-        // BUT the obstacles move lefter. The terrain should technically move left too if we want realism.
-        // But the user request implies just "terrain below ground". 
-        // We can use a simple shifting pattern based on time if we want.
-        // Dino game usually has static ground texture that scrolls.
-        // Let's simulate scrolling texture using Date.now() or a ref for distance.
-
-        // We actually map obstacle speed. Let's reuse that.
-        // We don't have a 'distance traveled' ref easily accessible here but we can approximate with time * speed.
-        // Actually, we can just use a simple scrolling offset ref if we want perfect sync.
-        // For this version, let's keep it static-ish or simple repeating pattern.
-
-        // Let's create a scrolling pattern using distanceRef
-        const offset = distanceRef.current % 100
-
-        ctx.save()
-        ctx.beginPath()
-        for (let i = -100; i < width + 100; i += 50) {
-            ctx.rect(Math.floor(i - offset + 10), Math.floor(groundY + 15), 10, 8)
-            ctx.rect(Math.floor(i - offset + 35), Math.floor(groundY + 30), 6, 6)
-        }
-        ctx.fill()
-        ctx.restore()
-    }
-    // Game loop
+    // Push Config to Backend when Detection Method or Model changes
     useEffect(() => {
-        let lastTime = Date.now()
+        // We only care if they changed METHOD or MODEL
+        const updateBackendConfig = async () => {
+            try {
+                const res = await fetch(buildApiUrl('/api/config'));
+                if (!res.ok) return;
+                const config = await res.json();
 
+                // Deep copy to avoid mutating state directly
+                const newConfig = JSON.parse(JSON.stringify(config));
 
+                if (!newConfig.features) newConfig.features = {};
+                if (!newConfig.features.EOG) newConfig.features.EOG = {};
 
-        const gameLoop = () => {
-            const now = Date.now()
-            const deltaTime = now - lastTime
-            lastTime = now
+                let changed = false;
+                if (newConfig.features.EOG.detection_method !== settings.DETECTION_METHOD) {
+                    newConfig.features.EOG.detection_method = settings.DETECTION_METHOD;
+                    changed = true;
+                }
 
-            const currentState = gameStateRef.current
-            const currentSettings = settingsRef.current
-
-            // Destructure settings
-            const {
-                GRAVITY, JUMP_STRENGTH, JUMP_DISTANCE, SPAWN_INTERVAL,
-                OBSTACLE_WIDTH, OBSTACLE_MIN_HEIGHT, OBSTACLE_MAX_HEIGHT,
-                GROUND_OFFSET, CANVAS_WIDTH, CANVAS_HEIGHT,
-                DINO_WIDTH, DINO_HEIGHT
-            } = currentSettings
-
-            // Derive GAME_SPEED to satisfy the Parabolic Path defined by Strength (Y) and Distance (X)
-            // Range d = (2 * vx * vy) / g  =>  vx = (d * g) / (2 * vy)
-            // Ensure divisor is non-zero
-            const vy = Math.abs(JUMP_STRENGTH)
-            const GAME_SPEED = vy > 0 ? (JUMP_DISTANCE * GRAVITY) / (2 * vy) : 5
-
-            if (currentState === 'playing') {
-                // Update dino physics (dinoYRef is distance above ground, 0 = on ground)
-                const oldVelocity = velocityRef.current
-                const oldY = dinoYRef.current
-
-                velocityRef.current += GRAVITY
-                dinoYRef.current += velocityRef.current
-
-                // Keep dino on or above ground (dinoYRef should not go below 0)
-                if (dinoYRef.current >= 0) {
-                    if (oldY < 0) {
-                        console.log('🛬 LANDING: Y went from', oldY.toFixed(2), 'to', dinoYRef.current.toFixed(2), '→ reset to 0')
+                if (settings.DETECTION_METHOD === 'ML' && settings.ACTIVE_MODEL) {
+                    if (!newConfig.active_models) newConfig.active_models = {};
+                    if (newConfig.active_models.EOG !== settings.ACTIVE_MODEL) {
+                        newConfig.active_models.EOG = settings.ACTIVE_MODEL;
+                        changed = true;
                     }
-                    dinoYRef.current = 0
-                    velocityRef.current = 0
                 }
 
-                // Update obstacles
-                obstaclesRef.current = obstaclesRef.current
-                    .map((o) => ({ ...o, x: o.x - GAME_SPEED }))
-                    .filter((o) => o.x > - OBSTACLE_WIDTH - 20)
-
-                // Spawn new obstacle
-                if (now - lastSpawnRef.current > SPAWN_INTERVAL) {
-                    lastSpawnRef.current = now
-                    const height = OBSTACLE_MIN_HEIGHT + Math.random() * (OBSTACLE_MAX_HEIGHT - OBSTACLE_MIN_HEIGHT)
-                    obstaclesRef.current.push({
-                        x: CANVAS_WIDTH,
-                        y: 0, // obstacles are on ground
-                        width: OBSTACLE_WIDTH + Math.random() * 10,
-                        height: height,
-                    })
+                if (changed) {
+                    await fetch(buildApiUrl('/api/config'), {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(newConfig)
+                    });
+                    console.log("[Dino] Backend feature config updated:", {
+                        method: settings.DETECTION_METHOD,
+                        model: settings.ACTIVE_MODEL
+                    });
                 }
 
-                // Update score
-                scoreRef.current += 1
-                setScore(scoreRef.current)
+            } catch (err) {
+                console.error("Failed to update backend config:", err);
+            }
+        };
 
-                // Collision detection (more forgiving hitbox)
-                const groundY = CANVAS_HEIGHT - GROUND_OFFSET
-                const dinoX = 75
-                const dinoLeft = dinoX + 10
-                const dinoRight = dinoX + DINO_WIDTH - 10
-                const dinoTop = groundY - DINO_HEIGHT - dinoYRef.current + 5
-                const dinoBottom = groundY - dinoYRef.current - 5
+        updateBackendConfig();
+    }, [settings.DETECTION_METHOD, settings.ACTIVE_MODEL]);
 
-                for (const obs of obstaclesRef.current) {
-                    const obsLeft = obs.x + 5
-                    const obsRight = obs.x + obs.width - 5
-                    const obsTop = groundY - obs.height
-                    const obsBottom = groundY
+    // Auto Select Smart Channel
+    const [availableChannels, setAvailableChannels] = useState([
+        { label: 'Any Channel', value: 'any' },
+        { label: 'Channel 0', value: 'ch0' },
+        { label: 'Channel 1', value: 'ch1' }
+    ]);
 
-                    if (
-                        dinoRight > obsLeft &&
-                        dinoLeft < obsRight &&
-                        dinoBottom > obsTop &&
-                        dinoTop < obsBottom
-                    ) {
-                        // Collision detected
-                        setGameState('gameOver')
-                        // Game loop will stop updating time, so time stops
-                        if (scoreRef.current > highScore) {
-                            setHighScore(scoreRef.current)
-                            localStorage.setItem('dino_highscore', scoreRef.current.toString())
+    useEffect(() => {
+        let cancelled = false;
+
+        const refreshEogChannels = () => {
+            fetch(buildApiUrl('/api/config'))
+                .then(res => res.json())
+                .then(config => {
+                    if (cancelled) return;
+
+                    const mapping = config.channel_mapping || {};
+                    const eogChannels = [];
+                    ['ch0', 'ch1', 'ch2', 'ch3'].forEach(ch => {
+                        if (mapping[ch] && mapping[ch].sensor === 'EOG' && mapping[ch].enabled) {
+                            eogChannels.push(ch);
                         }
-                        break
-                    }
-                }
+                    });
 
-                // Update distance for parallax
-                distanceRef.current += GAME_SPEED
+                    if (eogChannels.length === 0) {
+                        setAvailableChannels([{ label: 'No EOG Sensor Mapped', value: 'none' }]);
+                        if (settingsRef.current.CONTROL_CHANNEL !== 'none') {
+                            handleSettingChange('CONTROL_CHANNEL', 'none');
+                        }
+                    } else if (eogChannels.length === 1) {
+                        setAvailableChannels([{ label: `Channel ${eogChannels[0].replace('ch', '')}`, value: eogChannels[0] }]);
+                        if (settingsRef.current.CONTROL_CHANNEL !== eogChannels[0]) {
+                            handleSettingChange('CONTROL_CHANNEL', eogChannels[0]);
+                        }
+                    } else {
+                        const options = [{ label: 'Select Channel...', value: 'any' }];
+                        eogChannels.forEach(ch => {
+                            options.push({ label: `Channel ${ch.replace('ch', '')}`, value: ch });
+                        });
+                        setAvailableChannels(options);
 
-                // Update trees (Parallax with depth)
-                treesRef.current.forEach(tree => {
-                    tree.x -= GAME_SPEED * tree.speedFactor
-                    if (tree.x + tree.width < -100) { // Wrap around
-                        tree.x = CANVAS_WIDTH + Math.random() * 100
-                        // Randomize properties again for variety on respawn
-                        const depth = 0.4 + Math.random() * 0.6
-                        tree.depth = depth
-                        tree.speedFactor = 0.5 * depth
-                        tree.height = (50 + Math.random() * 70) * depth
-                        tree.width = (25 + Math.random() * 25) * depth
-                        tree.type = Math.random() > 0.5 ? 'round' : 'pine'
-
-                        // We strictly need to re-sort if we want perfect Z-ordering but
-                        // re-sorting every frame is expensive and popping creates issues.
-                        // Just letting them wrap is fine for background noise.
+                        if (settingsRef.current.CONTROL_CHANNEL !== 'any' && !eogChannels.includes(settingsRef.current.CONTROL_CHANNEL)) {
+                            handleSettingChange('CONTROL_CHANNEL', 'any');
+                        }
                     }
                 })
-            }
+                .catch(err => console.error("Error fetching config for channels", err));
+        };
 
+        refreshEogChannels();
+        const intervalId = setInterval(refreshEogChannels, 2000);
 
-            // Draw game
-            const canvas = canvasRef.current
-            if (canvas) {
-                const ctx = canvas.getContext('2d')
-                const width = canvas.width
-                const height = canvas.height
-
-                // Get settings again in case canvas dims changed (though they are props)
-                const { GROUND_OFFSET, DINO_HEIGHT } = settingsRef.current
-
-                // Clear canvas
-                ctx.clearRect(0, 0, width, height)
-
-                // Get theme colors from CSS variables
-                const styles = getComputedStyle(document.documentElement)
-                const bgColor = styles.getPropertyValue('--bg').trim()
-                const surfaceColor = styles.getPropertyValue('--surface').trim() // Main card bg
-                const textColor = styles.getPropertyValue('--text').trim()
-                const primaryColor = styles.getPropertyValue('--primary').trim()
-                const borderColor = styles.getPropertyValue('--border').trim()
-                const mutedColor = styles.getPropertyValue('--muted').trim() || '#888'
-                const accentColor = styles.getPropertyValue('--accent').trim() || primaryColor
-
-                // Background
-                // Update Time only if playing
-                if (currentState === 'playing') {
-                    const dt = deltaTime // ms
-                    const currentDuration = settingsRef.current.CYCLE_DURATION * 1000 // Convert to ms
-                    gameTimeRef.current = (gameTimeRef.current + dt / currentDuration) % 1.0
-                }
-
-                // Background (Sky)
-                drawSky(ctx, width, height, gameTimeRef.current, primaryColor, textColor, bgColor, surfaceColor, borderColor, mutedColor)
-
-                // Parallax Trees (Behind terrain)
-                const groundY = height - GROUND_OFFSET
-                drawTrees(ctx, width, groundY, mutedColor)
-
-                // Terrain
-                drawTerrain(ctx, width, height, groundY, surfaceColor, borderColor, mutedColor)
-
-                // Ground line (Visual enhancement)
-                ctx.strokeStyle = borderColor
-                ctx.lineWidth = 2
-                ctx.beginPath()
-                ctx.moveTo(0, groundY)
-                ctx.lineTo(width, groundY)
-                ctx.stroke()
-
-                // Draw dino
-                const dinoX = 75
-                const dinoDrawY = groundY - DINO_HEIGHT + dinoYRef.current
-                // Dino body = Primary, Eye = BgColor (contrast)
-                drawDino(ctx, dinoX, dinoDrawY, primaryColor, bgColor)
-
-                // Draw cacti
-                obstaclesRef.current.forEach((obs) => {
-                    const obsDrawY = groundY - obs.height
-                    // Cacti = Accent Color (stand out against surface/sky)
-                    drawCactus(ctx, obs.x, obsDrawY, obs.width, obs.height, surfaceColor, borderColor)
-                })
-
-                // Draw score
-                ctx.fillStyle = textColor
-                ctx.font = 'bold 20px monospace'
-                ctx.textAlign = 'right'
-                ctx.fillText(`Score: ${Math.floor(scoreRef.current / 10)}`, width - 20, 40)
-                ctx.fillText(`Best: ${Math.floor(highScore / 10)}`, width - 20, 70)
-
-                // Draw state messages
-                ctx.textAlign = 'center'
-                ctx.font = 'bold 24px sans-serif'
-                if (currentState === 'ready') {
-                    ctx.fillText('Blink to Start!', width / 2, height / 2 - 40)
-                    ctx.font = '16px sans-serif'
-                    ctx.fillText('Single blink = Jump', width / 2, height / 2)
-                    ctx.fillText('Double blink = Pause/Resume', width / 2, height / 2 + 30)
-                } else if (currentState === 'paused') {
-                    ctx.fillStyle = primaryColor
-                    ctx.fillText('PAUSED', width / 2, height / 2)
-                    ctx.font = '16px sans-serif'
-                    ctx.fillStyle = textColor
-                    ctx.fillText('Double blink to resume', width / 2, height / 2 + 30)
-                } else if (currentState === 'gameOver') {
-                    ctx.fillStyle = primaryColor
-                    ctx.fillText('GAME OVER!', width / 2, height / 2 - 20)
-                    ctx.font = '16px sans-serif'
-                    ctx.fillStyle = textColor
-                    ctx.fillText(`Final Score: ${Math.floor(scoreRef.current / 10)}`, width / 2, height / 2 + 10)
-                    ctx.fillText('Blink to restart', width / 2, height / 2 + 40)
-                }
-            }
-
-            animationRef.current = requestAnimationFrame(gameLoop)
-        }
-
-        animationRef.current = requestAnimationFrame(gameLoop)
         return () => {
-            if (animationRef.current) {
-                cancelAnimationFrame(animationRef.current)
+            cancelled = true;
+            clearInterval(intervalId);
+        };
+    }, []);
+
+    useEffect(() => {
+        togglePrediction(true);
+        return () => togglePrediction(false);
+    }, [togglePrediction]);
+
+    // WebSocket Event Listener (Blinks)
+    useEffect(() => {
+        if (!wsEvent) return;
+
+        // Check channel match (or 'any' bypass)
+        const targetCh = settingsRef.current.CONTROL_CHANNEL
+        if (targetCh !== 'any' && wsEvent.channel !== targetCh) {
+            // console.log(`[Dino] Ignored event ${wsEvent.event} from ${wsEvent.channel} (Target: ${targetCh})`);
+            return
+        }
+
+        if (wsEvent.event === 'SingleBlink') {
+            console.log("🦖 Dino: Single Blink Event Received!");
+            pendingActionFeedbackRef.current = {
+                prediction: 'SingleBlink',
+                features: wsEvent.features || null,
+                confidence: wsEvent.confidence || 0,
+                trigger: 'jump',
+                timestamp: Date.now()
+            }
+            handleSinglePress('blink');
+        } else if (wsEvent.event === 'DoubleBlink') {
+            console.log("🦖 Dino: Double Blink Event Received!");
+            pendingActionFeedbackRef.current = {
+                prediction: 'DoubleBlink',
+                features: wsEvent.features || null,
+                confidence: wsEvent.confidence || 0,
+                trigger: 'pause',
+                timestamp: Date.now()
+            }
+            handleDoublePress('blink');
+        }
+    }, [wsEvent, settings.CONTROL_CHANNEL]); // Added settings.CONTROL_CHANNEL to dependency array
+
+    const isInitialConnectionMount = useRef(true);
+    const prevConnectionState = useRef(isConnected);
+
+    useEffect(() => {
+        if (isInitialConnectionMount.current) {
+            logEvent(isConnected ? "Sensor Connected" : "Sensor Disconnected", isConnected ? 'connection' : 'disconnect')
+            isInitialConnectionMount.current = false;
+        } else if (prevConnectionState.current !== isConnected) {
+            logEvent(isConnected ? "Sensor Connected" : "Sensor Disconnected", isConnected ? 'connection' : 'disconnect')
+            prevConnectionState.current = isConnected;
+        }
+    }, [isConnected, logEvent]) // Only trigger on boolean flip
+
+    // --- Worker Bridge ---
+    const workerRef = useRef(null)
+    const observerRef = useRef(null)
+    const workerCleanupTimerRef = useRef(null)
+
+    const [canvasResetKey, setCanvasResetKey] = useState(0)
+
+    // Initialize Worker
+    useEffect(() => {
+        if (!canvasRef.current) return
+
+        // Cancel any pending cleanup (StrictMode handling)
+        if (workerCleanupTimerRef.current) {
+            clearTimeout(workerCleanupTimerRef.current)
+            workerCleanupTimerRef.current = null
+        }
+
+        let worker = workerRef.current
+
+        if (!worker) {
+            try {
+                // Create worker
+                worker = new Worker(new URL('../../workers/game.worker.js', import.meta.url), { type: 'module' })
+                workerRef.current = worker
+
+                // Get OffscreenCanvas
+                const offscreen = canvasRef.current.transferControlToOffscreen()
+
+                // Get theme colors
+                const styles = getComputedStyle(document.body)
+                const theme = {
+                    bg: resolveColorVar(styles, '--bg'),
+                    surface: resolveColorVar(styles, '--surface'),
+                    text: resolveColorVar(styles, '--text'),
+                    primary: resolveColorVar(styles, '--primary'),
+                    border: resolveColorVar(styles, '--border'),
+                    muted: resolveColorVar(styles, '--muted'),
+                    accent: resolveColorVar(styles, '--accent'),
+                    day: resolveColorVar(styles, '--day'),
+                    night: resolveColorVar(styles, '--night'),
+                    treeDay: resolveColorVar(styles, '--tree-day'),
+                    treeNight: resolveColorVar(styles, '--tree-night'),
+                    cloudDay: resolveColorVar(styles, '--cloud-day'),
+                    cloudNight: resolveColorVar(styles, '--cloud-night'),
+                    sunDay: resolveColorVar(styles, '--sun-day'),
+                    sunNight: resolveColorVar(styles, '--sun-night'),
+                    moonDay: resolveColorVar(styles, '--moon-day'),
+                    moonNight: resolveColorVar(styles, '--moon-night'),
+                    dinoDay: resolveColorVar(styles, '--dino-day', '--dino', '--primary'),
+                    dinoNight: resolveColorVar(styles, '--dino-night', '--dino', '--primary'),
+                    obstacleDay: resolveColorVar(styles, '--obstacle-day', '--obstacle', '--primary'),
+                    obstacleNight: resolveColorVar(styles, '--obstacle-night', '--obstacle', '--primary'),
+                    obstacleBorder: resolveColorVar(styles, '--obstacle-border', '--text'),
+                    groundDay: resolveColorVar(styles, '--ground-day', '--ground', '--surface'),
+                    groundNight: resolveColorVar(styles, '--ground-night', '--ground', '--surface'),
+                    groundLineDay: resolveColorVar(styles, '--ground-line-day', '--ground-line', '--accent'),
+                    groundLineNight: resolveColorVar(styles, '--ground-line-night', '--ground-line', '--accent'),
+                    skyDay: resolveColorVar(styles, '--sky-day'),
+                    skyNight: resolveColorVar(styles, '--sky-night')
+                }
+
+                // Load 8 Bush Variants
+                const loadBush = (i) => new Promise((resolve, reject) => {
+                    const img = new Image();
+                    img.src = `/Resources/Dino/bush_${i}.png`;
+                    img.onload = () => createImageBitmap(img).then(resolve).catch(reject);
+                    img.onerror = reject;
+                });
+
+                Promise.all(Array.from({ length: 8 }, (_, i) => loadBush(i + 1)))
+                    .then(bushSprites => {
+                        // Init Worker with Sprites
+                        const width = containerRef.current ? containerRef.current.clientWidth : settingsRef.current.CANVAS_WIDTH;
+                        const height = containerRef.current ? containerRef.current.clientHeight : settingsRef.current.CANVAS_HEIGHT;
+
+                        worker.postMessage({
+                            type: 'INIT',
+                            payload: {
+                                canvas: offscreen,
+                                settings: {
+                                    ...settingsRef.current,
+                                    CANVAS_WIDTH: width,
+                                    CANVAS_HEIGHT: height
+                                },
+                                highScore: highScore,
+                                theme: theme,
+                                bushSprites: bushSprites
+                            }
+                        }, [offscreen, ...bushSprites]);
+                    })
+                    .catch(err => {
+                        console.warn("Failed to load bush sprites", err);
+                        const width = containerRef.current ? containerRef.current.clientWidth : settingsRef.current.CANVAS_WIDTH;
+                        const height = containerRef.current ? containerRef.current.clientHeight : settingsRef.current.CANVAS_HEIGHT;
+
+                        // Init without sprites
+                        worker.postMessage({
+                            type: 'INIT',
+                            payload: {
+                                canvas: offscreen,
+                                settings: {
+                                    ...settingsRef.current,
+                                    CANVAS_WIDTH: width,
+                                    CANVAS_HEIGHT: height
+                                },
+                                highScore: highScore,
+                                theme: theme,
+                                bushSprites: []
+                            }
+                        }, [offscreen]);
+                    });
+
+                // --- Setup Resize Observer ---
+                if (containerRef.current) {
+                    observerRef.current = new ResizeObserver(entries => {
+                        for (let entry of entries) {
+                            const { width, height } = entry.contentRect;
+                            if (width > 0 && height > 0 && workerRef.current) {
+                                workerRef.current.postMessage({
+                                    type: 'RESIZE',
+                                    payload: { width, height }
+                                });
+                            }
+                        }
+                    });
+                    observerRef.current.observe(containerRef.current);
+                }
+            } catch (err) {
+                console.warn("Canvas transfer failed or Worker init error:", err)
             }
         }
-    }, [eyeState, highScore])
+
+        // Always re-bind events because 'worker' instance is stable but closure might not be?
+        if (worker) {
+            worker.onmessage = (e) => {
+                const { type, score, highScore: newHigh } = e.data
+                if (type === 'GAME_OVER') {
+                    setGameState('gameOver')
+                    soundHandler.playDinoDead();
+                    setIsNewScoreRecord(false);
+                    setIsNewJumpRecord(false);
+                    if (score !== undefined) {
+                        scoreRef.current = score
+                        setScore(score) // Explicitly set score state to show final result
+                        logEvent(`Game Over! Score: ${Math.floor(score / 10)}`, 'gameover')
+                    }
+                } else if (type === 'HIGHSCORE_UPDATE') {
+                    setHighScore(newHigh)
+                    localStorage.setItem('dino_highscore', newHigh.toString())
+                    logEvent(`New Highscore: ${Math.floor(newHigh / 10)}!`, 'highscore')
+                } else if (type === 'SCORE_UPDATE') {
+                    setScore(score)
+                    // Use ref to avoid stale closure comparison
+                    if (score > highScoreRef.current) {
+                        setHighScore(score)
+                    }
+                    setIsNewScoreRecord(score > 0 && score > highScoreRef.current)
+                } else if (type === 'OBSTACLE_CLEARED') {
+                    const obstaclesPassedVal = e.data.obstaclesPassed;
+                    // Reset or increment based on worker message
+                    setCactusJump(prev => {
+                        const next = (obstaclesPassedVal !== undefined && obstaclesPassedVal === 0) ? 0 : prev + 1;
+
+                        // Only update best if we are actually progressing
+                        if (next > 0 && next > bestCactusJumpRef.current) {
+                            localStorage.setItem('dino_best_cactus', next.toString())
+                            setIsNewJumpRecord(true)
+                            setBestCactusJump(next)
+                        }
+                        return next
+                    })
+                    if (obstaclesPassedVal !== 0) {
+                        logEvent('Obstacle cleared! +1', 'jump')
+                    }
+                    const pending = pendingActionFeedbackRef.current
+                    if (pending?.trigger === 'jump' && Date.now() - pending.timestamp <= 3000 && pending.features) {
+                        setFeedbackPrompt({
+                            prediction: pending.prediction,
+                            confidence: pending.confidence,
+                            features: pending.features,
+                            context: 'Successful jump'
+                        })
+                        pendingActionFeedbackRef.current = null
+                    }
+                } else if (type === 'STATE_UPDATE') {
+                    const nextState = e.data.payload
+                    setGameState(nextState)
+                    const pending = pendingActionFeedbackRef.current
+                    if (nextState === 'paused' && pending?.trigger === 'pause' && Date.now() - pending.timestamp <= 2000 && pending.features) {
+                        setFeedbackPrompt({
+                            prediction: pending.prediction,
+                            confidence: pending.confidence,
+                            features: pending.features,
+                            context: 'Pause triggered'
+                        })
+                        pendingActionFeedbackRef.current = null
+                    }
+                }
+            }
+        }
+
+        // Cleanup
+        return () => {
+            // Delay cleanup to allow for StrictMode remount re-use
+            workerCleanupTimerRef.current = setTimeout(() => {
+                if (workerRef.current) {
+                    workerRef.current.terminate()
+                    workerRef.current = null
+                }
+                if (observerRef.current) {
+                    observerRef.current.disconnect()
+                    observerRef.current = null
+                }
+            }, 100)
+        }
+    }, [canvasResetKey]);
+
+    // Monitor Theme Changes and Sync to Worker
+    useEffect(() => {
+        const observer = new MutationObserver((mutations) => {
+            let shouldUpdate = false;
+            for (const mutation of mutations) {
+                if (mutation.type === 'attributes' && (mutation.attributeName === 'class' || mutation.attributeName === 'style')) {
+                    shouldUpdate = true;
+                    break;
+                }
+            }
+
+            if (shouldUpdate && workerRef.current) {
+                const styles = getComputedStyle(document.body);
+                const theme = {
+                    bg: resolveColorVar(styles, '--bg'),
+                    surface: resolveColorVar(styles, '--surface'),
+                    text: resolveColorVar(styles, '--text'),
+                    primary: resolveColorVar(styles, '--primary'),
+                    border: resolveColorVar(styles, '--border'),
+                    muted: resolveColorVar(styles, '--muted'),
+                    accent: resolveColorVar(styles, '--accent'),
+                    day: resolveColorVar(styles, '--day'),
+                    night: resolveColorVar(styles, '--night'),
+                    treeDay: resolveColorVar(styles, '--tree-day'),
+                    treeNight: resolveColorVar(styles, '--tree-night'),
+                    cloudDay: resolveColorVar(styles, '--cloud-day'),
+                    cloudNight: resolveColorVar(styles, '--cloud-night'),
+                    sunDay: resolveColorVar(styles, '--sun-day'),
+                    sunNight: resolveColorVar(styles, '--sun-night'),
+                    moonDay: resolveColorVar(styles, '--moon-day'),
+                    moonNight: resolveColorVar(styles, '--moon-night'),
+                    // New simplified mappings
+                    dinoDay: resolveColorVar(styles, '--dino', '--dino-day', '--primary'),
+                    dinoNight: resolveColorVar(styles, '--dino', '--dino-night', '--primary'),
+                    obstacleDay: resolveColorVar(styles, '--obstacle', '--obstacle-day', '--primary'),
+                    obstacleNight: resolveColorVar(styles, '--obstacle', '--obstacle-night', '--primary'),
+                    obstacleBorder: resolveColorVar(styles, '--obstacle-border', '--text'),
+                    groundDay: resolveColorVar(styles, '--ground', '--ground-day', '--surface'),
+                    groundNight: resolveColorVar(styles, '--ground', '--ground-night', '--surface'),
+                    groundLineDay: resolveColorVar(styles, '--ground-line', '--ground-line-day', '--accent'),
+                    groundLineNight: resolveColorVar(styles, '--ground-line', '--ground-line-night', '--accent'),
+                    skyDay: resolveColorVar(styles, '--sky-day'),
+                    skyNight: resolveColorVar(styles, '--sky-night')
+                };
+                workerRef.current.postMessage({ type: 'THEME_UPDATE', payload: theme });
+            }
+        });
+
+        observer.observe(document.body, { attributes: true });
+        observer.observe(document.documentElement, { attributes: true });
+
+        return () => observer.disconnect();
+    }, []);
+
+    // Handle Resizing (Responsive)
+    useEffect(() => {
+        if (!workerRef.current || !containerRef.current) return
+
+        const updateSize = () => {
+            if (!containerRef.current || !workerRef.current) return
+            const { clientWidth, clientHeight } = containerRef.current
+
+            workerRef.current.postMessage({
+                type: 'RESIZE',
+                payload: {
+                    width: clientWidth,
+                    height: clientHeight
+                }
+            })
+        }
+
+        const resizeObserver = new ResizeObserver(() => {
+            updateSize()
+        })
+
+        resizeObserver.observe(containerRef.current)
+        updateSize() // Initial
+
+        return () => {
+            resizeObserver.disconnect()
+        }
+    }, [canvasResetKey])
+
+    // Update settings in worker
+    useEffect(() => {
+        if (workerRef.current) {
+            // Exclude canvas dimensions so we don't overwrite the resize observer's values
+            // with potentially stale default settings
+            const { CANVAS_WIDTH, CANVAS_HEIGHT, ...safeSettings } = settings;
+            console.log("[Dino] Syncing settings to worker:", safeSettings);
+            workerRef.current.postMessage({
+                type: 'SETTINGS',
+                payload: safeSettings
+            })
+        }
+    }, [settings])
+
+
+    // Sync Highscore reset
+    useEffect(() => {
+        if (workerRef.current) {
+            workerRef.current.postMessage({
+                type: 'SETTINGS',
+                payload: { highScore }
+            })
+        }
+    }, [highScore])
+
+    // Bridge Inputs
+    const startGame = useCallback(() => {
+        if (workerRef.current) {
+            workerRef.current.postMessage({ type: 'INPUT', payload: { action: 'start' } });
+        }
+        setGameState('playing');
+    }, []);
+
+    const jump = useCallback(() => {
+        if (workerRef.current) {
+            workerRef.current.postMessage({ type: 'INPUT', payload: { action: 'jump' } });
+        }
+    }, []);
+
+    const resetGame = useCallback(() => {
+        if (workerRef.current) {
+            workerRef.current.postMessage({ type: 'INPUT', payload: { action: 'reset' } });
+        }
+        setGameState('ready');
+        setIsNewScoreRecord(false);
+        setIsNewJumpRecord(false);
+        setFeedbackPrompt(null);
+        pendingActionFeedbackRef.current = null;
+    }, []);
+
+    const handleSinglePress = useCallback((source = 'blink') => {
+        const currentState = gameStateRef.current;
+        if (source !== 'blink') {
+            pendingActionFeedbackRef.current = null;
+        }
+        const text =
+            source === 'keyboard'
+                ? "Spacebar (Jump)"
+                : (currentState === 'ready' || currentState === 'gameOver')
+                    ? "Blink Detected (Start)"
+                    : "Blink Detected (Jump)"
+        logEvent(text, source === 'keyboard' ? 'keyboard' : 'blink')
+        triggerSingleBlink()
+
+        if (currentState === 'ready' || currentState === 'gameOver' || currentState === 'playing') {
+            soundHandler.playDinoJump();
+            jump();
+        }
+    }, [jump, logEvent]);
+
+    const handleDoublePress = useCallback((source = 'blink') => {
+        const currentState = gameStateRef.current;
+        if (currentState === 'gameOver') return;
+        if (source !== 'blink') {
+            pendingActionFeedbackRef.current = null;
+        }
+
+        const text = source === 'keyboard' ? "Spacebar x2 (Pause)" : "Double Blink (Pause)"
+        logEvent(text, 'toggle')
+        triggerDoubleBlink()
+
+        if (currentState === 'playing') {
+            soundHandler.playDinoPause();
+            if (workerRef.current) {
+                workerRef.current.postMessage({ type: 'INPUT', payload: { action: 'pause' } });
+            }
+            setGameState('paused');
+        } else if (currentState === 'paused') {
+            soundHandler.playDinoPause();
+            if (workerRef.current) {
+                workerRef.current.postMessage({ type: 'INPUT', payload: { action: 'pause' } });
+            }
+            setGameState('playing');
+        }
+    }, [logEvent]);
+
+    // Manual Keyboard Controls
+    useEffect(() => {
+        const handleKeyDown = (e) => {
+            if (e.code === 'Space') {
+                e.preventDefault()
+                // Check if manual controls enabled
+                console.log("[DinoView] Spacebar pressed. Manual controls:", settings.ENABLE_MANUAL_CONTROLS)
+                if (settings.ENABLE_MANUAL_CONTROLS) {
+                    handleSinglePress('keyboard') // Use the same unified logic for consistency
+                }
+            }
+        }
+        window.addEventListener('keydown', handleKeyDown)
+        return () => window.removeEventListener('keydown', handleKeyDown)
+    }, [settings, handleSinglePress])
+
+    // Blink Visuals (Optional - kept for side panel feedback)
+    const triggerSingleBlink = () => {
+        setEyeState('blink')
+        setTimeout(() => setEyeState('open'), 300)
+    }
+    const triggerDoubleBlink = () => {
+        setEyeState('double-blink')
+        setTimeout(() => setEyeState('open'), 600)
+    }
 
     const handleSettingChange = (key, value) => {
-        setSettings(prev => ({
-            ...prev,
-            [key]: parseFloat(value)
-        }))
+        setSettings(prev => {
+            const newValue = typeof value === 'string' ? value : (typeof value === 'boolean' ? value : parseFloat(value));
+
+            // Log specific setting changes to event log and console
+            if (key === 'DETECTION_METHOD' && prev.DETECTION_METHOD !== newValue) {
+                logEvent(`[Setup] Method: ${newValue}`, 'settings');
+                console.log(`[Dino] Detection Method changed to: ${newValue}`);
+            } else if (key === 'ACTIVE_MODEL' && prev.ACTIVE_MODEL !== newValue) {
+                logEvent(`[Setup] Model: ${newValue}`, 'settings');
+                console.log(`[Dino] Active Model changed to: ${newValue}`);
+            } else if (key === 'CONTROL_CHANNEL' && prev.CONTROL_CHANNEL !== newValue) {
+                logEvent(`[Setup] Channel: ${newValue}`, 'settings');
+                console.log(`[Dino] Control Channel changed to: ${newValue}`);
+            }
+
+            return {
+                ...prev,
+                [key]: newValue
+            };
+        });
     }
 
     const handleSaveSettings = () => {
-        localStorage.setItem('dino_settings', JSON.stringify(settings))
+        localStorage.setItem('dino_settings_v6', JSON.stringify(settings))
         setSavedMessage('Saved!')
+        logEvent("Settings Updated", 'settings')
         setTimeout(() => setSavedMessage(''), 2000)
     }
 
+    const handleResetSettings = () => {
+        const saved = localStorage.getItem('dino_settings_v6')
+        if (saved) {
+            try {
+                const parsed = JSON.parse(saved)
+                setSettings({ ...DEFAULT_SETTINGS, ...parsed })
+                setSavedMessage('Reverted!')
+                logEvent("Settings Reverted", 'settings')
+            } catch (e) {
+                console.error("Failed to parse saved settings", e)
+                setSettings(DEFAULT_SETTINGS)
+                setSavedMessage('Reset to Default')
+                logEvent("Corrupt Save - Reset to Default", 'settings')
+            }
+        } else {
+            setSettings(DEFAULT_SETTINGS)
+            setSavedMessage('Reset to Default')
+            logEvent("No Save - Reset to Default", 'settings')
+        }
+        setTimeout(() => setSavedMessage(''), 2000)
+    }
+
+    const submitFeedback = useCallback(async (correctedLabel) => {
+        if (!feedbackPrompt?.features) {
+            setFeedbackPrompt(null)
+            return
+        }
+
+        try {
+            setFeedbackSaving(true)
+            const response = await fetch(buildApiUrl('/api/eog/feedback'), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    prediction: feedbackPrompt.prediction,
+                    corrected_label: correctedLabel || feedbackPrompt.prediction,
+                    confidence: feedbackPrompt.confidence,
+                    features: feedbackPrompt.features,
+                })
+            })
+            if (!response.ok) {
+                throw new Error(`EOG feedback failed (${response.status})`)
+            }
+        } catch (error) {
+            console.error("Failed to save EOG feedback:", error)
+        } finally {
+            setFeedbackSaving(false)
+            setFeedbackPrompt(null)
+        }
+    }, [feedbackPrompt])
+
     return (
-        <div className="h-[calc(100vh-100px)] overflow-hidden">
-            <div className="flex gap-6 flex-wrap lg:flex-nowrap h-full">
+        <div className="dino-container">
+            <div className="dino-game-wrapper">
                 {/* Main game area */}
-                <div className="flex-1 min-w-0 h-full flex flex-col justify-center">
-                    <div className="card bg-surface border border-border shadow-card rounded-2xl p-6">
-                        <div className="flex justify-between items-center mb-6">
-                            <h2 className="text-2xl font-bold text-text flex items-center gap-3">
-                                <span className="w-3 h-3 rounded-full bg-primary animate-pulse"></span>
+                <div className="game-main-area">
+                    <div className="game-card">
+                        <div className="game-header">
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={() => setIsSidebarCollapsed(true)}
+                                    className={`pt-2 px-1 pb-1 rounded-full transition-all duration-300 text-muted hover:text-text ${isSidebarCollapsed ? 'hidden' : 'opacity-100 scale-100 w-[40px]'}`}
+                                    title="Collapse Sidebar"
+                                >
+                                    <Menu size={36} className='hover:text-text' />
+                                </button>
+                                <button
+                                    onPointerDown={() => !isSidebarCollapsed && setShowSettings(!showSettings)}
+                                    className={`tuner-button ${showSettings ? 'active' : 'inactive'} ${isSidebarCollapsed ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}`}
+                                    disabled={isSidebarCollapsed}
+                                >
+                                    <SlidersHorizontal /> Tuner
+                                </button>
+                            </div>
+                            <h2 className="game-title">
+                                <span className={`status-eye ${isConnected ? 'connected' : 'disconnected'}`}><ScanEye size={32} /></span>
                                 EOG Dino Game
                             </h2>
-                            <button
-                                onClick={() => setShowSettings(!showSettings)}
-                                className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${showSettings ? 'bg-primary text-bg' : 'bg-bg text-muted border border-border hover:text-text'}`}
-                            >
-                                ⚙️ Tuner
-                            </button>
                         </div>
 
-                        <div className="space-y-4">
+                        <div className="game-content-stack">
                             {/* Game info */}
-                            <div className="bg-bg/50 backdrop-blur-sm rounded-xl p-4 border border-border">
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-                                    <div>
-                                        <div className="text-muted text-sm font-medium">Status</div>
-                                        <div className="text-text font-bold text-lg capitalize">{gameState}</div>
+                            <div className="game-info-panel">
+                                {/* Eye Tracker (Absolute Positioned on Top Border) */}
+                                <div className="eyes-container">
+                                    {/* Left Eye */}
+                                    <div className={`eye ${eyeState !== 'open' ? eyeState : ''}`} ref={leftEyeRef}>
+                                        <div className="pupil"></div>
                                     </div>
-                                    <div>
-                                        <div className="text-muted text-sm font-medium">Score</div>
-                                        <div className="text-primary font-bold text-lg">{Math.floor(score / 10)}</div>
+                                    {/* Right Eye */}
+                                    <div className={`eye ${eyeState !== 'open' ? eyeState : ''}`} ref={rightEyeRef}>
+                                        <div className="pupil"></div>
                                     </div>
-                                    <div>
-                                        <div className="text-muted text-sm font-medium">Best</div>
-                                        <div className="text-primary font-bold text-lg">{Math.floor(highScore / 10)}</div>
+
+                                    {/* Face Decorations (Eyebrows & Smile) */}
+                                    <svg className="face-decoration-svg" style={{ overflow: 'visible', width: '100%', height: '100%' }}>
+                                        {/* Left Curve (Border to Top of Eye - Quarter Circle) */}
+                                        <path
+                                            d="M -160 -16 A 64 64 0 0 1 -96 -62"
+                                            fill="none"
+                                            stroke="var(--text)"
+                                            strokeWidth="3"
+                                            strokeLinecap="round"
+                                        />
+                                        {/* Right Curve (Top of Eye to Border - Quarter Circle) */}
+                                        <path
+                                            d="M 160 -16 A 64 64 0 0 0 96 -62"
+                                            fill="none"
+                                            stroke="var(--text)"
+                                            strokeWidth="3"
+                                            strokeLinecap="round"
+                                        />
+                                        {/* Smile (Circular Arc) */}
+                                        <path
+                                            d="M -40 75 A 45 45 0 0 0 40 75"
+                                            fill="none"
+                                            stroke="var(--text)"
+                                            strokeWidth="3"
+                                            strokeLinecap="round"
+                                        />
+                                    </svg>
+                                </div>
+
+                                <div className="game-stats-container-left">
+                                    {/* Far Left: Status */}
+                                    <div className="stat-group-status">
+                                        <div className="stat-block-column">
+                                            <span className="stat-label flex items-center gap-2">
+                                                <Activity size={26} className="text-primary" /> STATUS
+                                            </span>
+                                            <div className={`stat-value-large ${gameState}`}>
+                                                {gameState.toUpperCase()}
+                                            </div>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <div className="text-muted text-sm font-medium">EOG Sensor</div>
-                                        <div className={`text-sm font-bold ${wsData ? 'text-green-500' : 'text-red-500'}`}>
-                                            {wsData ? 'Connected' : 'Disconnected'}
+
+                                    {/* Left Center: Cactus Jump & Best Cactus Jump */}
+                                    <div className="stat-group-center">
+                                        <div className="stat-row-centered">
+                                            <span className='stat-row-centered stat-info'>JUMP  <ChevronRight /></span>
+                                            <Counter value={cactusJump} fontSize="1.6rem" places={[100, 10, 1]} className="stat-counter-primary-light" style={{ lineHeight: 1 }} />
+                                            <TreePine size={34} className="text-primary/40 mx-2" />
+                                            <span className={isNewJumpRecord ? 'record-glow' : ''}>
+                                                <Counter value={bestCactusJump} fontSize="1.6rem" places={[100, 10, 1]} className="stat-counter-primary-light" style={{ lineHeight: 1 }} />
+                                            </span>
+                                            <span className='stat-row-centered stat-info'> <ChevronLeft />  BEST</span>
                                         </div>
                                     </div>
                                 </div>
+
+                                {/* Middle Spacer to avoid absolute eyes collision */}
+                                <div className="eyes-spacer-block"></div>
+
+                                <div className="game-stats-container-right">
+                                    {/* Right Center: Score & Best Score */}
+                                    <div className="stat-group-center">
+                                        <div className="stat-row-centered">
+                                            <span className='stat-row-centered stat-info'>BEST <ChevronRight /></span>
+                                            <span className={isNewScoreRecord ? 'record-glow' : ''}>
+                                                <Counter value={Math.floor(highScore / 10)} fontSize="1.6rem" places={[10000, 1000, 100, 10, 1]} className="stat-counter-primary-light" style={{ lineHeight: 1 }} />
+                                            </span>
+                                            <Target size={34} className="text-primary/40 mx-2" />
+                                            <Counter value={Math.floor(score / 10)} fontSize="1.6rem" places={[10000, 1000, 100, 10, 1]} className="stat-counter-primary-light" style={{ lineHeight: 1 }} />
+                                            <span className='stat-row-centered stat-info'> <ChevronLeft />  SCORE</span>
+                                        </div>
+                                    </div>
+
+                                    {/* Far Right: Sensor Status */}
+                                    <div className="stat-group-sensor">
+                                        <div className="stat-block-column">
+                                            <span className="stat-label flex items-center gap-2">
+                                                SENSOR <Radio size={26} className="text-primary" />
+                                            </span>
+                                            <div className={`stat-value-large ${isConnected ? 'connected' : 'disconnected'}`}>
+                                                {isConnected ? 'CONNECTED' : 'OFFLINE'}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {feedbackPrompt && (
+                                    <div className="mt-4 rounded-2xl border border-primary/20 bg-bg/60 p-4 flex flex-col gap-3">
+                                        <div className="flex items-center justify-between gap-3">
+                                            <div>
+                                                <div className="text-xs font-bold uppercase tracking-[0.2em] text-primary">EOG Feedback</div>
+                                                <div className="text-sm font-bold text-text">
+                                                    {feedbackPrompt.context}: {feedbackPrompt.prediction}
+                                                </div>
+                                            </div>
+                                            <div className="text-xs font-mono text-muted">
+                                                {(feedbackPrompt.confidence || 0).toFixed(2)}
+                                            </div>
+                                        </div>
+                                        <div className="flex flex-wrap gap-2">
+                                            <button
+                                                onClick={() => submitFeedback(feedbackPrompt.prediction)}
+                                                disabled={feedbackSaving}
+                                                className="px-3 py-2 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 font-bold text-xs uppercase tracking-wider hover:bg-emerald-500/20 transition-colors disabled:opacity-50 flex items-center gap-2"
+                                            >
+                                                <Check size={14} /> Yes
+                                            </button>
+                                            {['SingleBlink', 'DoubleBlink', 'Rest'].filter((label) => label !== feedbackPrompt.prediction).map((label) => (
+                                                <button
+                                                    key={label}
+                                                    onClick={() => submitFeedback(label)}
+                                                    disabled={feedbackSaving}
+                                                    className="px-3 py-2 rounded-xl bg-surface border border-border text-text font-bold text-xs uppercase tracking-wider hover:border-primary/40 hover:text-primary transition-colors disabled:opacity-50"
+                                                >
+                                                    {label}
+                                                </button>
+                                            ))}
+                                            <button
+                                                onClick={() => setFeedbackPrompt(null)}
+                                                disabled={feedbackSaving}
+                                                className="px-3 py-2 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 font-bold text-xs uppercase tracking-wider hover:bg-red-500/15 transition-colors disabled:opacity-50 flex items-center gap-2"
+                                            >
+                                                <X size={14} /> Dismiss
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
 
                             {/* Canvas */}
-                            <div className="bg-bg rounded-xl border-2 border-border overflow-hidden shadow-lg">
+                            <div
+                                className="dino-canvas-container"
+                                ref={containerRef}
+                            >
                                 <canvas
+                                    key={canvasResetKey}
                                     ref={canvasRef}
-                                    width={settings.CANVAS_WIDTH}
-                                    height={settings.CANVAS_HEIGHT}
-                                    className="w-full"
-                                    style={{ imageRendering: 'crisp-edges' }}
+                                    className="dino-canvas"
                                 />
                             </div>
                         </div>
                     </div>
                 </div>
 
-                {/* Right Sidebar */}
-                <div className="w-full lg:w-80 space-y-6 h-full overflow-y-auto no-scrollbar pb-6">
+                {/* Left Sidebar (visually left via row-reverse) */}
+                <div className={`game-sidebar ${isSidebarCollapsed ? 'collapsed overflow-visible' : 'overflow-x-hidden overflow-y-auto'}`}>
+                    {/* Collapsed Icons Only State */}
+                    {isSidebarCollapsed && (
+                        <div className="flex flex-col items-center gap-4 w-full animate-fade-in shrink-0 h-full">
+                            <button
+                                onClick={() => setIsSidebarCollapsed(false)}
+                                className="hover:bg-white/10 rounded-full transition-colors mt-6 "
+                                title="Expand Sidebar"
+                            >
+                                <Menu size={34} className="text-primary" />
+                            </button>
 
-                    {/* Eye Tracker Panel */}
-                    <div className="eye-tracker">
-                        <h3>Eye Blink Tracker</h3>
+                            <hr className="w-16 border-border" />
 
-                        <div className="eyes-container">
-                            <div className="eye" ref={leftEyeRef}>
-                                <div className="pupil"></div>
-                            </div>
-                            <div className="eye" ref={rightEyeRef}>
-                                <div className="pupil"></div>
-                            </div>
-                        </div>
+                            <button onClick={() => setIsSidebarCollapsed(false)} className="mt-4 hover:text-primary transition-colors group relative" title="Camera">
+                                <Gamepad2 size={28} className="text-primary animate-pulse" title="Dino Game Setup" />
+                                <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Controls & Method</div>
+                            </button>
 
-                        <div className="blink-info">
-                            <strong>Controls:</strong><br />
-                            <strong>Single blink</strong> → Jump<br />
-                            <strong>Double blink</strong> → Pause/Resume<br />
-                            <br />
-                            <strong>Input Mode:</strong><br />
-                            {wsData ? '✓ EOG Sensor Active' : '✗ EOG Sensor Disconnected'}
-                        </div>
-                    </div>
+                            <button onClick={() => setIsSidebarCollapsed(false)} className="mt-4 hover:text-primary transition-colors group relative" title="Camera">
+                                <Camera size={28} className="text-muted group-hover:text-primary" />
+                                <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Camera Panel</div>
+                            </button>
+                            <button onClick={() => { handleSettingChange('DETECTION_METHOD', settings.DETECTION_METHOD === 'ML' ? 'Threshold' : 'ML') }} className="hover:text-primary transition-colors group relative mt-4" title="ML Model">
+                                < BrainCircuit size={28} className={`duration-300 ${settings.DETECTION_METHOD === 'ML' ? 'text-blue-500' : 'text-orange-500'}`} />
+                                <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Mode: {settings.DETECTION_METHOD}</div>
+                            </button>
+                            <button onClick={() => setIsSidebarCollapsed(false)} className="hover:text-primary transition-colors group relative mt-4" title="Event Log">
+                                <ScrollText size={28} className="text-muted group-hover:text-primary" />
+                                {eventLogs.length > 0 && <span className="absolute -top-1 -right-1 w-2 h-2 bg-primary rounded-full animate-pulse blur-[1px]"></span>}
+                                <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Event Log</div>
+                            </button>
+                            <button onClick={() => { setIsSidebarCollapsed(false); setShowSettings(true); }} className="hover:text-primary transition-colors group relative mt-4" title="Settings">
+                                <Settings size={28} className="text-muted group-hover:text-primary" />
+                                <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Game Constants</div>
+                            </button>
 
-                    {/* Settings Panel (Moved here) */}
-                    {showSettings && (
-                        <div className="card bg-surface border border-border shadow-card rounded-2xl p-4 animate-fade-in">
-                            <div className="flex justify-between items-center mb-4">
-                                <h3 className="text-sm font-bold text-text uppercase tracking-wider">Game Constants</h3>
-                                <div className="flex gap-2 items-center">
-                                    {savedMessage && <span className="text-xs text-green-500 font-bold animate-fade-in">{savedMessage}</span>}
-                                    <button
-                                        onClick={handleSaveSettings}
-                                        className="text-xs bg-primary text-bg px-2 py-1 rounded font-bold hover:opacity-90"
-                                    >
-                                        Save
-                                    </button>
-                                    <button
-                                        onClick={() => setSettings(DEFAULT_SETTINGS)}
-                                        className="text-xs text-red-400 hover:text-red-300 underline"
-                                    >
-                                        Reset
-                                    </button>
+                            <hr className="w-16 border-border mt-4" />
+
+                            <div className="flex flex-col gap-3 mt-4 items-center group relative cursor-default">
+                                <div className="flex flex-col items-center">
+                                    <Eye size={22} className={`transition-colors duration-200 ${eyeState === 'blink' ? 'text-primary' : 'text-muted/40'}`} />
+                                    <span className="text-[8px] font-bold text-muted/60 uppercase tracking-widest mt-1">Jump</span>
                                 </div>
-                            </div>
-
-                            <div className="space-y-6">
-                                <div className="space-y-3">
-                                    <h4 className="text-xs font-bold text-primary border-b border-border pb-1">Physics</h4>
-                                    <SettingInput label="Gravity" value={settings.GRAVITY} onChange={(v) => handleSettingChange('GRAVITY', v)} min="0.1" max="2.0" step="0.05" />
-                                    <SettingInput label="Jump Strength (Y)" value={settings.JUMP_STRENGTH} onChange={(v) => handleSettingChange('JUMP_STRENGTH', v)} min="-20" max="-5" step="0.5" />
-                                    <SettingInput label="Jump Distance (X)" value={settings.JUMP_DISTANCE} onChange={(v) => handleSettingChange('JUMP_DISTANCE', v)} min="100" max="600" step="10" />
-                                    {/* Derived Speed Display */}
-                                    <div className="flex justify-between text-xs text-muted pt-2 opacity-75">
-                                        <span>Derived Game Speed</span>
-                                        <span>{((settings.JUMP_DISTANCE * settings.GRAVITY) / (2 * Math.abs(settings.JUMP_STRENGTH))).toFixed(1)}</span>
+                                <div className="flex flex-col items-center mt-2">
+                                    <div className="flex flex-col -space-y-1.5">
+                                        <Eye size={22} className={`transition-colors duration-200 ${eyeState === 'double-blink' ? 'text-primary' : 'text-muted/40'}`} />
+                                        <Eye size={22} className={`transition-colors duration-200 ${eyeState === 'double-blink' ? 'text-primary' : 'text-muted/40'}`} />
                                     </div>
+                                    <span className="text-[8px] font-bold text-muted/60 uppercase tracking-widest mt-1">Pause</span>
                                 </div>
-                                <div className="space-y-3">
-                                    <h4 className="text-xs font-bold text-primary border-b border-border pb-1">Dimensions</h4>
-                                    <SettingInput label="Dino Width" value={settings.DINO_WIDTH} onChange={(v) => handleSettingChange('DINO_WIDTH', v)} min="20" max="100" step="2" />
-                                    <SettingInput label="Dino Height" value={settings.DINO_HEIGHT} onChange={(v) => handleSettingChange('DINO_HEIGHT', v)} min="20" max="100" step="2" />
-                                    <SettingInput label="Ground Offset" value={settings.GROUND_OFFSET} onChange={(v) => handleSettingChange('GROUND_OFFSET', v)} min="20" max="150" step="5" />
+                                <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-[60]">
+                                    Blink Status
                                 </div>
-                                <div className="space-y-3">
-                                    <h4 className="text-xs font-bold text-primary border-b border-border pb-1">Obstacles</h4>
-                                    <SettingInput label="Spawn Interval" value={settings.SPAWN_INTERVAL} onChange={(v) => handleSettingChange('SPAWN_INTERVAL', v)} min="500" max="3000" step="50" />
-                                    <SettingInput label="Obs Width" value={settings.OBSTACLE_WIDTH} onChange={(v) => handleSettingChange('OBSTACLE_WIDTH', v)} min="10" max="50" step="2" />
-                                    <SettingInput label="Obs Max Height" value={settings.OBSTACLE_MAX_HEIGHT} onChange={(v) => handleSettingChange('OBSTACLE_MAX_HEIGHT', v)} min="30" max="100" step="5" />
-                                </div>
-                                <div className="space-y-3">
-                                    <h4 className="text-xs font-bold text-primary border-b border-border pb-1">Environment</h4>
-                                    <SettingInput label="Day Cycle (s)" value={settings.CYCLE_DURATION} onChange={(v) => handleSettingChange('CYCLE_DURATION', v)} min="10" max="300" step="5" />
-                                </div>
+                            </div>
+
+                            <div className="flex-1" />
+
+                            <hr className="w-16 border-border" />
+
+                            <div className="flex flex-col gap-2 w-full items-center pb-4 shrink-0">
+                                <button onClick={() => setIsSidebarCollapsed(false)} className={`w-[42px] h-[42px] flex items-center justify-center rounded-full border transition-all shadow-sm group relative ${isConnected ? 'bg-green-500/10 border-green-500/30 text-green-500' : 'bg-red-500/10 border-red-500/30 text-red-500'}`} title={isConnected ? "Sensor Connected" : "Sensor Disconnected"}>
+                                    {isConnected ? <Wifi size={24} /> : <WifiOff size={24} />}
+                                    <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Sensor Status</div>
+                                </button>
                             </div>
                         </div>
                     )}
 
-                    {/* Tips */}
-                    <div className="card bg-surface border border-border shadow-card rounded-2xl p-6">
-                        <h3 className="text-xl font-bold text-text mb-4">💡 Tips</h3>
-                        <ul className="space-y-2 text-muted text-sm">
-                            <li className="flex items-start gap-2">
-                                <span className="text-primary mt-1">•</span>
-                                <span>Easy mode: slower speed for comfortable EOG control</span>
-                            </li>
-                            <li className="flex items-start gap-2">
-                                <span className="text-primary mt-1">•</span>
-                                <span>Practice your blink timing for better control</span>
-                            </li>
-                            <li className="flex items-start gap-2">
-                                <span className="text-primary mt-1">•</span>
-                                <span>Watch the eye tracker for blink confirmation</span>
-                            </li>
-                            <li className="flex items-start gap-2">
-                                <span className="text-primary mt-1">•</span>
-                                <span>Adjust EOG threshold in settings if needed</span>
-                            </li>
-                        </ul>
+                    {/* Full Panels Wrapper */}
+                    <div className={`flex flex-col gap-[clamp(0.75rem,1.5vh,1.5rem)] min-w-[280px] w-full h-full transition-opacity duration-200 shrink-0 ${isSidebarCollapsed ? 'opacity-0 h-0 hidden' : 'opacity-100'}`}>
+                        {/* Camera Panel */}
+                        <CameraPanel initialCameraOn={false} />
+
+                        {/* Eye Controls Panel */}
+                        <div className="card bg-surface border border-border rounded-2xl p-4 " style={{ flexShrink: 0 }}>
+                            <h3 className="text-sm font-bold text-text uppercase tracking-wider mb-3 flex items-center gap-2"><Gamepad2 size={16} /> Controls</h3>
+                            <div className="space-y-2 text-sm text-text">
+                                <div className="flex justify-between items-center">
+                                    <span className="text-muted flex items-center gap-1.5"><Eye size={14} className="text-secondary/70" /> Blink ONCE</span>
+                                    <span className="font-bold text-primary flex items-center gap-1"><ArrowUp size={12} /> Jump</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                    <span className="text-muted flex items-center gap-1.5"><Eye size={14} className="text-secondary/70" /><Eye size={14} className="text-secondary/70 -ml-2" /> Blink TWICE</span>
+                                    <span className="font-bold text-primary flex items-center gap-1"><Pause size={12} /> Pause/Resume</span>
+                                </div>
+                            </div>
+
+                            <div className="mt-4 pt-3 border-t border-border space-y-3">
+                                <SettingSelect
+                                    label="Method"
+                                    value={settings.DETECTION_METHOD}
+                                    options={[
+                                        { label: 'ML', value: 'ML' },
+                                        { label: 'Threshold', value: 'Threshold' }
+                                    ]}
+                                    onChange={(v) => handleSettingChange('DETECTION_METHOD', v)}
+                                />
+
+                                {settings.DETECTION_METHOD === 'ML' && models.length > 0 && (
+                                    <SettingSelect
+                                        label="Model"
+                                        value={settings.ACTIVE_MODEL || ''}
+                                        options={models.map(m => ({ label: m.name, value: m.name }))}
+                                        onChange={(v) => handleSettingChange('ACTIVE_MODEL', v)}
+                                    />
+                                )}
+
+                                <SettingSelect
+                                    label="Channel"
+                                    value={settings.CONTROL_CHANNEL}
+                                    options={availableChannels}
+                                    onChange={(v) => handleSettingChange('CONTROL_CHANNEL', v)}
+                                />
+
+                                <div className="flex justify-between items-center text-xs">
+                                    <span className="text-muted font-medium uppercase tracking-wider flex items-center gap-1"><Signal size={12} /> Input Status</span>
+                                    <span className={`font-bold ${settings.CONTROL_CHANNEL === 'none' ? 'text-red-500' : (isConnected ? 'text-green-500' : 'text-red-500')}`}>
+                                        {settings.CONTROL_CHANNEL === 'none' ? 'INACTIVE' : (isConnected ? 'ACTIVE' : 'OFFLINE')}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Event Log Panel */}
+                        <div className="card bg-surface border border-border rounded-2xl p-4 flex flex-col min-h-[200px]" style={{ flex: '1 0 0' }}>
+                            <div className="flex justify-between items-center mb-2 shrink-0">
+                                <h3 className="text-sm font-bold text-text uppercase tracking-wider flex items-center gap-2"><ScrollText size={16} /> Event Log</h3>
+                                <button
+                                    onClick={() => setEventLogs([])}
+                                    className="text-sm text-muted hover:text-red-400 flex items-center gap-1"
+                                >
+                                    <Trash2 size={16} /> Clear
+                                </button>
+                            </div>
+                            <div className="bg-bg/50 rounded-lg p-2 flex-1 overflow-y-auto font-mono text-xs space-y-1 border border-border scrollbar-thin scrollbar-thumb-border hover:scrollbar-thumb-primary/50 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']">
+                                {eventLogs.length === 0 ? (
+                                    <div className="text-muted italic text-center py-4">No events yet...</div>
+                                ) : (
+                                    eventLogs.map((log) => (
+                                        <div key={log.id} className="text-muted hover:text-text transition-colors border-b border-border last:border-0 pb-1 mb-1 flex items-start gap-2">
+                                            <span className="opacity-50 text-[10px] mt-0.5">{log.time}</span>
+                                            <div className="flex-1 flex items-center gap-1.5 break-words min-w-0">
+                                                {log.type === 'jump' && <ArrowUp size={12} className="text-primary shrink-0" />}
+                                                {log.type === 'blink' && <Eye size={12} className="text-primary shrink-0" />}
+                                                {log.type === 'keyboard' && <Keyboard size={12} className="text-muted shrink-0" />}
+                                                {log.type === 'toggle' && <div className="flex shrink-0"><Pause size={12} className="text-yellow-500" /><Play size={12} className="text-green-500 -ml-1" /></div>}
+                                                {log.type === 'connection' && <Wifi size={12} className="text-green-500 shrink-0" />}
+                                                {log.type === 'disconnect' && <WifiOff size={12} className="text-red-500 shrink-0" />}
+                                                {log.type === 'settings' && <Save size={12} className="text-blue-400 shrink-0" />}
+                                                {log.type === 'gameover' && <Skull size={12} className="text-red-500 shrink-0" />}
+                                                {log.type === 'highscore' && <Trophy size={12} className="text-yellow-400 shrink-0" />}
+                                                <span>{log.text}</span>
+                                            </div>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Settings Panel (Moved here) */}
+                        {showSettings && (
+
+                            <>
+
+                                <div className="card bg-surface border border-border rounded-2xl p-4 animate-fade-in" style={{ flexShrink: 0 }}>
+                                    <div className="flex justify-between flex-col gap-2 mb-4">
+                                        <h3 className="text-sm font-bold text-text uppercase tracking-wider flex items-center gap-2"><Settings size={16} /> Game Constants</h3>
+                                        <div className="flex gap-2 justify-between">
+                                            <span className="flex items-center gap-2">
+                                                <button
+                                                    onClick={handleSaveSettings}
+                                                    className="text-sm bg-primary text-bg px-2 py-1 rounded font-bold hover:opacity-90 flex items-center gap-1"
+                                                >
+                                                    <Save size={18} /> Save
+                                                </button>
+                                                {savedMessage && <span className="text-xs text-green-500 font-bold animate-fade-in">{savedMessage}</span>}
+                                            </span>
+
+                                            <button
+                                                onClick={handleResetSettings}
+                                                className="text-sm text-red-400 hover:text-red-300 flex items-center gap-1"
+                                            >
+                                                <RotateCcw size={18} /> Reset
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <SettingsSection title="Gameplay" icon={Gamepad2} defaultOpen={true}>
+                                            <div className="space-y-3 pt-2">
+                                                <SettingToggle label="Manual Controls (Space)" value={settings.ENABLE_MANUAL_CONTROLS} onChange={(v) => handleSettingChange('ENABLE_MANUAL_CONTROLS', v)} icon={Hand} />
+                                                <SettingInput label="Obstacle Bonus" value={settings.OBSTACLE_BONUS_FACTOR} onChange={(v) => handleSettingChange('OBSTACLE_BONUS_FACTOR', v)} min="0" max="0.5" step="0.005" icon={Zap} />
+                                                <div className="flex flex-row justify-between items-center text-xs pt-1 border-t border-border">
+                                                    <div>
+                                                        <span className="text-muted flex items-center gap-1"><Trophy size={10} /> HighScore: {Math.floor(highScore / 10)} </span>
+                                                        <span className='text-muted flex items-center gap-1'><TreePine size={10} />BestJump: {Math.floor(bestCactusJump)}</span>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => {
+                                                            localStorage.setItem('dino_highscore', '0')
+                                                            localStorage.setItem('dino_best_cactus', '0')
+                                                            setHighScore(0)
+                                                            setScore(0)
+                                                            setCactusJump(0)
+                                                            setBestCactusJump(0)
+                                                            setSavedMessage('Score Reset!')
+                                                            setTimeout(() => setSavedMessage(''), 2000)
+                                                        }}
+                                                        className="text-red-400 hover:text-red-300 font-bold uppercase tracking-wide text-[10px] border border-red-900/50 px-2 py-0.5 rounded bg-red-900/10 flex items-center gap-1"
+                                                    >
+                                                        <Trash2 size={10} /> Reset
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </SettingsSection>
+
+                                        <SettingsSection title="Environment" icon={Globe}>
+                                            <div className="space-y-3 pt-2">
+                                                <h5 className="text-[10px] font-bold text-muted uppercase tracking-wider mb-1 flex items-center gap-1"><Sun size={10} /> Day/Night</h5>
+                                                <SettingToggle label="Auto Cycle" value={settings.ENABLE_DAY_NIGHT_CYCLE} onChange={(v) => handleSettingChange('ENABLE_DAY_NIGHT_CYCLE', v)} icon={RotateCcw} />
+                                                {settings.ENABLE_DAY_NIGHT_CYCLE ? (
+                                                    <SettingInput label="Duration (s)" value={settings.CYCLE_DURATION} onChange={(v) => handleSettingChange('CYCLE_DURATION', v)} min="10" max="300" step="5" icon={Timer} />
+                                                ) : (
+                                                    <SettingInput label="Fixed Time" value={settings.FIXED_TIME} onChange={(v) => handleSettingChange('FIXED_TIME', v)} min="0" max="1" step="0.05" icon={Clock} />
+                                                )}
+
+                                                <h5 className="text-[10px] font-bold text-muted uppercase tracking-wider mb-1 mt-3 flex items-center gap-1"><Moon size={10} /> Moon</h5>
+                                                <SettingToggle label="Enable Phases" value={settings.ENABLE_MOON_PHASES} onChange={(v) => handleSettingChange('ENABLE_MOON_PHASES', v)} icon={Moon} />
+                                                {settings.ENABLE_MOON_PHASES && (
+                                                    <>
+                                                        <SettingToggle label="Auto Cycle" value={settings.ENABLE_AUTO_MOON_CYCLE} onChange={(v) => handleSettingChange('ENABLE_AUTO_MOON_CYCLE', v)} icon={RotateCcw} />
+                                                        {settings.ENABLE_AUTO_MOON_CYCLE ? (
+                                                            <SettingInput label="Days/Cycle" value={settings.MOON_CYCLE_DAYS} onChange={(v) => handleSettingChange('MOON_CYCLE_DAYS', v)} min="1" max="30" step="1" icon={Timer} />
+                                                        ) : (
+                                                            <SettingInput label="Phase (0-1)" value={settings.MOON_PHASE} onChange={(v) => handleSettingChange('MOON_PHASE', v)} min="0" max="1" step="0.05" icon={Circle} />
+                                                        )}
+                                                    </>
+                                                )}
+
+                                                <h5 className="text-[10px] font-bold text-muted uppercase tracking-wider mb-1 mt-3 flex items-center gap-1"><Grid size={10} /> Elements</h5>
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    <SettingToggle label="Trees" value={settings.ENABLE_TREES} onChange={(v) => handleSettingChange('ENABLE_TREES', v)} icon={TreePine} />
+                                                    <SettingToggle label="Clouds" value={settings.ENABLE_CLOUDS} onChange={(v) => handleSettingChange('ENABLE_CLOUDS', v)} icon={Cloud} />
+                                                    <SettingToggle label="Stars" value={settings.ENABLE_STARS} onChange={(v) => handleSettingChange('ENABLE_STARS', v)} icon={Star} />
+                                                    <SettingToggle label="Bushes" value={settings.ENABLE_BUSHES} onChange={(v) => handleSettingChange('ENABLE_BUSHES', v)} icon={Leaf} />
+                                                </div>
+                                            </div>
+                                        </SettingsSection>
+
+                                        <SettingsSection title="Visual Details" icon={Sparkles}>
+                                            <div className="space-y-4 pt-2">
+                                                {/* Trees */}
+                                                <div className="bg-bg/50 p-2 rounded border border-border">
+                                                    <h5 className="text-[10px] font-bold text-primary mb-2 border-b border-border pb-1 flex items-center gap-1"><TreePine size={10} /> Trees Config</h5>
+                                                    <SettingInput label="Layers" value={settings.TREES_LAYERS} onChange={(v) => handleSettingChange('TREES_LAYERS', v)} min="1" max="15" step="1" icon={Layers} />
+                                                    <SettingInput label="Density" value={settings.TREES_DENSITY} onChange={(v) => handleSettingChange('TREES_DENSITY', v)} min="0" max="5" step="0.1" icon={Grid} />
+                                                    <SettingInput label="Size" value={settings.TREES_SIZE} onChange={(v) => handleSettingChange('TREES_SIZE', v)} min="0.5" max="2.0" step="0.1" icon={Maximize} />
+                                                </div>
+
+                                                {/* Clouds */}
+                                                <div className="bg-bg/50 p-2 rounded border border-border">
+                                                    <h5 className="text-[10px] font-bold text-primary mb-2 border-b border-border pb-1 flex items-center gap-1"><Cloud size={10} /> Clouds Config</h5>
+                                                    <SettingInput label="Layers" value={settings.CLOUDS_LAYERS} onChange={(v) => handleSettingChange('CLOUDS_LAYERS', v)} min="1" max="15" step="1" icon={Layers} />
+                                                    <SettingInput label="Density" value={settings.CLOUDS_DENSITY} onChange={(v) => handleSettingChange('CLOUDS_DENSITY', v)} min="0.1" max="3.0" step="0.1" icon={Grid} />
+                                                    <SettingInput label="Size" value={settings.CLOUDS_SIZE} onChange={(v) => handleSettingChange('CLOUDS_SIZE', v)} min="0.5" max="1.5" step="0.1" icon={Maximize} />
+                                                </div>
+
+                                                {/* Stars & Bushes */}
+                                                <div className="bg-bg/50 p-2 rounded border border-border">
+                                                    <h5 className="text-[10px] font-bold text-primary mb-2 border-b border-border pb-1 flex items-center gap-1"><Star size={10} /> Stars & Bushes</h5>
+                                                    <SettingInput label="Stars Layers" value={settings.STARS_LAYERS} onChange={(v) => handleSettingChange('STARS_LAYERS', v)} min="1" max="15" step="1" icon={Layers} />
+                                                    <SettingInput label="Stars Density" value={settings.STARS_DENSITY} onChange={(v) => handleSettingChange('STARS_DENSITY', v)} min="0.1" max="3.0" step="0.1" icon={Grid} />
+                                                    <div className="h-2" />
+                                                    <SettingInput label="Bush Layers" value={settings.BUSHES_LAYERS} onChange={(v) => handleSettingChange('BUSHES_LAYERS', v)} min="1" max="10" step="1" icon={Layers} />
+                                                    <SettingInput label="Bush Density" value={settings.BUSHES_DENSITY} onChange={(v) => handleSettingChange('BUSHES_DENSITY', v)} min="0.1" max="3.0" step="0.1" icon={Grid} />
+                                                </div>
+                                            </div>
+                                        </SettingsSection>
+
+                                        <SettingsSection title="Physics" icon={Atom}>
+                                            <div className="space-y-3 pt-2">
+                                                <SettingInput label="Gravity" value={settings.GRAVITY} onChange={(v) => handleSettingChange('GRAVITY', v)} min="0.1" max="2.0" step="0.05" icon={Weight} />
+                                                <SettingInput label="Jump Strength" value={settings.JUMP_STRENGTH} onChange={(v) => handleSettingChange('JUMP_STRENGTH', v)} min="-20" max="-5" step="0.5" icon={MoveVertical} />
+                                                <SettingInput label="Jump Distance" value={settings.JUMP_DISTANCE} onChange={(v) => handleSettingChange('JUMP_DISTANCE', v)} min="100" max="600" step="10" icon={MoveHorizontal} />
+                                                <div className="flex justify-between text-xs text-muted pt-1 opacity-75 border-t border-border mt-2">
+                                                    <span>Est. Speed</span>
+                                                    <span className="font-mono">{((settings.JUMP_DISTANCE * settings.GRAVITY) / (2 * Math.abs(settings.JUMP_STRENGTH))).toFixed(1)}</span>
+                                                </div>
+                                            </div>
+                                        </SettingsSection>
+
+                                        <SettingsSection title="World Dimensions" icon={Ruler}>
+                                            <div className="space-y-3 pt-2">
+                                                <SettingInput label="Dino W" value={settings.DINO_WIDTH} onChange={(v) => handleSettingChange('DINO_WIDTH', v)} min="20" max="100" step="2" icon={Maximize} />
+                                                <SettingInput label="Dino H" value={settings.DINO_HEIGHT} onChange={(v) => handleSettingChange('DINO_HEIGHT', v)} min="20" max="100" step="2" icon={Maximize} />
+                                                <SettingInput label="Ground Offset" value={settings.GROUND_OFFSET} onChange={(v) => handleSettingChange('GROUND_OFFSET', v)} min="20" max="150" step="5" icon={ArrowDownToLine} />
+                                                <div className="h-1 border-t border-border my-2" />
+                                                <SettingInput label="Spawn Interval" value={settings.SPAWN_INTERVAL} onChange={(v) => handleSettingChange('SPAWN_INTERVAL', v)} min="500" max="3000" step="50" icon={Timer} />
+                                                <SettingInput label="Obs Width" value={settings.OBSTACLE_WIDTH} onChange={(v) => handleSettingChange('OBSTACLE_WIDTH', v)} min="10" max="50" step="2" icon={Maximize} />
+                                                <SettingInput label="Obs Max H" value={settings.OBSTACLE_MAX_HEIGHT} onChange={(v) => handleSettingChange('OBSTACLE_MAX_HEIGHT', v)} min="30" max="100" step="5" icon={Maximize} />
+                                            </div>
+                                        </SettingsSection>
+                                    </div>
+                                </div>
+
+                                <div className='h-[29px] shrink-0'></div>
+                            </>
+                        )}
                     </div>
                 </div>
             </div>
+        </div >
+    )
+}
+
+// --- Helper Components ---
+
+const SettingsSection = ({ title, icon: Icon, children, defaultOpen = false }) => {
+    const [isOpen, setIsOpen] = useState(defaultOpen)
+    return (
+        <div className="border border-border rounded-lg overflow-hidden bg-bg/20">
+            <button
+                onClick={() => setIsOpen(!isOpen)}
+                className="w-full flex justify-between items-center p-2 bg-surface hover:bg-bg/80 transition-colors"
+            >
+                <div className="flex items-center gap-2">
+                    {Icon && <Icon size={14} className="text-primary" />}
+                    <span className="text-xs font-bold text-text uppercase tracking-wider">{title}</span>
+                </div>
+                <ChevronDown size={14} className={`text-muted transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+            </button>
+            {isOpen && (
+                <div className="p-2 border-t border-border animate-fade-in">
+                    {children}
+                </div>
+            )}
         </div>
     )
 }
 
-// Helper outside component to avoid remounting on render (fixes slider focus)
-const SettingInput = ({ label, value, onChange, min, max, step }) => (
-    <div className="flex flex-col gap-1">
-        <div className="flex justify-between text-xs text-muted">
-            <span>{label}</span>
-            <span>{value}</span>
+const SettingInput = ({ label, value, onChange, min, max, step, icon: Icon }) => (
+    <div>
+        <div className="flex justify-between text-xs text-muted mb-1">
+            <div className="flex items-center gap-1.5">
+                {Icon && <Icon size={12} className="text-secondary/80" />}
+                <span>{label}</span>
+            </div>
+            <span className="font-mono text-primary">{value}</span>
         </div>
         <input
             type="range"
@@ -991,7 +1493,35 @@ const SettingInput = ({ label, value, onChange, min, max, step }) => (
             step={step}
             value={value}
             onChange={(e) => onChange(parseFloat(e.target.value))}
-            className="w-full accent-primary h-2 bg-surface border border-border rounded-lg appearance-none cursor-pointer"
+            className="w-full accent-primary h-1.5 bg-surface border border-border rounded-lg appearance-none cursor-pointer"
         />
+    </div>
+)
+
+const SettingToggle = ({ label, value, onChange, icon: Icon }) => (
+    <div className="flex justify-between items-center py-0.5">
+        <div className="flex items-center gap-1.5">
+            {Icon && <Icon size={12} className="text-secondary/80" />}
+            <span className="text-xs text-muted">{label}</span>
+        </div>
+        <button
+            onClick={() => onChange(!value)}
+            className={`w-7 h-3.5 rounded-full relative transition-colors ${value ? 'bg-primary' : 'bg-border'}`}
+        >
+            <div className={`w-2.5 h-2.5 bg-white rounded-full absolute top-0.5 transition-transform ${value ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
+        </button>
+    </div>
+)
+
+const SettingSelect = ({ label, value, options, onChange }) => (
+    <div className="flex justify-between items-center py-1 gap-2">
+        <span className="text-lg text-muted">{label}</span>
+        <div className="w-32">
+            <CustomSelect
+                value={value}
+                onChange={onChange}
+                options={options}
+            />
+        </div>
     </div>
 )

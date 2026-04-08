@@ -1,0 +1,29 @@
+{
+  "active_models": {
+    "EMG": "Neurobench",
+    "EOG": "dino-ml"
+  },
+  "channel_mapping": {
+    "ch0": {
+      "sensor": "EEG",
+      "label": "Fp1"
+    },
+    "ch1": {
+      "sensor": "EEG",
+      "label": "Oz"
+    }
+  },
+  "display": {
+    "scannerX": 0,
+    "showGrid": true,
+    "timeWindowMs": 10000
+  },
+  "num_channels": 2,
+  "sampling_rate": 1000.0,
+  "baud": 230400,
+  "serial_port": "",
+  "connection_mode": "WiFi",
+  "target_ip": "10.232.218.237",
+  "target_port": 6000,
+  "binary": true
+}

@@ -1,313 +1,439 @@
 // SignalChart.jsx
-import React, { useMemo } from 'react'
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine, ReferenceDot, ReferenceArea } from 'recharts'
+import React, { useEffect, useRef, useImperativeHandle, forwardRef, useState } from 'react'
+import { ChartSpline, ZoomIn, ArrowUpDown, ArrowDown, ArrowUp, Sigma, Clock, Minus, Plus, Activity, ChevronUp, ChevronDown } from 'lucide-react'
+import ElasticSlider from '../ui/inputs/ElasticSlider'
+import { useTheme } from '../../contexts/ThemeContext'
+import '../../styles/live/SignalChart.css'
 
 const DEFAULT_PALETTE = [
   '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6',
   '#06b6d4', '#f97316', '#06d6a0'
 ]
 
-export default function SignalChart({
+const getPrevGoodRange = (val) => {
+  if (val <= 1) return 1;
+  const target = val * 0.98; // 2% reduction leeway
+  let power = Math.floor(Math.log10(target));
+  let fraction = target / Math.pow(10, power);
+
+  if (fraction < 1.0) {
+    power -= 1;
+    fraction = target / Math.pow(10, power);
+  }
+
+  let niceFraction;
+  if (fraction >= 10.0) niceFraction = 10.0;
+  else if (fraction >= 7.5) niceFraction = 7.5;
+  else if (fraction >= 5.0) niceFraction = 5.0;
+  else if (fraction >= 4.0) niceFraction = 4.0;
+  else if (fraction >= 3.0) niceFraction = 3.0;
+  else if (fraction >= 2.5) niceFraction = 2.5;
+  else if (fraction >= 2.0) niceFraction = 2.0;
+  else if (fraction >= 1.5) niceFraction = 1.5;
+  else if (fraction >= 1.25) niceFraction = 1.25;
+  else niceFraction = 1.0;
+
+  return parseFloat((niceFraction * Math.pow(10, power)).toPrecision(15));
+};
+
+const getNextGoodRange = (val) => {
+  if (val <= 0) return 1;
+  const padded = val * 1.02; // 2% padding margin
+  const power = Math.floor(Math.log10(padded));
+  const fraction = padded / Math.pow(10, power);
+
+  let niceFraction;
+  if (fraction <= 1.0) niceFraction = 1.0;
+  else if (fraction <= 1.25) niceFraction = 1.25;
+  else if (fraction <= 1.5) niceFraction = 1.5;
+  else if (fraction <= 2.0) niceFraction = 2.0;
+  else if (fraction <= 2.5) niceFraction = 2.5;
+  else if (fraction <= 3.0) niceFraction = 3.0;
+  else if (fraction <= 4.0) niceFraction = 4.0;
+  else if (fraction <= 5.0) niceFraction = 5.0;
+  else if (fraction <= 7.5) niceFraction = 7.5;
+  else niceFraction = 10.0;
+
+  // Format to avoid floating point precision issues
+  return parseFloat((niceFraction * Math.pow(10, power)).toPrecision(15));
+};
+
+const SignalChart = forwardRef(({
+  graphNo,
   title,
-  data = [],
-  byChannel = null,
   color = '#3b82f6',
-  curveType = 'monotone',
   timeWindowMs = 10000,
-  channelLabelPrefix = 'Ch',
   height = 300,
-  yDomainProp = null,
   showGrid = true,
-  scannerX = null,
-  annotations = [], // New Prop [{ x: timestamp, y: value, label: string, color: string }]
-  channelColors = null, // New Prop { [key]: colorString }
+  annotations = [],
   markedWindows = [],
-  activeWindow = null
-}) {
-  const merged = useMemo(() => {
-    if (!byChannel || typeof byChannel !== 'object') {
-      const arr = Array.isArray(data) ? data.slice() : []
-      if (arr.length === 0) return { dataArray: [], channelKeys: [] }
-      // ensure numeric times/values
-      arr.forEach(d => {
-        d.time = Number(d.time);
-        d.value = (d.value === null || d.value === undefined) ? null : Number(d.value)
-      })
-      // sort ascending
-      arr.sort((a, b) => a.time - b.time)
-      const newest = arr[arr.length - 1]?.time || Date.now()
-      const cutoff = newest - timeWindowMs
-      const filtered = arr.filter(d => Number(d.time) >= cutoff)
-      return { dataArray: filtered.map(d => ({ time: Number(d.time), value: Number(d.value) })), channelKeys: [] }
+  currentZoom = 1,
+  currentManual = "",
+  onZoomChange = null,
+  onTimeWindowChange = null,
+  onRangeChange = null,
+  onColorChange = null,
+  disabled = false,
+  channelIndex = -1,
+  activeSensor,
+  displayMode = 'raw',
+  titleAddon = null
+}, ref) => {
+
+  const containerRef = useRef(null)
+  const workerRef = useRef(null)
+
+  const [stats, setStats] = useState({ min: 0, max: 0, mean: 0 })
+  const [autoScaledRange, setAutoScaledRange] = useState(null)
+  const { currentTheme } = useTheme() || {};
+
+  // Initialize Worker
+  useEffect(() => {
+    if (!containerRef.current) return;
+
+    let canvas = null;
+
+    if (!workerRef.current) {
+      // Dynamically create canvas to avoid React StrictMode DOM reuse issues with OffscreenCanvas
+      canvas = document.createElement('canvas');
+      canvas.style.width = '100%';
+      canvas.style.height = '100%';
+      canvas.style.display = 'block';
+      canvas.style.margin = '0';
+      canvas.style.padding = '0';
+      containerRef.current.prepend(canvas);
+
+      if (!canvas.transferControlToOffscreen) {
+        console.error("OffscreenCanvas not supported!");
+        return;
+      }
+
+      try {
+        const worker = new Worker(new URL('../../workers/signal.worker.js', import.meta.url), { type: 'module' });
+        workerRef.current = worker;
+
+        const offscreen = canvas.transferControlToOffscreen();
+
+        worker.postMessage({
+          type: 'INIT',
+          payload: {
+            canvas: offscreen,
+            width: containerRef.current.clientWidth,
+            height: containerRef.current.clientHeight,
+            config: {
+              timeWindowMs,
+              color,
+              themeAxisColor: getComputedStyle(document.documentElement).getPropertyValue('--muted').trim() || '#aaaaaa',
+              zoom: currentZoom,
+              manualRange: autoScaledRange || currentManual,
+              showGrid,
+              channelIndex,
+              disabled,
+              activeSensor,
+              displayMode
+            }
+          }
+        }, [offscreen]);
+
+        worker.onmessage = (e) => {
+          const { type, payload } = e.data;
+          if (type === 'STATS') {
+            // Update local state less frequently, or rely on worker throttling
+            setStats({ min: payload.min || 0, max: payload.max || 0, mean: payload.mean || 0 });
+          }
+        };
+      }
+      catch (err) {
+        console.error("Failed to init worker:", err);
+      }
     }
 
-    const chKeys = Object.keys(byChannel).map(k => k).sort((a, b) => Number(a) - Number(b))
-    if (chKeys.length === 0) return { dataArray: [], channelKeys: [] }
-
-    const allTimestampsSet = new Set()
-    const chFiltered = {}
-    chKeys.forEach((k) => {
-      const arr = Array.isArray(byChannel[k]) ? byChannel[k].slice() : []
-      arr.forEach(d => { if (d) { d.time = Number(d.time); d.value = Number(d.value) } })
-      if (arr.length === 0) { chFiltered[k] = []; return }
-      const newest = arr[arr.length - 1].time || Date.now()
-      const cutoff = newest - timeWindowMs
-      const filtered = arr.filter(d => Number(d.time) >= cutoff)
-      filtered.forEach(p => allTimestampsSet.add(Number(p.time)))
-      filtered.sort((a, b) => a.time - b.time)
-      chFiltered[k] = filtered
-    })
-
-    if (allTimestampsSet.size === 0) return { dataArray: [], channelKeys: chKeys }
-
-    const allTimestamps = Array.from(allTimestampsSet).sort((a, b) => a - b)
-
-    const dataArray = allTimestamps.map(ts => {
-      const row = { time: ts }
-      chKeys.forEach(k => {
-        const arr = chFiltered[k]
-        if (!arr || arr.length === 0) {
-          row[`ch${k}`] = null
-          return
+    const observer = new ResizeObserver((entries) => {
+      for (let entry of entries) {
+        const { width, height } = entry.contentRect;
+        if (workerRef.current) {
+          workerRef.current.postMessage({
+            type: 'RESIZE',
+            payload: { width, height }
+          });
         }
-        let lo = 0, hi = arr.length - 1, best = arr[0]
-        while (lo <= hi) {
-          const mid = Math.floor((lo + hi) / 2)
-          const midT = arr[mid].time
-          if (midT === ts) { best = arr[mid]; break }
-          if (midT < ts) lo = mid + 1
-          else hi = mid - 1
-          if (Math.abs(arr[mid].time - ts) < Math.abs(best.time - ts)) best = arr[mid]
+      }
+    });
+
+    if (containerRef.current) {
+      observer.observe(containerRef.current);
+    }
+
+    return () => {
+      if (workerRef.current) {
+        // We must ALWAYS terminate the worker when the component unmounts
+        // or during strict mode re-renders, otherwise multiple workers
+        // will pile up in the background and crash the browser context limits.
+        workerRef.current.terminate();
+        workerRef.current = null;
+      }
+      if (canvas && containerRef.current && containerRef.current.contains(canvas)) {
+        containerRef.current.removeChild(canvas);
+      }
+      observer.disconnect();
+    };
+  }, []); // init only once
+
+  // Sync Config Updates
+  useEffect(() => {
+    if (workerRef.current) {
+      const style = getComputedStyle(document.documentElement);
+      const gridColor = style.getPropertyValue('--graph-grid').trim() || 'rgba(255, 255, 255, 0.1)';
+      const textColor = style.getPropertyValue('--graph-text').trim() || '#9ca3af';
+
+      workerRef.current.postMessage({
+        type: 'SET_CONFIG',
+        payload: {
+          timeWindowMs,
+          color,
+          themeAxisColor: textColor,
+          themeGridColor: gridColor,
+          zoom: currentZoom,
+          manualRange: autoScaledRange || currentManual,
+          showGrid,
+          channelIndex,
+          disabled,
+          activeSensor,
+          displayMode
         }
-        const approxInterval = arr.length >= 2 ? Math.abs(arr[arr.length - 1].time - arr[0].time) / (arr.length - 1) : 1000
-        const maxAcceptDist = Math.max(approxInterval * 0.6, 1)
-        row[`ch${k}`] = Math.abs(best.time - ts) <= maxAcceptDist ? Number(best.value) : null
-      })
-      return row
-    })
-
-    return { dataArray, channelKeys: chKeys }
-  }, [data, byChannel, timeWindowMs])
-
-  let dataArray = merged.dataArray || []
-  const channelKeys = merged.channelKeys || []
-
-  // If timestamps have almost no variance (dataMin === dataMax or tiny range), synthesize an even timescale
-  const xTimes = dataArray.map(d => Number(d.time)).filter(t => Number.isFinite(t))
-  let dataMin = xTimes.length ? Math.min(...xTimes) : null
-  let dataMax = xTimes.length ? Math.max(...xTimes) : null
-
-  const tinyThreshold = Math.max(1, timeWindowMs * 0.001) // e.g., 1ms or 0.1% of window
-  if (dataMin === null || dataMax === null || (dataMax - dataMin) < tinyThreshold) {
-    // synthesize times evenly spaced across the timeWindowMs so chart can render smoothly
-    const now = Date.now()
-    const n = Math.max(1, dataArray.length)
-    const base = now - timeWindowMs
-    const stride = timeWindowMs / Math.max(1, n)
-    dataArray = dataArray.map((row, i) => {
-      return { ...row, time: Math.round(base + (i + 1) * stride) }
-    })
-    // recompute min/max
-    const newTimes = dataArray.map(d => d.time)
-    dataMin = Math.min(...newTimes)
-    dataMax = Math.max(...newTimes)
-  }
-
-  // collect values for Y domain
-  const values = []
-  if (byChannel && channelKeys.length) {
-    dataArray.forEach(row => {
-      channelKeys.forEach(k => {
-        const v = row[`ch${k}`]
-        if (Number.isFinite(v)) values.push(v)
-      })
-    })
-  } else {
-    dataArray.forEach(d => {
-      const v = d.value
-      if (Number.isFinite(v)) values.push(v)
-    })
-  }
-
-  const min = values.length ? Math.min(...values) : -1
-  const max = values.length ? Math.max(...values) : 1
-  const mean = values.length ? (values.reduce((a, b) => a + b, 0) / values.length) : 0
-
-  const pad = Math.max((max - min) * 0.1, 0.01)
-  const calculatedDomain = [min - pad, max + pad]
-  const finalYDomain = yDomainProp || calculatedDomain
-
-  // compute scannerXValue robustly (if scannerX is null it stays null)
-  let scannerXValue = null
-  if (scannerX !== null && scannerX !== undefined) {
-    // if scannerX is percent 0..100
-    if (typeof scannerX === 'number' && scannerX >= 0 && scannerX <= 100 && dataMin !== null && dataMax !== null) {
-      scannerXValue = dataMin + (dataMax - dataMin) * (scannerX / 100)
-    } else {
-      // otherwise assume timestamp / x coordinate; ensure it's numeric
-      const n = Number(scannerX)
-      if (Number.isFinite(n)) scannerXValue = n
+      });
     }
-    // clamp into dataMin..dataMax to avoid drawing outside visible domain
-    if (scannerXValue !== null && dataMin !== null && dataMax !== null) {
-      if (scannerXValue < dataMin) scannerXValue = dataMin
-      if (scannerXValue > dataMax) scannerXValue = dataMax
-    }
-  }
+  }, [timeWindowMs, color, currentZoom, currentManual, autoScaledRange, showGrid, currentTheme, disabled, activeSensor, displayMode]);
 
-  // Helper to get color for window status (Synchronized with TimeSeriesZoomChart)
-  const getWindowColor = (status, isMissed) => {
-    if (isMissed) return 'rgba(239, 68, 68, 0.2)'; // Red
-    if (status === 'correct') return 'rgba(16, 185, 129, 0.2)'; // Green
-    if (status === 'incorrect') return 'rgba(245, 158, 11, 0.2)'; // Orange
-    return 'rgba(156, 163, 175, 0.1)'; // Gray
-  };
+  // Sync Annotations
+  useEffect(() => {
+    if (workerRef.current) {
+      workerRef.current.postMessage({
+        type: 'SET_ANNOTATIONS',
+        payload: annotations
+      });
+    }
+  }, [annotations]);
+
+  // Handle Disabled State (Clear chart so it doesn't leave frozen data)
+  useEffect(() => {
+    if (disabled && workerRef.current) {
+      workerRef.current.postMessage({ type: 'CLEAR_DATA' });
+    }
+  }, [disabled]);
+
+  // Sync Windows
+  useEffect(() => {
+    if (workerRef.current) {
+      workerRef.current.postMessage({
+        type: 'SET_WINDOWS',
+        payload: markedWindows
+      });
+    }
+  }, [markedWindows]);
+
+
+  useImperativeHandle(ref, () => ({
+    addData: (points) => {
+      if (workerRef.current) {
+        workerRef.current.postMessage({ type: 'ADD_DATA', payload: points });
+      }
+    },
+    clearData: () => {
+      if (workerRef.current) {
+        workerRef.current.postMessage({ type: 'CLEAR_DATA' });
+      }
+      setStats({ min: 0, max: 0, mean: 0 });
+    }
+  }));
+
+  // Clear auto-scaled range if manual config changes
+  useEffect(() => {
+    setAutoScaledRange(null);
+  }, [currentManual, currentZoom]);
+
+  const effectiveRangeStr = autoScaledRange || currentManual;
+  const yDomainRaw = parseFloat(effectiveRangeStr);
+  let rangeDisplay = isNaN(yDomainRaw) ? Math.round(1500 / currentZoom).toString() : yDomainRaw.toString();
+
+  // Auto-range adjusting logic based on absolute maximum of signal
+  useEffect(() => {
+    // We only want to AUTO EXPAND. We do not shrink if max < range.
+    const absMax = Math.max(Math.abs(stats.min), Math.abs(stats.max));
+    const currentR = parseFloat(rangeDisplay);
+
+    // ONLY auto-scale if the user hasn't explicitly zoomed in or set a manual range
+    if (!isNaN(currentR) && absMax > currentR && currentZoom === 1 && !currentManual) {
+      const nextRange = getNextGoodRange(absMax);
+      if (nextRange > currentR) {
+        setAutoScaledRange(nextRange.toString());
+      }
+    }
+  }, [stats.min, stats.max, rangeDisplay, currentZoom, currentManual]);
 
   return (
-    <div className="bg-card surface-panel border border-border shadow-sm rounded-xl overflow-hidden flex flex-col h-full bg-surface">
-      <div className="px-5 py-3 border-b border-border bg-bg/50 backdrop-blur-sm flex justify-between items-center">
-        <h3 className="font-bold text-text flex items-center gap-2">
-          <span className="w-2 h-6 rounded-full" style={{ backgroundColor: color }}></span>
-          {title}
-        </h3>
+    <div className={`signal-chart-container ${disabled ? 'signal-chart-disabled' : ''}`}>
+      <div className="chart-header">
+        {/* Left: Title and Color */}
+        <div className="flex items-center gap-4 min-w-0">
+          <h3 className="chart-title" style={{ position: 'relative' }}>
+            <button
+              onClick={(e) => {
+                e.preventDefault()
+                if (onColorChange) {
+                  const currentIndex = DEFAULT_PALETTE.indexOf(color)
+                  const nextIndex = (currentIndex + 1) % DEFAULT_PALETTE.length
+                  onColorChange(DEFAULT_PALETTE[nextIndex === -1 ? 0 : nextIndex])
+                }
+              }}
+              className="p-1 hover:bg-muted/10 rounded-full transition-colors cursor-pointer group"
+              title="Click to Cycle Color"
+            >
+              <ChartSpline
+                size={32}
+                strokeWidth={3}
+                style={{ color: color }}
+                className="mr-2 group-hover:scale-110 transition-transform"
+              />
+            </button>
+            <span className="flex items-center gap-2 shrink-0">
+              {graphNo}
+              <span className="channel-color-dot" style={{ backgroundColor: color }}></span>
+              {title}
+            </span>
+          </h3>
+          <div className="flex items-center">{titleAddon}</div>
+        </div>
 
-        <div className="flex gap-4 text-xs font-mono text-muted">
-          {dataArray.length > 0 && (
-            <>
-              <div className="flex flex-col items-end">
-                <span className="opacity-50 text-[10px] uppercase tracking-wider">Min</span>
-                <span className="font-medium text-text">{min.toFixed(2)}</span>
+        {/* Middle: Controls Box */}
+        <div className="flex items-center gap-6">
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 text-muted">
+              <Clock size={18} />
+              <span className="text-xs font-bold uppercase tracking-wider">Time</span>
+            </div>
+            <div className="w-48">
+              <ElasticSlider
+                defaultValue={(timeWindowMs || 10000) / 1000}
+                startingValue={1}
+                maxValue={20}
+                stepSize={1}
+                isStepped={true}
+                onChange={(val) => onTimeWindowChange && onTimeWindowChange(val * 1000)}
+                leftIcon={<Minus size={16} className="text-muted" />}
+                rightIcon={<Plus size={16} className="text-muted" />}
+                className="w-full h-5"
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 text-muted">
+              <ZoomIn size={18} />
+              <span className="text-xs font-bold uppercase tracking-wider">Zoom</span>
+            </div>
+            <div className="flex gap-1.5 bg-bg/50 p-1.5 rounded-lg">
+              {[1, 2, 5, 10, 20, 50].map((z) => (
+                <button
+                  key={z}
+                  onClick={() => onZoomChange && onZoomChange(z)}
+                  className={`px-2.5 py-1 rounded text-xs font-bold transition-all border ${currentZoom === z
+                    ? 'bg-primary text-white border-primary shadow-sm'
+                    : 'bg-bg text-muted border-border hover:text-text hover:border-muted/50'
+                    }`}
+                >
+                  {z}x
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 text-muted">
+              <ArrowUpDown size={18} />
+              <span className="text-xs font-bold uppercase tracking-wider">Range</span>
+            </div>
+            <div className="flex items-center bg-bg/50 border border-border rounded-lg overflow-hidden focus-within:border-primary transition-colors h-8">
+              <input
+                type="number"
+                value={currentManual}
+                placeholder={Math.round(1500 / currentZoom).toString()}
+                onChange={(e) => onRangeChange && onRangeChange(e.target.value)}
+                className="w-14 bg-transparent px-0 py-1 text-[16px] font-mono font-bold text-primary focus:outline-none text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              />
+              <div className="text-[16px] font-bold text-muted pointer-events-none pr-2">uV</div>
+              <div className="flex flex-col border-l border-border h-full">
+                <button
+                  onClick={() => {
+                    const val = parseFloat(currentManual) || Math.round(1500 / currentZoom);
+                    onRangeChange && onRangeChange(getNextGoodRange(val).toString());
+                  }}
+                  className="flex-1 flex items-center justify-center px-1.5 hover:bg-muted/10 text-muted hover:text-text transition-colors border-b border-border outline-none focus:outline-none"
+                >
+                  <ChevronUp size={14} strokeWidth={4} />
+                </button>
+                <button
+                  onClick={() => {
+                    const val = parseFloat(currentManual) || Math.round(1500 / currentZoom);
+                    onRangeChange && onRangeChange(getPrevGoodRange(val).toString());
+                  }}
+                  className="flex-1 flex items-center justify-center px-1.5 hover:bg-muted/10 text-muted hover:text-text transition-colors outline-none focus:outline-none"
+                >
+                  <ChevronDown size={14} strokeWidth={4} />
+                </button>
               </div>
-              <div className="w-[1px] h-6 bg-border/50"></div>
-              <div className="flex flex-col items-end">
-                <span className="opacity-50 text-[10px] uppercase tracking-wider">Max</span>
-                <span className="font-medium text-text">{max.toFixed(2)}</span>
-              </div>
-              <div className="w-[1px] h-6 bg-border/50"></div>
-              <div className="flex flex-col items-end">
-                <span className="opacity-50 text-[10px] uppercase tracking-wider">Mean</span>
-                <span className="font-medium text-text">{mean.toFixed(2)}</span>
-              </div>
-            </>
-          )}
+            </div>
+          </div>
+        </div>
+
+        {/* Right: Stats Box */}
+        <div className="flex items-center gap-4 pl-4 border-l border-border">
+          <div className="range-display text-[16px] font-bold text-muted tabular-nums">
+            +/-{rangeDisplay} uV
+          </div>
+          <div className="chart-stats flex gap-5">
+            <div className="stat-item flex items-center gap-0.25">
+              <span className="stat-label-chart flex items-center gap-1 text-xs text-muted"><ArrowDown size={18} /> Min</span>
+              <span className="stat-value text-sm font-mono font-bold">{stats.min.toFixed(2)}</span>
+            </div>
+            <div className="stat-item flex items-center gap-0.25">
+              <span className="stat-label-chart flex items-center gap-1 text-xs text-muted"><ArrowUp size={18} /> Max</span>
+              <span className="stat-value text-sm font-mono font-bold">{stats.max.toFixed(2)}</span>
+            </div>
+            <div className="stat-item flex items-center gap-0.25">
+              <span className="stat-label-chart flex items-center gap-1 text-xs text-muted"><Sigma size={18} /> Mean</span>
+              <span className="stat-value text-sm font-mono font-bold">{stats.mean.toFixed(2)}</span>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div className="relative w-full p-2 flex-grow" style={{ height: height }}>
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={dataArray}>
-            {showGrid && <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.3} />}
-            {scannerXValue !== null && (
-              <ReferenceLine x={scannerXValue} stroke="var(--accent)" strokeOpacity={0.9} strokeWidth={1.5} />
-            )}
+      <div className="chart-area flex-grow relative" style={{ minHeight: 0, overflow: 'hidden', margin: 0, padding: 0 }} ref={containerRef}>
 
-            {/* Render Marked Windows */}
-            {markedWindows.map((win) => {
-              const x1 = win.startTime % timeWindowMs;
-              const x2 = win.endTime % timeWindowMs;
-              if (isNaN(x1) || isNaN(x2)) return null;
-              return (
-                <ReferenceArea
-                  key={win.id}
-                  x1={x1}
-                  x2={x2}
-                  fill={getWindowColor(win.status, win.isMissedActual)}
-                  stroke={win.isMissedActual ? '#ef4444' : (win.status === 'correct' ? '#10b981' : '#9ca3af')}
-                  strokeOpacity={0.5}
-                  label={{ position: 'top', value: win.label, fill: 'var(--muted)', fontSize: 10 }}
-                />
-              );
-            })}
-
-            {activeWindow && !isNaN(activeWindow.startTime) && !isNaN(activeWindow.endTime) && (
-              <ReferenceArea
-                x1={activeWindow.startTime % timeWindowMs}
-                x2={activeWindow.endTime % timeWindowMs}
-                fill="var(--primary)"
-                fillOpacity={0.1}
-                stroke="var(--primary)"
-                strokeDasharray="3 3"
-              />
-            )}
-
-            {/* Render Annotations (Blinks) */}
-            {annotations.map((ann, idx) => (
-              <ReferenceDot
-                key={`ann-${idx}`}
-                x={ann.x}
-                y={ann.y}
-                r={6}
-                fill={ann.color || "red"}
-                stroke="white"
-                strokeWidth={2}
-                label={{ position: 'top', value: ann.label, fill: ann.color || "red", fontSize: 12, fontWeight: 'bold' }}
-                isFront={true}
-              />
-            ))}
-
-            <XAxis
-              dataKey="time"
-              type="number"
-              domain={['dataMin', 'dataMax']}
-              tickFormatter={(t) => (Number.isFinite(t) && t < 86400000) ? (t / 1000).toFixed(1) + 's' : new Date(t).toLocaleTimeString([], { hour12: false, minute: '2-digit', second: '2-digit' })}
-              stroke="var(--muted)"
-              fontSize={10}
-              tickLine={false}
-              axisLine={false}
-              dy={10}
-            />
-            <YAxis
-              domain={finalYDomain}
-              stroke="var(--muted)"
-              fontSize={10}
-              tickLine={false}
-              axisLine={false}
-              tickFormatter={(v) => v.toFixed(1)}
-              width={40}
-            />
-            <Tooltip
-              contentStyle={{
-                backgroundColor: 'var(--surface)',
-                borderColor: 'var(--border)',
-                borderRadius: '8px',
-                color: 'var(--text)',
-                boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)'
-              }}
-              labelStyle={{ color: 'var(--muted)', marginBottom: '0.5rem', fontSize: '12px' }}
-              itemStyle={{ fontSize: '12px', padding: '2px 0' }}
-              labelFormatter={(t) => new Date(Number(t)).toLocaleTimeString() + `.${new Date(Number(t)).getMilliseconds()}`}
-              formatter={(v) => [Number(v).toFixed(3), '']}
-            />
-            <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />
-
-            {byChannel && channelKeys.length ? (
-              channelKeys.map((k, idx) => (
-                <Line
-                  key={`ch-${k}`}
-                  type={curveType}
-                  dataKey={`ch${k}`}
-                  name={`${channelLabelPrefix ?? 'Ch'} ${k}`}
-                  stroke={channelColors?.[k] || DEFAULT_PALETTE[idx % DEFAULT_PALETTE.length]}
-                  dot={false}
-                  strokeWidth={1.5}
-                  isAnimationActive={false}
-                  connectNulls={false}
-                />
-              ))
-            ) : (
-              <Line
-                type={curveType}
-                dataKey="value"
-                name="Signal"
-                stroke={color}
-                dot={false}
-                strokeWidth={2}
-                isAnimationActive={false}
-              />
-            )}
-          </LineChart>
-        </ResponsiveContainer>
+        {/* Centered Static Labels Overlay */}
+        <div style={{
+          position: 'absolute',
+          top: '10px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '24px',
+          fontFamily: 'sans-serif',
+          fontSize: '12px',
+          fontWeight: 'bold',
+          pointerEvents: 'none'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: color }}>
+            <Activity size={14} color={color} /> ACTIVE
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: color, opacity: 0.4 }}>
+            <Clock size={14} color={color} /> HISTORY
+          </div>
+        </div>
       </div>
     </div>
   )
-}
+})
+
+export default SignalChart

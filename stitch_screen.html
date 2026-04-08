@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>NEON PULSE - Visualizer Preview</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "on-primary-container": "#00575b",
+                      "secondary": "#ff51fa",
+                      "on-background": "#f9f5f8",
+                      "surface-variant": "#262528",
+                      "on-primary-fixed": "#004346",
+                      "on-primary-fixed-variant": "#006266",
+                      "error-container": "#9f0519",
+                      "surface": "#0e0e10",
+                      "on-secondary-fixed": "#620061",
+                      "primary-fixed-dim": "#00e5ee",
+                      "tertiary-fixed": "#a2f31f",
+                      "surface-tint": "#a1faff",
+                      "on-secondary-container": "#fff5f9",
+                      "primary-dim": "#00e5ee",
+                      "on-tertiary-fixed-variant": "#3d6200",
+                      "background": "#0e0e10",
+                      "secondary-container": "#a900a9",
+                      "surface-container-low": "#131315",
+                      "surface-container-lowest": "#000000",
+                      "on-surface": "#f9f5f8",
+                      "primary-container": "#00f4fe",
+                      "surface-container": "#19191c",
+                      "surface-bright": "#2c2c2f",
+                      "secondary-fixed-dim": "#ffa6f3",
+                      "primary": "#a1faff",
+                      "on-secondary-fixed-variant": "#920091",
+                      "on-error": "#490006",
+                      "surface-dim": "#0e0e10",
+                      "surface-container-highest": "#262528",
+                      "tertiary-dim": "#95e400",
+                      "on-tertiary": "#3d6100",
+                      "inverse-surface": "#fcf8fb",
+                      "on-surface-variant": "#adaaad",
+                      "on-tertiary-container": "#365700",
+                      "on-secondary": "#400040",
+                      "tertiary-container": "#a2f31f",
+                      "secondary-dim": "#ff51fa",
+                      "outline": "#767577",
+                      "tertiary": "#bcff5f",
+                      "on-tertiary-fixed": "#294300",
+                      "error-dim": "#d7383b",
+                      "inverse-on-surface": "#565457",
+                      "primary-fixed": "#00f4fe",
+                      "inverse-primary": "#006a6e",
+                      "tertiary-fixed-dim": "#95e400",
+                      "secondary-fixed": "#ffbdf3",
+                      "error": "#ff716c",
+                      "outline-variant": "#48474a",
+                      "surface-container-high": "#1f1f22",
+                      "on-primary": "#006165",
+                      "on-error-container": "#ffa8a3"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.25rem",
+                      "lg": "0.5rem",
+                      "xl": "0.75rem",
+                      "full": "9999px"
+              },
+              "fontFamily": {
+                      "headline": ["Space Grotesk"],
+                      "body": ["Manrope"],
+                      "label": ["Manrope"]
+              }
+            },
+          },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            display: inline-block;
+            line-height: 1;
+            text-transform: none;
+            letter-spacing: normal;
+            word-wrap: normal;
+            white-space: nowrap;
+            direction: ltr;
+        }
+        .visualizer-canvas {
+            background: radial-gradient(circle at center, #131315 0%, #000000 100%);
+        }
+        .neon-glow-primary {
+            box-shadow: 0 0 15px rgba(161, 250, 255, 0.3);
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #a1faff;
+            border-radius: 10px;
+        }
+    </style>
+</head>
+<body class="bg-background text-on-surface font-body overflow-hidden">
+<!-- TOP APP BAR -->
+<header class="fixed top-0 w-full bg-transparent backdrop-blur-xl flex justify-between items-center px-8 py-6 z-50">
+<div class="flex items-center gap-4">
+<span class="text-2xl font-bold tracking-tighter text-[#a1faff] drop-shadow-[0_0_10px_rgba(161,250,255,0.5)] font-headline uppercase">NEON PULSE</span>
+</div>
+<nav class="hidden md:flex items-center gap-8">
+<a class="font-['Space_Grotesk'] tracking-wider uppercase text-sm text-[#a1faff] border-b-2 border-[#a1faff] pb-1 transition-colors duration-300" href="#">Visualizer</a>
+<a class="font-['Space_Grotesk'] tracking-wider uppercase text-sm text-[#f9f5f8]/60 hover:text-[#a1faff] transition-colors duration-300" href="#">Library</a>
+<a class="font-['Space_Grotesk'] tracking-wider uppercase text-sm text-[#f9f5f8]/60 hover:text-[#a1faff] transition-colors duration-300" href="#">Studio</a>
+</nav>
+<div class="flex items-center gap-6">
+<button class="material-symbols-outlined text-[#a1faff] scale-95 active:scale-90 transition-transform" data-icon="fullscreen">fullscreen</button>
+<button class="material-symbols-outlined text-[#a1faff] scale-95 active:scale-90 transition-transform" data-icon="settings">settings</button>
+</div>
+</header>
+<!-- SIDE NAV BAR (Collapsed Lab Layout) -->
+<aside class="fixed left-0 h-screen w-20 hover:w-64 transition-all duration-500 overflow-hidden border-r border-[#48474a]/15 bg-[#0e0e10]/80 backdrop-blur-2xl flex flex-col py-8 z-40 shadow-[20px_0_50px_rgba(0,0,0,0.5)]">
+<div class="px-6 mb-12">
+<div class="text-[#a1faff] font-black font-headline tracking-tighter">LAB_01</div>
+<div class="text-[10px] text-tertiary font-headline tracking-[0.2em] opacity-0 transition-opacity duration-500 group-hover:opacity-100">SONIC_ENGINE_V2</div>
+</div>
+<div class="flex flex-col gap-2 w-full">
+<div class="flex items-center gap-6 px-6 py-4 text-[#a1faff] bg-[#a1faff]/10 border-r-4 border-[#a1faff] font-['Space_Grotesk'] text-sm uppercase tracking-widest transition-all duration-300 ease-in-out">
+<span class="material-symbols-outlined shrink-0" data-icon="graphic_eq" style="font-variation-settings: 'FILL' 1;">graphic_eq</span>
+<span class="whitespace-nowrap">Visualizer</span>
+</div>
+<div class="flex items-center gap-6 px-6 py-4 text-[#f9f5f8]/40 hover:bg-[#19191c] hover:text-[#bcff5f] font-['Space_Grotesk'] text-sm uppercase tracking-widest transition-all duration-300 ease-in-out">
+<span class="material-symbols-outlined shrink-0" data-icon="library_music">library_music</span>
+<span class="whitespace-nowrap">Library</span>
+</div>
+<div class="flex items-center gap-6 px-6 py-4 text-[#f9f5f8]/40 hover:bg-[#19191c] hover:text-[#bcff5f] font-['Space_Grotesk'] text-sm uppercase tracking-widest transition-all duration-300 ease-in-out">
+<span class="material-symbols-outlined shrink-0" data-icon="tune">tune</span>
+<span class="whitespace-nowrap">Studio</span>
+</div>
+<div class="flex items-center gap-6 px-6 py-4 text-[#f9f5f8]/40 hover:bg-[#19191c] hover:text-[#bcff5f] font-['Space_Grotesk'] text-sm uppercase tracking-widest transition-all duration-300 ease-in-out">
+<span class="material-symbols-outlined shrink-0" data-icon="person">person</span>
+<span class="whitespace-nowrap">Profile</span>
+</div>
+</div>
+</aside>
+<!-- MAIN VISUALIZER CANVAS -->
+<main class="relative w-full h-screen visualizer-canvas overflow-hidden">
+<!-- BACKGROUND ANIMATION MOCKUP -->
+<div class="absolute inset-0 z-0">
+<img alt="abstract neon wireframe landscape" class="w-full h-full object-cover opacity-60 mix-blend-screen" data-alt="abstract 3D wireframe landscape in neon cyan and magenta colors with a pulsing grid under a dark sky" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBRzTWxdbmQm_2SDM4jYV1nKfQE1YgCMX5zAKU4SzZqnhIH2nmfAyoiNGkL_ZEZupPX2OZfhGoslGa23Ull1cjPSZvkxkxaXCEIXLKa9ftnnNfsqgXwknUwWQfuyJhMsyxlKgDCO88S0XLcwYXlWvrhYtvHMDjvspoXG46LPAr-ZiaG8y4I_mmKqi0rWAsWPCvZitvtt9cEnKFwUlU9wDFSs1l8QB7aiubp3OHC3L3n4iHqEXSj-XzbhSHtZWIVCJbx6GAZPlhLENk"/>
+<!-- Simulated Pulse Glows -->
+<div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-primary/20 rounded-full blur-[120px]"></div>
+<div class="absolute bottom-0 left-0 w-full h-1/2 bg-gradient-to-t from-background to-transparent"></div>
+</div>
+<!-- DEMO OVERLAY TEXT -->
+<div class="absolute top-32 left-32 z-10 space-y-2 pointer-events-none">
+<div class="flex items-center gap-3">
+<span class="flex h-2 w-2 rounded-full bg-tertiary animate-pulse"></span>
+<span class="font-headline text-tertiary tracking-[0.3em] text-xs uppercase">Demo Mode Active</span>
+</div>
+<h1 class="font-headline text-5xl font-light text-on-surface tracking-tighter">Visualizer Preview</h1>
+<p class="font-body text-on-surface-variant max-w-xs text-sm uppercase tracking-widest">Real-time spectral analysis processing...</p>
+</div>
+<!-- TRACK INDICATOR (Top Right Floating) -->
+<div class="absolute top-32 right-12 z-10">
+<div class="bg-surface-container/40 backdrop-blur-2xl px-6 py-4 rounded-xl border border-outline-variant/15 flex items-center gap-4">
+<div class="relative w-12 h-12 rounded-lg overflow-hidden shrink-0">
+<img alt="album art" class="w-full h-full object-cover" data-alt="minimalist electronic music album cover with abstract geometric shapes in neon cyan and dark purple" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAo46g4FZ8ZhOppcsvmJNv8CvdOw_azldNM9P1tZStbYO_OGiRIORlNGLvloOMxAC9_xXAEolhjqZuI5zQspAa2hPEm7gkTCl0fKiwGJgyvp73LxeHCKqddrX6gXYtBBs5_4cBpIOoqBjF52lUufXGh_F47ruOxGjFU1ZQ618ZXvs_dUvtjbhdnGG4FEZ953K6NUc1Gudh52U8ob2KjWOD1b24tPEc_cCUWdoxbOv0BY5pMTTgvA0Q8KROoGYd9oCZe5rtbx6531pI"/>
+</div>
+<div>
+<div class="font-headline text-primary text-xs tracking-widest uppercase">Now Playing</div>
+<div class="font-headline font-bold text-lg text-on-surface whitespace-nowrap">Neon Drifter</div>
+<div class="font-body text-[10px] text-on-surface-variant uppercase tracking-widest">Tokyo Midnight</div>
+</div>
+</div>
+</div>
+<!-- FREQUENCY WAVES (Bottom Right Floating) -->
+<div class="absolute bottom-40 right-12 z-10 hidden lg:block">
+<div class="flex items-end gap-1 h-24">
+<div class="w-1 bg-primary/40 h-[60%] rounded-full"></div>
+<div class="w-1 bg-primary/60 h-[80%] rounded-full"></div>
+<div class="w-1 bg-primary h-[40%] rounded-full"></div>
+<div class="w-1 bg-secondary h-[90%] rounded-full"></div>
+<div class="w-1 bg-primary h-[100%] rounded-full"></div>
+<div class="w-1 bg-tertiary h-[60%] rounded-full"></div>
+<div class="w-1 bg-primary h-[30%] rounded-full"></div>
+<div class="w-1 bg-primary/40 h-[50%] rounded-full"></div>
+</div>
+<div class="mt-4 text-right">
+<span class="font-headline text-[10px] text-on-surface-variant uppercase tracking-widest">Live Spectrum Analysis</span>
+</div>
+</div>
+<!-- MINI CONTROL PANEL (Bottom Center) -->
+<div class="fixed bottom-10 left-1/2 -translate-x-1/2 flex gap-8 items-center z-50 bg-transparent rounded-full px-12 py-4 border border-[#48474a]/20 backdrop-blur-md shadow-[0_0_30px_rgba(161,250,255,0.15)]">
+<button class="flex flex-col items-center gap-1 text-[#f9f5f8]/80 hover:scale-110 hover:text-[#a1faff] transition-all active:scale-90 duration-150 group">
+<span class="material-symbols-outlined text-3xl" data-icon="replay">replay</span>
+<span class="font-['Manrope'] font-bold text-[8px] tracking-[0.2em] uppercase">Restart</span>
+</button>
+<button class="w-16 h-16 flex items-center justify-center bg-gradient-to-br from-primary to-primary-container rounded-full text-on-primary shadow-lg shadow-primary/20 active:scale-90 transition-transform">
+<span class="material-symbols-outlined text-4xl" data-icon="play_arrow" style="font-variation-settings: 'FILL' 1;">play_arrow</span>
+</button>
+<button class="flex flex-col items-center gap-1 text-[#f9f5f8]/80 hover:scale-110 hover:text-[#a1faff] transition-all active:scale-90 duration-150 group">
+<span class="material-symbols-outlined text-3xl" data-icon="skip_next">skip_next</span>
+<span class="font-['Manrope'] font-bold text-[8px] tracking-[0.2em] uppercase">Next Mode</span>
+</button>
+</div>
+<!-- PARAMETER CLUSTER (Left Floating) -->
+<div class="absolute bottom-40 left-32 z-10 flex flex-col gap-6">
+<div class="group">
+<div class="flex justify-between items-center mb-2">
+<span class="font-headline text-[10px] text-on-surface-variant uppercase tracking-widest">Frequency Gain</span>
+<span class="font-headline text-[10px] text-primary uppercase">84%</span>
+</div>
+<div class="w-48 h-1 bg-outline-variant/20 rounded-full relative overflow-hidden">
+<div class="absolute inset-y-0 left-0 w-[84%] bg-primary neon-glow-primary"></div>
+</div>
+</div>
+<div class="group">
+<div class="flex justify-between items-center mb-2">
+<span class="font-headline text-[10px] text-on-surface-variant uppercase tracking-widest">Particle Density</span>
+<span class="font-headline text-[10px] text-secondary uppercase">2.4k</span>
+</div>
+<div class="w-48 h-1 bg-outline-variant/20 rounded-full relative overflow-hidden">
+<div class="absolute inset-y-0 left-0 w-[45%] bg-secondary"></div>
+</div>
+</div>
+<div class="group">
+<div class="flex justify-between items-center mb-2">
+<span class="font-headline text-[10px] text-on-surface-variant uppercase tracking-widest">Chroma Shift</span>
+<span class="font-headline text-[10px] text-tertiary uppercase">Active</span>
+</div>
+<div class="w-48 h-1 bg-outline-variant/20 rounded-full relative overflow-hidden">
+<div class="absolute inset-y-0 left-0 w-[60%] bg-tertiary"></div>
+</div>
+</div>
+</div>
+</main>
+<!-- UI ACCENTS -->
+<div class="fixed top-0 left-0 w-px h-screen bg-gradient-to-b from-transparent via-primary/20 to-transparent z-50"></div>
+<div class="fixed top-0 right-0 w-px h-screen bg-gradient-to-b from-transparent via-secondary/20 to-transparent z-50"></div>
+<div class="fixed top-0 left-0 w-screen h-px bg-gradient-to-r from-transparent via-tertiary/10 to-transparent z-50"></div>
+</body></html>

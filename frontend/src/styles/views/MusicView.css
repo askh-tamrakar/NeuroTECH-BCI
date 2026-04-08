@@ -1,0 +1,128 @@
+.music-view-container {
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(circle at 50% 0%, #0d1a1f 0%, #050a0c 100%);
+  position: relative;
+  overflow: hidden;
+
+  display: flex;
+  flex-direction: column;
+  /* Gentle zoom-out so all elements fit comfortably */
+  zoom: 0.9;
+}
+
+/* ── WIREFRAME MESH BACKGROUND ── */
+.music-mesh-surface {
+  position: absolute;
+  bottom: -20%;
+  left: -20%;
+  right: -20%;
+  height: 80%;
+  background-image: 
+    linear-gradient(rgba(0, 229, 255, 0.1) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 229, 255, 0.1) 1px, transparent 1px);
+  background-size: 60px 40px;
+  transform: perspective(800px) rotateX(60deg);
+  mask-image: radial-gradient(ellipse at center, black 20%, transparent 80%);
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* ── GLOWING HALO ARC ── */
+.music-halo-arc {
+  position: absolute;
+  top: -5%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(75vw, 620px);
+  height: min(75vw, 620px);
+  border: 2px solid rgba(0, 229, 255, 0.4);
+  border-radius: 50%;
+  box-shadow: 0 0 40px rgba(0, 229, 255, 0.1), inset 0 0 40px rgba(0, 229, 255, 0.1);
+  /* Show more of the arc — less masking at top */
+  mask-image: linear-gradient(to bottom, black 60%, transparent 95%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ── TRACK INDICATOR CARD ── */
+.track-indicator-card {
+  background: rgba(var(--surface-rgb), 0.4);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+.album-art-glow {
+  box-shadow: 0 0 15px rgba(var(--primary-rgb), 0.2);
+}
+
+/* ── PARAMETER CLUSTER ── */
+.parameter-cluster {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  pointer-events: none;
+}
+
+.parameter-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.parameter-label-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.parameter-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.parameter-value {
+  font-size: 10px;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+.parameter-progress-bg {
+  width: 12rem;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 9999px;
+  overflow: hidden;
+  position: relative;
+}
+
+.parameter-progress-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  border-radius: 9999px;
+  transition: width 0.3s ease;
+}
+
+/* ── ANIMATIONS ── */
+@keyframes neon-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.95); }
+}
+
+.animate-neon-pulse {
+  animation: neon-pulse 2s infinite ease-in-out;
+}
+/* ── LAYOUT UTILS ── */
+.ml-80 {
+  margin-left: 20rem; /* Matches 80 * 0.25rem */
+}
+
+.ml-\[4\.25rem\] {
+  margin-left: 4.25rem;
+}

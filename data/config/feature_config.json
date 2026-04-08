@@ -1,0 +1,95 @@
+{
+  "EEG": {
+    "target_freqs": [
+      6,
+      8,
+      9,
+      12,
+      16,
+      18
+    ],
+    "targets": [
+      {
+        "id": 0,
+        "freq": 6,
+        "label": "Target 1",
+        "mappedKey": "W",
+        "mappedMouse": "Left Click",
+        "enabled": true,
+        "controlType": "Keyboard",
+        "divisor": 18,
+        "source": "dynamic",
+        "isManual": true
+      },
+      {
+        "id": 1,
+        "freq": 8,
+        "label": "Target 2",
+        "mappedKey": "A",
+        "mappedMouse": "None",
+        "enabled": true,
+        "controlType": "Keyboard",
+        "divisor": 16,
+        "source": "dynamic",
+        "isManual": true
+      },
+      {
+        "id": 2,
+        "freq": 9,
+        "label": "Target 3",
+        "mappedKey": "S",
+        "mappedMouse": "None",
+        "enabled": true,
+        "controlType": "Keyboard",
+        "divisor": 12,
+        "source": "dynamic",
+        "isManual": true
+      },
+      {
+        "id": 3,
+        "freq": 12,
+        "label": "Target 4",
+        "mappedKey": "D",
+        "mappedMouse": "None",
+        "enabled": true,
+        "controlType": "Keyboard",
+        "divisor": 10,
+        "source": "dynamic",
+        "isManual": true
+      },
+      {
+        "id": 4,
+        "freq": 16,
+        "label": "Target 5",
+        "mappedKey": "Space",
+        "mappedMouse": "None",
+        "enabled": true,
+        "controlType": "Keyboard",
+        "divisor": 9,
+        "source": "dynamic",
+        "isManual": true
+      },
+      {
+        "id": 5,
+        "freq": 18,
+        "label": "Target 6",
+        "mappedKey": "W",
+        "mappedMouse": "None",
+        "enabled": true,
+        "controlType": "Keyboard",
+        "divisor": 8,
+        "source": "dynamic",
+        "isManual": true
+      }
+    ],
+    "rest_threshold": 0.6,
+    "ratio_threshold": 1.2,
+    "classifier": "fbcca",
+    "use_ml_pipeline": false,
+    "num_harmonics": 4,
+    "window_len_sec": 1.5,
+    "step_sec": 0.25,
+    "smoothing_windows": 7,
+    "refresh_rate": 51
+  }
+}
