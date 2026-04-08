@@ -104,11 +104,7 @@ def log_system(msg, icon=Theme.SYS):
 
 
 def runtime_prompt() -> str:
-<<<<<<< HEAD
     return "NeuroTECH Loded >>> "
-=======
-    return "NeuroTECH Pipeline Load >>> "
->>>>>>> eeg-application-dashboard
 
 
 ALLOWLIST = [
@@ -750,11 +746,8 @@ class PipelineOrchestrator:
 
         ordered = dependency_order(actual_processes, self.specs)
         pretty = ", ".join(block_ids)
-<<<<<<< HEAD
         if reason == "manual":
             log_system(f"Reload request accepted for: {pretty}", icon=Theme.INFO)
-=======
->>>>>>> eeg-application-dashboard
         log_system(f"Reloading {pretty} ({reason})...", icon=Theme.INFO)
 
         for block_id in reversed(ordered):
@@ -934,10 +927,6 @@ class PipelineOrchestrator:
     def run_background_threads(self):
         threading.Thread(target=self.watch_loop, daemon=True).start()
         threading.Thread(target=self.monitor_loop, daemon=True).start()
-<<<<<<< HEAD
-=======
-        threading.Thread(target=self.command_loop, daemon=True).start()
->>>>>>> eeg-application-dashboard
 
     def shutdown_handler(self, signum, frame):
         self.shutdown()
@@ -970,11 +959,7 @@ def main(argv: list[str] | None = None):
     orchestrator.install_signal_handlers()
     orchestrator.startup()
     orchestrator.run_background_threads()
-<<<<<<< HEAD
     orchestrator.command_loop()
-=======
-    orchestrator.wait_forever()
->>>>>>> eeg-application-dashboard
 
 
 if __name__ == "__main__":

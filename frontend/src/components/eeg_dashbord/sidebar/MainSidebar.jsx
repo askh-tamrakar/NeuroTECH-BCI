@@ -16,31 +16,9 @@ const MainSidebar = ({ currentView, onSelect }) => {
     );
 
     return (
-<<<<<<< HEAD
         <div className="flex h-full w-full flex-col p-4 font-mono transition-opacity duration-300">
             <div className="flex flex-col gap-1.5 flex-grow overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:'none'] [&::-webkit-scrollbar]:hidden">
                 <p className="text-[9px] font-black text-[var(--muted)] uppercase tracking-[3px] px-2 mb-1">
-=======
-        <div className="flex flex-col h-full w-full p-4 font-mono transition-opacity duration-300">
-            <div className="flex items-center justify-between mb-6 px-2">
-                <h2 className="text-xl font-black text-[var(--primary)] tracking-[6px] uppercase">
-                    Navigator
-                </h2>
-                {currentView !== 'overview' && (
-                    <button
-                        onClick={() => setSidebarMode('page')}
-                        className="nav-controls-toggle"
-                        title="Switch to Controls"
-                    >
-                        <Layers size={14} />
-                        NAV
-                    </button>
-                )}
-            </div>
-
-            <div className="flex flex-col gap-1.5 flex-grow overflow-y-auto [&::-webkit-scrollbar]:hidden">
-                <p className="text-[13px] font-black text-[var(--muted)] uppercase tracking-[5px] px-2 mb-3 opacity-50">
->>>>>>> eeg-application-dashboard
                     Applications
                 </p>
                 {btn('overview', Grid, 'Dashboard Overview')}

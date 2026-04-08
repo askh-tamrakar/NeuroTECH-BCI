@@ -45,24 +45,17 @@ const PRESETS = [3, 5, 10, 15];
 const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => {
   const containerRef = useRef(null);
   const resultRef = useRef(null);
-<<<<<<< HEAD
   const wsEventRef = useRef(null);
-=======
->>>>>>> eeg-application-dashboard
   
   // Keep resultRef fresh for the requestAnimationFrame loop
   useEffect(() => {
     resultRef.current = result;
   }, [result]);
 
-<<<<<<< HEAD
   // Keep wsEventRef fresh — captures raw eeg_prediction events with full feature set
   useEffect(() => {
     wsEventRef.current = wsEvent;
   }, [wsEvent]);
-
-=======
->>>>>>> eeg-application-dashboard
   const { currentTheme } = useTheme();
   const themeRef = useRef(currentTheme);
 
@@ -91,6 +84,25 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
 
   /* ── FFT WORKER STATE ──────────────────────── */
   const [spectra, setSpectra] = useState({});
+  const [selectedChannel, setSelectedChannel] = useState('0');
+
+  // Keep spectraRef fresh — used to drive the radar chart from the LIVE FFT graph data
+  const spectraRef = useRef({});
+  useEffect(() => {
+    spectraRef.current = spectra;
+  }, [spectra]);
+
+  // Keep selectedChannelRef fresh for the interval closure
+  const selectedChannelRef = useRef('0');
+  useEffect(() => {
+    selectedChannelRef.current = selectedChannel;
+  }, [selectedChannel]);
+
+  // Keep wsUrlRef fresh to detect disconnections in the loop
+  const wsUrlRef = useRef(wsUrl);
+  useEffect(() => {
+    wsUrlRef.current = wsUrl;
+  }, [wsUrl]);
 
   useEffect(() => {
     if (!wsUrl) return;
@@ -100,7 +112,14 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
     const fftWorker = new FFTWorker();
     fftWorker.onmessage = (e) => {
         if (e.data.type === 'FFT_RESULT') {
-            setSpectra(e.data.payload);
+            setSpectra(prev => {
+                // Auto-select first channel if currently selected key is absent
+                const keys = Object.keys(e.data.payload);
+                if (keys.length > 0) {
+                    setSelectedChannel(ch => (e.data.payload[ch] ? ch : keys[0]));
+                }
+                return e.data.payload;
+            });
         }
     };
 
@@ -108,6 +127,7 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
         dataWorker.postMessage({ type: 'DISCONNECT' });
         dataWorker.terminate();
         fftWorker.terminate();
+        setSpectra({}); // clear when disconnected
     };
   }, [wsUrl]);
 
@@ -362,19 +382,11 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
         ctx.lineWidth = frac === 1.0 ? 1.2 : frac === INNER ? 1.0 : 0.6;
         ctx.stroke();
 
-<<<<<<< HEAD
         // Numeric labels
         ctx.font = 'bold 9px "Share Tech Mono", monospace';
         ctx.fillStyle = hex2rgba(primary, frac === INNER ? 0.9 : 0.6);
         ctx.textAlign = 'center';
         ctx.fillText(ringLabels[ri], cx, cy - R * frac - 3);
-=======
-        // Numeric labels (25, 50, 75, 100)
-        ctx.font = 'bold 9px "Share Tech Mono", monospace';
-        ctx.fillStyle = hex2rgba(primary, 0.7);
-        ctx.textAlign = 'center';
-        ctx.fillText((frac * 100).toFixed(0), cx, cy - R * frac - 3);
->>>>>>> eeg-application-dashboard
       });
 
       // Spokes
@@ -461,64 +473,51 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
       eegMode = 'ws';
       if (fetchInterval) clearInterval(fetchInterval);
       fetchInterval = setInterval(() => {
-<<<<<<< HEAD
         const ws  = wsEventRef.current;  // raw eeg_prediction — has full features
         const res = resultRef.current;   // processed result  — has state/band_mix/score
 
+        // If disconnected from backend, force wave bands to 0 immediately
+        if (!wsUrlRef.current || ws?.status === 'disconnected' || res?.status === 'disconnected') {
+           rawBands = [0, 0, 0, 0, 0];
+           calmSignal = 0;
+           return;
+        }
+
         // ── BAND POWERS ──────────────────────────────────────────────────────
-        // Priority 1: wsEvent.features (eeg_prediction) — has ALL 4 bands raw
-        const feat = ws?.features || res?.features;
-        if (feat?.delta !== undefined) {
-          // Log-scale so large delta doesn't visually crush theta/alpha/beta
-          rawBands = [
-            Math.log1p(feat.delta || 0),
-            Math.log1p(feat.theta || 0),
-            Math.log1p(feat.alpha || 0),
-            Math.log1p(feat.beta  || 0),
-            0, // gamma — keep at 0 per user request
-          ];
-        }
-        // Priority 2: band_powers array from mode result
-        else if (res?.band_powers?.length >= 4) {
-          rawBands = [
-            Math.log1p(res.band_powers[0] || 0),
-            Math.log1p(res.band_powers[1] || 0),
-            Math.log1p(res.band_powers[2] || 0),
-            Math.log1p(res.band_powers[3] || 0),
-            0,
-          ];
-        }
-        // Priority 3: radar_bands (pre-computed, already scaled)
-        else if (res?.radar_bands?.length >= 4) {
-          rawBands = [...res.radar_bands.slice(0, 4), 0];
-        }
-
-        // ── CALM SIGNAL ──────────────────────────────────────────────────────
-        if (res?.meditation_score !== undefined) {
-          calmSignal = Math.max(0, Math.min(1, res.meditation_score / 100));
-        } else if (feat?.alpha_rel !== undefined) {
-          const alphaRel = feat.alpha_rel || 0;
-          const betaRel  = feat.beta_rel  || 0;
-          calmSignal = Math.max(0, Math.min(1, alphaRel * 1.5 - betaRel * 0.5));
-        } else if (res?.band_mix) {
-          const { alpha = 0, theta = 0, beta = 0.1 } = res.band_mix;
-          calmSignal = Math.max(0, Math.min(1, (alpha + theta * 0.5) / (beta + 0.1) * 0.4));
-=======
-        const res = resultRef.current;
-        if (res?.band_powers?.length >= 5) {
-          // Use absolute backend band powers - radar normalizes them via ratio automatically
-          // We can apply a small log baseline so delta doesn't 100% crush the UI visually, 
-          // or just pass them raw as requested by user's raw band matching rule
-          rawBands = [...res.band_powers];
-        }
-
-        if (res?.meditation_score !== undefined) {
-          calmSignal = Math.max(0, Math.min(1, res.meditation_score / 100));
-        } else if (res?.band_mix) {
-           // Fallback to calculate base calm from mix if score is omitted for some reason
-           const { alpha, theta, beta } = res.band_mix;
-           calmSignal = Math.max(0, Math.min(1, (alpha + theta * 0.5) / (beta + 0.1) * 0.4));
->>>>>>> eeg-application-dashboard
+        // Compute REAL band powers directly from the live FFT spectra
+        // Use the explicit source channel if backend provides it, otherwise fallback
+        const activeCh = (ws?.source_channel !== undefined) ? String(ws.source_channel) : selectedChannelRef.current;
+        const currentSp = spectraRef.current[activeCh] || spectraRef.current[selectedChannelRef.current] || Object.values(spectraRef.current)[0] || [];
+        
+        if (currentSp.length > 0) {
+          let delta = 0, theta = 0, alpha = 0, beta = 0;
+          currentSp.forEach(d => {
+            if (d.freq >= 1 && d.freq < 4) delta += d.power;
+            else if (d.freq >= 4 && d.freq < 8) theta += d.power;
+            else if (d.freq >= 8 && d.freq < 13) alpha += d.power;
+            else if (d.freq >= 13 && d.freq <= 30) beta += d.power;
+          });
+          
+          // Use raw powers instead of log — radar normalizes them anyway
+          rawBands = [delta, theta, alpha, beta, 0];
+          
+          // ── CALM SIGNAL ──────────────────────────────────────────────────────
+          const total = delta + theta + alpha + beta + 1e-6;
+          const alphaRel = alpha / total;
+          const betaRel  = beta / total;
+          const thetaRel = theta / total;
+          
+          // Calm = high alpha/theta, low beta
+          calmSignal = Math.max(0, Math.min(1, (alphaRel + thetaRel * 0.5) * 1.5 - (betaRel * 0.5)));
+        } else {
+          // Fallback to wsEvent.features if FFT stream not ready
+          const feat = ws?.features || res?.features;
+          if (feat?.delta !== undefined) {
+            rawBands = [feat.delta||0, feat.theta||0, feat.alpha||0, feat.beta||0, 0];
+            const alphaRel = feat.alpha_rel || 0;
+            const betaRel  = feat.beta_rel  || 0;
+            calmSignal = Math.max(0, Math.min(1, alphaRel * 1.5 - betaRel * 0.5));
+          }
         }
       }, 60);
     }
@@ -601,6 +600,53 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
           orb.style.boxShadow = '0 0 40px var(--primary)';
         }
       }
+
+      // ── Focus & Stress live values ────────────────────────────────
+      // Focus = alpha/theta dominance over beta  (0-100)
+      // Stress = beta dominance, inverse of calm (0-100)
+      const ws2  = wsEventRef.current;
+      const res2 = resultRef.current;
+      const feat2 = ws2?.features || res2?.features;
+
+      // Focus & Stress also using spectra-derived features for consistency
+      const activeCh2 = (ws2?.source_channel !== undefined) ? String(ws2.source_channel) : selectedChannelRef.current;
+      const currentSp = spectraRef.current[activeCh2] || spectraRef.current[selectedChannelRef.current] || Object.values(spectraRef.current)[0] || [];
+      let focusVal  = 0;
+      let stressVal = 0;
+
+      if (!wsUrlRef.current || ws2?.status === 'disconnected' || res2?.status === 'disconnected') {
+         focusVal = 0;
+         stressVal = 0;
+      } else if (currentSp.length > 0) {
+         let delta = 0, theta = 0, alpha = 0, beta = 0;
+         currentSp.forEach(d => {
+            if (d.freq >= 1 && d.freq < 4) delta += d.power;
+            else if (d.freq >= 4 && d.freq < 8) theta += d.power;
+            else if (d.freq >= 8 && d.freq < 13) alpha += d.power;
+            else if (d.freq >= 13 && d.freq <= 30) beta += d.power;
+         });
+         const total2 = delta + theta + alpha + beta + 1e-6;
+         const alphaRel = alpha / total2;
+         const betaRel  = beta / total2;
+         const thetaRel = theta / total2;
+         focusVal  = Math.round(Math.min(100, Math.max(0, (alphaRel + thetaRel * 0.5) * 200)));
+         stressVal = Math.round(Math.min(100, Math.max(0, betaRel * 300)));
+      } else if (feat2?.alpha !== undefined) {
+        const total2 = (feat2.delta||0) + (feat2.theta||0) + (feat2.alpha||0) + (feat2.beta||0) + 1e-6;
+        const alphaRel = (feat2.alpha||0) / total2;
+        const betaRel  = (feat2.beta||0)  / total2;
+        const thetaRel = (feat2.theta||0) / total2;
+        focusVal  = Math.round(Math.min(100, Math.max(0, (alphaRel + thetaRel * 0.5) * 200)));
+        stressVal = Math.round(Math.min(100, Math.max(0, betaRel * 300)));
+      } else if (res2?.meditation_score !== undefined) {
+        focusVal  = Math.round(res2.meditation_score || 0);
+        stressVal = Math.round(Math.max(0, 100 - focusVal));
+      }
+
+      const fv = $('med-focus-val');
+      if (fv) fv.textContent = focusVal;
+      const sv = $('med-stress-val');
+      if (sv) sv.textContent = stressVal;
 
       // Sidebar indicators
       const colCalm = $('med-col-calm-val');

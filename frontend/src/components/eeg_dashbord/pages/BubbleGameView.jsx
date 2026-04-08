@@ -37,10 +37,7 @@ const BubbleGameView = ({ result, isConnected }) => {
   useEffect(() => {
     setSidebarSlot(
       <BubbleSidebar
-<<<<<<< HEAD
-=======
-        onBackToMenu={onBackToMenu}
->>>>>>> eeg-application-dashboard
+
         mouseMode={mouseMode}
         setMouseMode={setMouseMode}
         difficulty={difficulty}
@@ -109,16 +106,11 @@ const BubbleGameView = ({ result, isConnected }) => {
     );
     setSidebarMode('page');
     // Important: Clear the slot on unmount to avoid ghost sidebars
-<<<<<<< HEAD
     return () => {
       setSidebarSlot(null);
       setSidebarMiniSlot(null);
     };
   }, [mouseMode, difficulty, realTimeFreq, focusScore, globalRunning, setSidebarSlot, setSidebarMiniSlot, setSidebarMode]);
-=======
-    return () => setSidebarSlot(null);
-  }, [onBackToMenu, mouseMode, difficulty, realTimeFreq, focusScore, globalRunning, setSidebarSlot, setSidebarMode]);
->>>>>>> eeg-application-dashboard
 
   useEffect(() => { themeRef.current = currentTheme; }, [currentTheme]);
   useEffect(() => { resultRef.current = result; }, [result]);
