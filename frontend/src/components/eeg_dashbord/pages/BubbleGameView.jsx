@@ -449,6 +449,7 @@ const BubbleGameView = ({ result, isConnected, onBackToMenu }) => {
     function drawBubbles() {
       bubbles.forEach(b => {
         b.wobble += b.wobbleSpeed; b.x += b.drift + Math.sin(b.wobble) * 0.4; b.y -= b.speed;
+        b.r += 0.08; // Increase bubble size over time
         b.opacity = Math.min(1, b.opacity + 0.04);
         if (b.y < -b.r * 2) { b.alive = false; if (b.type !== 'bomb') { bubblesMissed++; lives = Math.max(0, lives - 1); buildLivesUI(); if (lives === 0) endGame(); } return; }
         ctx.save(); ctx.globalAlpha = b.opacity;

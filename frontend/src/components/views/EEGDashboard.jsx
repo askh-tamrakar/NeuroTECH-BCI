@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Activity, Music, Wind, Eye, Grid, MonitorPlay, Layers } from 'lucide-react';
+import { Activity, Music, Wind, Eye, Grid, MonitorPlay, Layers, ChevronLeft, ChevronRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import '../../styles/views/EEGDashboard.css';
 
@@ -89,6 +89,7 @@ const EEGDashboardContent = ({ wsEvent, isConnected, wsUrl }) => {
   const [currentView, setCurrentView] = useState("overview");
   const [eegResult, setEegResult] = useState(null);
   const { sidebarMode, setSidebarMode, sidebarSlot } = useSidebar();
+  const [sidebarVisible, setSidebarVisible] = useState(true);
 
   useEffect(() => {
     let modePreset = "frontal_fp1";
@@ -150,10 +151,19 @@ const EEGDashboardContent = ({ wsEvent, isConnected, wsUrl }) => {
   const isFullContainer = currentView !== "overview";
 
   return (
-    <div className="flex flex-row h-full w-full bg-[var(--bg)] overflow-hidden">
+    <div className="flex flex-row h-full w-full bg-[var(--bg)] overflow-hidden relative">
+
+      {/* ── TOGGLE BUTTON ── */}
+      <button
+        onClick={() => setSidebarVisible(prev => !prev)}
+        className={`absolute top-4 z-[100] p-1.5 rounded-md bg-[var(--surface)]/80 backdrop-blur-md border border-[var(--primary)]/30 text-[var(--text)] shadow-lg transition-all duration-500 hover:bg-[var(--primary)]/20 ${sidebarVisible ? 'left-[calc(21rem+1rem)]' : 'left-4'}`}
+        title={sidebarVisible ? "Hide Sidebar" : "Show Sidebar"}
+      >
+        {sidebarVisible ? <ChevronLeft size={20} /> : <ChevronRight size={20} />}
+      </button>
 
       {/* ── DUAL SIDEBAR SYSTEM ── */}
-      <div className="w-[21rem] bg-[var(--surface)] border-r border-[var(--border)] shrink-0 flex flex-col h-full z-20 relative transition-all duration-500">
+      <div className={`${sidebarVisible ? 'w-[21rem] border-r opacity-100' : 'w-0 border-r-0 opacity-0'} bg-[var(--surface)] border-[var(--border)] shrink-0 flex flex-col h-full z-20 relative transition-all duration-500 overflow-hidden`}>
 
         {/* Sidebar content — flex-1 allows it to grow and inner panel handles scroll */}
         <div className="sidebar-wrapper flex-1 min-h-0">
