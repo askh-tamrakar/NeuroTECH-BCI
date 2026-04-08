@@ -17,41 +17,94 @@ const OVERVIEW_APPS = [
   { id: 'ssvep', title: 'SSVEP Interface', icon: Eye, desc: 'Visual cortex stimulation via flickering targets.' },
 ];
 
-const OverviewGrid = ({ onSelect }) => (
+const CARD_THEMES = {
+  music: {
+    bg: 'linear-gradient(135deg, rgba(168, 85, 247, 0.18) 0%, rgba(99, 102, 241, 0.06) 50%, rgba(30, 20, 50, 0.9) 100%)',
+    border: 'rgba(168, 85, 247, 0.35)',
+    shadow: '0 24px 48px rgba(0,0,0,0.4), 0 0 50px rgba(168,85,247,0.15), inset 0 0 0 1px rgba(168,85,247,0.15)',
+    hoverBg: 'linear-gradient(135deg, rgba(168, 85, 247, 0.3) 0%, rgba(99, 102, 241, 0.12) 60%, rgba(30, 20, 50, 0.95) 100%)',
+    hoverBorder: 'rgba(168, 85, 247, 0.7)',
+    hoverShadow: '0 0 80px rgba(168,85,247,0.35), 0 0 160px rgba(168,85,247,0.15), inset 0 0 100px rgba(168,85,247,0.1)',
+  },
+  meditation: {
+    bg: 'linear-gradient(135deg, rgba(16, 185, 129, 0.18) 0%, rgba(59, 130, 246, 0.06) 50%, rgba(15, 40, 30, 0.9) 100%)',
+    border: 'rgba(16, 185, 129, 0.35)',
+    shadow: '0 24px 48px rgba(0,0,0,0.4), 0 0 50px rgba(16,185,129,0.15), inset 0 0 0 1px rgba(16,185,129,0.15)',
+    hoverBg: 'linear-gradient(135deg, rgba(16, 185, 129, 0.3) 0%, rgba(59, 130, 246, 0.12) 60%, rgba(15, 40, 30, 0.95) 100%)',
+    hoverBorder: 'rgba(16, 185, 129, 0.7)',
+    hoverShadow: '0 0 80px rgba(16,185,129,0.35), 0 0 160px rgba(16,185,129,0.15), inset 0 0 100px rgba(16,185,129,0.1)',
+  },
+  bubble: {
+    bg: 'linear-gradient(135deg, rgba(14, 165, 233, 0.18) 0%, rgba(45, 212, 191, 0.06) 50%, rgba(15, 25, 45, 0.9) 100%)',
+    border: 'rgba(14, 165, 233, 0.35)',
+    shadow: '0 24px 48px rgba(0,0,0,0.4), 0 0 50px rgba(14,165,233,0.15), inset 0 0 0 1px rgba(14,165,233,0.15)',
+    hoverBg: 'linear-gradient(135deg, rgba(14, 165, 233, 0.3) 0%, rgba(45, 212, 191, 0.12) 60%, rgba(15, 25, 45, 0.95) 100%)',
+    hoverBorder: 'rgba(14, 165, 233, 0.7)',
+    hoverShadow: '0 0 80px rgba(14,165,233,0.35), 0 0 160px rgba(14,165,233,0.15), inset 0 0 100px rgba(14,165,233,0.1)',
+  },
+  ssvep: {
+    bg: 'linear-gradient(135deg, rgba(245, 158, 11, 0.18) 0%, rgba(239, 68, 68, 0.06) 50%, rgba(45, 30, 15, 0.9) 100%)',
+    border: 'rgba(245, 158, 11, 0.35)',
+    shadow: '0 24px 48px rgba(0,0,0,0.4), 0 0 50px rgba(245,158,11,0.15), inset 0 0 0 1px rgba(245,158,11,0.15)',
+    hoverBg: 'linear-gradient(135deg, rgba(245, 158, 11, 0.3) 0%, rgba(239, 68, 68, 0.12) 60%, rgba(45, 30, 15, 0.95) 100%)',
+    hoverBorder: 'rgba(245, 158, 11, 0.7)',
+    hoverShadow: '0 0 80px rgba(245,158,11,0.35), 0 0 160px rgba(245,158,11,0.15), inset 0 0 100px rgba(245,158,11,0.1)',
+  },
+};
+
+const OverviewGrid = ({ onSelect }) => {
+  const [hoveredId, setHoveredId] = React.useState(null);
+
+  return (
   <div className="eeg-overview-container animate-fade-in w-full">
     <h1 className="eeg-overview-title">Applications Dashboard</h1>
     <p className="eeg-overview-subtitle">Select a neuro-application to begin session.</p>
     <div className="eeg-app-grid">
       <AnimatePresence>
-        {OVERVIEW_APPS.map((app, index) => (
+        {OVERVIEW_APPS.map((app, index) => {
+          const theme = CARD_THEMES[app.id];
+          const isHovered = hoveredId === app.id;
+          return (
           <motion.div
             key={app.id}
             className={`eeg-app-card group card-${app.id}`}
+            style={{
+              background: isHovered ? theme.hoverBg : theme.bg,
+              borderColor: isHovered ? theme.hoverBorder : theme.border,
+              boxShadow: isHovered ? theme.hoverShadow : theme.shadow,
+            }}
+            onMouseEnter={() => setHoveredId(app.id)}
+            onMouseLeave={(e) => {
+              setHoveredId(null);
+              e.currentTarget.style.setProperty('--mouse-x', '50%');
+              e.currentTarget.style.setProperty('--mouse-y', '50%');
+            }}
             onClick={() => onSelect(app.id)}
-            initial={{ opacity: 0, y: 30, scale: 0.9 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
+            initial={{ opacity: 0, y: 60, scale: 0.85, rotateX: 15 }}
+            animate={{ opacity: 1, y: 0, scale: 1, rotateX: 0 }}
+            exit={{ opacity: 0, y: -30, scale: 0.9, transition: { duration: 0.3 } }}
             transition={{
-              duration: 0.8,
-              delay: index * 0.1,
+              duration: 1,
+              delay: index * 0.15,
               type: "spring",
-              stiffness: 100,
-              damping: 15
+              stiffness: 80,
+              damping: 18
             }}
             whileHover={{
-              y: -20,
-              scale: 1.05,
-              rotateX: 5,
-              rotateY: -5,
-              z: 50,
-              transition: { duration: 0.4, type: "spring", stiffness: 300 }
+              y: -16,
+              scale: 1.04,
+              rotateX: 4,
+              rotateY: -4,
+              z: 40,
+              transition: { duration: 0.45, type: "spring", stiffness: 250, damping: 20 }
             }}
-            whileTap={{ scale: 0.98, rotateX: 0, rotateY: 0 }}
+            whileTap={{ scale: 0.97, rotateX: 0, rotateY: 0, transition: { duration: 0.1 } }}
             onMouseMove={(e) => {
               const rect = e.currentTarget.getBoundingClientRect();
-              e.currentTarget.style.setProperty('--mouse-x', `${e.clientX - rect.left}px`);
-              e.currentTarget.style.setProperty('--mouse-y', `${e.clientY - rect.top}px`);
-
-              // Custom GSAP-like 3D feel using CSS Variables if needed, but framer-motion handles most.
+              const x = e.clientX - rect.left;
+              const y = e.clientY - rect.top;
+              e.currentTarget.style.setProperty('--mouse-x', `${x}px`);
+              e.currentTarget.style.setProperty('--mouse-y', `${y}px`);
             }}
           >
             {/* Holographic Decoration Layer */}
@@ -79,11 +132,13 @@ const OverviewGrid = ({ onSelect }) => (
               </div>
             </div>
           </motion.div>
-        ))}
+          );
+        })}
       </AnimatePresence>
     </div>
   </div>
-);
+  );
+};
 
 const EEGDashboardContent = ({ wsEvent, isConnected, wsUrl }) => {
   const [currentView, setCurrentView] = useState("overview");

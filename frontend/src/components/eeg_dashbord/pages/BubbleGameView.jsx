@@ -1,11 +1,11 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
-import { Play, Square, Activity, Gamepad2, Mouse, Zap } from 'lucide-react';
+import { Settings, Play, Square, Activity, MousePointer2, Zap, History, Menu, ChevronLeft, ChevronUp, Power, ChevronDown, Gamepad2, Mouse, Trash2 } from 'lucide-react';
 import { useTheme } from '../../../contexts/ThemeContext';
 import '../../../styles/views/BubbleGameView.css';
 import BubbleSidebar from '../sidebar/BubbleSidebar';
 import { useSidebar } from './SidebarContext';
 
-const BubbleGameView = ({ result, isConnected }) => {
+const BubbleGameView = ({ result, isConnected, onBackToMenu }) => {
   const containerRef = useRef(null);
   const canvasWrapRef = useRef(null);
   const resultRef = useRef(null);
@@ -31,13 +31,13 @@ const BubbleGameView = ({ result, isConnected }) => {
 
   useEffect(() => { activeChannelRef.current = activeChannel; }, [activeChannel]);
 
-  const { setSidebarSlot, setSidebarMiniSlot, setSidebarMode } = useSidebar();
+  const { setSidebarSlot, setSidebarMode } = useSidebar();
 
   // Update the sidebar slot whenever the game state changes
   useEffect(() => {
     setSidebarSlot(
       <BubbleSidebar
-
+        onBackToMenu={onBackToMenu}
         mouseMode={mouseMode}
         setMouseMode={setMouseMode}
         difficulty={difficulty}
@@ -48,69 +48,10 @@ const BubbleGameView = ({ result, isConnected }) => {
         containerRef={containerRef}
       />
     );
-    setSidebarMiniSlot(
-      <div className="flex h-full w-full flex-col items-center gap-3 px-2 py-3 [scrollbar-width:none] [-ms-overflow-style:'none'] [&::-webkit-scrollbar]:hidden">
-        <div className="mt-12 flex flex-col items-center gap-2">
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-[var(--primary)]/35 bg-[var(--primary)]/10 text-[var(--primary)]">
-            <Gamepad2 size={18} />
-          </div>
-          <span className="text-[9px] font-black uppercase tracking-[2px] text-[var(--primary)] [writing-mode:vertical-rl] rotate-180">
-            Bubble
-          </span>
-        </div>
-
-        <div className="flex flex-col items-center gap-2 rounded-2xl border border-[var(--primary)]/20 bg-[var(--bg)]/60 px-1.5 py-2 shadow-[0_0_12px_rgba(0,0,0,0.16)]">
-          <button
-            type="button"
-            onClick={() => globalRunning ? containerRef.current?.stopGameHandler() : containerRef.current?.startGameHandler()}
-            className={`flex h-11 w-11 items-center justify-center rounded-xl border ${globalRunning ? 'border-red-500/35 bg-red-500/10 text-red-400' : 'border-green-500/35 bg-green-500/10 text-green-400'}`}
-            title={globalRunning ? 'End session' : 'Start session'}
-          >
-            {globalRunning ? <Square size={18} /> : <Play size={18} />}
-          </button>
-          <button
-            type="button"
-            onClick={() => setMouseMode((prev) => !prev)}
-            className={`flex h-11 w-11 items-center justify-center rounded-xl border ${mouseMode ? 'border-amber-500/35 bg-amber-500/10 text-amber-400' : 'border-[var(--border)] bg-[var(--bg)] text-[var(--text)]'}`}
-            title={mouseMode ? 'Switch to sensor mode' : 'Switch to manual mode'}
-          >
-            {mouseMode ? <Mouse size={18} /> : <Zap size={18} />}
-          </button>
-        </div>
-
-        <div className="flex w-full flex-col gap-1 rounded-2xl border border-[var(--border)] bg-[var(--bg)]/60 px-1.5 py-2">
-          <span className="text-center text-[8px] font-black uppercase tracking-[2px] text-[var(--muted)]">Level</span>
-          <div className="grid grid-cols-3 gap-1">
-            {[1, 2, 3].map((lvl) => (
-              <button
-                key={lvl}
-                type="button"
-                onClick={() => setDifficulty(lvl)}
-                className={`rounded-lg border px-1 py-1.5 text-[8px] font-black uppercase tracking-[1.5px] ${difficulty === lvl ? 'border-[var(--primary)]/50 bg-[var(--primary)]/15 text-[var(--primary)]' : 'border-[var(--border)] bg-[var(--surface)]/60 text-[var(--muted)]'}`}
-                title={`Set difficulty ${lvl}`}
-              >
-                {lvl}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="flex w-full flex-col items-center gap-1 rounded-2xl border border-[var(--border)] bg-[var(--bg)] px-1.5 py-2 text-center">
-          <div className="text-[8px] font-black uppercase tracking-[2px] text-[var(--muted)]">Focus</div>
-          <div className="text-[10px] font-black text-[var(--primary)]">{focusScore}%</div>
-          <div className="text-[8px] font-black uppercase tracking-[1.5px] text-[var(--primary)]/70">
-            {realTimeFreq ? `${Math.round(realTimeFreq)}hz` : 'idle'}
-          </div>
-        </div>
-      </div>
-    );
     setSidebarMode('page');
     // Important: Clear the slot on unmount to avoid ghost sidebars
-    return () => {
-      setSidebarSlot(null);
-      setSidebarMiniSlot(null);
-    };
-  }, [mouseMode, difficulty, realTimeFreq, focusScore, globalRunning, setSidebarSlot, setSidebarMiniSlot, setSidebarMode]);
+    return () => setSidebarSlot(null);
+  }, [onBackToMenu, mouseMode, difficulty, realTimeFreq, focusScore, globalRunning, setSidebarSlot, setSidebarMode]);
 
   useEffect(() => { themeRef.current = currentTheme; }, [currentTheme]);
   useEffect(() => { resultRef.current = result; }, [result]);
@@ -420,9 +361,7 @@ const BubbleGameView = ({ result, isConnected }) => {
     }
 
     function getCursorRadius() {
-      const isManualMode = mouseModeRef.current;
-      const r = isManualMode ? 65 : (20 + eegSignal * 110);
-      
+      const r = 65; // Fixed radius for both modes
       const cur = $('cursor');
       if (cur) {
         const s = Math.round(r * 2 + 20);
@@ -431,7 +370,7 @@ const BubbleGameView = ({ result, isConnected }) => {
         const aura = $('cursorAura');
         if (aura) { 
           aura.setAttribute('cx', s / 2); aura.setAttribute('cy', s / 2); aura.setAttribute('r', s / 2 - 4); 
-          aura.setAttribute('opacity', isManualMode ? 0.6 : (0.3 + eegSignal * 0.55)); 
+          aura.setAttribute('opacity', 0.6); // Fixed opacity for both modes
         }
         $$('#cursor circle').forEach((c, i) => { if (i > 0) { c.setAttribute('cx', s / 2); c.setAttribute('cy', s / 2); } });
       }
@@ -510,6 +449,7 @@ const BubbleGameView = ({ result, isConnected }) => {
     function drawBubbles() {
       bubbles.forEach(b => {
         b.wobble += b.wobbleSpeed; b.x += b.drift + Math.sin(b.wobble) * 0.4; b.y -= b.speed;
+        b.r += 0.08; // Increase bubble size over time
         b.opacity = Math.min(1, b.opacity + 0.04);
         if (b.y < -b.r * 2) { b.alive = false; if (b.type !== 'bomb') { bubblesMissed++; lives = Math.max(0, lives - 1); buildLivesUI(); if (lives === 0) endGame(); } return; }
         ctx.save(); ctx.globalAlpha = b.opacity;
@@ -536,7 +476,7 @@ const BubbleGameView = ({ result, isConnected }) => {
     function drawCursorGlow() {
       const r = getCursorRadius();
       const prim = themeRef.current?.colors?.['--primary'] || '#00f5ff';
-      const alpha = 0.04 + eegSignal * 0.09;
+      const alpha = 0.08; // Fixed alpha for both modes
       const grad = ctx.createRadialGradient(mouseX, mouseY, 0, mouseX, mouseY, r);
       grad.addColorStop(0, hexToRgba(prim, alpha * 2)); grad.addColorStop(0.5, hexToRgba(prim, alpha)); grad.addColorStop(1, hexToRgba(prim, 0));
       ctx.beginPath(); ctx.arc(mouseX, mouseY, r, 0, Math.PI * 2); ctx.fillStyle = grad; ctx.fill();

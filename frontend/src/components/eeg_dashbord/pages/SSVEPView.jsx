@@ -96,7 +96,7 @@ export default function SSVEPView({ isConnected, wsEvent, onBackToMenu }) {
     const [realTimeFreq, setRealTimeFreq] = useState(0);
 
     // --- Protocol State ---
-    const { setSidebarSlot, setSidebarMiniSlot, setSidebarMode } = useSidebar();
+    const { setSidebarSlot, setSidebarMode } = useSidebar();
 
     const [lastModifiedTargetId, setLastModifiedTargetId] = useState(null);
     const [isSyncing, setIsSyncing] = useState(false);
@@ -181,9 +181,8 @@ export default function SSVEPView({ isConnected, wsEvent, onBackToMenu }) {
         setSidebarMode('page');
         return () => {
             setSidebarSlot(null);
-            setSidebarMiniSlot(null);
         };
-    }, [setSidebarMode, setSidebarSlot, setSidebarMiniSlot]);
+    }, [setSidebarMode, setSidebarSlot]);
 
     // Update the sidebar slot whenever any relevant state changes
     useEffect(() => {
@@ -223,71 +222,12 @@ export default function SSVEPView({ isConnected, wsEvent, onBackToMenu }) {
                 isConnected={isConnected}
             />
         );
-        setSidebarMiniSlot(
-            <div className="flex h-full w-full flex-col items-center gap-3 px-2 py-3 [scrollbar-width:none] [-ms-overflow-style:'none'] [&::-webkit-scrollbar]:hidden">
-                <div className="mt-12 flex flex-col items-center gap-2">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-[var(--primary)]/35 bg-[var(--primary)]/10 text-[var(--primary)]">
-                        <Brain size={18} />
-                    </div>
-                    <span className="text-[9px] font-black uppercase tracking-[2px] text-[var(--primary)] [writing-mode:vertical-rl] rotate-180">
-                        SSVEP
-                    </span>
-                </div>
-
-                <div className="flex flex-col items-center gap-2 rounded-2xl border border-[var(--primary)]/20 bg-[var(--bg)]/60 px-1.5 py-2 shadow-[0_0_12px_rgba(0,0,0,0.16)]">
-                    <button
-                        type="button"
-                        onClick={globalRunning ? stopFlicker : startFlicker}
-                        className={`flex h-11 w-11 items-center justify-center rounded-xl border ${globalRunning ? 'border-red-500/35 bg-red-500/10 text-red-400' : 'border-green-500/35 bg-green-500/10 text-green-400'}`}
-                        title={globalRunning ? 'Stop flicker' : 'Start flicker'}
-                    >
-                        {globalRunning ? <Square size={18} /> : <Play size={18} />}
-                    </button>
-                    {!globalRunning ? (
-                        <button
-                            type="button"
-                            onClick={runProtocol}
-                            className="flex h-11 w-11 items-center justify-center rounded-xl border border-[var(--primary)]/35 bg-[var(--primary)]/10 text-[var(--primary)]"
-                            title="Run protocol"
-                        >
-                            <Zap size={18} />
-                        </button>
-                    ) : null}
-                </div>
-
-                <div className="flex w-full flex-col gap-1 rounded-2xl border border-[var(--border)] bg-[var(--bg)]/60 px-1.5 py-2 text-center">
-                    <div className="flex items-center justify-center gap-1 text-[8px] font-black uppercase tracking-[2px] text-[var(--muted)]">
-                        <Brain size={10} className={useML ? 'text-[var(--primary)]' : 'text-[var(--muted)]'} />
-                        <span>{useML ? 'ML On' : 'FBCCA'}</span>
-                    </div>
-                    <div className="flex items-center justify-center gap-1 text-[8px] font-black uppercase tracking-[1.5px] text-[var(--primary)]/80">
-                        <Sun size={10} />
-                        <span>{Math.round(brightness * 100)}%</span>
-                    </div>
-                    <div className="flex items-center justify-center gap-1 text-[8px] font-black uppercase tracking-[1.5px] text-[var(--primary)]/70">
-                        <Target size={10} />
-                        <span>{configs.filter((cfg) => cfg.enabled).length} tgt</span>
-                    </div>
-                </div>
-
-                <div className="flex w-full flex-col items-center gap-1 rounded-2xl border border-[var(--border)] bg-[var(--bg)] px-1.5 py-2 text-center">
-                    <div className="flex items-center justify-center gap-1 text-[8px] font-black uppercase tracking-[2px] text-[var(--muted)]">
-                        <Activity size={10} className="text-[var(--primary)]" />
-                        <span>Signal</span>
-                    </div>
-                    <div className="text-[10px] font-black text-[var(--primary)]">{realTimeFreq ? realTimeFreq.toFixed(1) : '0.0'}</div>
-                    <div className="text-[8px] font-black uppercase tracking-[1.5px] text-[var(--primary)]/70">
-                        {predictedFreq ? `pred ${predictedFreq.toFixed(1)}` : 'waiting'}
-                    </div>
-                </div>
-            </div>
-        );
     }, [
         onBackToMenu, useML, runtimeMLState, detectorMode, availableModels, selectedModel,
         addLog, realTimeFreq, predictedFreq, scoreVector, configs, updateConfig,
         isSyncing, lastModifiedTargetId, globalRunning, protocolMode, startFlicker,
         stopFlicker, runProtocol, brightness, refreshRate,
-        logs, showTargets, openDropdownId, isConnected, setSidebarSlot, setSidebarMiniSlot
+        logs, showTargets, openDropdownId, isConnected, setSidebarSlot
     ]);
 
 

@@ -204,7 +204,7 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
     localStorage.setItem('med_stats', JSON.stringify(stats));
   }, [stats]);
 
-  const { setSidebarSlot, setSidebarMiniSlot } = useSidebar();
+  const { setSidebarSlot } = useSidebar();
 
   // Update the sidebar slot whenever state affecting the sidebar changes
   useEffect(() => {
@@ -220,71 +220,15 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
         wisdomIdx={wisdomIdx}
       />
     );
-    setSidebarMiniSlot(
-      <div className="flex h-full w-full flex-col items-center gap-3 px-2 py-3 [scrollbar-width:none] [-ms-overflow-style:'none'] [&::-webkit-scrollbar]:hidden">
-        <div className="mt-12 flex flex-col items-center gap-2">
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-primary/35 bg-primary/10 text-primary">
-            <Wind size={18} />
-          </div>
-          <span className="text-[9px] font-black uppercase tracking-[2px] text-primary [writing-mode:vertical-rl] rotate-180">
-            Meditate
-          </span>
-        </div>
 
-        <div className="flex flex-col items-center gap-2 rounded-2xl border border-primary/20 bg-bg/60 px-1.5 py-2 shadow-[0_0_12px_rgba(0,0,0,0.16)]">
-          <button
-            type="button"
-            onClick={() => containerRef.current?.sessionBtnHandler()}
-            className="flex h-11 w-11 items-center justify-center rounded-xl border border-green-500/35 bg-green-500/10 text-green-400"
-            title="Start or stop session"
-          >
-            <Play size={18} />
-          </button>
-          <button
-            type="button"
-            onClick={() => containerRef.current?.toggleConnHandler()}
-            className="flex h-11 w-11 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--bg)] text-[var(--text)]"
-            title="Toggle live mode"
-          >
-            <Power size={18} />
-          </button>
-        </div>
-
-        <div className="flex w-full flex-col gap-1 rounded-2xl border border-[var(--border)] bg-[var(--bg)]/60 px-1.5 py-2">
-          <span className="text-center text-[8px] font-black uppercase tracking-[2px] text-[var(--muted)] mb-1">Timer</span>
-          <div className="flex flex-col gap-1">
-            {PRESETS.map((min) => (
-              <button
-                key={min}
-                type="button"
-                onClick={() => containerRef.current?.presetHandler(min)}
-                className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)]/60 py-2 text-[9px] font-black uppercase tracking-[1.5px] text-[var(--muted)] hover:border-primary/50 hover:bg-primary/10 hover:text-primary transition-all"
-                title={`Set ${min} minute session`}
-              >
-                {min}m
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="flex w-full flex-col items-center gap-1 rounded-2xl border border-[var(--border)] bg-[var(--bg)] px-1.5 py-2 text-center">
-          <div className="text-[8px] font-black uppercase tracking-[2px] text-[var(--muted)]">Calm</div>
-          <div className="text-[10px] font-black text-primary">{Math.round((result?.meditation_score || 0))}%</div>
-          <div className="text-[8px] font-black uppercase tracking-[1.5px] text-primary/70">
-            {musicState.filter((m) => m.active).length} tracks
-          </div>
-        </div>
-      </div>
-    );
-  }, [musicState, masterVol, stats, wisdomIdx, toggleMusic, updateVol, onMasterVol, setSidebarSlot, setSidebarMiniSlot, result]);
+  }, [musicState, masterVol, stats, wisdomIdx, toggleMusic, updateVol, onMasterVol, setSidebarSlot, result]);
 
   // Separate cleanup-only effect: clear slot on unmount
   useEffect(() => {
     return () => {
       setSidebarSlot(null);
-      setSidebarMiniSlot(null);
     };
-  }, [setSidebarSlot, setSidebarMiniSlot]);
+  }, [setSidebarSlot]);
 
 
   useEffect(() => {
