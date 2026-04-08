@@ -361,9 +361,7 @@ const BubbleGameView = ({ result, isConnected, onBackToMenu }) => {
     }
 
     function getCursorRadius() {
-      const isManualMode = mouseModeRef.current;
-      const r = isManualMode ? 65 : (20 + eegSignal * 110);
-      
+      const r = 65; // Fixed radius for both modes
       const cur = $('cursor');
       if (cur) {
         const s = Math.round(r * 2 + 20);
@@ -372,7 +370,7 @@ const BubbleGameView = ({ result, isConnected, onBackToMenu }) => {
         const aura = $('cursorAura');
         if (aura) { 
           aura.setAttribute('cx', s / 2); aura.setAttribute('cy', s / 2); aura.setAttribute('r', s / 2 - 4); 
-          aura.setAttribute('opacity', isManualMode ? 0.6 : (0.3 + eegSignal * 0.55)); 
+          aura.setAttribute('opacity', 0.6); // Fixed opacity for both modes
         }
         $$('#cursor circle').forEach((c, i) => { if (i > 0) { c.setAttribute('cx', s / 2); c.setAttribute('cy', s / 2); } });
       }
@@ -477,7 +475,7 @@ const BubbleGameView = ({ result, isConnected, onBackToMenu }) => {
     function drawCursorGlow() {
       const r = getCursorRadius();
       const prim = themeRef.current?.colors?.['--primary'] || '#00f5ff';
-      const alpha = 0.04 + eegSignal * 0.09;
+      const alpha = 0.08; // Fixed alpha for both modes
       const grad = ctx.createRadialGradient(mouseX, mouseY, 0, mouseX, mouseY, r);
       grad.addColorStop(0, hexToRgba(prim, alpha * 2)); grad.addColorStop(0.5, hexToRgba(prim, alpha)); grad.addColorStop(1, hexToRgba(prim, 0));
       ctx.beginPath(); ctx.arc(mouseX, mouseY, r, 0, Math.PI * 2); ctx.fillStyle = grad; ctx.fill();
