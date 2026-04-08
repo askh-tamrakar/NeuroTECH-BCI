@@ -1,3 +1,4 @@
+import time
 import joblib
 import pandas as pd
 import numpy as np
@@ -37,10 +38,9 @@ class RPSDetector:
                 from src.utils.config import config_manager
                 model_name = config_manager.get_active_model('EMG') or "emg_rf"
 
-            # Locate model paths relative to project root
-            project_root = Path(__file__).resolve().parent.parent.parent.parent
-            # UPDATED: Use EMG subfolder
-            models_dir = project_root / "frontend" / "public" / "data" / "EMG" / "models"
+            # Locate model paths via centralized data directory
+            from src.utils.paths import get_models_dir
+            models_dir = get_models_dir('EMG')
             
             clean_name = "".join([c for c in model_name if c.isalnum() or c in ('_', '-')])
             

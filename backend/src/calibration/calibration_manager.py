@@ -32,7 +32,8 @@ class CalibrationManager:
     
     def __init__(self):
         self.project_root = Path(__file__).resolve().parent.parent.parent
-        self.data_dir = self.project_root / "frontend" / "public" / "data"
+        from src.utils.paths import get_base_data_dir
+        self.data_dir = get_base_data_dir()
     
     def _sanitize_features(self, features: Dict[str, Any]) -> Dict[str, Any]:
         """

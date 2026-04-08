@@ -2,13 +2,12 @@ import json
 from pathlib import Path
 from src.server.server.state import state
 
-# Paths - Adjusted relative to PROJECT ROOT
-# Assuming src/web/server/config_manager.py
-# ROOT is ../../../
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
-CONFIG_PATH = PROJECT_ROOT / "config" / "sensor_config.json"
-FILTER_CONFIG_PATH = PROJECT_ROOT / "config" / "filter_config.json"
-FEATURE_CONFIG_PATH = PROJECT_ROOT / "config" / "feature_config.json"
+from src.utils.paths import get_config_dir
+
+_CONFIG_DIR = get_config_dir()
+CONFIG_PATH = _CONFIG_DIR / "sensor_config.json"
+FILTER_CONFIG_PATH = _CONFIG_DIR / "filter_config.json"
+FEATURE_CONFIG_PATH = _CONFIG_DIR / "feature_config.json"
 DEFAULT_SR = 512
 
 def load_config() -> dict:
@@ -18,34 +17,59 @@ def load_config() -> dict:
         "channel_mapping": {
             "ch0": {
                 "sensor": "EMG", 
-                "enabled": True
+                "enabled": True,
+                "label": "Fp1 / Oz (Ref: A1, A2)"
             },
             "ch1": {
-                "sensor": "EEG", 
-                "enabled": True
+                "sensor": "EOG", 
+                "enabled": True,
+                "label": "UNUSED"
             }
         },
+        "active_models": {
+            "EMG": "Neptune",
+            "EOG": "dino-ml",
+            "EEG": "Neo"
+        },
+        "adc_settings": {
+            "resolution_bits": 14,
+            "vref_mv": 3300
+        },
+        "ui_settings": {
+            "showGrid": True,
+            "timeWindowMs": 10000
+        },
         "filters": {
-             "EMG": {"cutoff": 20.0, "order": 4, "notch_enabled": True, "notch_freq": 50, "bandpass_enabled": True, "bandpass_low": 20, "bandpass_high": 250},
+            "EMG": {
+                "notch_enabled": True,
+                "notch_freq": 50,
+                "notch_q": 30,
+                "bandpass_enabled": True,
+                "bandpass_high": 250,
+                "bandpass_low": 70,
+                "bandpass_order": 4,
+                "envelope_enabled": True,
+                "envelope_cutoff": 8,
+                "envelope_order": 4
+            },
             "EOG": {
-                "type": "low_pass",
-                "cutoff": 10.0,
-                "order": 4
+                "notch_enabled": True,
+                "notch_freq": 50,
+                "notch_q": 5,
+                "bandpass_enabled": True,
+                "bandpass_high": 10,
+                "bandpass_low": 0.4,
+                "bandpass_order": 1
             },
             "EEG": {
-                "filters": [ 
-                    {
-                        "type": "notch",
-                        "freq": 50,
-                        "Q": 30
-                    },  
-                    {
-                        "type": "bandpass",
-                        "low": 0.5,
-                        "high": 45,
-                        "order": 4
-                    }
-                ]
+                "notch_enabled": True,
+                "notch_freq": 50,
+                "notch_q": 30,
+                "bandpass_enabled": True,
+                "bandpass_high": 100,
+                "bandpass_low": 1,
+                "bandpass_order": 4,
+                "cutoff": 1
             }
         },
         "display": {
@@ -122,12 +146,11 @@ def save_config(config: dict) -> bool:
         print(f"[ConfigManager] 💾 Sensor config saved to {CONFIG_PATH}")
         state.config = config
         return True
-        return True
     except Exception as e:
         print(f"[ConfigManager] ❌ Error saving config: {e}")
         return False
 
-DETECTION_STATE_PATH = PROJECT_ROOT / "config" / "detection_state.json"
+DETECTION_STATE_PATH = _CONFIG_DIR / "detection_state.json"
 
 def get_detection_state() -> bool:
     """Read detection active state from file."""

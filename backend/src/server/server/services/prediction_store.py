@@ -5,7 +5,7 @@ import time
 from src.utils.paths import get_base_data_dir
 
 
-PREDICTION_DB_DIR = get_base_data_dir() / "PREDICTION" / "EMG"
+PREDICTION_DB_DIR = get_base_data_dir() / "EMG" / "predictions"
 PREDICTION_DB_PATH = PREDICTION_DB_DIR / "emg.db"
 
 

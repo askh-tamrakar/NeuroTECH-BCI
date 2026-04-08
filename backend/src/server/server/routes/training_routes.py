@@ -145,15 +145,9 @@ def api_list_models():
         # Inline Listing Logic
         from pathlib import Path
         import json
+        from src.utils.paths import get_models_dir
         
-        # Path: src/web/server/routes/training_routes.py -> root is 5 levels up?
-        # root/src/web/server/routes
-        # Actually simplest is to find 'data' from common anchor?
-        # Let's rely on relative path from this file.
-        # this_file = .../src/web/server/routes/training_routes.py
-        # root is parents[4]
-        PROJ_ROOT = Path(__file__).resolve().parent.parent.parent.parent.parent
-        MODELS_DIR = PROJ_ROOT / "frontend" / "public" / "data" / "EMG" / "models"
+        MODELS_DIR = get_models_dir('EMG')
         
         # Get active model to mark it
         from src.utils.config import config_manager

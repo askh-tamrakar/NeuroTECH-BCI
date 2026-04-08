@@ -30,7 +30,6 @@ DISPLAY_LABELS = {
 }
 
 MODELS_ROOT = get_base_data_dir()
-REJECTED_MODELS_ROOT = MODELS_ROOT / "rejected_models"
 ACTIVE_MODELS = {'EMG': None, 'EOG': None, 'EEG': None}
 ACTIVE_SCALERS = {'EMG': None, 'EOG': None, 'EEG': None}
 ACTIVE_MODEL_NAMES = {'EMG': None, 'EOG': None, 'EEG': None}
@@ -63,7 +62,7 @@ def get_model_paths(sensor, model_id):
 
 
 def get_rejected_model_paths(sensor, model_id):
-    rejected_dir = REJECTED_MODELS_ROOT / sensor.upper()
+    rejected_dir = MODELS_ROOT / sensor.upper() / "rejected_models"
     rejected_dir.mkdir(parents=True, exist_ok=True)
     base = rejected_dir / model_id
     return {

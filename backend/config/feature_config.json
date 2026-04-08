@@ -1,5 +1,5 @@
 {
   "EOG": {
-    "detection_method": "ML"
+    "detection_method": "Threshold"
   }
 }

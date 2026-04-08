@@ -50,8 +50,13 @@ except ImportError:
     from src.processing.eeg_processor import EEGFilterProcessor
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-CONFIG_PATH = PROJECT_ROOT / "config" / "sensor_config.json"
-FILTER_CONFIG_PATH = PROJECT_ROOT / "config" / "filter_config.json"
+try:
+    from src.utils.paths import get_config_dir
+    _CONFIG_DIR = get_config_dir()
+except ImportError:
+    _CONFIG_DIR = PROJECT_ROOT / "config"
+CONFIG_PATH = _CONFIG_DIR / "sensor_config.json"
+FILTER_CONFIG_PATH = _CONFIG_DIR / "filter_config.json"
 RAW_STREAM_NAME = "BioSignals-Raw-uV"
 PROCESSED_STREAM_NAME = "BioSignals-Processed"
 RELOAD_INTERVAL = 2.0

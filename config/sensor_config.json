@@ -19,8 +19,8 @@
   },
   "num_channels": 2,
   "active_models": {
-    "EMG": "Neo",
-    "EOG": "dino ml",
+    "EMG": "rps",
+    "EOG": "Dino",
     "EEG": "Neuro"
   }
 }

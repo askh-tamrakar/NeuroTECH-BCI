@@ -26,27 +26,17 @@ DATA_DIR = PROJECT_ROOT / "data"
 def get_base_data_dir() -> Path:
     """
     Get the base directory for storing BCI data, models, and databases.
-    In development, this defaults to 'frontend/public/data' for easy access by the dev server.
-    In production, it checks the BCI_DATA_DIR environment variable, or defaults to a 'bci_data' folder next to the project root.
+    Always uses the centralized 'data/' folder at project root.
+    Can be overridden via BCI_DATA_DIR environment variable.
     """
     env_dir = os.environ.get("BCI_DATA_DIR")
     if env_dir:
         path = Path(env_dir)
         path.mkdir(parents=True, exist_ok=True)
         return path
-        
-    # Check if we are likely in production (cPanel usually sets specific env vars, or we can check for node_modules)
-    # A simple heuristical check: if frontend/public doesn't exist, we might be in a built environment
-    public_dir = FRONTEND_DIR / "public"
-    if public_dir.exists() and not os.environ.get("FLASK_ENV") == "production":
-        # Development mode
-        return public_dir / "data"
-    else:
-        # Production mode - store data outside the frontend folder to avoid serving raw DBs
-        # Default to a 'bci_data' folder in the project root
-        prod_data = PROJECT_ROOT / "bci_data"
-        prod_data.mkdir(parents=True, exist_ok=True)
-        return prod_data
+
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    return DATA_DIR
 
 def get_db_path(sensor_type: str) -> Path:
     base = get_base_data_dir()
@@ -83,12 +73,16 @@ def _json_copy_if_exists(candidates: list[Path], destination: Path) -> bool:
     return False
 
 
-def ensure_runtime_config_files(default_payloads: dict[str, object]) -> Path:
+def ensure_runtime_config_files(default_payloads: dict[str, object] | None = None) -> Path:
+    """Ensure all config files exist in data/config/, migrating from legacy dirs if needed."""
     config_dir = get_config_dir()
     legacy_dirs = [
         PROJECT_ROOT / "config",
         PROJECT_ROOT / "backend" / "config",
     ]
+
+    if default_payloads is None:
+        default_payloads = _DEFAULT_CONFIG_PAYLOADS
 
     for filename, payload in default_payloads.items():
         destination = config_dir / filename
@@ -104,3 +98,36 @@ def ensure_runtime_config_files(default_payloads: dict[str, object]) -> Path:
             json.dump(payload, handle, indent=2)
 
     return config_dir
+
+
+_DEFAULT_CONFIG_PAYLOADS = {
+    "sensor_config.json": {
+        "sampling_rate": 512,
+        "channel_mapping": {
+            "ch0": {"enabled": True, "sensor": "EMG", "label": "Fp1 / Oz (Ref: A1, A2)"},
+            "ch1": {"enabled": True, "sensor": "EOG", "label": "UNUSED"}
+        },
+        "active_models": {"EMG": "Neptune", "EOG": "dino-ml", "EEG": "Neo"},
+        "adc_settings": {"resolution_bits": 14, "vref_mv": 3300},
+        "ui_settings": {"showGrid": True, "timeWindowMs": 10000},
+        "display": {"timeWindowMs": 10000, "showGrid": True, "scannerX": 0},
+        "num_channels": 2
+    },
+    "filter_config.json": {
+        "filters": {
+            "EMG": {"notch_enabled": True, "notch_freq": 50, "notch_q": 30, "bandpass_enabled": True, "bandpass_high": 250, "bandpass_low": 70, "bandpass_order": 4, "envelope_enabled": True, "envelope_cutoff": 8, "envelope_order": 4},
+            "EOG": {"notch_enabled": True, "notch_freq": 50, "notch_q": 5, "bandpass_enabled": True, "bandpass_high": 10, "bandpass_low": 0.4, "bandpass_order": 1},
+            "EEG": {"notch_enabled": True, "notch_freq": 50, "notch_q": 30, "bandpass_enabled": True, "bandpass_high": 100, "bandpass_low": 1, "bandpass_order": 4, "cutoff": 1}
+        }
+    },
+    "feature_config.json": {
+        "RPS": {"confidence_threshold": 0.68, "voting_window": 5, "stable_count": 3, "activation_count": 3, "release_count": 2, "min_episode_votes": 4, "min_episode_majority_ratio": 0.6, "confirmation_cooldown_sec": 0.65}
+    },
+    "calibration_config.json": {},
+    "detection_state.json": {"active": False},
+    "sensor_presets.json": {}
+}
+
+
+# Auto-migrate on first import
+ensure_runtime_config_files()

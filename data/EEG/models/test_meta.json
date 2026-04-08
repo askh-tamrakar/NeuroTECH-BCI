@@ -1,0 +1,27 @@
+{
+  "sensor": "EEG",
+  "classifier": "LDA",
+  "feature_order": [
+    "score_1",
+    "score_2",
+    "score_3",
+    "score_4",
+    "score_5",
+    "score_6",
+    "max_score",
+    "second_max_score",
+    "score_ratio",
+    "score_mean",
+    "score_std",
+    "peak_freq"
+  ],
+  "test_size": 0.15,
+  "solver": "eigen",
+  "shrinkage": "auto",
+  "train_samples": 895,
+  "test_samples": 159,
+  "total_samples": 1054,
+  "table_name": "eeg_windows",
+  "created_at": "2026-03-30T04:35:53.875509",
+  "accuracy": 0.9371069182389937
+}

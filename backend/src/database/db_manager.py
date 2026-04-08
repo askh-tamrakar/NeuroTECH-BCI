@@ -6,13 +6,12 @@ from typing import Dict, Optional, List
 
 class DatabaseManager:
     def __init__(self):
-        project_root = Path(__file__).resolve().parent.parent.parent
-        base_data_dir = project_root / "frontend" / "public" / "data"
+        from src.utils.paths import get_db_path
         
         self.db_paths = {
-            'EMG': base_data_dir / "EMG" / "processed" / "emg_data.db",
-            'EOG': base_data_dir / "EOG" / "processed" / "eog_data.db",
-            'EEG': base_data_dir / "EEG" / "processed" / "eeg_data.db"
+            'EMG': get_db_path('EMG'),
+            'EOG': get_db_path('EOG'),
+            'EEG': get_db_path('EEG')
         }
         
         # Ensure directories exist

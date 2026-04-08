@@ -1,0 +1,13 @@
+{
+  "sensor": "EEG",
+  "table_name": "eeg_session_t",
+  "session_name": "t",
+  "storage_format": "compact_eeg_v1",
+  "channel_index": 1,
+  "sample_count": 993,
+  "sampling_rate": 1000.0,
+  "window_ms": 1499.0537109375,
+  "target_frequency": 0.0,
+  "source": "ssvep_collector"
+}
+}

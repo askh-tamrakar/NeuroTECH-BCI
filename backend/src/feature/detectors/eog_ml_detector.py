@@ -36,10 +36,9 @@ class EOGMLDetector:
                 # Fallback to default name
                 model_name = "eog_rf"
 
-            # Locate model paths relative to project root
-            # This file is in src/feature/detectors
-            project_root = Path(__file__).resolve().parent.parent.parent.parent
-            models_dir = project_root / "frontend" / "public" / "data" / "EOG" / "models"
+            # Locate model paths via centralized data directory
+            from src.utils.paths import get_models_dir
+            models_dir = get_models_dir('EOG')
             
             clean_name = "".join([c for c in model_name if c.isalnum() or c in ('_', '-')])
             

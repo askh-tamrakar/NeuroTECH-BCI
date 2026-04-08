@@ -35,7 +35,12 @@ from .extractors.trigger_extractor import EEGExtractor
 from .detectors.eeg_frequency_detector import EEGFrequencyDetector
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-CONFIG_PATH = PROJECT_ROOT / "config" / "sensor_config.json"
+try:
+    from src.utils.paths import get_config_dir
+    _CONFIG_DIR = get_config_dir()
+except ImportError:
+    _CONFIG_DIR = PROJECT_ROOT / "config"
+CONFIG_PATH = _CONFIG_DIR / "sensor_config.json"
 
 INPUT_STREAM_NAME = "BioSignals-Processed"
 OUTPUT_STREAM_NAME = "BioSignals-Events"
