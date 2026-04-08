@@ -119,18 +119,18 @@
 .eeg-overview-container {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: flex-start;
   justify-content: flex-start;
-  padding: 20px 40px;
-  min-height: 100%;
-  text-align: center;
-  overflow-y: auto;
+  padding: 20px 36px 16px;
+  height: 100%;
+  text-align: left;
+  overflow: hidden;
 }
 
 .eeg-overview-title {
-  font-size: 3.5rem;
+  font-size: 2.8rem;
   font-weight: 900;
-  margin: 0 0 20px;
+  margin: 0 0 6px;
   font-family: 'Outfit', sans-serif;
   letter-spacing: -0.04em;
   background: linear-gradient(135deg, #fff 0%, #888 100%);
@@ -138,28 +138,31 @@
   background-clip: text;
   -webkit-text-fill-color: transparent;
   width: 100%;
-  max-width: 1200px;
+  max-width: 100%;
   text-align: left;
+  flex-shrink: 0;
 }
 
 .eeg-overview-subtitle {
-  font-size: 1.25rem;
+  font-size: 1rem;
   color: rgba(255, 255, 255, 0.4);
-  margin-bottom: 40px;
+  margin-bottom: 16px;
   font-weight: 400;
-  max-width: 1200px;
+  max-width: 100%;
   width: 100%;
   text-align: left;
+  flex-shrink: 0;
 }
 
 .eeg-app-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 40px;
-  max-width: 1200px;
+  grid-template-rows: 1fr 1fr;
+  gap: 20px;
   width: 100%;
-  margin: 0 auto;
-  padding-bottom: 45px;
+  flex: 1;
+  min-height: 0;
+  padding-bottom: 16px;
   transform-style: preserve-3d;
   perspective: 2000px;
 }
@@ -170,13 +173,18 @@
   -webkit-backdrop-filter: blur(50px);
   border: 1px solid rgba(255, 255, 255, 0.04);
   border-radius: 36px;
-  padding: 48px;
+  padding: 36px 40px;
   cursor: pointer;
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: center;
+  justify-content: center;
   position: relative;
   overflow: hidden;
+  height: 100%;
+  width: 100%;
+  min-height: 0;
+  text-align: center;
   box-shadow:
     0 20px 40px rgba(0, 0, 0, 0.3),
     inset 0 0 0 1px rgba(255, 255, 255, 0.05);
@@ -268,43 +276,67 @@
 }
 
 /* Theme: Music */
-.card-music { --theme-color: #a855f7; --theme-bg: linear-gradient(135deg, rgba(168, 85, 247, 0.1) 0%, rgba(99, 102, 241, 0.05) 100%); }
+.card-music { --theme-color: #a855f7; --theme-bg: linear-gradient(135deg, rgba(168, 85, 247, 0.15) 0%, rgba(99, 102, 241, 0.02) 100%); }
 .card-music .eeg-app-icon { 
-  background: linear-gradient(135deg, #a855f7, #6366f1); color: white; 
+  background: linear-gradient(135deg, #b066ff, #6366f1); 
+  color: white; 
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 
+    inset 0 4px 6px rgba(255, 255, 255, 0.4),
+    inset 0 -6px 12px rgba(0, 0, 0, 0.3),
+    0 15px 35px rgba(168, 85, 247, 0.5);
   animation: musicPulse 3s ease-in-out infinite;
 }
-@keyframes musicPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
-.card-music .orb-1 { background: radial-gradient(circle, #a855f7, transparent); opacity: 0.1; }
+@keyframes musicPulse { 0%, 100% { transform: scale(1); filter: brightness(1) } 50% { transform: scale(1.05); filter: brightness(1.2) } }
+.card-music .orb-1 { background: radial-gradient(circle, #a855f7, transparent); opacity: 0.15; }
 .card-music:hover { border-color: #a855f7; box-shadow: 0 0 50px rgba(168, 85, 247, 0.2); }
 
 /* Theme: Meditation */
-.card-meditation { --theme-color: #10b981; --theme-bg: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(59, 130, 246, 0.05) 100%); }
+.card-meditation { --theme-color: #10b981; --theme-bg: linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(59, 130, 246, 0.02) 100%); }
 .card-meditation .eeg-app-icon { 
-  background: linear-gradient(135deg, #10b981, #3b82f6); color: white; 
+  background: linear-gradient(135deg, #34d399, #2563eb); 
+  color: white; 
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 
+    inset 0 4px 6px rgba(255, 255, 255, 0.4),
+    inset 0 -6px 12px rgba(0, 0, 0, 0.3),
+    0 15px 35px rgba(16, 185, 129, 0.5);
   animation: meditationBreath 4s ease-in-out infinite;
 }
-@keyframes meditationBreath { 0%, 100% { box-shadow: 0 0 20px rgba(16, 185, 129, 0.3); } 50% { box-shadow: 0 0 40px rgba(16, 185, 129, 0.6); } }
-.card-meditation .orb-1 { background: radial-gradient(circle, #10b981, transparent); opacity: 0.1; }
+@keyframes meditationBreath { 0%, 100% { box-shadow: inset 0 4px 6px rgba(255, 255, 255, 0.4), inset 0 -6px 12px rgba(0,0,0,0.3), 0 15px 35px rgba(16, 185, 129, 0.3); } 50% { box-shadow: inset 0 4px 6px rgba(255, 255, 255, 0.5), inset 0 -6px 12px rgba(0,0,0,0.3), 0 25px 50px rgba(16, 185, 129, 0.7); } }
+.card-meditation .orb-1 { background: radial-gradient(circle, #10b981, transparent); opacity: 0.15; }
 .card-meditation:hover { border-color: #10b981; box-shadow: 0 0 50px rgba(16, 185, 129, 0.2); }
 
 /* Theme: Bubble Game */
-.card-bubble { --theme-color: #0ea5e9; --theme-bg: linear-gradient(135deg, rgba(14, 165, 233, 0.1) 0%, rgba(45, 212, 191, 0.05) 100%); }
+.card-bubble { --theme-color: #0ea5e9; --theme-bg: linear-gradient(135deg, rgba(14, 165, 233, 0.15) 0%, rgba(45, 212, 191, 0.02) 100%); }
 .card-bubble .eeg-app-icon { 
-  background: linear-gradient(135deg, #0ea5e9, #2dd4bf); color: white; 
+  background: linear-gradient(135deg, #38bdf8, #14b8a6); 
+  color: white; 
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 
+    inset 0 4px 6px rgba(255, 255, 255, 0.4),
+    inset 0 -6px 12px rgba(0, 0, 0, 0.3),
+    0 15px 35px rgba(14, 165, 233, 0.5);
   animation: bubbleFloat 4s ease-in-out infinite;
 }
-@keyframes bubbleFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
-.card-bubble .orb-1 { background: radial-gradient(circle, #0ea5e9, transparent); opacity: 0.1; }
+@keyframes bubbleFloat { 0%, 100% { transform: translateY(0) scale(1); border-radius: 24px; } 50% { transform: translateY(-8px) scale(1.02); border-radius: 28px; } }
+.card-bubble .orb-1 { background: radial-gradient(circle, #0ea5e9, transparent); opacity: 0.15; }
 .card-bubble:hover { border-color: #0ea5e9; box-shadow: 0 0 50px rgba(14, 165, 233, 0.2); }
 
 /* Theme: SSVEP */
-.card-ssvep { --theme-color: #f59e0b; --theme-bg: linear-gradient(135deg, rgba(245, 158, 11, 0.1) 0%, rgba(239, 68, 68, 0.05) 100%); }
+.card-ssvep { --theme-color: #f59e0b; --theme-bg: linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, rgba(239, 68, 68, 0.02) 100%); }
 .card-ssvep .eeg-app-icon { 
-  background: linear-gradient(135deg, #f59e0b, #ef4444); color: white; 
+  background: linear-gradient(135deg, #fbbf24, #ef4444); 
+  color: white; 
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 
+    inset 0 4px 6px rgba(255, 255, 255, 0.4),
+    inset 0 -6px 12px rgba(0, 0, 0, 0.3),
+    0 15px 35px rgba(245, 158, 11, 0.5);
   animation: ssvepFlash 5s linear infinite;
 }
-@keyframes ssvepFlash { 0%, 100% { opacity: 1; } 50% { opacity: 0.85; } }
-.card-ssvep .orb-1 { background: radial-gradient(circle, #f59e0b, transparent); opacity: 0.1; }
+@keyframes ssvepFlash { 0%, 100% { filter: saturate(1) brightness(1); } 50% { filter: saturate(1.5) brightness(1.3); } }
+.card-ssvep .orb-1 { background: radial-gradient(circle, #f59e0b, transparent); opacity: 0.15; }
 .card-ssvep:hover { border-color: #f59e0b; box-shadow: 0 0 50px rgba(245, 158, 11, 0.2); }
 
 .eeg-view-icon {
@@ -338,13 +370,13 @@
 }
 
 .eeg-app-icon {
-  width: 72px;
-  height: 72px;
-  border-radius: 22px;
+  width: 80px;
+  height: 80px;
+  border-radius: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 24px;
+  margin-bottom: 20px;
   transition: all 0.6s cubic-bezier(0.16, 1, 0.3, 1);
   box-shadow: 0 10px 20px rgba(0, 0, 0, 0.4);
   position: relative;
@@ -358,15 +390,16 @@
 }
 
 .card-title-premium {
-  margin: 0 0 12px 0;
-  font-size: 1.75rem;
+  margin: 0 0 10px 0;
+  font-size: 1.5rem;
   color: #fff;
   font-family: 'Outfit', sans-serif;
   font-weight: 900;
-  letter-spacing: -0.05em;
+  letter-spacing: -0.04em;
   transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
   position: relative;
   z-index: 10;
+  text-align: center;
   text-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
 }
 
@@ -377,14 +410,15 @@
 
 .card-desc-premium {
   margin: 0;
-  font-size: 1.15rem;
+  font-size: 0.95rem;
   color: rgba(255, 255, 255, 0.4);
-  line-height: 1.6;
+  line-height: 1.5;
   font-weight: 400;
   transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
   max-width: 85%;
   position: relative;
   z-index: 10;
+  text-align: center;
 }
 
 .eeg-app-card:hover .card-desc-premium {
