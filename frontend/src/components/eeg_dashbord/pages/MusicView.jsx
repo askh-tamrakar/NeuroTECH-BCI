@@ -60,7 +60,7 @@ const FrequencyWaves = ({ stateTheme }) => {
   );
 };
 
-const MusicView = ({ result, onNavigate }) => {
+const MusicView = ({ result, onNavigate, onBackToMenu }) => {
   const canvasRef = useRef(null);
   const animationRef = useRef(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -96,7 +96,11 @@ const MusicView = ({ result, onNavigate }) => {
     return labels[maxIdx];
   }, [result?.band_powers]);
 
-  const { setSidebarSlot } = useSidebar();
+  const { setSidebarSlot, setSidebarMode } = useSidebar();
+
+  useEffect(() => {
+    setSidebarMode('page');
+  }, [setSidebarMode]);
 
   useEffect(() => {
     if (result && result.eeg_mapped !== undefined) setEegMapped(result.eeg_mapped);
@@ -127,10 +131,11 @@ const MusicView = ({ result, onNavigate }) => {
         focusScore={focusScore}
         currentState={currentState}
         stateLevel={stateLevel}
+        onBackToMenu={onBackToMenu}
       />
     );
     return () => setSidebarSlot(null);
-  }, [isPlaying, isMuted, result, stateTheme, stressScore, focusScore, currentState, stateLevel, setSidebarSlot]);
+  }, [isPlaying, isMuted, result, stateTheme, stressScore, focusScore, currentState, stateLevel, setSidebarSlot, onBackToMenu]);
 
   // Init handler
   useEffect(() => {

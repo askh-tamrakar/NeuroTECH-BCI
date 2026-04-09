@@ -104,10 +104,11 @@ const BubbleGameView = ({ result, isConnected, onBackToMenu }) => {
       const radius = baseR * (1.2 - sf * 0.5);
       const speed = 0.4 + Math.random() * 0.6 + sf * 0.8;
       bubbles.push({
-        x: radius + Math.random() * (W - radius * 2), y: H + radius, r: radius,
+        x: radius + Math.random() * (W - radius * 2), y: radius + Math.random() * (H - radius * 2), r: radius,
         speed, drift: (Math.random() - 0.5) * 0.4, col,
         wobble: Math.random() * Math.PI * 2, wobbleSpeed: 0.025 + Math.random() * 0.02,
-        opacity: 0, alive: true, points: Math.round(10 + sf * 15),
+        moveAngle: Math.random() * Math.PI * 2,
+        opacity: 0, alive: true, points: Math.round(10 + sf * 15), age: 0,
       });
     }
 
@@ -218,10 +219,18 @@ const BubbleGameView = ({ result, isConnected, onBackToMenu }) => {
     function drawBubbles() {
       bubbles.forEach(b => {
         b.wobble += b.wobbleSpeed;
-        b.x += b.drift + Math.sin(b.wobble) * 0.4;
-        b.y -= b.speed;
+        b.age++;
+        // Float in a random direction with gentle wobble
+        b.x += Math.cos(b.moveAngle) * b.speed * 0.4 + Math.sin(b.wobble) * 0.4;
+        b.y += Math.sin(b.moveAngle) * b.speed * 0.4 + Math.cos(b.wobble) * 0.3;
         b.opacity = Math.min(1, b.opacity + 0.04);
-        if (b.y < -b.r * 2) { b.alive = false; bubblesMissed++; if (combo > 0) combo = 0; return; }
+        // Bounce off edges
+        if (b.x < b.r) { b.x = b.r; b.moveAngle = Math.PI - b.moveAngle; }
+        if (b.x > W - b.r) { b.x = W - b.r; b.moveAngle = Math.PI - b.moveAngle; }
+        if (b.y < b.r) { b.y = b.r; b.moveAngle = -b.moveAngle; }
+        if (b.y > H - b.r) { b.y = H - b.r; b.moveAngle = -b.moveAngle; }
+        // Expire after ~8 seconds (480 frames at 60fps) if not popped
+        if (b.age > 480) { b.alive = false; bubblesMissed++; if (combo > 0) combo = 0; return; }
         ctx.save(); ctx.globalAlpha = b.opacity;
         const grad = ctx.createRadialGradient(b.x - b.r * .3, b.y - b.r * .3, 1, b.x, b.y, b.r);
         grad.addColorStop(0, 'rgba(255,255,255,.15)'); grad.addColorStop(0.5, b.col.fill); grad.addColorStop(1, 'rgba(0,0,0,.05)');

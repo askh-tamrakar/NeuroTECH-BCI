@@ -1,5 +1,16 @@
 """
 Shared detection heuristics for frontal EEG application modules.
+
+All modules (Music, Meditation, Bubble Game) share a SINGLE state
+detection pipeline via detect_mind_state() so states agree across pages.
+
+Feature vector layout (13 elements):
+  [0] delta  [1] theta  [2] alpha  [3] beta  [4] gamma
+  [5] theta/beta  [6] alpha/beta  [7] beta/alpha  [8] alpha/theta
+  [9] calm_index=(alpha+theta)/beta
+  [10] stress_index=beta/(alpha+theta)
+  [11] engagement=beta/alpha
+  [12] gamma/beta
 """
 
 from __future__ import annotations
@@ -12,43 +23,37 @@ def _safe(feature_vector, index, default=0.0):
         return float(default)
 
 
+# ── Music action helper (derives action from unified state) ──────────
 def classify_music_state(feature_vector):
+    """Kept for backward-compat but now delegates to detect_mind_state."""
     theta = _safe(feature_vector, 1)
     alpha = _safe(feature_vector, 2)
     beta = _safe(feature_vector, 3)
-
     total = theta + alpha + beta + 1e-6
-    p_theta = theta / total
-    p_alpha = alpha / total
-    p_beta = beta / total
 
-    action = "Maintain current track"
-    if p_beta > 0.48:
-        state = "Focus"
-        action = "Increase tempo"
-    elif p_theta > 0.46:
-        state = "Drowsy"
-        action = "Play stimulating music"
-    elif p_alpha > 0.42 and p_theta > 0.22:
-        state = "Calm"
-        action = "Lower volume"
-    elif p_alpha > 0.42:
-        state = "Relax"
-        action = "Play calm music"
-    else:
-        state = "Neutral"
+    state_result = detect_mind_state(feature_vector)
+    state = state_result["state"]
 
+    ACTION_MAP = {
+        "Focus": "Increase tempo",
+        "Calm": "Lower volume",
+        "Relaxed": "Play calm music",
+        "Stressed": "Play calming music",
+        "Drowsy": "Play stimulating music",
+        "Neutral": "Maintain current track",
+    }
     return {
         "state": state,
-        "action": action,
+        "action": ACTION_MAP.get(state, "Maintain current track"),
         "band_mix": {
-            "theta": p_theta,
-            "alpha": p_alpha,
-            "beta": p_beta,
-        }
+            "theta": theta / total,
+            "alpha": alpha / total,
+            "beta": beta / total,
+        },
     }
 
 
+# ── Focus metrics ────────────────────────────────────────────────────
 def detect_focus_metrics(feature_vector, history):
     theta_beta = _safe(feature_vector, 5)
     engagement = _safe(feature_vector, 11)
@@ -72,10 +77,11 @@ def detect_focus_metrics(feature_vector, history):
         "focus_score": score,
         "focus_trend": trend,
         "attention_drop_detection": trend == "Decreasing" and score < 40,
-        "neurofeedback_indicator": "green" if score > 65 else ("yellow" if score > 40 else "red")
+        "neurofeedback_indicator": "green" if score > 65 else ("yellow" if score > 40 else "red"),
     }
 
 
+# ── Meditation metrics ───────────────────────────────────────────────
 def detect_meditation_metrics(feature_vector):
     calm_index = _safe(feature_vector, 9)
     ci_clamped = max(0.0, min(5.0, calm_index))
@@ -103,13 +109,12 @@ def detect_meditation_metrics(feature_vector):
     p_beta = beta / total_tab
 
     total_all = delta + theta + alpha + beta + gamma + 1e-6
-    # Smoothed radar representations that prevent huge delta from squashing other bands visually
     radar_bands = [
         int(14 + (delta / total_all) * 10),
         int(18 + (score / 100.0) * 15 + p_theta * 10),
         int(22 + (score / 100.0) * 22 + p_alpha * 10),
         int(max(8, 28 - (score / 100.0) * 20 + p_beta * 10)),
-        int(8 + (gamma / total_all) * 10)
+        int(8 + (gamma / total_all) * 10),
     ]
 
     return {
@@ -117,19 +122,18 @@ def detect_meditation_metrics(feature_vector):
         "calmness_meter": score,
         "breathing_guide": breathing_guide,
         "relaxation_trend": trend,
-        "band_mix": {
-            "theta": p_theta,
-            "alpha": p_alpha,
-            "beta": p_beta
-        },
-        "radar_bands": radar_bands
+        "band_mix": {"theta": p_theta, "alpha": p_alpha, "beta": p_beta},
+        "radar_bands": radar_bands,
     }
 
 
+# ── Stress metrics ───────────────────────────────────────────────────
 def detect_stress_metrics(feature_vector):
     stress_index = _safe(feature_vector, 10)
-    si_clamped = max(0.0, min(3.0, stress_index))
-    score = int((si_clamped / 3.0) * 100)
+    # Scale: 0→0%, 1.0→50%, 2.0→100%. Most frontal Fpz signals
+    # produce stress_index 0.05-2.0; clamp at 2.0 for full range.
+    si_clamped = max(0.0, min(2.0, stress_index))
+    score = int((si_clamped / 2.0) * 100)
 
     if score > 75:
         state = "High Stress"
@@ -148,44 +152,75 @@ def detect_stress_metrics(feature_vector):
         "stress_score": score,
         "calm_vs_stress_state": state,
         "break_recommendation": break_rec,
-        "breathing_suggestion": suggestion
+        "breathing_suggestion": suggestion,
     }
 
 
-def detect_mind_state(feature_vector, _state_hold={"prev": "Neutral", "count": 0, "HOLD": 3}):
-    """Detect the dominant state of mind from EEG features.
-    Optimized for single-channel Fpz placement (A1/A2 reference).
-    Includes hysteresis: new state must be dominant for HOLD consecutive
-    calls before switching, preventing rapid Neutral↔State flicker.
+# ── Unified mind state detection ─────────────────────────────────────
+# Shared hysteresis state — single instance for entire process
+_state_hold = {"prev": "Neutral", "count": 0, "HOLD": 5}
 
-    Returns dict with:
-      - state: str (Focus, Calm, Relaxed, Stressed, Drowsy, Neutral)
-      - state_level: int (0-100, intensity of the detected state)
-      - all_states: dict mapping state name -> confidence (0-100)
+
+def detect_mind_state(feature_vector):
+    """Unified mind state detection for ALL pages.
+
+    Optimized for single-channel Fpz (A1/A2 reference).
+    Uses confidence scores with controlled scaling so one band
+    cannot permanently dominate, plus 5-frame hysteresis.
+
+    States: Focus, Calm, Relaxed, Stressed, Drowsy, Neutral
     """
     delta = _safe(feature_vector, 0)
     theta = _safe(feature_vector, 1)
     alpha = _safe(feature_vector, 2)
     beta = _safe(feature_vector, 3)
-    gamma = _safe(feature_vector, 4)
     calm_index = _safe(feature_vector, 9)
     stress_index = _safe(feature_vector, 10)
     engagement_index = _safe(feature_vector, 11)
 
-    # Use cognitive total (exclude gamma) — for single-channel Fpz,
-    # gamma is mostly muscle/electrode artifact that would dominate all ratios
+    # Proportional power (exclude gamma — mostly artifact on Fpz)
     total = delta + theta + alpha + beta + 1e-6
     p_delta = delta / total
     p_theta = theta / total
     p_alpha = alpha / total
     p_beta = beta / total
 
-    # Confidence scores (0-100) for each state
-    focus_conf = min(100, int((p_beta * 0.6 + min(engagement_index, 2.5) / 2.5 * 0.4) * 150))
-    calm_conf = min(100, int((p_alpha * 0.5 + min(calm_index, 5.0) / 5.0 * 0.4) * 140))
-    relaxed_conf = min(100, int((p_alpha * 0.4 + p_theta * 0.3) * 160))
-    stressed_conf = min(100, int((p_beta * 0.5 + min(stress_index, 3.0) / 3.0 * 0.5) * 140))
-    drowsy_conf = min(100, int((p_delta * 0.45 + p_theta * 0.4) * 150))
+    # ── Confidence formulas (each 0-100, balanced competition) ──────────
+    #
+    # Focus: needs beta above baseline (~15%) + engagement
+    #   Beta-dominant (p_beta=0.50,ei=2.64): (0.35)*180+0.88*25 = 63+22 = 85
+    #   Alpha-dominant (p_beta=0.07): 0 → ~1
+    focus_beta = max(0.0, p_beta - 0.15) * 180
+    eng_norm = min(1.0, engagement_index / 3.0)
+    focus_conf = min(100, int(focus_beta + eng_norm * 25))
+
+    # Calm: dominant alpha, light calm_index bonus
+    #   Alpha-dominant (p_alpha=0.87,ci=12.6): 0.87*90+1.0*15 = 78+15 = 93
+    #   Beta-dominant (p_alpha=0.19,ci=0.75): 0.19*90+0.19*15 = 17+3 = 20
+    ci_norm = min(1.0, calm_index / 4.0)
+    calm_conf = min(100, int(p_alpha * 90 + ci_norm * 15))
+
+    # Relaxed: simultaneous alpha AND theta (meditation-like)
+    #   Theta+alpha both 40%: (0.40*0.5+0.40*0.5)*150 = 60
+    relax_blend = p_alpha * 0.50 + p_theta * 0.50
+    relaxed_conf = min(100, int(relax_blend * 150))
+
+    # Stressed: driven primarily by stress_index, not raw beta
+    #   This separates stress (anxious beta) from focus (engaged beta)
+    #   Beta-dom (si=1.33): 0.67*80+0.50*30 = 53+15 = 68
+    #   Very stressed (si=4.0): 1.0*80+0.70*30 = 80+21 = 100
+    si_norm = min(1.0, stress_index / 2.0)
+    stressed_conf = min(100, int(si_norm * 80 + p_beta * 30))
+
+    # Drowsy: needs high delta+theta (both slow waves)
+    #   Truly drowsy (d=40%,t=35%): 0.40*100+0.35*60 = 40+21 = 61
+    #   Normal awake (d=12%,t=19%): 0.12*100+0.19*60 = 12+11 = 23
+    drowsy_conf = min(100, int(p_delta * 100 + p_theta * 60))
+
+    # Dampen focus when stress_index is very high (anxious arousal ≠ attention)
+    if stress_index > 1.5:
+        dampen = max(0.3, 1.0 - (stress_index - 1.5) * 0.3)
+        focus_conf = int(focus_conf * dampen)
 
     all_states = {
         "Focus": focus_conf,
@@ -198,19 +233,18 @@ def detect_mind_state(feature_vector, _state_hold={"prev": "Neutral", "count": 0
     dominant = max(all_states, key=all_states.get)
     level = all_states[dominant]
 
-    if level < 20:
+    # If nothing scores above 15, call it Neutral
+    if level < 15:
         dominant = "Neutral"
         level = 50
 
-    # Hysteresis: require HOLD consecutive frames of the same new state
-    # before actually switching, to prevent rapid flicker
+    # Hysteresis: require HOLD consecutive frames of a new state
     if dominant != _state_hold["prev"]:
         _state_hold["count"] += 1
         if _state_hold["count"] >= _state_hold["HOLD"]:
             _state_hold["prev"] = dominant
             _state_hold["count"] = 0
         else:
-            # Keep previous state until hold threshold met
             dominant = _state_hold["prev"]
             level = all_states.get(dominant, level)
     else:

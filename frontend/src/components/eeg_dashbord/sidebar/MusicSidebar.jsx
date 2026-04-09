@@ -1,5 +1,5 @@
 import React from 'react';
-import { Music, Activity, Play, Pause, Volume2, VolumeX, Headphones, FastForward } from 'lucide-react';
+import { Music, Activity, Play, Pause, Volume2, VolumeX, Headphones, FastForward, ArrowLeft } from 'lucide-react';
 
 const MusicSidebar = ({
     isPlaying, togglePlayback,
@@ -7,6 +7,7 @@ const MusicSidebar = ({
     result, stateTheme,
     stressScore = 0, focusScore = 0,
     currentState = 'Neutral', stateLevel = 0,
+    onBackToMenu,
 }) => {
     const focusDash = 201 - (Math.min(100, focusScore) / 100) * 201;
     const stressDash = 201 - (Math.min(100, stressScore) / 100) * 201;
@@ -14,6 +15,11 @@ const MusicSidebar = ({
     return (
         <div className="flex-grow flex flex-col p-4 font-mono transition-opacity duration-300 w-full shrink-0 overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:'none'] [&::-webkit-scrollbar]:hidden">
             <div className="mb-4 flex items-center gap-3 rounded-xl border border-[var(--primary)]/20 bg-[var(--bg)]/40 px-3 py-2.5">
+                {onBackToMenu && (
+                    <button onClick={onBackToMenu} className="text-[var(--muted)] hover:text-[var(--primary)] transition-colors" title="Back to menu">
+                        <ArrowLeft size={18} />
+                    </button>
+                )}
                 <div className="w-10 h-10 rounded-xl bg-[var(--primary)]/15 flex items-center justify-center border border-[var(--primary)]/30 shadow-glow">
                     <Music size={20} className="text-[var(--primary)]" />
                 </div>

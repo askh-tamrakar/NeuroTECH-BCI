@@ -42,7 +42,7 @@ const TOTAL_CYCLE = PHASES.reduce((s, p) => s + p.dur, 0);
 /* ── PRESETS (minutes) ─────────────────────────── */
 const PRESETS = [3, 5, 10, 15];
 
-const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => {
+const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate, onBackToMenu }) => {
   const containerRef = useRef(null);
   const resultRef = useRef(null);
   const wsEventRef = useRef(null);
@@ -213,7 +213,11 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
     localStorage.setItem('med_stats', JSON.stringify(stats));
   }, [stats]);
 
-  const { setSidebarSlot } = useSidebar();
+  const { setSidebarSlot, setSidebarMode } = useSidebar();
+
+  useEffect(() => {
+    setSidebarMode('page');
+  }, [setSidebarMode]);
 
   // Update the sidebar slot whenever state affecting the sidebar changes
   useEffect(() => {
@@ -227,6 +231,7 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
         onMasterVol={onMasterVol}
         stats={stats}
         wisdomIdx={wisdomIdx}
+        onBackToMenu={onBackToMenu}
       />
     );
 
@@ -617,7 +622,7 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
          const thetaRel = theta / total2;
          rawFocus  = Math.min(100, Math.max(0, (alphaRel + thetaRel * 0.5) * 200));
          const si = beta / (alpha + theta + 1e-6);
-         rawStress = Math.min(100, Math.max(0, (Math.min(si, 3.0) / 3.0) * 100));
+         rawStress = Math.min(100, Math.max(0, (Math.min(si, 2.0) / 2.0) * 100));
         } else if (feat2?.alpha !== undefined) {
           const total2 = (feat2.delta||0) + (feat2.theta||0) + (feat2.alpha||0) + (feat2.beta||0) + 1e-6;
           const alphaRel = (feat2.alpha||0) / total2;
@@ -625,7 +630,7 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
           const thetaRel = (feat2.theta||0) / total2;
           rawFocus  = Math.min(100, Math.max(0, (alphaRel + thetaRel * 0.5) * 200));
           const si2 = (feat2.beta||0) / ((feat2.alpha||0) + (feat2.theta||0) + 1e-6);
-          rawStress = Math.min(100, Math.max(0, (Math.min(si2, 3.0) / 3.0) * 100));
+          rawStress = Math.min(100, Math.max(0, (Math.min(si2, 2.0) / 2.0) * 100));
         } else if (res2?.meditation_score !== undefined) {
           rawFocus  = res2.meditation_score || 0;
           rawStress = Math.max(0, 100 - rawFocus);

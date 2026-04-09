@@ -1,7 +1,7 @@
 import React from 'react';
 import {
     Play, Activity, Wind, Power, Zap,
-    BookOpen, Volume2, VolumeX
+    BookOpen, Volume2, VolumeX, ArrowLeft
 } from 'lucide-react';
 
 const PRESETS = [3, 5, 10, 15];
@@ -78,6 +78,7 @@ const MeditationSidebar = ({
     masterVol = 1.0,
     onMasterVol = () => { },
     wisdomIdx = 0,
+    onBackToMenu,
 }) => {
     const wisdom = WISDOM[wisdomIdx] || WISDOM[0];
 
@@ -85,6 +86,11 @@ const MeditationSidebar = ({
     return (
         <div className="flex-grow flex flex-col p-4 gap-4 font-mono transition-opacity duration-300 w-full shrink-0 overflow-hidden">
             <div className="flex items-center gap-3 rounded-xl border border-primary/20 bg-bg/40 px-3 py-2.5 shrink-0">
+                {onBackToMenu && (
+                    <button onClick={onBackToMenu} className="text-muted hover:text-primary transition-colors" title="Back to menu">
+                        <ArrowLeft size={18} />
+                    </button>
+                )}
                 <Wind size={22} className="text-primary" />
                 <div>
                     <h3 className="text-[16px] font-bold text-text tracking-[2px]">NEURO TRAINER</h3>
