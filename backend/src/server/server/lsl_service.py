@@ -9,6 +9,7 @@ from src.server.server.session_manager import SessionManager
 
 from src.feature.extractors.rps_extractor import RPSExtractor
 from src.feature.extractors.blink_extractor import BlinkExtractor
+from src.server.server.routes.eeg_routes import _get_mode_manager
 
 try:
     import pylsl
@@ -216,6 +217,21 @@ def broadcast_data(socketio):
                     "sample_count": state.sample_count
                 })
                 
+                # --- EEG Mode Manager Hook ---
+                try:
+                    mm = _get_mode_manager()
+                    if mm and mm.mode:
+                        for ch_idx, data in channels_data.items():
+                            if data['type'].upper() == 'EEG':
+                                eeg_result = mm.process_sample(
+                                    [data['value']], pre_filtered=True
+                                )
+                                if eeg_result is not None:
+                                    socketio.emit('eeg_mode_result', eeg_result)
+                                break
+                except Exception as e:
+                    pass  # Don't let mode_manager errors break data broadcast
+
                 # --- RECORDING & PREDICTION hooks ---
                 if hasattr(state, 'session') and state.session:
                     eog_vals = []

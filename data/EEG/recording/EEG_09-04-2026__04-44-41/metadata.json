@@ -1,0 +1,73 @@
+{
+  "session": {
+    "name": "EEG_09-04-2026__04-44-41",
+    "sensor_type": "EEG",
+    "data_type": "raw",
+    "created": "2026-04-09T04:44:41.566424"
+  },
+  "acquisition": {
+    "sampling_rate": 1000,
+    "num_channels": 1,
+    "channels": [
+      {
+        "index": 1,
+        "label": "UNUSED",
+        "sensor": "EEG",
+        "unit": "µV"
+      }
+    ]
+  },
+  "hardware": {
+    "device_id": "Arduino_UNO_R4",
+    "adc_resolution": 14,
+    "gain": 1,
+    "reference_voltage": 3.3
+  },
+  "filters": {
+    "filters": {
+      "EEG": {
+        "bandpass_enabled": true,
+        "bandpass_high": 45,
+        "bandpass_low": 0.5,
+        "bandpass_order": 4,
+        "cutoff": 0.1,
+        "notch_enabled": true,
+        "notch_freq": 50,
+        "notch_q": 30
+      },
+      "EMG": {
+        "bandpass_enabled": true,
+        "bandpass_high": 250,
+        "bandpass_low": 74,
+        "bandpass_order": 4,
+        "envelope_cutoff": 8,
+        "envelope_enabled": true,
+        "envelope_order": 4,
+        "notch_enabled": true,
+        "notch_freq": 50
+      },
+      "EOG": {
+        "bandpass_enabled": true,
+        "bandpass_high": 10,
+        "bandpass_low": 0.5,
+        "bandpass_order": 4,
+        "notch_enabled": true,
+        "notch_freq": 50
+      }
+    }
+  },
+  "timing": {
+    "start_time": "2026-04-09T04:44:41.566424",
+    "start_timestamp_ms": 1775690081566,
+    "end_time": "2026-04-09T04:45:42.861412",
+    "end_timestamp_ms": 1775690142861,
+    "duration_seconds": 61.295,
+    "total_pause_seconds": 0.0
+  },
+  "integrity": {
+    "total_rows": 30829,
+    "expected_rows": 61295,
+    "status": "warning_row_mismatch",
+    "note": "Row count (30829) differs from expected (61295) by 30466 samples"
+  }
+}

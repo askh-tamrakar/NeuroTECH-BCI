@@ -23,7 +23,9 @@ def compute_feature_vector(band_powers):
     
     alpha_theta_sum = alpha + theta
     calm_index = alpha_theta_sum / (beta + epsilon)
-    stress_index = (beta + gamma) / (alpha_theta_sum + epsilon)
+    # Exclude gamma from stress_index — for single-channel Fpz,
+    # gamma is mostly muscle/electrode artifact, not cortical gamma
+    stress_index = beta / (alpha_theta_sum + epsilon)
     engagement_index = beta / (alpha + epsilon)
     gamma_beta_ratio = gamma / (beta + epsilon)
     

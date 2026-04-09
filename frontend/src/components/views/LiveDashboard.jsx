@@ -26,6 +26,7 @@ export default function LiveDashboard({ wsData, wsConfig, wsEvent, sendMessage, 
     const [isSaving, setIsSaving] = useState(false)
     const [isConfirmationPending, setIsConfirmationPending] = useState(false)
     const [isFirmwareModalOpen, setIsFirmwareModalOpen] = useState(false)
+    const [hybridResult, setHybridResult] = useState(null)
 
     // Use Ref for Performance
     const recordedDataRef = useRef([])
@@ -71,109 +72,80 @@ export default function LiveDashboard({ wsData, wsConfig, wsEvent, sendMessage, 
         }
     }
 
-    // Recording Actions
-    const startRecording = () => {
+    // Recording Actions — uses server-side hybrid recorder (CSV + metadata.json)
+    const startRecording = async () => {
         recordedDataRef.current = []
+        setHybridResult(null)
         setRecordingStartTime(Date.now())
         setTotalPausedDuration(0)
         setIsRecording(true)
         setIsPausedRecording(false)
         setIsConfirmationPending(false)
+
+        try {
+            const result = await DataService.startHybridRecording(recordingChannels, 'raw')
+            console.log('[LiveDashboard] Hybrid recording started:', result)
+        } catch (err) {
+            console.error('[LiveDashboard] Failed to start hybrid recording:', err)
+            setIsRecording(false)
+        }
     }
 
-    const togglePauseRecording = () => {
+    const togglePauseRecording = async () => {
         if (!isPausedRecording) {
             setIsPausedRecording(true)
             setLastPauseTime(Date.now())
+            DataService.pauseHybridRecording().catch(e => console.warn('Pause error:', e))
         } else {
             const pausedAt = lastPauseTime || Date.now()
             setTotalPausedDuration(prev => prev + (Date.now() - pausedAt))
             setIsPausedRecording(false)
             setLastPauseTime(null)
+            DataService.resumeHybridRecording().catch(e => console.warn('Resume error:', e))
         }
     }
 
-    const stopRecording = () => {
+    const stopRecording = async () => {
         setIsRecording(false)
         setIsPausedRecording(false)
+
+        try {
+            const result = await DataService.stopHybridRecording()
+            console.log('[LiveDashboard] Hybrid recording stopped:', result)
+            setHybridResult(result)
+        } catch (err) {
+            console.error('[LiveDashboard] Failed to stop hybrid recording:', err)
+        }
+
         setIsConfirmationPending(true)
     }
 
-    const discardRecording = () => {
+    const discardRecording = async () => {
+        // Delete the server-side recording files
+        if (hybridResult?.path) {
+            try {
+                const base = (await import('../../utils/runtimeConnection')).getBaseDataDir?.()
+                // Build relative path from the full path
+                const relPath = hybridResult.path.split(/[\\/]data[\\/]/).pop()
+                if (relPath) await DataService.deleteHybridRecording(relPath)
+            } catch (e) {
+                console.warn('[LiveDashboard] Delete error:', e)
+            }
+        }
         recordedDataRef.current = []
+        setHybridResult(null)
         setIsConfirmationPending(false)
         setRecordingTime(0)
     }
 
     const saveRecording = async () => {
+        // With hybrid recording the data is already saved server-side.
+        // "Save" just clears the confirmation UI.
         setIsSaving(true)
         try {
-            const now = new Date()
-            const day = String(now.getDate()).padStart(2, '0')
-            const month = String(now.getMonth() + 1).padStart(2, '0')
-            const year = now.getFullYear()
-            const hours = String(now.getHours()).padStart(2, '0')
-            const mins = String(now.getMinutes()).padStart(2, '0')
-            const secs = String(now.getSeconds()).padStart(2, '0')
-
-            const channelMapping = config?.channel_mapping || {}
-            const samplingRate = config?.sampling_rate || 1000
-
-            const sensorsToRecord = {};
-            recordingChannels.forEach(chNum => {
-                const sensorType = channelMapping[`ch${chNum}`]?.sensor || 'DATA';
-                if (!sensorsToRecord[sensorType]) sensorsToRecord[sensorType] = [];
-                sensorsToRecord[sensorType].push(chNum);
-            });
-
-            const sensorTypes = Object.keys(sensorsToRecord);
-            if (sensorTypes.length === 0) {
-                setIsSaving(false);
-                recordedDataRef.current = [];
-                setIsConfirmationPending(false);
-                return;
-            }
-
-            const currentData = recordedDataRef.current;
-
-            const savePromises = sensorTypes.map(async (sensorType) => {
-                const channelsForThisSensor = sensorsToRecord[sensorType];
-                const filename = `${sensorType}__${day}-${month}-${year}__${hours}-${mins}-${secs}.csv`
-
-                const filteredData = currentData.map(point => {
-                    const filteredPoint = { timestamp: point.timestamp, channels: {} };
-                    let hasDataForSensor = false;
-                    channelsForThisSensor.forEach(chNum => {
-                        if (point.channels[`ch${chNum}`] !== undefined) {
-                            filteredPoint.channels[`ch${chNum}`] = point.channels[`ch${chNum}`];
-                            hasDataForSensor = true;
-                        }
-                    });
-                    return hasDataForSensor ? filteredPoint : null;
-                }).filter(Boolean);
-
-                if (filteredData.length === 0) return;
-
-                const payload = {
-                    metadata: {
-                        sensorType,
-                        channels: channelsForThisSensor,
-                        samplingRate,
-                        startTime: recordingStartTime,
-                        endTime: Date.now(),
-                        duration: recordingTime
-                    },
-                    data: filteredData
-                }
-
-                return DataService.saveSession(filename, payload, sensorType)
-            });
-
-            await Promise.all(savePromises);
-            setIsConfirmationPending(false);
-            recordedDataRef.current = [];
-        } catch (err) {
-            console.error('Failed to save multi-sensor session:', err)
+            setIsConfirmationPending(false)
+            recordedDataRef.current = []
+            console.log('[LiveDashboard] Recording kept:', hybridResult?.session)
         } finally {
             setIsSaving(false)
         }
@@ -182,7 +154,8 @@ export default function LiveDashboard({ wsData, wsConfig, wsEvent, sendMessage, 
     const recordState = {
         isRecording, isPausedRecording, recordingTime, recordingChannels,
         isSaving, isConfirmationPending, isFirmwareModalOpen,
-        recordingStartTime, totalPausedDuration, recordedDataRef
+        recordingStartTime, totalPausedDuration, recordedDataRef,
+        hybridResult
     }
 
     const recordHandlers = {

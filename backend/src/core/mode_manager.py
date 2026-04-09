@@ -149,10 +149,11 @@ class ModeManager:
                 
             log.info(f"ModeManager configured for Frontal EEG (Preset: {preset_name}, View: {view_name})")
 
-    def process_sample(self, sample):
+    def process_sample(self, sample, pre_filtered=False):
         """
         Processes a single sample, pushing it through the pipeline.
         Returns the module output if a window was processed, else None.
+        If pre_filtered=True, skip preprocessing (data already filtered upstream).
         """
         if not self.mode or not self.window_buffer:
             return None
@@ -163,8 +164,11 @@ class ModeManager:
         if window_ready:
             raw_window = self.window_buffer.get_window()
             
-            # Preprocess
-            filtered_window = self.preprocessor.process_window(raw_window)
+            # Preprocess (skip if data already filtered by filter_router)
+            if pre_filtered:
+                filtered_window = raw_window
+            else:
+                filtered_window = self.preprocessor.process_window(raw_window)
             
             # Application Logic
             if self.mode == "visual":

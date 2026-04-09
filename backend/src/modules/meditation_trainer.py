@@ -21,6 +21,13 @@ class MeditationTrainerModule:
         self.session_start = 0
         self.session_duration = 300
         self.session_samples = []
+        self._smooth_stress = 0.0
+        self._smooth_focus = 0.0
+        self._smooth_calm = 0.0
+        self._ema_alpha = 0.2  # lower = smoother
+
+    def _ema(self, prev, new):
+        return prev + self._ema_alpha * (new - prev)
 
     def start_session(self, duration_sec=300):
         self.session_active = True
@@ -109,15 +116,20 @@ class MeditationTrainerModule:
         if self.session_active:
             self.session_samples.append(sample)
 
+        # EMA smooth scores to prevent harsh oscillation
+        self._smooth_stress = self._ema(self._smooth_stress, stress["stress_score"])
+        self._smooth_focus = self._ema(self._smooth_focus, focus["focus_score"])
+        self._smooth_calm = self._ema(self._smooth_calm, meditation["meditation_score"])
+
         return {
-            "meditation_score": meditation["meditation_score"],
-            "calmness_meter": meditation["calmness_meter"],
+            "meditation_score": round(self._smooth_calm),
+            "calmness_meter": round(self._smooth_calm),
             "breathing_guide": meditation["breathing_guide"],
             "relaxation_trend": meditation["relaxation_trend"],
             "radar_bands": meditation["radar_bands"],
             "band_mix": meditation["band_mix"],
-            "stress_score": stress["stress_score"],
-            "focus_score": focus["focus_score"],
+            "stress_score": round(self._smooth_stress),
+            "focus_score": round(self._smooth_focus),
             "focus_trend": focus["focus_trend"],
             "state": mind_state["state"],
             "state_level": mind_state["state_level"],

@@ -170,7 +170,13 @@ const EEGDashboardContent = ({ wsEvent, isConnected, wsUrl }) => {
     if (wsEvent) {
       // Priority 1: Direct mode manager output
       if (wsEvent.event === 'eeg_mode_result') {
-        setEegResult(wsEvent.output || wsEvent);
+        const output = wsEvent.output || {};
+        setEegResult({
+          ...output,
+          band_powers: wsEvent.band_powers,
+          eeg_mapped: wsEvent.eeg_mapped,
+          features: wsEvent.features,
+        });
       }
       // Priority 2: Feature Router predictions (F1/F2)
       else if (wsEvent.event === 'eeg_prediction' || wsEvent.output?.event === 'eeg_prediction') {

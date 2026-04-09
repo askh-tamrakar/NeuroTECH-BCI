@@ -55,6 +55,14 @@ void updateLEDs() {
     digitalWrite(LED_YELLOW_2, HIGH);
     digitalWrite(LED_GREEN_1, LOW);
     digitalWrite(LED_GREEN_2, LOW);
+  } else {
+    // Streaming: Green ON
+    digitalWrite(LED_RED_1, LOW);
+    digitalWrite(LED_RED_2, LOW);
+    digitalWrite(LED_YELLOW_1, LOW);
+    digitalWrite(LED_YELLOW_2, LOW);
+    digitalWrite(LED_GREEN_1, HIGH);
+    digitalWrite(LED_GREEN_2, HIGH);
   }
 }
 
@@ -195,45 +203,21 @@ void setup() {
   Serial.println("\n=== BCI UNO R4 (STABLE SERVO PWM) ===");
 }
 
-// ===== LED ANIMATION =====
-void runChaserAnimation() {
-  static unsigned long lastUpdate = 0;
-  static int currentLedIdx = 0;
-  const int ledPins[] = {LED_RED_1,    LED_RED_2,   LED_YELLOW_1,
-                         LED_YELLOW_2, LED_GREEN_1, LED_GREEN_2};
-  const int numLeds = 6;
-
-  if (millis() - lastUpdate > 100) { // Fast animation for active servo version
-    lastUpdate = millis();
-    for (int i = 0; i < numLeds; i++)
-      digitalWrite(ledPins[i], LOW);
-    digitalWrite(ledPins[currentLedIdx], HIGH);
-    currentLedIdx++;
-    if (currentLedIdx >= numLeds)
-      currentLedIdx = 0;
-  }
-}
-
 // ===== MAIN LOOP =====
 void loop() {
-  // 1. LED Handling
-  if (isConnected && isAcquiring) {
-    runChaserAnimation();
-  }
-
-  // 2. Data Sending
+  // 1. Data Sending
   if (timerStatus && bufferReady) {
     sendBinaryPacket();
     bufferReady = false;
   }
 
-  // 3. Command Processing
+  // 2. Command Processing
   if (Serial.available()) {
     String command = Serial.readStringUntil('\n');
     processCommand(command);
   }
 
-  // 4. Switch Handling (Robust Debounce)
+  // 3. Switch Handling (Robust Debounce)
   static bool sw1State = LOW;
   static bool sw2State = LOW;
   static bool lastReading1 = LOW;

@@ -17,6 +17,7 @@ class MusicHandler {
         this.initialized = false;
         this.currentSourceUrl = null;
         this.currentState = null;
+        this._generation = 0; // cancellation token for async playStateTrack
 
         // State folder track cache: { state: [url, ...] }
         this.stateTracks = {};
@@ -122,8 +123,25 @@ class MusicHandler {
         if (tracks.length === 0) return;
 
         const url = tracks[Math.floor(Math.random() * tracks.length)];
-        this.stop();
+
+        // Stop current source without incrementing generation
+        // (we want THIS call to proceed, not cancel itself)
+        if (this.source) {
+            try { this.source.stop(); } catch (_) {}
+            this.source.disconnect();
+            this.source = null;
+        }
+        this.isPlaying = false;
+
+        // Claim a generation token — if stop() or another playStateTrack()
+        // runs during the await below, _generation will change and we bail out
+        const myGen = ++this._generation;
+
         await this.loadTrack(url);
+
+        // Cancelled — stop() or another playStateTrack() was called while loading
+        if (this._generation !== myGen) return;
+
         this.currentState = state;
 
         if (this.buffer) {
@@ -164,6 +182,7 @@ class MusicHandler {
     }
 
     stop() {
+        this._generation++; // cancel any in-flight async playStateTrack
         if (this.source) {
             try { this.source.stop(); } catch (_) {}
             this.source.disconnect();

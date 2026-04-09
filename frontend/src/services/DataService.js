@@ -6,7 +6,7 @@ import { fetchWithBase } from '../utils/runtimeConnection';
  */
 export const DataService = {
     /**
-     * Saves a recorded session to the server.
+     * Saves a recorded session to the server (legacy JSON format).
      * @param {string} filename - The formatted filename.
      * @param {Object} payload - The session data.
      * @returns {Promise<Object>} The server response.
@@ -36,5 +36,70 @@ export const DataService = {
             console.error('[DataService] Error saving session:', error);
             throw error;
         }
-    }
+    },
+
+    // =================================================================
+    //  Hybrid Recording API (server-side CSV + metadata.json)
+    // =================================================================
+
+    /**
+     * Start a server-side hybrid recording.
+     * @param {number[]} channels - Channel indices, e.g. [0, 1]
+     * @param {string} dataType - "raw" (default) or "filtered"
+     */
+    async startHybridRecording(channels = [0, 1], dataType = 'raw') {
+        const res = await fetchWithBase('/api/hybrid/start', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ channels, data_type: dataType }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to start recording');
+        return data;
+    },
+
+    /** Stop the running hybrid recording and finalise files. */
+    async stopHybridRecording() {
+        const res = await fetchWithBase('/api/hybrid/stop', { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to stop recording');
+        return data;
+    },
+
+    /** Pause the running hybrid recording. */
+    async pauseHybridRecording() {
+        const res = await fetchWithBase('/api/hybrid/pause', { method: 'POST' });
+        return res.json();
+    },
+
+    /** Resume the paused hybrid recording. */
+    async resumeHybridRecording() {
+        const res = await fetchWithBase('/api/hybrid/resume', { method: 'POST' });
+        return res.json();
+    },
+
+    /** Get current hybrid recording status. */
+    async getHybridStatus() {
+        const res = await fetchWithBase('/api/hybrid/status');
+        return res.json();
+    },
+
+    /** List all server-side hybrid recordings. */
+    async listHybridRecordings() {
+        const res = await fetchWithBase('/api/hybrid/recordings');
+        return res.json();
+    },
+
+    /**
+     * Delete a hybrid recording session.
+     * @param {string} sessionPath - Relative path within the data dir
+     */
+    async deleteHybridRecording(sessionPath) {
+        const res = await fetchWithBase(`/api/hybrid/recordings/${encodeURIComponent(sessionPath)}`, {
+            method: 'DELETE',
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to delete recording');
+        return data;
+    },
 };

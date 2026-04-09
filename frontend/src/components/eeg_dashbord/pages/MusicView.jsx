@@ -106,10 +106,12 @@ const MusicView = ({ result, onNavigate }) => {
     if (!isPlaying) {
       await musicHandler.resume();
       await musicHandler.playStateTrack(currentState, stateLevel);
+      // Only set playing if musicHandler actually started (wasn't cancelled)
+      if (musicHandler.isPlaying) setIsPlaying(true);
     } else {
       musicHandler.stop();
+      setIsPlaying(false);
     }
-    setIsPlaying(!isPlaying);
   };
 
   useEffect(() => {
@@ -139,16 +141,22 @@ const MusicView = ({ result, onNavigate }) => {
 
     return () => {
       musicHandler.stop();
+      setIsPlaying(false);
+      lastStateRef.current = null;
       if (animationRef.current) cancelAnimationFrame(animationRef.current);
     };
   }, []);
 
-  // State change → switch track from state folder
+  // State change → switch track from state folder (debounced to avoid rapid flicker)
   useEffect(() => {
     if (!isPlaying || !currentState) return;
     if (currentState !== lastStateRef.current) {
-      lastStateRef.current = currentState;
-      musicHandler.playStateTrack(currentState, stateLevel);
+      // Debounce: wait 600ms before switching track to prevent rapid Neutral↔State flicker
+      const timer = setTimeout(() => {
+        lastStateRef.current = currentState;
+        musicHandler.playStateTrack(currentState, stateLevel);
+      }, 600);
+      return () => clearTimeout(timer);
     } else {
       // Same state, just adjust volume based on level
       musicHandler.setStateVolume(stateLevel);

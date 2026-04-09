@@ -13,9 +13,9 @@ class EEGPreprocessor:
         self.notch_q = 30.0
         
         if mode == "visual":
-            # Visual EEG: 6-60 Hz
+            # Visual EEG: 6-45 Hz
             self.lowcut = 6.0
-            self.highcut = 60.0
+            self.highcut = 45.0
             self.order = 4
         else:
             # Frontal EEG: 0.5-45 Hz

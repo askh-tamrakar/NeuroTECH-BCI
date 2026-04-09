@@ -47,7 +47,7 @@ const BubbleGameView = ({ result, isConnected, onBackToMenu }) => {
   useEffect(() => {
     if (!containerRef.current) return;
     const container = containerRef.current;
-    const $ = (id) => container.querySelector(`#${id}`);
+    const $ = (id) => document.getElementById(id);
 
     const canvas = $('gameCanvas');
     if (!canvas) return;

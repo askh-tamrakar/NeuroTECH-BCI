@@ -67,6 +67,9 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
 
   const [wisdomIdx] = useState(() => Math.floor(Math.random() * WISDOM.length));
 
+  /* ── LIVE MIND STATE ───────────────────────── */
+  const [mindState, setMindState] = useState({ state: 'Neutral', level: 0, all: {} });
+
   /* ── MUSIC MIXER STATE ─────────────────────── */
   const [musicState, setMusicState] = useState(
     TRACKS.map(t => ({ id: t.id, label: t.label, active: false, vol: 0.8, category: t.category }))
@@ -240,7 +243,7 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
   useEffect(() => {
     if (!containerRef.current) return;
     const container = containerRef.current;
-    const $ = (id) => container.querySelector(`#${id}`);
+    const $ = (id) => document.getElementById(id);
 
     /* ── CANVASES ──────────────────────────────── */
     const radar = $('med-radar');
@@ -263,6 +266,20 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
     let lastTS = null;
 
     let calmAcc = 0, calmSamples = 0;
+
+    /* ── EMA SMOOTHING ──────────────────────────── */
+    const EMA_ALPHA = 0.15; // lower = smoother (0.1-0.3 is good for 60ms interval)
+    let smoothBands = [20, 20, 25, 20, 15];
+    let smoothCalm = 0;
+    let smoothFocus = 0;
+    let smoothStress = 0;
+    let prevDominant = 'Alpha';
+    let dominantHoldFrames = 0;
+    const DOMINANT_HOLD = 20; // hold dominant label for ~20 frames (~1.2s) to prevent flicker
+
+    function ema(prev, next, alpha) {
+      return prev + alpha * (next - prev);
+    }
 
     /* ── THEME COLOR HELPER ────────────────────── */
     function tc(name, fallback = '#ffffff') {
@@ -448,8 +465,10 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
             else if (d.freq >= 13 && d.freq <= 30) beta += d.power;
           });
           
-          // Use raw powers instead of log — radar normalizes them anyway
-          rawBands = [delta, theta, alpha, beta, 0];
+          // Smooth band powers with EMA to prevent rapid oscillation
+          const newBands = [delta, theta, alpha, beta, 0];
+          for (let i = 0; i < 5; i++) smoothBands[i] = ema(smoothBands[i], newBands[i], EMA_ALPHA);
+          rawBands = smoothBands.slice();
           
           // ── CALM SIGNAL ──────────────────────────────────────────────────────
           const total = delta + theta + alpha + beta + 1e-6;
@@ -457,8 +476,10 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
           const betaRel  = beta / total;
           const thetaRel = theta / total;
           
-          // Calm = high alpha/theta, low beta
-          calmSignal = Math.max(0, Math.min(1, (alphaRel + thetaRel * 0.5) * 1.5 - (betaRel * 0.5)));
+          // Calm = high alpha/theta, low beta — smoothed
+          const rawCalm = Math.max(0, Math.min(1, (alphaRel + thetaRel * 0.5) * 1.5 - (betaRel * 0.5)));
+          smoothCalm = ema(smoothCalm, rawCalm, EMA_ALPHA);
+          calmSignal = smoothCalm;
         } else {
           // Fallback to wsEvent.features if FFT stream not ready
           const feat = ws?.features || res?.features;
@@ -552,26 +573,36 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
       }
 
       // ── Focus & Stress live values ────────────────────────────────
-      // Prefer backend-computed values from result.output
+      // eegResult is already the spread of wsEvent.output — fields live at top level
       const ws2  = wsEventRef.current;
       const res2 = resultRef.current;
-      const out2 = res2?.output || {};
+      const out2 = res2 || {};
       const feat2 = ws2?.features || res2?.features;
+
+      // ── Update mind state from backend ────────────────────────────
+      if (out2.state) {
+        setMindState({ state: out2.state, level: out2.state_level ?? 0, all: out2.all_states || {} });
+      }
 
       let focusVal  = 0;
       let stressVal = 0;
 
-      // Use backend-computed scores if available
-      if (out2.focus_score !== undefined) {
-        focusVal = Math.round(out2.focus_score);
-        stressVal = Math.round(out2.stress_score ?? 0);
-      } else if (!wsUrlRef.current || ws2?.status === 'disconnected' || res2?.status === 'disconnected') {
-         focusVal = 0;
-         stressVal = 0;
+      // Compute raw focus/stress from ONE consistent source (spectra preferred)
+      let rawFocus = smoothFocus;
+      let rawStress = smoothStress;
+
+      if (!wsUrlRef.current || ws2?.status === 'disconnected' || res2?.status === 'disconnected') {
+         rawFocus = 0;
+         rawStress = 0;
+         smoothFocus = 0;
+         smoothStress = 0;
+      } else if (out2.focus_score !== undefined) {
+        // Backend-computed scores — still smooth them
+        rawFocus = out2.focus_score;
+        rawStress = out2.stress_score ?? 0;
       } else {
-        // Spectra-derived fallback
-        const activeCh2 = (ws2?.source_channel !== undefined) ? String(ws2.source_channel) : selectedChannelRef.current;
-        const currentSp = spectraRef.current[activeCh2] || spectraRef.current[selectedChannelRef.current] || Object.values(spectraRef.current)[0] || [];
+        // Spectra-derived
+        const currentSp = spectraRef.current[selectedChannelRef.current] || Object.values(spectraRef.current)[0] || [];
         if (currentSp.length > 0) {
          let delta = 0, theta = 0, alpha = 0, beta = 0;
          currentSp.forEach(d => {
@@ -584,20 +615,28 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
          const alphaRel = alpha / total2;
          const betaRel  = beta / total2;
          const thetaRel = theta / total2;
-         focusVal  = Math.round(Math.min(100, Math.max(0, (alphaRel + thetaRel * 0.5) * 200)));
-         stressVal = Math.round(Math.min(100, Math.max(0, betaRel * 300)));
+         rawFocus  = Math.min(100, Math.max(0, (alphaRel + thetaRel * 0.5) * 200));
+         const si = beta / (alpha + theta + 1e-6);
+         rawStress = Math.min(100, Math.max(0, (Math.min(si, 3.0) / 3.0) * 100));
         } else if (feat2?.alpha !== undefined) {
           const total2 = (feat2.delta||0) + (feat2.theta||0) + (feat2.alpha||0) + (feat2.beta||0) + 1e-6;
           const alphaRel = (feat2.alpha||0) / total2;
           const betaRel  = (feat2.beta||0)  / total2;
           const thetaRel = (feat2.theta||0) / total2;
-          focusVal  = Math.round(Math.min(100, Math.max(0, (alphaRel + thetaRel * 0.5) * 200)));
-          stressVal = Math.round(Math.min(100, Math.max(0, betaRel * 300)));
+          rawFocus  = Math.min(100, Math.max(0, (alphaRel + thetaRel * 0.5) * 200));
+          const si2 = (feat2.beta||0) / ((feat2.alpha||0) + (feat2.theta||0) + 1e-6);
+          rawStress = Math.min(100, Math.max(0, (Math.min(si2, 3.0) / 3.0) * 100));
         } else if (res2?.meditation_score !== undefined) {
-          focusVal  = Math.round(res2.meditation_score || 0);
-          stressVal = Math.round(Math.max(0, 100 - focusVal));
+          rawFocus  = res2.meditation_score || 0;
+          rawStress = Math.max(0, 100 - rawFocus);
         }
       }
+
+      // EMA smooth focus & stress
+      smoothFocus  = ema(smoothFocus, rawFocus, EMA_ALPHA);
+      smoothStress = ema(smoothStress, rawStress, EMA_ALPHA);
+      focusVal  = Math.round(smoothFocus);
+      stressVal = Math.round(smoothStress);
 
       const fv = $('med-focus-val');
       if (fv) fv.textContent = focusVal;
@@ -629,11 +668,22 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
 
       const phaseInfo = getPhase();
 
-      // Dominant Wave Calculation
+      // Dominant Wave Calculation — with hold timer to prevent rapid flicker
       const labels = ['Delta', 'Theta', 'Alpha', 'Beta', 'Gamma'];
       const maxVal = Math.max(...rawBands);
       const dominantIdx = rawBands.indexOf(maxVal);
-      const dominantWaveName = labels[dominantIdx];
+      const candidateWave = labels[dominantIdx];
+
+      if (candidateWave !== prevDominant) {
+        dominantHoldFrames++;
+        if (dominantHoldFrames >= DOMINANT_HOLD) {
+          prevDominant = candidateWave;
+          dominantHoldFrames = 0;
+        }
+      } else {
+        dominantHoldFrames = 0;
+      }
+      const dominantWaveName = prevDominant;
 
       const dwEl = $('med-dominant-val');
       if (dwEl) {
@@ -847,58 +897,159 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
       )}
 
       {/* ── SESSION RESULTS OVERLAY ── */}
-      {sessionResults && (
-        <div className="absolute inset-0 z-[200] flex items-center justify-center bg-[var(--bg)]/90 backdrop-blur-xl">
-          <div className="bg-[var(--surface)] border border-[var(--primary)]/30 rounded-2xl p-6 max-w-md w-[90%] shadow-2xl">
-            <h2 className="font-display text-2xl font-black text-white tracking-widest mb-4 text-center">SESSION RESULTS</h2>
-            <div className="grid grid-cols-2 gap-3 mb-4">
-              <div className="bg-[var(--primary)]/5 border border-[var(--primary)]/20 rounded-lg p-3 text-center">
-                <div className="text-[9px] tracking-[3px] text-[var(--primary)] opacity-70 mb-1">QUALITY</div>
-                <div className="font-display text-xl font-bold text-white">{sessionResults.quality_score ?? 0}%</div>
-              </div>
-              <div className="bg-[var(--primary)]/5 border border-[var(--primary)]/20 rounded-lg p-3 text-center">
-                <div className="text-[9px] tracking-[3px] text-[var(--primary)] opacity-70 mb-1">DURATION</div>
-                <div className="font-display text-xl font-bold text-white">{sessionResults.duration_seconds ? `${Math.round(sessionResults.duration_seconds)}s` : '—'}</div>
-              </div>
-              <div className="bg-cyan-500/5 border border-cyan-500/20 rounded-lg p-3 text-center">
-                <div className="text-[9px] tracking-[3px] text-cyan-400 opacity-70 mb-1">AVG FOCUS</div>
-                <div className="font-display text-xl font-bold text-cyan-400">{sessionResults.avg_focus ?? 0}%</div>
-              </div>
-              <div className="bg-red-500/5 border border-red-500/20 rounded-lg p-3 text-center">
-                <div className="text-[9px] tracking-[3px] text-red-400 opacity-70 mb-1">AVG STRESS</div>
-                <div className="font-display text-xl font-bold text-red-400">{sessionResults.avg_stress ?? 0}%</div>
-              </div>
-              <div className="bg-green-500/5 border border-green-500/20 rounded-lg p-3 text-center">
-                <div className="text-[9px] tracking-[3px] text-green-400 opacity-70 mb-1">AVG CALM</div>
-                <div className="font-display text-xl font-bold text-green-400">{sessionResults.avg_calm ?? 0}%</div>
-              </div>
-              <div className="bg-amber-500/5 border border-amber-500/20 rounded-lg p-3 text-center">
-                <div className="text-[9px] tracking-[3px] text-amber-400 opacity-70 mb-1">SAMPLES</div>
-                <div className="font-display text-xl font-bold text-amber-400">{sessionResults.total_samples ?? 0}</div>
-              </div>
-            </div>
-            {sessionResults.state_breakdown && (
-              <div className="mb-4">
-                <div className="text-[9px] tracking-[3px] text-[var(--muted)] mb-2">STATE BREAKDOWN</div>
-                <div className="flex flex-col gap-1">
-                  {Object.entries(sessionResults.state_breakdown).map(([state, pct]) => (
-                    <div key={state} className="flex items-center gap-2">
-                      <span className="text-[10px] font-bold text-white/70 w-16">{state}</span>
-                      <div className="flex-1 h-1.5 bg-white/5 rounded-full overflow-hidden">
-                        <div className="h-full bg-[var(--primary)] rounded-full" style={{ width: `${pct}%` }} />
-                      </div>
-                      <span className="text-[10px] font-bold text-white/60 w-8 text-right">{pct}%</span>
-                    </div>
-                  ))}
+      {sessionResults && (() => {
+        const q = sessionResults.quality_score ?? 0;
+        const dur = sessionResults.duration_sec ?? sessionResults.duration_seconds ?? 0;
+        const durMin = Math.floor(dur / 60);
+        const durSec = dur % 60;
+        const rating = q >= 80 ? { label: 'EXCELLENT', color: '#22c55e', icon: '🧘' }
+                     : q >= 60 ? { label: 'GOOD', color: '#0ea5e9', icon: '✨' }
+                     : q >= 40 ? { label: 'FAIR', color: '#f59e0b', icon: '💫' }
+                     : { label: 'KEEP TRYING', color: '#f43f5e', icon: '🔥' };
+        const posPct = sessionResults.positive_time_pct ?? 0;
+        const negPct = sessionResults.negative_time_pct ?? 0;
+        const stateColors = { Focus: '#0ea5e9', Calm: '#a855f7', Relaxed: '#22c55e', Stressed: '#f43f5e', Drowsy: '#f59e0b', Neutral: '#94a3b8' };
+
+        return (
+          <div className="absolute inset-0 z-[200] flex items-center justify-center bg-[var(--bg)]/90 backdrop-blur-xl overflow-y-auto py-6">
+            <div className="bg-[var(--surface)] border border-[var(--primary)]/30 rounded-2xl p-6 max-w-lg w-[92%] shadow-2xl">
+
+              {/* Performance Rating */}
+              <div className="text-center mb-5">
+                <div className="text-4xl mb-1">{rating.icon}</div>
+                <h2 className="font-display text-2xl font-black text-white tracking-widest mb-1">SESSION COMPLETE</h2>
+                <div className="inline-block px-4 py-1 rounded-full text-xs font-black tracking-[3px] uppercase border"
+                  style={{ color: rating.color, borderColor: rating.color + '66', backgroundColor: rating.color + '15' }}>
+                  {rating.label}
                 </div>
               </div>
-            )}
-            <button onClick={() => setSessionResults(null)} className="w-full py-3 rounded-xl text-sm font-black uppercase tracking-[3px] border-2 border-[var(--primary)] bg-[var(--primary)]/10 text-white hover:bg-[var(--primary)]/20 transition-all">
-              CLOSE
-            </button>
+
+              {/* Quality Ring */}
+              <div className="flex justify-center mb-5">
+                <div className="relative w-28 h-28">
+                  <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
+                    <circle cx="50" cy="50" r="42" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="8" />
+                    <circle cx="50" cy="50" r="42" fill="none" stroke={rating.color} strokeWidth="8"
+                      strokeDasharray={`${q * 2.64} ${264 - q * 2.64}`} strokeLinecap="round"
+                      style={{ filter: `drop-shadow(0 0 6px ${rating.color}66)` }} />
+                  </svg>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center">
+                    <span className="font-display text-2xl font-black text-white">{q}</span>
+                    <span className="text-[8px] tracking-[2px] text-white/50 uppercase">Quality</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Core Metrics Grid */}
+              <div className="grid grid-cols-3 gap-2 mb-4">
+                <div className="bg-white/5 border border-white/10 rounded-lg p-2.5 text-center">
+                  <div className="text-[8px] tracking-[2px] text-white/40 mb-1">DURATION</div>
+                  <div className="font-display text-lg font-bold text-white">{durMin > 0 ? `${durMin}m ${durSec}s` : `${durSec}s`}</div>
+                </div>
+                <div className="bg-white/5 border border-white/10 rounded-lg p-2.5 text-center">
+                  <div className="text-[8px] tracking-[2px] text-green-400/70 mb-1">POSITIVE</div>
+                  <div className="font-display text-lg font-bold text-green-400">{posPct}%</div>
+                </div>
+                <div className="bg-white/5 border border-white/10 rounded-lg p-2.5 text-center">
+                  <div className="text-[8px] tracking-[2px] text-red-400/70 mb-1">NEGATIVE</div>
+                  <div className="font-display text-lg font-bold text-red-400">{negPct}%</div>
+                </div>
+              </div>
+
+              {/* Avg + Peak Stats */}
+              <div className="grid grid-cols-2 gap-2 mb-4">
+                <div className="bg-cyan-500/5 border border-cyan-500/15 rounded-lg p-2.5">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[8px] tracking-[2px] text-cyan-400/70">AVG FOCUS</span>
+                    <span className="text-[8px] tracking-[2px] text-cyan-400/50">PEAK {sessionResults.peak_focus ?? 0}</span>
+                  </div>
+                  <div className="font-display text-xl font-bold text-cyan-400">{sessionResults.avg_focus ?? 0}%</div>
+                  <div className="h-1 bg-white/5 rounded-full mt-1 overflow-hidden">
+                    <div className="h-full bg-cyan-400 rounded-full" style={{ width: `${sessionResults.avg_focus ?? 0}%` }} />
+                  </div>
+                </div>
+                <div className="bg-red-500/5 border border-red-500/15 rounded-lg p-2.5">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[8px] tracking-[2px] text-red-400/70">AVG STRESS</span>
+                    <span className="text-[8px] tracking-[2px] text-red-400/50">LOW IS GOOD</span>
+                  </div>
+                  <div className="font-display text-xl font-bold text-red-400">{sessionResults.avg_stress ?? 0}%</div>
+                  <div className="h-1 bg-white/5 rounded-full mt-1 overflow-hidden">
+                    <div className="h-full bg-red-400 rounded-full" style={{ width: `${sessionResults.avg_stress ?? 0}%` }} />
+                  </div>
+                </div>
+                <div className="bg-green-500/5 border border-green-500/15 rounded-lg p-2.5">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[8px] tracking-[2px] text-green-400/70">AVG CALM</span>
+                    <span className="text-[8px] tracking-[2px] text-green-400/50">PEAK {sessionResults.peak_calm ?? 0}</span>
+                  </div>
+                  <div className="font-display text-xl font-bold text-green-400">{sessionResults.avg_calm ?? 0}%</div>
+                  <div className="h-1 bg-white/5 rounded-full mt-1 overflow-hidden">
+                    <div className="h-full bg-green-400 rounded-full" style={{ width: `${sessionResults.avg_calm ?? 0}%` }} />
+                  </div>
+                </div>
+                <div className="bg-amber-500/5 border border-amber-500/15 rounded-lg p-2.5">
+                  <div className="text-[8px] tracking-[2px] text-amber-400/70 mb-1">SAMPLES</div>
+                  <div className="font-display text-xl font-bold text-amber-400">{sessionResults.total_samples ?? 0}</div>
+                </div>
+              </div>
+
+              {/* State Breakdown */}
+              {sessionResults.state_breakdown && (
+                <div className="mb-4">
+                  <div className="text-[9px] tracking-[3px] text-[var(--muted)] mb-2 uppercase">State Breakdown</div>
+                  <div className="flex flex-col gap-1.5">
+                    {Object.entries(sessionResults.state_breakdown)
+                      .sort(([,a], [,b]) => b - a)
+                      .map(([state, pct]) => (
+                      <div key={state} className="flex items-center gap-2">
+                        <span className="text-[10px] font-bold w-16 shrink-0" style={{ color: stateColors[state] || '#94a3b8' }}>{state}</span>
+                        <div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden">
+                          <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: stateColors[state] || '#94a3b8' }} />
+                        </div>
+                        <span className="text-[10px] font-bold text-white/60 w-10 text-right">{pct}%</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Band Power Averages */}
+              {sessionResults.avg_band_powers && (
+                <div className="mb-5">
+                  <div className="text-[9px] tracking-[3px] text-[var(--muted)] mb-2 uppercase">Avg Band Power</div>
+                  <div className="flex gap-1.5">
+                    {[
+                      { key: 'delta', label: 'δ', color: '#4f8eff' },
+                      { key: 'theta', label: 'θ', color: '#a855f7' },
+                      { key: 'alpha', label: 'α', color: '#22c55e' },
+                      { key: 'beta', label: 'β', color: '#00e5ff' },
+                      { key: 'gamma', label: 'γ', color: '#f59e0b' },
+                    ].map(band => {
+                      const val = sessionResults.avg_band_powers[band.key] ?? 0;
+                      const allVals = Object.values(sessionResults.avg_band_powers);
+                      const maxVal = Math.max(...allVals, 1e-6);
+                      const pct = Math.min(100, (val / maxVal) * 100);
+                      return (
+                        <div key={band.key} className="flex-1 flex flex-col items-center gap-1">
+                          <div className="w-full h-12 bg-white/5 rounded relative overflow-hidden flex items-end">
+                            <div className="w-full rounded-t transition-all" style={{ height: `${pct}%`, backgroundColor: band.color + '99' }} />
+                          </div>
+                          <span className="text-sm font-bold" style={{ color: band.color }}>{band.label}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              <button onClick={() => setSessionResults(null)} className="w-full py-3 rounded-xl text-sm font-black uppercase tracking-[3px] border-2 border-[var(--primary)] bg-[var(--primary)]/10 text-white hover:bg-[var(--primary)]/20 transition-all">
+                CLOSE
+              </button>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ══ CENTER AREA: Main Charts ═══════════════════════════════ */}
       <div className="flex-grow flex flex-col transition-all duration-300">
@@ -910,7 +1061,7 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
               <div className="med-section-header">
                 <span className="med-section-icon">⬡</span>
                 <span className="med-section-title" style={{ fontFamily: 'Orbitron, sans-serif', fontSize: '10px', fontWeight: '800', letterSpacing: '3px', color: 'var(--primary)', textShadow: '0 0 12px var(--primary)', textTransform: 'uppercase' }}>Brain Activity</span>
-                <span className="med-section-sub" style={{ fontSize: '8px', letterSpacing: '2px', color: 'var(--muted)', opacity: '.8', marginLeft: '2px' }}> · {wsEvent?.source_channel !== undefined ? `CH${wsEvent.source_channel}` : 'EEG'} {wsEvent?.preset === 'frontal_fp1' ? '(Fp1)' : (wsEvent?.preset === 'visual_eeg_oz' ? '(Oz)' : '')}</span>
+                <span className="med-section-sub" style={{ fontSize: '8px', letterSpacing: '2px', color: 'var(--muted)', opacity: '.8', marginLeft: '2px' }}> · EEG (Fpz)</span>
                 <div className="ml-auto flex items-center gap-2 pr-2">
                   <span className="text-[8px] font-black text-[var(--primary)] uppercase tracking-widest opacity-100">Dominant:</span>
                   <span id="med-dominant-val" className="text-[10px] font-black tracking-[2px] uppercase">Alpha</span>
@@ -932,6 +1083,37 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
                 <div className="flex flex-col items-center">
                   <span className="text-[10px] font-black text-primary tracking-widest uppercase opacity-100">Focus</span>
                   <span id="med-focus-val" className="text-2xl font-black text-primary font-mono tabular-nums drop-shadow-glow">0</span>
+                </div>
+                {/* Live Mind State Badge */}
+                <div className="flex flex-col items-center gap-0.5">
+                  <span className="text-[8px] font-black tracking-[3px] uppercase" style={{ color: 'var(--muted)' }}>State</span>
+                  <span
+                    className="px-3 py-1 rounded-full text-[10px] font-black tracking-[2px] uppercase border transition-all duration-500"
+                    style={{
+                      backgroundColor: {
+                        Focus: 'rgba(14,165,233,0.15)', Calm: 'rgba(168,85,247,0.15)',
+                        Relaxed: 'rgba(34,197,94,0.15)', Stressed: 'rgba(244,63,94,0.15)',
+                        Drowsy: 'rgba(245,158,11,0.15)', Neutral: 'rgba(148,163,184,0.15)',
+                      }[mindState.state] || 'rgba(148,163,184,0.15)',
+                      borderColor: {
+                        Focus: 'rgba(14,165,233,0.4)', Calm: 'rgba(168,85,247,0.4)',
+                        Relaxed: 'rgba(34,197,94,0.4)', Stressed: 'rgba(244,63,94,0.4)',
+                        Drowsy: 'rgba(245,158,11,0.4)', Neutral: 'rgba(148,163,184,0.3)',
+                      }[mindState.state] || 'rgba(148,163,184,0.3)',
+                      color: {
+                        Focus: '#0ea5e9', Calm: '#a855f7', Relaxed: '#22c55e',
+                        Stressed: '#f43f5e', Drowsy: '#f59e0b', Neutral: '#94a3b8',
+                      }[mindState.state] || '#94a3b8',
+                      boxShadow: `0 0 12px ${({
+                        Focus: 'rgba(14,165,233,0.3)', Calm: 'rgba(168,85,247,0.3)',
+                        Relaxed: 'rgba(34,197,94,0.3)', Stressed: 'rgba(244,63,94,0.3)',
+                        Drowsy: 'rgba(245,158,11,0.3)', Neutral: 'transparent',
+                      }[mindState.state] || 'transparent')}`,
+                    }}
+                  >
+                    {mindState.state}
+                  </span>
+                  <span className="text-[8px] font-mono tabular-nums" style={{ color: 'var(--muted)' }}>{mindState.level}%</span>
                 </div>
                 <div className="flex flex-col items-center">
                   <span className="text-[10px] font-black text-red-500 tracking-widest uppercase opacity-100">Stress</span>
@@ -973,8 +1155,7 @@ const MeditationView = ({ result, wsEvent, wsUrl, currentView, onNavigate }) => 
             
             <div className="flex-grow w-full relative">
               {(() => {
-                 const chKey = wsEvent?.source_channel !== undefined ? String(wsEvent.source_channel) : '0';
-                 const data = spectra[chKey] || spectra['0'] || spectra['1'] || Object.values(spectra)[0];
+                 const data = spectra[selectedChannel] || spectra['0'] || spectra['1'] || Object.values(spectra)[0];
                  const chartData = data ? data.filter(d => d.freq >= 1 && d.freq <= 50) : [];
                  
                  return chartData.length > 0 ? (

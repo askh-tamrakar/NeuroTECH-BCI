@@ -63,6 +63,16 @@ def create_app():
     state.config = load_config()
     state.session = SessionManager()
     
+    # Initialize Hybrid Recorder (server-side CSV recording)
+    try:
+        from src.data.hybrid_recorder import HybridRecorder
+        from src.data.recording_service import RecordingService
+        state.hybrid_recorder = HybridRecorder()
+        state.recording_service = RecordingService(state.hybrid_recorder)
+        print("[App] Hybrid recorder initialized")
+    except Exception as e:
+        print(f"[App] Warning: Failed to init HybridRecorder: {e}")
+
     # Initialize Detector
     try:
         # Load config to get detector settings if needed, or default

@@ -1,7 +1,7 @@
 import React from 'react';
 import {
     Play, Square, Activity,
-    History, Gamepad2, Trash2
+    History, Gamepad2, Trash2, ArrowLeft
 } from 'lucide-react';
 
 const BubbleSidebar = ({
@@ -9,6 +9,7 @@ const BubbleSidebar = ({
     focusScore,
     globalRunning,
     containerRef,
+    onBackToMenu,
 }) => {
     const focusDash = 201 - (Math.min(100, focusScore || 0) / 100) * 201;
     const stressDash = 201 - (Math.min(100, stressScore || 0) / 100) * 201;
@@ -16,6 +17,11 @@ const BubbleSidebar = ({
     return (
         <div className="flex-grow flex flex-col p-4 gap-4 font-mono transition-opacity duration-300 w-full shrink-0 overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:'none'] [&::-webkit-scrollbar]:hidden">
             <div className="flex items-center gap-3 rounded-xl border border-[var(--primary)]/20 bg-[var(--bg)]/40 px-3 py-2.5 shrink-0">
+                {onBackToMenu && (
+                    <button onClick={onBackToMenu} className="text-[var(--muted)] hover:text-[var(--primary)] transition-colors" title="Back to menu">
+                        <ArrowLeft size={18} />
+                    </button>
+                )}
                 <Gamepad2 size={18} className="text-[var(--primary)]" />
                 <div>
                     <h3 className="text-[12px] font-black uppercase tracking-[3px] text-[var(--primary)]">Bubble Game</h3>

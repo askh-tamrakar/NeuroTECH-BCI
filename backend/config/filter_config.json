@@ -2,7 +2,7 @@
   "filters": {
     "EEG": {
       "bandpass_enabled": true,
-      "bandpass_high": 30,
+      "bandpass_high": 45,
       "bandpass_low": 0.5,
       "bandpass_order": 4,
       "notch_enabled": true,

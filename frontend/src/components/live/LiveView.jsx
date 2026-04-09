@@ -211,14 +211,18 @@ export default function LiveView({ wsData, wsEvent, config, isPaused, wsUrl, rec
 
             {recordState?.isConfirmationPending && (
               <div className="confirm-group flex items-center gap-2">
-                <span className="text-[14px] font-bold text-muted uppercase tracking-wider mr-2">Keep Session ({recordState?.recordingTime}s)?</span>
+                <span className="text-[14px] font-bold text-muted uppercase tracking-wider mr-2">
+                  {recordState?.hybridResult
+                    ? `Saved ${recordState.hybridResult.data_type?.toUpperCase()} — ${recordState.hybridResult.duration_seconds}s, ${recordState.hybridResult.total_rows} samples (${recordState.hybridResult.integrity})`
+                    : `Keep Session (${recordState?.recordingTime}s)?`}
+                </span>
                 <button
                   onClick={recordHandlers?.saveRecording}
                   disabled={recordState?.isSaving}
                   className="save-btn flex items-center gap-1"
                 >
                   <Save size={18} />
-                  <span className='text-[12px]'>SAVE</span>
+                  <span className='text-[12px]'>KEEP</span>
                 </button>
                 <button
                   onClick={recordHandlers?.discardRecording}
@@ -226,7 +230,7 @@ export default function LiveView({ wsData, wsEvent, config, isPaused, wsUrl, rec
                   className="discard-btn flex items-center gap-1"
                 >
                   <Trash2 size={18} />
-                  <span className='text-[12px]'>DISCARD</span>
+                  <span className='text-[12px]'>DELETE</span>
                 </button>
               </div>
             )}

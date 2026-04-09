@@ -17,5 +17,9 @@ class WebServerState:
         self.last_pred_time = 0
         self.session = None # Assigned by main app or initialized here? Initialize in app setup.
 
+        # Hybrid recording (server-side CSV + metadata.json)
+        self.hybrid_recorder = None      # HybridRecorder instance
+        self.recording_service = None    # RecordingService instance
+
 # Global instance
 state = WebServerState()

@@ -613,7 +613,7 @@ function FilterSection({
                         {(() => {
                             const ranges = {
                                 EMG: { min: 1, max: 300, step: 2 },
-                                EEG: { min: 1, max: 120, step: 1 },
+                                EEG: { min: 0.5, max: 60, step: 0.5 },
                                 EOG: { min: 0.1, max: 20, step: 0.1 }
                             };
                             const range = ranges[sensorType] || { min: 1, max: 300, step: 1 };
