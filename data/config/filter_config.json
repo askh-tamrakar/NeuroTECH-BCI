@@ -8,6 +8,8 @@
     },
     "EMG": {
       "bandpass_enabled": true,
+      "bandpass_high": 252,
+      "bandpass_low": 1,
       "notch_enabled": true
     },
     "EOG": {

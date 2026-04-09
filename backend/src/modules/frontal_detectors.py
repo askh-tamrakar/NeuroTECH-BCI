@@ -165,8 +165,16 @@ def detect_mind_state(feature_vector):
     """Unified mind state detection for ALL pages.
 
     Optimized for single-channel Fpz (A1/A2 reference).
-    Uses confidence scores with controlled scaling so one band
-    cannot permanently dominate, plus 5-frame hysteresis.
+
+    KEY DESIGN DECISIONS:
+    - Proportions use TAB (theta+alpha+beta) only.  Delta is excluded
+      because on Fpz it is dominated by eye-blink artifacts, DC drift,
+      and 1/f noise — not cortical delta.
+    - An artifact gate linearly suppresses ALL confidences when delta
+      exceeds 40 % of total power (fully muted at 80 %).
+    - Drowsy is driven by theta dominance + theta/beta ratio (no delta).
+    - Stressed subtracts an alpha term so focused-but-calm beta does
+      not falsely trigger stress.
 
     States: Focus, Calm, Relaxed, Stressed, Drowsy, Neutral
     """
@@ -177,50 +185,66 @@ def detect_mind_state(feature_vector):
     calm_index = _safe(feature_vector, 9)
     stress_index = _safe(feature_vector, 10)
     engagement_index = _safe(feature_vector, 11)
+    theta_beta = _safe(feature_vector, 5)
 
-    # Proportional power (exclude gamma — mostly artifact on Fpz)
-    total = delta + theta + alpha + beta + 1e-6
-    p_delta = delta / total
-    p_theta = theta / total
-    p_alpha = alpha / total
-    p_beta = beta / total
+    # ── TAB proportions (exclude delta — artifact-prone on Fpz) ─────────
+    total_tab = theta + alpha + beta + 1e-6
+    p_theta = theta / total_tab
+    p_alpha = alpha / total_tab
+    p_beta = beta / total_tab
 
-    # ── Confidence formulas (each 0-100, balanced competition) ──────────
+    # ── Artifact gate ───────────────────────────────────────────────────
+    # When delta > 40 % of total power the signal is contaminated by
+    # eye blinks / motion / DC drift.  Linearly ramp confidence toward
+    # zero; above 80 % → all states = 0 → Neutral.
+    total_all = delta + theta + alpha + beta + 1e-6
+    delta_frac = delta / total_all
+    if delta_frac > 0.40:
+        artifact_scale = max(0.0, 1.0 - (delta_frac - 0.40) / 0.40)
+    else:
+        artifact_scale = 1.0
+
+    # ── Confidence formulas (each 0-100) ────────────────────────────────
     #
-    # Focus: needs beta above baseline (~15%) + engagement
-    #   Beta-dominant (p_beta=0.50,ei=2.64): (0.35)*180+0.88*25 = 63+22 = 85
-    #   Alpha-dominant (p_beta=0.07): 0 → ~1
-    focus_beta = max(0.0, p_beta - 0.15) * 180
+    # Focus: beta above TAB baseline (~25 %) + engagement
+    #   Beta-dominant TAB (p_b=0.65, ei=3.25): (0.40)*220+1.0*25 = 88+25→100
+    #   Alpha-dominant TAB (p_b=0.27): (0.02)*220+0.13*25 = 4+3 = 7
+    focus_beta = max(0.0, p_beta - 0.25) * 220
     eng_norm = min(1.0, engagement_index / 3.0)
     focus_conf = min(100, int(focus_beta + eng_norm * 25))
 
-    # Calm: dominant alpha, light calm_index bonus
-    #   Alpha-dominant (p_alpha=0.87,ci=12.6): 0.87*90+1.0*15 = 78+15 = 93
-    #   Beta-dominant (p_alpha=0.19,ci=0.75): 0.19*90+0.19*15 = 17+3 = 20
+    # Calm: alpha dominance in TAB + light calm_index bonus
     ci_norm = min(1.0, calm_index / 4.0)
     calm_conf = min(100, int(p_alpha * 90 + ci_norm * 15))
 
     # Relaxed: simultaneous alpha AND theta (meditation-like)
-    #   Theta+alpha both 40%: (0.40*0.5+0.40*0.5)*150 = 60
     relax_blend = p_alpha * 0.50 + p_theta * 0.50
     relaxed_conf = min(100, int(relax_blend * 150))
 
-    # Stressed: driven primarily by stress_index, not raw beta
-    #   This separates stress (anxious beta) from focus (engaged beta)
-    #   Beta-dom (si=1.33): 0.67*80+0.50*30 = 53+15 = 68
-    #   Very stressed (si=4.0): 1.0*80+0.70*30 = 80+21 = 100
+    # Stressed: stress_index + beta MINUS alpha presence.
+    # Alpha presence distinguishes calm-focus (some alpha) from
+    # anxious arousal (alpha deeply suppressed).
     si_norm = min(1.0, stress_index / 2.0)
-    stressed_conf = min(100, int(si_norm * 80 + p_beta * 30))
+    stressed_conf = max(0, min(100, int(si_norm * 80 + p_beta * 30 - p_alpha * 40)))
 
-    # Drowsy: needs high delta+theta (both slow waves)
-    #   Truly drowsy (d=40%,t=35%): 0.40*100+0.35*60 = 40+21 = 61
-    #   Normal awake (d=12%,t=19%): 0.12*100+0.19*60 = 12+11 = 23
-    drowsy_conf = min(100, int(p_delta * 100 + p_theta * 60))
+    # Drowsy: theta dominance in TAB + elevated theta/beta ratio.
+    # NO delta term — delta on single-channel Fpz is unreliable.
+    drowsy_theta = max(0.0, p_theta - 0.30) * 150
+    tb_norm = min(1.0, theta_beta / 3.0)
+    drowsy_conf = min(100, int(drowsy_theta + tb_norm * 40))
 
     # Dampen focus when stress_index is very high (anxious arousal ≠ attention)
     if stress_index > 1.5:
         dampen = max(0.3, 1.0 - (stress_index - 1.5) * 0.3)
         focus_conf = int(focus_conf * dampen)
+
+    # Apply artifact penalty to all states
+    if artifact_scale < 1.0:
+        focus_conf = int(focus_conf * artifact_scale)
+        calm_conf = int(calm_conf * artifact_scale)
+        relaxed_conf = int(relaxed_conf * artifact_scale)
+        stressed_conf = int(stressed_conf * artifact_scale)
+        drowsy_conf = int(drowsy_conf * artifact_scale)
 
     all_states = {
         "Focus": focus_conf,

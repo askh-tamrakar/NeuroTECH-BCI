@@ -60,15 +60,28 @@ Computed in `backend/src/core/feature_vector.py`. Guard: ε = 10⁻⁶.
 
 All pages (Music, Meditation, Bubble Game) use the **same** function so states always agree.
 
-### 4.1 Proportional Power
+### 4.1 TAB Proportional Power
 
-Gamma is excluded from the proportion denominator (unreliable on Fpz):
+**Delta is excluded** from the proportion denominator.  On single-channel Fpz,
+delta (0.5–4 Hz) is dominated by eye-blink artifacts, DC drift, and 1/f noise —
+not cortical delta.  Only Theta, Alpha, Beta (TAB) are used:
 
-$$\text{total} = \delta + \theta + \alpha + \beta + \varepsilon$$
+$$\text{total}_{\text{TAB}} = \theta + \alpha + \beta + \varepsilon$$
 
-$$p_\delta = \frac{\delta}{\text{total}}, \quad p_\theta = \frac{\theta}{\text{total}}, \quad p_\alpha = \frac{\alpha}{\text{total}}, \quad p_\beta = \frac{\beta}{\text{total}}$$
+$$p_\theta = \frac{\theta}{\text{total}_{\text{TAB}}}, \quad p_\alpha = \frac{\alpha}{\text{total}_{\text{TAB}}}, \quad p_\beta = \frac{\beta}{\text{total}_{\text{TAB}}}$$
 
-### 4.2 Normalized Indices
+### 4.2 Artifact Gate
+
+When delta exceeds 40% of total power (including delta), the signal is
+contaminated.  All state confidences are linearly scaled toward zero:
+
+$$\text{delta\_frac} = \frac{\delta}{\delta + \theta + \alpha + \beta + \varepsilon}$$
+
+$$\text{artifact\_scale} = \begin{cases} 1.0 & \text{if } \text{delta\_frac} \le 0.40 \\ \max\!\left(0,\; 1 - \frac{\text{delta\_frac} - 0.40}{0.40}\right) & \text{if } \text{delta\_frac} > 0.40 \end{cases}$$
+
+Above 80% delta → all confidences = 0 → **Neutral**.
+
+### 4.3 Normalized Indices
 
 $$\text{ci\_norm} = \min\!\left(1,\; \frac{\text{calm\_index}}{4.0}\right)$$
 
@@ -76,19 +89,19 @@ $$\text{si\_norm} = \min\!\left(1,\; \frac{\text{stress\_index}}{2.0}\right)$$
 
 $$\text{eng\_norm} = \min\!\left(1,\; \frac{\text{engagement\_index}}{3.0}\right)$$
 
-### 4.3 Confidence Formulas
+### 4.4 Confidence Formulas
 
-Each state is scored 0–100. The highest score wins.
+Each state is scored 0–100. The highest score wins (after artifact scaling).
 
 #### Focus
 
-> **Key band:** Beta (β > 15% baseline required)  
+> **Key band:** Beta (β > 25% of TAB required)  
 > **Rationale:** Sustained attention elevates beta over the resting baseline; engagement reinforces it.
 
-$$\text{Focus} = \min\!\Big(100,\;\; \max(0,\; p_\beta - 0.15) \times 180 \;+\; \text{eng\_norm} \times 25\Big)$$
+$$\text{Focus} = \min\!\Big(100,\;\; \max(0,\; p_\beta - 0.25) \times 220 \;+\; \text{eng\_norm} \times 25\Big)$$
 
-- Beta-dominant example ($p_\beta = 0.50$, engagement = 2.64): $(0.35) \times 180 + 0.88 \times 25 = 63 + 22 = \mathbf{85}$
-- Alpha-dominant example ($p_\beta = 0.07$): $0 \to \mathbf{\sim 1}$
+- Beta-dominant TAB ($p_\beta = 0.65$, engagement = 3.25): $(0.40) \times 220 + 1.0 \times 25 = 88 + 25 \to \mathbf{100}$
+- Alpha-dominant TAB ($p_\beta = 0.27$): $(0.02) \times 220 + 0.13 \times 25 = 4 + 3 = \mathbf{7}$
 
 **Focus dampening under stress:** When `stress_index > 1.5`, focus is reduced to separate anxious arousal from genuine attention:
 
@@ -116,29 +129,31 @@ $$\text{Relaxed} = \min\!\Big(100,\;\; (p_\alpha \times 0.5 + p_\theta \times 0.
 
 #### Stressed
 
-> **Key metric:** Stress index (primary), beta power (secondary)  
-> **Rationale:** Uses the stress_index ratio rather than raw beta, so focused-but-calm beta doesn't trigger stress.
+> **Key metric:** Stress index (primary), beta power (secondary), alpha presence (negative)  
+> **Rationale:** Uses stress_index + beta, but subtracts alpha presence to distinguish calm-focus (some alpha retained) from anxious arousal (alpha deeply suppressed).
 
-$$\text{Stressed} = \min\!\Big(100,\;\; \text{si\_norm} \times 80 \;+\; p_\beta \times 30\Big)$$
+$$\text{Stressed} = \max\!\Big(0,\;\; \min\!\big(100,\;\; \text{si\_norm} \times 80 \;+\; p_\beta \times 30 \;-\; p_\alpha \times 40\big)\Big)$$
 
-- $\text{stress\_index} = 1.33$, $p_\beta = 0.50$: $0.67 \times 80 + 0.50 \times 30 = 53 + 15 = \mathbf{68}$
-- $\text{stress\_index} \geq 2.0$: $1.0 \times 80 + \dots = \mathbf{\geq 100}$
+- Anxious ($\text{si}=2.17$, $p_\beta=0.68$, $p_\alpha=0.21$): $1.0 \times 80 + 0.68 \times 30 - 0.21 \times 40 = 80 + 20 - 8 = \mathbf{92}$
+- Calm-alpha ($\text{si}=0.25$, $p_\alpha=0.60$): $0.125 \times 80 + \dots - 0.60 \times 40 \to \mathbf{0}$ (clamped)
 
 #### Drowsy
 
-> **Key bands:** Delta (δ) + Theta (θ)  
-> **Rationale:** Slow-wave dominance indicates sleep onset or deep drowsiness.
+> **Key band:** Theta (θ) dominance in TAB + elevated θ/β ratio  
+> **Rationale:** On single-channel Fpz, delta is unreliable (artifacts). Drowsiness is detected via theta dominance + high theta/beta ratio, which is the classic sleep-onset marker.
 
-$$\text{Drowsy} = \min\!\Big(100,\;\; p_\delta \times 100 \;+\; p_\theta \times 60\Big)$$
+$$\text{Drowsy} = \min\!\Big(100,\;\; \max(0,\; p_\theta - 0.30) \times 150 \;+\; \text{tb\_norm} \times 40\Big)$$
 
-- Truly drowsy ($p_\delta = 0.40$, $p_\theta = 0.35$): $40 + 21 = \mathbf{61}$
-- Normal awake ($p_\delta = 0.12$, $p_\theta = 0.19$): $12 + 11 = \mathbf{23}$
+where $\text{tb\_norm} = \min\!\left(1,\; \frac{\theta/\beta}{3.0}\right)$
+
+- Theta-dominant TAB ($p_\theta = 0.55$, θ/β = 2.75): $(0.25) \times 150 + 0.92 \times 40 = 38 + 37 = \mathbf{74}$
+- Normal awake TAB ($p_\theta = 0.25$, θ/β = 0.6): $0 + 0.20 \times 40 = \mathbf{8}$
 
 #### Neutral
 
 If no state scores above **15**, the result is **Neutral** with a fixed level of 50.
 
-### 4.4 Hysteresis
+### 4.5 Hysteresis
 
 The detected state must persist for **5 consecutive frames** before it replaces the previous state. This prevents rapid flickering between states.
 
@@ -197,19 +212,20 @@ $$\text{meditation\_score} = \frac{\min(\text{calm\_index},\, 5.0)}{5.0} \times 
 
 | Band | Focus | Calm | Relaxed | Stressed | Drowsy |
 |------|-------|------|---------|----------|--------|
-| **Delta (δ)** | — | — | — | — | **Strong ↑** (×100) |
-| **Theta (θ)** | — | — | **Moderate ↑** (50% weight) | — | **Moderate ↑** (×60) |
-| **Alpha (α)** | — | **Strong ↑** (×90) | **Moderate ↑** (50% weight) | — | — |
-| **Beta (β)** | **Strong ↑** (×180 above 15%) | — | — | **Moderate ↑** (×30 direct, ×80 via SI) | — |
+| **Delta (δ)** | — | — | — | — | — (excluded; artifact gate only) |
+| **Theta (θ)** | — | — | **Moderate ↑** (50% weight) | — | **Strong ↑** (×150 above 30%) |
+| **Alpha (α)** | — | **Strong ↑** (×90) | **Moderate ↑** (50% weight) | **Moderate ↓** (−40) | — |
+| **Beta (β)** | **Strong ↑** (×220 above 25%) | — | — | **Moderate ↑** (×30 direct, ×80 via SI) | — |
 | **Gamma (γ)** | — | — | — | — | — |
 
 ### Interactions Between Bands
 
 - **Beta vs Alpha:** Competing. High β/α → Focus or Stressed; High α/β → Calm.
 - **Alpha + Theta together:** Cooperative → Relaxed (meditation-like state).
-- **Delta + Theta together:** Cooperative → Drowsy (sleep onset).
-- **Beta + high stress_index:** Stressed wins over Focus (dampening applied).
-- **Beta + low stress_index:** Focus wins (engaged but not anxious).
+- **Theta dominance + high θ/β:** → Drowsy (sleep onset).
+- **Beta + high stress_index + low alpha:** Stressed wins over Focus (dampening + alpha penalty).
+- **Beta + low stress_index + some alpha:** Focus wins (engaged but not anxious).
+- **High delta (> 40%):** Artifact gate suppresses all states → Neutral.
 
 ---
 
