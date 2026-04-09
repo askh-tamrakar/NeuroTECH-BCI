@@ -10,6 +10,7 @@ const SidebarCtx = createContext({
 export const SidebarProvider = ({ children }) => {
     const [sidebarMode, setSidebarMode] = useState('main'); // 'main' | 'page'
     const [sidebarSlot, setSidebarSlot] = useState(null);
+    const [isCollapsed, setIsCollapsed] = useState(true);
 
     const stableSetSidebarMode = useCallback((mode) => {
         setSidebarMode(mode);
@@ -19,12 +20,18 @@ export const SidebarProvider = ({ children }) => {
         setSidebarSlot(slot);
     }, []);
 
+    const stableSetIsCollapsed = useCallback((col) => {
+        setIsCollapsed(col);
+    }, []);
+
     const value = useMemo(() => ({
         sidebarMode,
         sidebarSlot,
+        isCollapsed,
         setSidebarMode: stableSetSidebarMode,
-        setSidebarSlot: stableSetSidebarSlot
-    }), [sidebarMode, sidebarSlot, stableSetSidebarMode, stableSetSidebarSlot]);
+        setSidebarSlot: stableSetSidebarSlot,
+        setIsCollapsed: stableSetIsCollapsed
+    }), [sidebarMode, sidebarSlot, isCollapsed, stableSetSidebarMode, stableSetSidebarSlot, stableSetIsCollapsed]);
 
     return (
         <SidebarCtx.Provider value={value}>

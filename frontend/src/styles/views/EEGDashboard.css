@@ -128,19 +128,18 @@
 }
 
 .eeg-overview-title {
-  font-size: 2.8rem;
+  font-size: 3.5rem;
   font-weight: 900;
-  margin: 0 0 6px;
+  margin: 0 0 8px;
   font-family: 'Outfit', sans-serif;
   letter-spacing: -0.04em;
-  background: linear-gradient(135deg, #fff 0%, #888 100%);
+  background: linear-gradient(135deg, #fff 0%, #a5b4fc 100%);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
+  text-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
   width: 100%;
   max-width: 100%;
-  text-align: left;
-  flex-shrink: 0;
 }
 
 .eeg-overview-subtitle {
@@ -154,43 +153,95 @@
   flex-shrink: 0;
 }
 
-.eeg-app-grid {
+/*======================================================
+  BENTO GRID ARCHITECTURE
+======================================================*/
+.eeg-bento-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  grid-template-rows: 1fr 1fr;
-  gap: 32px;
+  grid-template-columns: repeat(4, 1fr);
+  grid-auto-rows: 240px;
+  gap: 28px;
   width: 100%;
-  flex: 1;
-  min-height: 0;
-  padding-bottom: 24px;
+  padding-bottom: 40px;
   transform-style: preserve-3d;
-  perspective: 2000px;
+  perspective: 2500px;
+  position: relative;
+  z-index: 10;
 }
 
-.eeg-app-card {
-  background: rgba(255, 255, 255, 0.02);
-  backdrop-filter: blur(60px);
-  -webkit-backdrop-filter: blur(60px);
+/* Span Helpers */
+.col-span-2 { grid-column: span 2 / span 2; }
+.col-span-1 { grid-column: span 1 / span 1; }
+.row-span-2 { grid-row: span 2 / span 2; }
+.row-span-1 { grid-row: span 1 / span 1; }
+
+.eeg-bento-card {
+  background: rgba(255, 255, 255, 0.015);
+  backdrop-filter: blur(28px) saturate(180%);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 40px;
-  padding: 40px 48px;
   cursor: pointer;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
   position: relative;
   overflow: hidden;
   height: 100%;
   width: 100%;
-  min-height: 0;
-  text-align: center;
-  box-shadow:
-    0 24px 48px rgba(0, 0, 0, 0.4),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+  box-shadow: 
+    0 30px 60px rgba(0, 0, 0, 0.5),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.03);
   transform-style: preserve-3d;
   will-change: transform;
-  animation: cardIdleFloat 6s ease-in-out infinite;
+  transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.eeg-bento-card:hover {
+  transform: translateY(-8px) translateZ(20px);
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.035);
+  box-shadow: 
+    0 40px 80px rgba(0, 0, 0, 0.6),
+    0 0 30px rgba(var(--theme-color-rgb, 255, 255, 255), 0.1);
+}
+
+.bento-square { align-items: center; justify-content: center; padding: 32px 24px; }
+.bento-wide { align-items: flex-start; justify-content: space-between; padding: 40px; flex-direction: row; }
+.bento-hero { align-items: flex-start; justify-content: space-between; padding: 48px; }
+
+/* Custom Layouts based on span */
+.bento-wide .bento-content { text-align: left; margin-left: 32px; flex: 1; }
+.bento-wide .bento-icon-wrapper { margin-bottom: 0; }
+.bento-hero .bento-content { text-align: left; margin-top: auto; max-width: 70%; }
+
+.bento-square .bento-content { text-align: center; }
+
+/* Icon Wrapper inside Bento Cards */
+.bento-icon-wrapper {
+  width: 80px;
+  height: 80px;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
+  transition: all 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.5);
+  position: relative;
+  z-index: 10;
+  transform-style: preserve-3d;
+}
+
+.bento-hero .bento-icon-wrapper {
+  width: 100px;
+  height: 100px;
+  border-radius: 28px;
+}
+
+.eeg-bento-card:hover .bento-icon-wrapper {
+  transform: translateZ(50px) rotateY(-10deg) scale(1.1);
+  box-shadow: 0 30px 60px rgba(0, 0, 0, 0.6);
+  filter: brightness(1.2) saturate(1.2);
 }
 
 .eeg-app-card:nth-child(1) { animation-delay: 0s; }
@@ -204,22 +255,23 @@
 }
 
 /* Radial spotlight that follows mouse */
-.eeg-app-card::before {
+.eeg-bento-card::before {
   content: '';
   position: absolute;
   top: var(--mouse-y, 50%);
   left: var(--mouse-x, 50%);
-  width: 400px;
-  height: 400px;
-  background: radial-gradient(circle, var(--theme-color, rgba(255,255,255,0.1)) 0%, transparent 70%);
+  width: 450px;
+  height: 450px;
+  background: radial-gradient(circle, var(--theme-color, rgba(255,255,255,0.15)) 0%, transparent 60%);
   opacity: 0;
   transform: translate(-50%, -50%);
   pointer-events: none;
   z-index: 1;
   transition: opacity 0.5s ease;
+  mix-blend-mode: overlay;
 }
 
-.eeg-app-card:hover::before {
+.eeg-bento-card:hover::before {
   opacity: 0.15;
 }
 
@@ -263,7 +315,7 @@
   background: var(--theme-color);
 }
 
-.eeg-app-card:hover .decoration-orb {
+.eeg-bento-card:hover .decoration-orb {
   opacity: 0.4;
   transform: scale(1.2) translate(20px, -20px);
 }
@@ -283,8 +335,8 @@
   z-index: 5;
 }
 
-.eeg-app-card:hover .card-shimmer {
-  animation: shimmerEffect 1.5s infinite;
+.eeg-bento-card:hover .card-shimmer {
+  animation: shimmerEffect 2s infinite;
 }
 
 @keyframes shimmerEffect {
@@ -318,15 +370,13 @@
     inset 0 0 0 1px rgba(168, 85, 247, 0.15) !important;
 }
 
-.card-music .eeg-app-icon {
-  background: linear-gradient(135deg, #b066ff, #6366f1) !important;
+.card-music .bento-icon-wrapper {
+  background: linear-gradient(135deg, #8b5cf6, #4f46e5) !important;
   color: white;
-  border: 1px solid rgba(255, 255, 255, 0.3) !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
   box-shadow:
-    inset 0 4px 6px rgba(255, 255, 255, 0.4),
-    inset 0 -6px 12px rgba(0, 0, 0, 0.3),
-    0 15px 35px rgba(168, 85, 247, 0.5) !important;
-  animation: musicPulse 3s ease-in-out infinite;
+    inset 0 4px 6px rgba(255, 255, 255, 0.3),
+    0 15px 35px rgba(139, 92, 246, 0.4) !important;
 }
 
 @keyframes musicPulse {
@@ -369,15 +419,13 @@
     inset 0 0 0 1px rgba(16, 185, 129, 0.15) !important;
 }
 
-.card-meditation .eeg-app-icon {
-  background: linear-gradient(135deg, #34d399, #2563eb) !important;
+.card-meditation .bento-icon-wrapper {
+  background: linear-gradient(135deg, #10b981, #0ea5e9) !important;
   color: white;
-  border: 1px solid rgba(255, 255, 255, 0.3) !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
   box-shadow:
-    inset 0 4px 6px rgba(255, 255, 255, 0.4),
-    inset 0 -6px 12px rgba(0, 0, 0, 0.3),
-    0 15px 35px rgba(16, 185, 129, 0.5) !important;
-  animation: meditationBreath 4s ease-in-out infinite;
+    inset 0 4px 6px rgba(255, 255, 255, 0.3),
+    0 15px 35px rgba(16, 185, 129, 0.4) !important;
 }
 
 @keyframes meditationBreath {
@@ -418,15 +466,13 @@
     inset 0 0 0 1px rgba(14, 165, 233, 0.15) !important;
 }
 
-.card-bubble .eeg-app-icon {
-  background: linear-gradient(135deg, #38bdf8, #14b8a6) !important;
+.card-bubble .bento-icon-wrapper {
+  background: linear-gradient(135deg, #06b6d4, #3b82f6) !important;
   color: white;
-  border: 1px solid rgba(255, 255, 255, 0.3) !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
   box-shadow:
-    inset 0 4px 6px rgba(255, 255, 255, 0.4),
-    inset 0 -6px 12px rgba(0, 0, 0, 0.3),
-    0 15px 35px rgba(14, 165, 233, 0.5) !important;
-  animation: bubbleFloat 4s ease-in-out infinite;
+    inset 0 4px 6px rgba(255, 255, 255, 0.3),
+    0 15px 35px rgba(6, 182, 212, 0.4) !important;
 }
 
 @keyframes bubbleFloat {
@@ -469,15 +515,13 @@
     inset 0 0 0 1px rgba(245, 158, 11, 0.15) !important;
 }
 
-.card-ssvep .eeg-app-icon {
-  background: linear-gradient(135deg, #fbbf24, #ef4444) !important;
+.card-ssvep .bento-icon-wrapper {
+  background: linear-gradient(135deg, #f59e0b, #ef4444) !important;
   color: white;
-  border: 1px solid rgba(255, 255, 255, 0.3) !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
   box-shadow:
-    inset 0 4px 6px rgba(255, 255, 255, 0.4),
-    inset 0 -6px 12px rgba(0, 0, 0, 0.3),
-    0 15px 35px rgba(245, 158, 11, 0.5) !important;
-  animation: ssvepFlash 5s linear infinite;
+    inset 0 4px 6px rgba(255, 255, 255, 0.3),
+    0 15px 35px rgba(245, 158, 11, 0.4) !important;
 }
 
 @keyframes ssvepFlash {
@@ -528,27 +572,6 @@
 
 
 
-.eeg-app-icon {
-  width: 96px;
-  height: 96px;
-  border-radius: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 24px;
-  transition: all 0.6s cubic-bezier(0.16, 1, 0.3, 1);
-  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.5);
-  position: relative;
-  z-index: 10;
-  transform-style: preserve-3d;
-}
-
-.eeg-app-card:hover .eeg-app-icon {
-  transform: translateZ(60px) rotateY(-15deg) scale(1.18);
-  box-shadow: 0 30px 60px rgba(0, 0, 0, 0.6);
-  filter: brightness(1.15) saturate(1.2);
-}
-
 .card-title-premium {
   margin: 0 0 12px 0;
   font-size: 1.8rem;
@@ -563,8 +586,8 @@
   text-shadow: 0 12px 24px rgba(0, 0, 0, 0.4);
 }
 
-.eeg-app-card:hover .card-title-premium {
-  transform: translateZ(40px) translateX(15px);
+.eeg-bento-card:hover .card-title-premium {
+  transform: translateZ(30px) translateX(10px);
   color: #fff;
 }
 
@@ -583,9 +606,62 @@
   text-align: center;
 }
 
-.eeg-app-card:hover .card-desc-premium {
-  color: rgba(255, 255, 255, 0.7);
-  transform: translateZ(20px) translateX(15px);
+.eeg-bento-card:hover .card-desc-premium {
+  color: rgba(255, 255, 255, 0.9);
+  transform: translateZ(20px) translateX(10px);
+}
+
+/* Ambient Cyberpunk Background Layer */
+.eeg-ambient-bg {
+  mix-blend-mode: screen;
+}
+
+.ambient-sphere {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(120px);
+  opacity: 0.15;
+  animation: ambientFloat 20s infinite alternate ease-in-out;
+}
+
+.sphere-blue {
+  width: 600px;
+  height: 600px;
+  background: #3b82f6;
+  top: -10%;
+  right: -10%;
+}
+
+.sphere-purple {
+  width: 500px;
+  height: 500px;
+  background: #a855f7;
+  bottom: -20%;
+  left: 10%;
+  animation-delay: -5s;
+}
+
+.ambient-grid-lines {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image: 
+    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 60px 60px;
+  transform: perspective(1000px) rotateX(60deg) scale(2);
+  transform-origin: top center;
+  opacity: 0.3;
+  mask-image: linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 80%);
+  -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 80%);
+}
+
+@keyframes ambientFloat {
+  0% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(-30px, 50px) scale(1.1); }
+  100% { transform: translate(40px, -20px) scale(0.9); }
 }
 
 .eeg-progress-track {
@@ -730,3 +806,116 @@
 .nav-controls-toggle:active {
   transform: translateY(0);
 }
+
+/*======================================================
+  PREMIUM BACKGROUND ANIMATIONS
+======================================================*/
+.eeg-ambient-bg {
+  position: fixed;
+  inset: 0;
+  background: #020408;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.ambient-grid-lines {
+  position: absolute;
+  inset: -100%;
+  background-image: 
+    linear-gradient(rgba(0, 255, 242, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 255, 242, 0.03) 1px, transparent 1px);
+  background-size: 60px 60px;
+  background-position: center center;
+  transform: perspective(1000px) rotateX(60deg) scale(2) translateY(-10%);
+  animation: gridMove 20s linear infinite;
+  opacity: 0.6;
+}
+
+@keyframes gridMove {
+  0% { transform: perspective(1000px) rotateX(60deg) scale(2) translateY(-10%); background-position: center 0; }
+  100% { transform: perspective(1000px) rotateX(60deg) scale(2) translateY(-10%); background-position: center 60px; }
+}
+
+.scanner-sweep {
+  position: absolute;
+  top: -20vh;
+  left: 0;
+  width: 100%;
+  height: 60vh;
+  background: linear-gradient(180deg, 
+    transparent 0%, 
+    rgba(0, 242, 255, 0.05) 45%, 
+    rgba(0, 242, 255, 0.1) 50%, 
+    rgba(0, 242, 255, 0.05) 55%, 
+    transparent 100%);
+  filter: blur(20px);
+  animation: scannerSweep 12s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 1;
+}
+
+@keyframes scannerSweep {
+  0% { transform: translateY(-100%) skewY(-5deg); opacity: 0; }
+  20% { opacity: 1; }
+  80% { opacity: 1; }
+  100% { transform: translateY(200%) skewY(-5deg); opacity: 0; }
+}
+
+.tech-readout {
+  position: absolute;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+  color: rgba(0, 242, 255, 0.25);
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  pointer-events: none;
+  z-index: 2;
+  font-weight: 500;
+}
+
+.readout-tl { top: 24px; left: 28px; border-left: 1px solid rgba(0, 242, 255, 0.3); padding-left: 8px; }
+.readout-br { bottom: 24px; right: 28px; border-right: 1px solid rgba(0, 242, 255, 0.3); padding-right: 8px; text-align: right; }
+
+.bitstream-anim {
+  display: block;
+  animation: bitstreamFade 3s steps(1) infinite;
+}
+
+@keyframes bitstreamFade {
+  0% { opacity: 0.2; }
+  25% { opacity: 0.6; }
+  50% { opacity: 0.4; }
+  75% { opacity: 0.8; }
+}
+
+.ambient-sphere {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(160px);
+  opacity: 0.2;
+  mix-blend-mode: screen;
+  animation: sphereDrift 30s ease-in-out infinite alternate;
+}
+
+@keyframes sphereDrift {
+  0% { transform: translate(-15%, -15%) scale(1); }
+  100% { transform: translate(15%, 15%) scale(1.3); }
+}
+
+.sphere-blue {
+  width: 800px;
+  height: 800px;
+  background: radial-gradient(circle, #00d2ff, transparent 70%);
+  top: -150px;
+  left: -150px;
+}
+
+.sphere-purple {
+  width: 900px;
+  height: 900px;
+  background: radial-gradient(circle, #8a2be2, transparent 70%);
+  bottom: -250px;
+  right: -150px;
+  animation-delay: -7s;
+}

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Activity, Music, Wind, Eye, Grid, MonitorPlay, Layers, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Activity, Music, Wind, Eye, Grid, MonitorPlay, Layers, ChevronLeft, ChevronRight, Brain, Zap, Headphones, Focus, Gamepad2, Sparkles, Orbit, RadioTower, Disc } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import '../../styles/views/EEGDashboard.css';
 
@@ -10,11 +10,42 @@ import BubbleGameView from '../eeg_dashbord/pages/BubbleGameView';
 import { SidebarProvider, useSidebar } from '../eeg_dashbord/pages/SidebarContext';
 import MainSidebar from '../eeg_dashbord/sidebar/MainSidebar';
 
+// Composite Icon Components
+const MusicIcon = () => (
+  <div className="relative w-full h-full flex items-center justify-center">
+    <Headphones className="absolute text-white/90 z-20" size={42} strokeWidth={1.5} />
+    <Disc className="absolute text-indigo-400/40 z-10 animate-spin-slow duration-[8000ms]" size={64} strokeWidth={1} />
+    <RadioTower className="absolute text-purple-300/30 -right-2 -top-2 animate-pulse" size={24} />
+  </div>
+);
+
+const MeditationIcon = () => (
+  <div className="relative w-full h-full flex items-center justify-center">
+    <Wind className="absolute text-white/90 z-20" size={42} strokeWidth={1.5} />
+    <Orbit className="absolute text-emerald-400/40 z-10 animate-spin-slow duration-[12000ms]" size={68} strokeWidth={1} />
+    <Sparkles className="absolute text-blue-300/50 -left-1 -top-1 animate-pulse" size={20} />
+  </div>
+);
+
+const BubbleIcon = () => (
+  <div className="relative w-full h-full flex items-center justify-center">
+    <Gamepad2 className="absolute text-white/90 z-20" size={38} strokeWidth={1.5} />
+    <Activity className="absolute text-cyan-400/40 z-10" size={60} strokeWidth={1} />
+  </div>
+);
+
+const SSVEPIcon = () => (
+  <div className="relative w-full h-full flex items-center justify-center">
+    <Eye className="absolute text-white/90 z-20" size={38} strokeWidth={1.5} />
+    <Zap className="absolute text-orange-400/50 z-10 animate-pulse" size={56} strokeWidth={1} />
+  </div>
+);
+
 const OVERVIEW_APPS = [
-  { id: 'music', title: 'Music Control', icon: Music, desc: 'Control playback using frontal lobe focus states.' },
-  { id: 'meditation', title: 'Meditation Trainer', icon: Wind, desc: 'Guided neurofeedback breathing sessions.' },
-  { id: 'bubble', title: 'Bubble Game', icon: Activity, desc: 'Interactive peak wave game.' },
-  { id: 'ssvep', title: 'SSVEP Interface', icon: Eye, desc: 'Visual cortex stimulation via flickering targets.' },
+  { id: 'music', title: 'Music Control', icon: <MusicIcon />, desc: 'Control playback using frontal lobe focus states.', spanClass: 'col-span-2 row-span-2 bento-hero' },
+  { id: 'meditation', title: 'Meditation Trainer', icon: <MeditationIcon />, desc: 'Guided neurofeedback breathing sessions.', spanClass: 'col-span-2 row-span-1 bento-wide' },
+  { id: 'bubble', title: 'Bubble Game', icon: <BubbleIcon />, desc: 'Interactive peak wave game.', spanClass: 'col-span-1 row-span-1 bento-square' },
+  { id: 'ssvep', title: 'SSVEP Interface', icon: <SSVEPIcon />, desc: 'Visual cortex stimulation.', spanClass: 'col-span-1 row-span-1 bento-square' },
 ];
 
 const CARD_THEMES = {
@@ -56,87 +87,98 @@ const OverviewGrid = ({ onSelect }) => {
   const [hoveredId, setHoveredId] = React.useState(null);
 
   return (
-  <div className="eeg-overview-container animate-fade-in w-full">
-    <h1 className="eeg-overview-title">Applications Dashboard</h1>
-    <p className="eeg-overview-subtitle">Select a neuro-application to begin session.</p>
-    <div className="eeg-app-grid">
-      <AnimatePresence>
-        {OVERVIEW_APPS.map((app, index) => {
-          const theme = CARD_THEMES[app.id];
-          const isHovered = hoveredId === app.id;
-          return (
-          <motion.div
-            key={app.id}
-            className={`eeg-app-card group card-${app.id}`}
-            style={{
-              background: isHovered ? theme.hoverBg : theme.bg,
-              borderColor: isHovered ? theme.hoverBorder : theme.border,
-              boxShadow: isHovered ? theme.hoverShadow : theme.shadow,
-            }}
-            onMouseEnter={() => setHoveredId(app.id)}
-            onMouseLeave={(e) => {
-              setHoveredId(null);
-              e.currentTarget.style.setProperty('--mouse-x', '50%');
-              e.currentTarget.style.setProperty('--mouse-y', '50%');
-            }}
-            onClick={() => onSelect(app.id)}
-            initial={{ opacity: 0, y: 60, scale: 0.85, rotateX: 15 }}
-            animate={{ opacity: 1, y: 0, scale: 1, rotateX: 0 }}
-            exit={{ opacity: 0, y: -30, scale: 0.9, transition: { duration: 0.3 } }}
-            transition={{
-              duration: 1,
-              delay: index * 0.15,
-              type: "spring",
-              stiffness: 80,
-              damping: 18
-            }}
-            whileHover={{
-              y: -16,
-              scale: 1.04,
-              rotateX: 4,
-              rotateY: -4,
-              z: 40,
-              transition: { duration: 0.45, type: "spring", stiffness: 250, damping: 20 }
-            }}
-            whileTap={{ scale: 0.97, rotateX: 0, rotateY: 0, transition: { duration: 0.1 } }}
-            onMouseMove={(e) => {
-              const rect = e.currentTarget.getBoundingClientRect();
-              const x = e.clientX - rect.left;
-              const y = e.clientY - rect.top;
-              e.currentTarget.style.setProperty('--mouse-x', `${x}px`);
-              e.currentTarget.style.setProperty('--mouse-y', `${y}px`);
-            }}
-          >
-            {/* Holographic Decoration Layer */}
-            <div className="eeg-card-decoration">
-              <div className="decoration-orb orb-1"></div>
-              <div className="decoration-orb orb-2"></div>
-            </div>
+    <div className="eeg-overview-container animate-fade-in w-full h-full flex flex-col justify-center items-center">
+      <div className="w-full max-w-[1200px] mb-8 relative z-10 text-center">
+        <h1 className="eeg-overview-title mx-auto text-center justify-center flex items-center gap-4">
+          <Brain size={48} className="text-[var(--primary)]" />
+          Application Dashboard
+        </h1>
+        <p className="eeg-overview-subtitle text-center mx-auto mt-2">Select a neuro-application to begin session.</p>
+      </div>
+      <div className="eeg-bento-grid w-full max-w-[1200px] mx-auto z-10">
+        <AnimatePresence>
+          {OVERVIEW_APPS.map((app, index) => {
+            const theme = CARD_THEMES[app.id];
+            const isHovered = hoveredId === app.id;
+            return (
+              <motion.div
+                key={app.id}
+                className={`eeg-bento-card group card-${app.id} ${app.spanClass}`}
+                style={{
+                  background: isHovered ? theme.hoverBg : theme.bg,
+                  borderColor: isHovered ? theme.hoverBorder : theme.border,
+                  boxShadow: isHovered ? theme.hoverShadow : theme.shadow,
+                }}
+                onMouseEnter={() => setHoveredId(app.id)}
+                onMouseLeave={(e) => {
+                  setHoveredId(null);
+                  e.currentTarget.style.setProperty('--mouse-x', '50%');
+                  e.currentTarget.style.setProperty('--mouse-y', '50%');
+                }}
+                onClick={() => onSelect(app.id)}
+                initial={{ opacity: 0, y: 100, scale: 0.8 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.2 } }}
+                transition={{
+                  duration: 1,
+                  delay: index * 0.15,
+                  type: "spring",
+                  stiffness: 80,
+                  damping: 18
+                }}
+                whileHover={{
+                  scale: 1.02,
+                  rotateX: 2,
+                  rotateY: -2,
+                  z: 20,
+                  transition: { duration: 0.4, type: "spring", stiffness: 300, damping: 20 }
+                }}
+                whileTap={{ scale: 0.96, rotateX: 0, rotateY: 0, transition: { duration: 0.1 } }}
+                onMouseMove={(e) => {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const x = e.clientX - rect.left;
+                  const y = e.clientY - rect.top;
+                  e.currentTarget.style.setProperty('--mouse-x', `${x}px`);
+                  e.currentTarget.style.setProperty('--mouse-y', `${y}px`);
+                }}
+              >
+                {/* Holographic Decoration Layer */}
+                <div className="eeg-card-decoration">
+                  <div className="decoration-orb orb-1"></div>
+                  <div className="decoration-orb orb-2"></div>
+                </div>
 
-            {/* Shimmer line */}
-            <div className="card-shimmer"></div>
+                {/* Shimmer line */}
+                <div className="card-shimmer"></div>
 
-            <div className="eeg-app-icon">
-              <app.icon size={32} strokeWidth={1.5} />
-            </div>
+                <div className={`bento-icon-wrapper ${app.spanClass.includes('hero') ? 'hero-icon' : ''}`}>
+                  {app.icon}
+                </div>
 
-            <div className="relative z-10 w-full">
-              <h3 className="card-title-premium">{app.title}</h3>
-              <p className="card-desc-premium">{app.desc}</p>
-            </div>
+                <div className={`relative z-10 w-full bento-content ${app.spanClass.includes('hero') ? 'hero-content' : ''}`}>
+                  <h3 className="card-title-premium">{app.title}</h3>
+                  <p className="card-desc-premium">{app.desc}</p>
+                </div>
 
-            {/* Glowing Action Button */}
-            <div className="absolute bottom-10 right-10 opacity-0 group-hover:opacity-100 transition-all duration-500 translate-x-10 group-hover:translate-x-0">
-              <div className="w-14 h-14 rounded-full border border-white/30 bg-white/10 flex items-center justify-center backdrop-blur-2xl shadow-[0_0_20px_rgba(255,255,255,0.2)]">
-                <span className="text-white text-3xl font-light">→</span>
-              </div>
-            </div>
-          </motion.div>
-          );
-        })}
-      </AnimatePresence>
+                {/* Glowing Action Button */}
+                <div className="absolute bottom-6 right-6 opacity-0 group-hover:opacity-100 transition-all duration-500 translate-x-8 group-hover:translate-x-0">
+                  <div className="w-12 h-12 rounded-full border border-white/30 bg-white/10 flex items-center justify-center backdrop-blur-2xl shadow-[0_0_20px_rgba(255,255,255,0.2)]">
+                    <span className="text-white text-2xl font-light">→</span>
+                  </div>
+                </div>
+              </motion.div>
+            );
+          })}
+        </AnimatePresence>
+      </div>
+
+      {/* Grid Ambient Background Component */}
+      <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden eeg-ambient-bg">
+        <div className="ambient-sphere sphere-blue"></div>
+        <div className="ambient-sphere sphere-purple"></div>
+        <div className="ambient-grid-lines"></div>
+      </div>
     </div>
-  </div>
   );
 };
 
@@ -144,7 +186,7 @@ const EEGDashboardContent = ({ wsEvent, isConnected, wsUrl }) => {
   const [currentView, setCurrentView] = useState("overview");
   const [eegResult, setEegResult] = useState(null);
   const { sidebarMode, setSidebarMode, sidebarSlot } = useSidebar();
-  const [sidebarVisible, setSidebarVisible] = useState(true);
+  const [sidebarVisible, setSidebarVisible] = useState(false);
 
   useEffect(() => {
     let modePreset = "frontal_fp1";
@@ -250,7 +292,8 @@ const EEGDashboardContent = ({ wsEvent, isConnected, wsUrl }) => {
       </div>
 
       {/* ── MAIN CONTENT AREA ── */}
-      <div className="flex-grow h-full relative overflow-hidden">
+      <div className="flex-grow h-full relative overflow-hidden flex flex-col">
+
         {renderView()}
       </div>
     </div>

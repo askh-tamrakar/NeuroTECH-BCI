@@ -1,5 +1,6 @@
 import React, { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react'
-import { Activity, ChevronLeft, ChevronRight, Eye, Grid3X3, Music, Wind } from 'lucide-react'
+import { Activity, ChevronLeft, ChevronRight, Eye, Grid3X3, Music, Wind, Brain, Zap, Headphones, Focus, Gamepad2, Sparkles, Orbit, RadioTower, Disc } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { Navigate, useLocation, useNavigate, useOutletContext } from 'react-router-dom'
 import '../styles/views/EEGDashboard.css'
 import MainSidebar from '../components/eeg_dashbord/sidebar/MainSidebar'
@@ -12,24 +13,135 @@ const MeditationView = lazy(() => import('../components/eeg_dashbord/pages/Medit
 const BubbleGameView = lazy(() => import('../components/eeg_dashbord/pages/BubbleGameView'))
 const SSVEPView = lazy(() => import('../components/eeg_dashbord/pages/SSVEPView'))
 
+// Composite Icon Components
+const MusicIcon = () => (
+  <div className="relative w-full h-full flex items-center justify-center">
+    <Headphones className="absolute text-white/90 z-20" size={42} strokeWidth={1.5} />
+    <Disc className="absolute text-indigo-400/40 z-10 animate-spin-slow duration-[8000ms]" size={64} strokeWidth={1} />
+    <RadioTower className="absolute text-purple-300/30 -right-2 -top-2 animate-pulse" size={24} />
+  </div>
+);
+
+const MeditationIcon = () => (
+  <div className="relative w-full h-full flex items-center justify-center">
+    <Wind className="absolute text-white/90 z-20" size={42} strokeWidth={1.5} />
+    <Orbit className="absolute text-emerald-400/40 z-10 animate-spin-slow duration-[12000ms]" size={68} strokeWidth={1} />
+    <Sparkles className="absolute text-blue-300/50 -left-1 -top-1 animate-pulse" size={20} />
+  </div>
+);
+
+const BubbleIcon = () => (
+  <div className="relative w-full h-full flex items-center justify-center">
+    <Gamepad2 className="absolute text-white/90 z-20" size={38} strokeWidth={1.5} />
+    <Activity className="absolute text-cyan-400/40 z-10" size={60} strokeWidth={1} />
+  </div>
+);
+
+const SSVEPIcon = () => (
+  <div className="relative w-full h-full flex items-center justify-center">
+    <Eye className="absolute text-white/90 z-20" size={38} strokeWidth={1.5} />
+    <Zap className="absolute text-orange-400/50 z-10 animate-pulse" size={56} strokeWidth={1} />
+  </div>
+);
+
 const OVERVIEW_APPS = [
-  { id: 'music', title: 'Music Control', icon: Music, desc: 'Control playback using frontal lobe focus states.' },
-  { id: 'meditation', title: 'Meditation Trainer', icon: Wind, desc: 'Guided neurofeedback breathing sessions.' },
-  { id: 'bubble', title: 'Bubble Game', icon: Activity, desc: 'Interactive peak wave game.' },
-  { id: 'ssvep', title: 'SSVEP Interface', icon: Eye, desc: 'Visual cortex stimulation via flickering targets.' },
+  { id: 'music', title: 'Music Control', icon: <MusicIcon />, fallbackIcon: Music, desc: 'Control playback using frontal lobe focus states.', spanClass: 'col-span-2 row-span-2 bento-hero' },
+  { id: 'meditation', title: 'Meditation Trainer', icon: <MeditationIcon />, fallbackIcon: Wind, desc: 'Guided neurofeedback breathing sessions.', spanClass: 'col-span-2 row-span-1 bento-wide' },
+  { id: 'bubble', title: 'Bubble Game', icon: <BubbleIcon />, fallbackIcon: Activity, desc: 'Interactive peak wave game.', spanClass: 'col-span-1 row-span-1 bento-square' },
+  { id: 'ssvep', title: 'SSVEP Interface', icon: <SSVEPIcon />, fallbackIcon: Eye, desc: 'Visual cortex stimulation via flickering targets.', spanClass: 'col-span-1 row-span-1 bento-square' },
 ]
 
 function OverviewGrid({ onSelect }) {
+  const [hoveredId, setHoveredId] = useState(null)
+
   return (
-    <div className="eeg-overview-container animate-fade-in w-full">
-      <h1 className="eeg-overview-title">Applications Dashboard</h1>
-      <p className="eeg-overview-subtitle">Select a neuro-application to begin session.</p>
-      <div className="eeg-app-grid">
+    <div className="eeg-overview-container animate-fade-in w-full h-full flex flex-col justify-center items-center">
+      {/* Background System */}
+      <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden eeg-ambient-bg">
+          <div className="ambient-sphere sphere-blue"></div>
+          <div className="ambient-sphere sphere-purple"></div>
+          <div className="ambient-grid-lines"></div>
+          <div className="scanner-sweep"></div>
+          
+          {/* Framer Motion Particles */}
+          {[...Array(6)].map((_, i) => (
+            <motion.div
+              key={i}
+              className="absolute w-1 h-1 bg-cyan-400/30 rounded-full blur-[1px]"
+              initial={{ 
+                x: Math.random() * 100 + "%", 
+                y: Math.random() * 100 + "%",
+                opacity: 0 
+              }}
+              animate={{ 
+                y: [null, Math.random() * 100 + "%"],
+                opacity: [0, 0.5, 0]
+              }}
+              transition={{ 
+                duration: Math.random() * 10 + 20, 
+                repeat: Infinity,
+                ease: "linear"
+              }}
+            />
+          ))}
+      </div>
+
+      <div className="w-full max-w-[1200px] mb-8 relative z-10 text-center">
+          <h1 className="eeg-overview-title mx-auto text-center justify-center flex items-center gap-4">
+              <Brain size={48} className="text-[var(--primary)]" />
+              Neural Hub
+          </h1>
+          <p className="eeg-overview-subtitle text-center mx-auto mt-2">Select a neuro-application to begin session.</p>
+      </div>
+
+      <div className="eeg-bento-grid w-full max-w-[1200px] mx-auto z-10">
         {OVERVIEW_APPS.map((app) => (
-          <div key={app.id} className="eeg-app-card" onClick={() => onSelect(app.id)}>
-            <div className="eeg-app-icon"><app.icon size={28} /></div>
-            <h3>{app.title}</h3>
-            <p>{app.desc}</p>
+          <div
+            key={app.id} 
+            className={`eeg-bento-card group card-${app.id} ${app.spanClass}`} 
+            onClick={() => onSelect(app.id)}
+            onMouseMove={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect()
+              const x = e.clientX - rect.left
+              const y = e.clientY - rect.top
+              e.currentTarget.style.setProperty('--mouse-x', `${x}px`)
+              e.currentTarget.style.setProperty('--mouse-y', `${y}px`)
+            }}
+          >
+            {/* Tech Readouts */}
+            <div className="tech-readout readout-tl">
+               MOD_ID: <span className="text-white/40">{app.id.toUpperCase()}</span>
+               <div className="bitstream-anim text-[6px] opacity-30 mt-1">01101001 10101111</div>
+            </div>
+            <div className="tech-readout readout-br">
+               SYS_ACT: <span className="text-cyan-400">ONLINE</span>
+               <div className="text-[6px] opacity-30 mt-1">0x{Math.floor(Math.random()*0xFFFF).toString(16).toUpperCase()}</div>
+            </div>
+
+            {/* Holographic Decoration Layer */}
+            <div className="eeg-card-decoration">
+              <div className="decoration-orb orb-1"></div>
+              <div className="decoration-orb orb-2"></div>
+            </div>
+
+            {/* Shimmer line */}
+            <div className="card-shimmer"></div>
+
+            <div className={`bento-icon-wrapper ${app.spanClass.includes('hero') ? 'hero-icon' : ''}`}>
+              {app.icon}
+            </div>
+            
+            <div className={`relative z-10 w-full bento-content ${app.spanClass.includes('hero') ? 'hero-content' : ''}`}>
+              <h3 className="card-title-premium">{app.title}</h3>
+              <p className="card-desc-premium">{app.desc}</p>
+            </div>
+
+            {/* Glowing Action Button */}
+            <div className="absolute bottom-6 right-6 opacity-0 group-hover:opacity-100 transition-all duration-500 translate-x-8 group-hover:translate-x-0">
+              <div className="w-12 h-12 rounded-full border border-white/30 bg-white/10 flex items-center justify-center backdrop-blur-2xl shadow-[0_0_20px_rgba(255,255,255,0.2)]">
+                <span className="text-white text-2xl font-light">→</span>
+              </div>
+            </div>
           </div>
         ))}
       </div>
@@ -99,7 +211,7 @@ function EEGContent() {
   }, [normalizedView])
   const compactNavItems = useMemo(() => ([
     { id: 'overview', title: 'Overview', icon: Grid3X3 },
-    ...OVERVIEW_APPS.map(({ id, title, icon }) => ({ id, title, icon })),
+    ...OVERVIEW_APPS.map(({ id, title, fallbackIcon }) => ({ id, title, icon: fallbackIcon })),
   ]), [])
 
   if (location.pathname === '/dashboard/eeg/views') {
