@@ -82,6 +82,9 @@ class StreamManagerApp:
                 self.log(f"❌ Error creating LSL stream: {e}")
         else:
             self.log("❌ LSL library not found (pylsl).")
+            
+        # Automatically trigger Start Server shortly after app boots up
+        self.root.after(500, self.start_server)
 
     @staticmethod
     def get_local_ip():
@@ -115,8 +118,8 @@ class StreamManagerApp:
         self.status_label = ttk.Label(status_frame, textvariable=self.status_var, font=("Helvetica", 12))
         self.status_label.pack(pady=10)
         
-        # Auto-Start Server for Pipeline Compatibility
-        self.start_server()
+        # Auto-Start disabled so Start Server button remains enabled for user input
+        # self.start_server()
         
         self.connection_var = tk.StringVar(value="No Client Connected")
         ttk.Label(status_frame, textvariable=self.connection_var).pack(pady=5)
@@ -238,9 +241,12 @@ class StreamManagerApp:
                         t.start()
                         
                     else:
-                        # For Events, just accept and hold (threaded to avoid block)
                         self.log(f"{name} Client connected from {addr}")
-                        pass 
+                        if not hasattr(self, 'events_clients'):
+                            self.events_clients = []
+                        self.events_clients.append(conn)
+                        t = threading.Thread(target=self._handle_events_client, args=(conn, addr), daemon=True)
+                        t.start()
                     
                 except socket.timeout:
                     continue
@@ -376,6 +382,36 @@ class StreamManagerApp:
         finally:
             conn.close()
             self.log(f"Processed Source disconnected: {addr}")
+
+    def _handle_events_client(self, conn, addr):
+        """
+        Handles data from Events port (Port 6002).
+        Relays DEG commands to the servo actuator.
+        """
+        try:
+            while self.is_running:
+                data = conn.recv(1024)
+                if not data:
+                    break
+                
+                decoded = data.decode('utf-8', errors='ignore')
+                if "DEG" in decoded:
+                    self.log(f"Relaying DEG command: {decoded.strip()}")
+                    
+                if hasattr(self, 'events_clients'):
+                    for client in list(self.events_clients):
+                        if client != conn:
+                            try:
+                                client.sendall(data)
+                            except Exception:
+                                pass
+        except Exception as e:
+            self.log(f"Events Handler Error: {e}")
+        finally:
+            if hasattr(self, 'events_clients') and conn in self.events_clients:
+                self.events_clients.remove(conn)
+            conn.close()
+            self.log(f"Events Client disconnected: {addr}")
 
 def main():
     root = tk.Tk()

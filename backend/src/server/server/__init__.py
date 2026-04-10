@@ -26,7 +26,7 @@ from src.server.server.routes.eeg_routes import eeg_bp
 # parent: .../src/web/server
 # parent.parent: .../src/web
 # parent.parent.parent: .../src
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent.parent
 TEMPLATES_DIR = PROJECT_ROOT / "frontend" / "dist"
 
 def create_app():

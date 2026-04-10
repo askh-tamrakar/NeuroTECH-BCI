@@ -114,6 +114,7 @@ def _train_sensor_model(sensor: str):
     try:
         params = dict(request.get_json() or {})
         sensor = sensor.upper()
+        params.pop('sensor', None)
         table_name = _normalize_training_table(sensor, params.get('table_name'))
         if not _table_exists(sensor, table_name):
             return jsonify({"error": f"Table {table_name} not found"}), 404
