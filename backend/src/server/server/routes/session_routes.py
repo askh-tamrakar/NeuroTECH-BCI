@@ -32,11 +32,29 @@ def api_get_session_data(sensor_type, session_name):
         # Pagement parameters
         limit_arg = request.args.get('limit')
         offset_arg = request.args.get('offset', 0)
+        sort_by = request.args.get('sortBy', 'id')
+        order = request.args.get('order', 'asc')
+        label_arg = request.args.get('label')
+        from_arg = request.args.get('from')
+        to_arg = request.args.get('to')
         
         limit = int(limit_arg) if limit_arg is not None else None
         offset = int(offset_arg)
+        label = int(label_arg) if label_arg not in (None, '', 'ALL', 'all') else None
+        row_from = int(from_arg) if from_arg not in (None, '') else None
+        row_to = int(to_arg) if to_arg not in (None, '') else None
 
-        data = db_manager.get_session_data(sensor_type, session_name, limit=limit, offset=offset)
+        data = db_manager.get_session_data(
+            sensor_type,
+            session_name,
+            limit=limit,
+            offset=offset,
+            sort_by=sort_by,
+            order=order,
+            label=label,
+            row_from=row_from,
+            row_to=row_to,
+        )
         return jsonify(data)
     except ValueError:
         return jsonify({"error": "Invalid limit or offset"}), 400

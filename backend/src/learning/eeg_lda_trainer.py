@@ -6,7 +6,7 @@ import joblib
 import numpy as np
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.metrics import accuracy_score, confusion_matrix
-from sklearn.model_selection import GroupKFold, train_test_split
+from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 
 from src.learning.emg_trainer import (
@@ -25,7 +25,6 @@ from src.learning.emg_trainer import (
     delete_model as _delete_model,
     evaluate_saved_model as _evaluate_saved_model,
     generate_model_id,
-    get_group_column,
     get_model_paths,
     get_rejected_model_paths,
     list_saved_models as _list_saved_models,
@@ -191,29 +190,33 @@ def train_eeg_lda_model(table_name="eeg_windows", train_split=0.7, val_split=0.1
 
     split_cfg = _resolve_split_configuration(train_split, val_split, test_split, n_folds)
     resolved_split = split_cfg["resolved"]
-    group_col = get_group_column('EEG')
-    groups = df[group_col].astype(str)
-    unique_groups = groups.unique()
-    if len(unique_groups) < 3:
-        indices = np.arange(len(df))
-        train_idx, test_idx = train_test_split(indices, test_size=resolved_split["test_ratio"], random_state=42, stratify=df["label"])
-        train_df = df.iloc[train_idx].copy()
-        test_df = df.iloc[test_idx].copy()
-    else:
-        train_groups, test_groups = train_test_split(unique_groups, test_size=resolved_split["test_ratio"], random_state=42)
-        train_df = df[groups.isin(train_groups)].copy()
-        test_df = df[groups.isin(test_groups)].copy()
+    indices = np.arange(len(df))
+    train_idx, test_idx = train_test_split(
+        indices,
+        test_size=resolved_split["test_ratio"],
+        random_state=42,
+        shuffle=True,
+        stratify=df["label"] if df["label"].nunique() > 1 else None,
+    )
+    train_df = df.iloc[train_idx].copy()
+    test_df = df.iloc[test_idx].copy()
 
-    train_groups = train_df[group_col].astype(str)
     if resolved_split["k_folds"] <= 1:
         row_indices = np.arange(len(train_df))
         folds = [(row_indices, np.array([], dtype=int))]
-    elif len(train_groups.unique()) >= resolved_split["k_folds"]:
-        folds = list(GroupKFold(n_splits=resolved_split["k_folds"]).split(train_df, train_df["label"], train_groups))
     else:
         row_indices = np.arange(len(train_df))
-        train_idx, val_idx = train_test_split(row_indices, test_size=1 / resolved_split["k_folds"], random_state=42)
-        folds = [(train_idx, val_idx)]
+        folds = []
+        stratify = train_df["label"] if train_df["label"].nunique() > 1 else None
+        for fold_seed in range(resolved_split["k_folds"]):
+            fold_train_idx, val_idx = train_test_split(
+                row_indices,
+                test_size=1 / resolved_split["k_folds"],
+                random_state=42 + fold_seed,
+                shuffle=True,
+                stratify=stratify,
+            )
+            folds.append((fold_train_idx, val_idx))
 
     candidates = _lda_candidate_grid({
         "solver": solver,
@@ -353,7 +356,7 @@ def train_eeg_lda_model(table_name="eeg_windows", train_split=0.7, val_split=0.1
         "resolved_split": resolved_split,
         "training_history": history,
         "hyperparameters": best["hyperparameters"],
-        "group_counts": train_df.groupby(group_col)["label"].count().to_dict(),
+        "group_counts": {},
         "confusion_matrix": confusion,
         "labels": _eeg_frequency_labels(df),
         "feature_importances": feature_importances,

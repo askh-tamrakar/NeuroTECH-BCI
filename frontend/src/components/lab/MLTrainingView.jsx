@@ -1881,6 +1881,7 @@ const ControlPanel = ({
 export default function MLTrainingView({ onSwitchLab }) {
     const { currentThemeId } = useTheme();
     const [activeTab, setActiveTab] = useState('EMG');
+    const TRAINING_JOB_STORAGE_KEY = 'lab_active_training_job';
 
     // --- SESSIONS ---
     const [availableSessions, setAvailableSessions] = useState([]);
@@ -1988,22 +1989,23 @@ export default function MLTrainingView({ onSwitchLab }) {
         ? (availableSessions.find(s => s.table === selectedSession)?.name || selectedSession)
         : 'All Available Data';
 
-    const fetchModels = async (forcedName = null) => {
+    const fetchModels = async (forcedName = null, sensorOverride = null) => {
         try {
-            const res = await fetch(buildApiUrl(`/api/models/${activeTab}`));
+            const sensor = sensorOverride || activeTab;
+            const res = await fetch(buildApiUrl(`/api/models/${sensor}`));
             if (res.ok) {
                 const data = await res.json();
                 setModels(data);
 
                 // Smarter Auto-load: Only if nothing is selected or current selection is invalid
                 if (data.length > 0) {
-                    const currentName = forcedName || selectedModelName;
+                    const currentName = forcedName || selectedModels[sensor];
                     const currentModelExists = data.find(m => m.name === currentName);
 
                     if (!currentName || !currentModelExists) {
                         // We NO LONGER auto-load the active or first model.
                         // The user must explicitly select a model to fill the workspace.
-                        setSelectedModels(prev => ({ ...prev, [activeTab]: null }));
+                        setSelectedModels(prev => ({ ...prev, [sensor]: null }));
                     }
                     // If we have a currentName and it exists in the list, we DON'T override 
                     // it with the 'active' flag from the backend yet to avoid race conditions.
@@ -2091,8 +2093,11 @@ export default function MLTrainingView({ onSwitchLab }) {
 
     // --- ROCKY TRAINING SOUND ---
     useEffect(() => {
-        // Play sound while training job is active and NOT in the finalizing countdown
-        if (trainingJob && countdown === null) {
+        const shouldPlay = trainingJob?.job_id
+            && activeTrainingJobIdRef.current === trainingJob.job_id
+            && countdown === null
+            && (trainingJob.status === 'queued' || trainingJob.status === 'running');
+        if (shouldPlay) {
             soundHandler.startRockySliding();
         } else {
             soundHandler.stopRockySliding();
@@ -2114,6 +2119,7 @@ export default function MLTrainingView({ onSwitchLab }) {
     const [error, setError] = useState(null);
     const socketRef = useRef(null);
     const finalizedJobRef = useRef(null);
+    const activeTrainingJobIdRef = useRef(null);
 
     // --- TREE INSPECTION STATE ---
     const [treeIndex, setTreeIndex] = useState(0);
@@ -2187,10 +2193,49 @@ export default function MLTrainingView({ onSwitchLab }) {
         return data;
     };
 
+    const persistTrainingJob = useCallback((job) => {
+        try {
+            if (!job?.job_id) {
+                window.localStorage.removeItem(TRAINING_JOB_STORAGE_KEY);
+                return;
+            }
+            window.localStorage.setItem(TRAINING_JOB_STORAGE_KEY, JSON.stringify({
+                job_id: job.job_id,
+                sensor: job.sensor,
+                model_name: job.model_name,
+            }));
+        } catch (e) {
+            console.error('Failed to persist training job', e);
+        }
+    }, []);
+
+    const restoreCompletedJob = useCallback((job) => {
+        if (!job?.job_id) return;
+        const resObj = job.result || job;
+        const history = job.history || resObj.training_history || [];
+        const sensorKey = job.sensor || activeTab;
+        setActiveTab(sensorKey);
+        setResults(prev => ({ ...prev, [sensorKey]: { ...resObj, source: `Trained on: ${resObj.session_name || resObj.table_name || 'Saved Dataset'}` } }));
+        setEvalResults(prev => ({ ...prev, [sensorKey]: null }));
+        setSelectedModels(prev => ({ ...prev, [sensorKey]: job.model_name || resObj.model_name || prev[sensorKey] }));
+        setLastHistory(prev => ({ ...prev, [sensorKey]: history }));
+        setSelectedHistoryItems(prev => ({ ...prev, [sensorKey]: history[history.length - 1] || null }));
+        if (resObj.table_name) {
+            setSelectedSession(resObj.table_name);
+        }
+        setTreeIndex(0);
+    }, [activeTab]);
+
     const clearTrainingJobState = useCallback(() => {
+        activeTrainingJobIdRef.current = null;
         setTrainingJob(null);
         setCountdown(null);
         setLoading(false);
+        try {
+            window.localStorage.removeItem(TRAINING_JOB_STORAGE_KEY);
+        } catch (e) {
+            console.error('Failed to clear training job state', e);
+        }
     }, []);
 
     const handleStopTraining = async () => {
@@ -2217,6 +2262,7 @@ export default function MLTrainingView({ onSwitchLab }) {
         socket.on('training_job_update', (job) => {
             setTrainingJob(prev => {
                 if (!job?.job_id) return prev;
+                if (activeTrainingJobIdRef.current && activeTrainingJobIdRef.current !== job.job_id) return prev;
                 if (prev?.job_id && prev.job_id !== job.job_id) return prev;
                 return job;
             });
@@ -2231,7 +2277,7 @@ export default function MLTrainingView({ onSwitchLab }) {
 
     useEffect(() => {
         if (!trainingJob?.job_id) return undefined;
-        if (trainingJob.status === 'completed' || trainingJob.status === 'failed' || trainingJob.status === 'error') return undefined;
+        if (trainingJob.status === 'completed' || trainingJob.status === 'failed' || trainingJob.status === 'error' || trainingJob.status === 'cancelled') return undefined;
 
         let cancelled = false;
         const interval = setInterval(async () => {
@@ -2252,6 +2298,53 @@ export default function MLTrainingView({ onSwitchLab }) {
     }, [trainingJob?.job_id, trainingJob?.status]);
 
     useEffect(() => {
+        if (!trainingJob?.job_id) return;
+        activeTrainingJobIdRef.current = trainingJob.job_id;
+        persistTrainingJob(trainingJob);
+    }, [trainingJob?.job_id, trainingJob?.sensor, trainingJob?.model_name, persistTrainingJob]);
+
+    useEffect(() => {
+        let cancelled = false;
+        const restoreTrainingJob = async () => {
+            try {
+                const raw = window.localStorage.getItem(TRAINING_JOB_STORAGE_KEY);
+                if (!raw) return;
+                const persisted = JSON.parse(raw);
+                if (!persisted?.job_id) {
+                    window.localStorage.removeItem(TRAINING_JOB_STORAGE_KEY);
+                    return;
+                }
+                const snapshot = await fetchJobSnapshot(persisted.job_id);
+                if (cancelled) return;
+
+                if (snapshot.status === 'queued' || snapshot.status === 'running' || snapshot.status === 'cancelling') {
+                    activeTrainingJobIdRef.current = snapshot.job_id;
+                    setActiveTab(snapshot.sensor || persisted.sensor || 'EMG');
+                    setTrainingJob(snapshot);
+                    setCountdown(null);
+                    setLoading(true);
+                    return;
+                }
+
+                if (snapshot.status === 'completed' && snapshot.result) {
+                    restoreCompletedJob(snapshot);
+                    await fetchModels(snapshot.model_name || snapshot.result?.model_name || null, snapshot.sensor || persisted.sensor || 'EMG');
+                }
+
+                window.localStorage.removeItem(TRAINING_JOB_STORAGE_KEY);
+            } catch (e) {
+                try {
+                    window.localStorage.removeItem(TRAINING_JOB_STORAGE_KEY);
+                } catch {}
+            }
+        };
+        restoreTrainingJob();
+        return () => {
+            cancelled = true;
+        };
+    }, []);
+
+    useEffect(() => {
         if (!trainingJob?.job_id) {
             finalizedJobRef.current = null;
             return;
@@ -2262,15 +2355,8 @@ export default function MLTrainingView({ onSwitchLab }) {
         if (isCompleted) {
             finalizedJobRef.current = trainingJob.job_id;
             const resObj = trainingJob.result || trainingJob;
-            const history = trainingJob.history || resObj.training_history || [];
-            const sensorKey = trainingJob.sensor || activeTab;
-            setResults(prev => ({ ...prev, [sensorKey]: { ...resObj, source: getSourceName(true) } }));
-            setEvalResults(prev => ({ ...prev, [sensorKey]: null }));
-            setSelectedModels(prev => ({ ...prev, [sensorKey]: trainingJob.model_name || resObj.model_name || prev[sensorKey] }));
-            setLastHistory(prev => ({ ...prev, [sensorKey]: history }));
-            setSelectedHistoryItems(prev => ({ ...prev, [sensorKey]: history[history.length - 1] || null }));
-            setTreeIndex(0);
-            fetchModels(trainingJob.model_name || resObj.model_name);
+            restoreCompletedJob(trainingJob);
+            fetchModels(trainingJob.model_name || resObj.model_name, trainingJob.sensor || activeTab);
             setLoading(false);
             soundHandler.playSuccess();
             setCountdown(5);
@@ -2297,7 +2383,7 @@ export default function MLTrainingView({ onSwitchLab }) {
             }
             clearTrainingJobState();
         }
-    }, [trainingJob, activeTab, clearTrainingJobState]);
+    }, [trainingJob, activeTab, clearTrainingJobState, restoreCompletedJob]);
 
     const handleTrain = async () => {
         soundHandler.playMLTrain();
@@ -2346,14 +2432,17 @@ export default function MLTrainingView({ onSwitchLab }) {
             if (data.job_id) {
                 finalizedJobRef.current = null;
                 setCountdown(null);
-                setTrainingJob({
+                const nextJob = {
                     job_id: data.job_id,
                     status: data.status || 'queued',
                     sensor: data.sensor || activeTab,
                     model_name: modelNameFinal,
                     progress: 0,
                     history: [],
-                });
+                };
+                activeTrainingJobIdRef.current = nextJob.job_id;
+                persistTrainingJob(nextJob);
+                setTrainingJob(nextJob);
             } else {
                 setResults(prev => ({ ...prev, [activeTab]: { ...data, source: getSourceName(true) } }));
                 setEvalResults(prev => ({ ...prev, [activeTab]: null }));
@@ -2361,13 +2450,18 @@ export default function MLTrainingView({ onSwitchLab }) {
                 setTreeIndex(0);
                 await fetchModels(modelNameFinal);
                 setLoading(false);
+                activeTrainingJobIdRef.current = null;
                 setTrainingJob(null);
             }
         } catch (e) {
             setError(e.message);
             setLoading(false);
+            activeTrainingJobIdRef.current = null;
             setTrainingJob(null);
             setCountdown(null);
+            try {
+                window.localStorage.removeItem(TRAINING_JOB_STORAGE_KEY);
+            } catch {}
         }
     };
 

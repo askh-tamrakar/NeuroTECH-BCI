@@ -9,13 +9,17 @@ import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, confusion_matrix
-from sklearn.model_selection import GroupKFold, train_test_split
+from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 
 from src.database.db_manager import db_manager
-from src.feature.extractors.rps_extractor import EMG_FEATURE_COLUMNS
 from src.learning.tree_utils import tree_to_json
 from src.utils.paths import get_base_data_dir
+
+EMG_FEATURE_COLUMNS = [
+    'rms', 'mav', 'var', 'wl', 'peak', 'range', 'iemg',
+    'entropy', 'energy', 'kurtosis', 'skewness', 'ssc', 'wamp',
+]
 
 LABELS_MAP = {
     'EMG': [0, 1, 2, 3],
@@ -47,7 +51,7 @@ def get_feature_cols(sensor):
 
 
 def get_group_column(sensor):
-    return 'serial_id' if sensor.upper() == 'EOG' else 'trial'
+    return None
 
 
 def get_model_paths(sensor, model_id):
@@ -174,60 +178,39 @@ def _prepare_dataframe(sensor: str, table_name: str):
             df[column] = 0.0
     df['label'] = df['label'].apply(lambda value: _normalize_label(sensor, value))
 
-    group_col = get_group_column(sensor)
-    if group_col not in df.columns:
-        fallback_prefix = 'SER' if group_col == 'serial_id' else 'TR'
-        df[group_col] = [f"{fallback_prefix}_{index:06d}" for index in range(len(df))]
-    else:
-        df[group_col] = df[group_col].fillna('')
-        missing_mask = df[group_col].astype(str).str.strip() == ''
-        if missing_mask.any():
-            fallback_prefix = 'SER' if group_col == 'serial_id' else 'TR'
-            fallback_values = [f"{fallback_prefix}_{index:06d}" for index in df.index]
-            df.loc[missing_mask, group_col] = np.array(fallback_values, dtype=object)[missing_mask.to_numpy()]
-
     return df
 
 
-def _split_train_and_test(df: pd.DataFrame, group_col: str, test_ratio: float):
-    groups = df[group_col].astype(str)
-    unique_groups = groups.unique()
-    if len(unique_groups) < 3:
-        indices = np.arange(len(df))
-        train_idx, test_idx = train_test_split(indices, test_size=test_ratio, random_state=42, stratify=df['label'] if df['label'].nunique() > 1 else None)
-        return df.iloc[train_idx].copy(), df.iloc[test_idx].copy()
-
-    train_groups, test_groups = train_test_split(unique_groups, test_size=test_ratio, random_state=42)
-    train_df = df[groups.isin(train_groups)].copy()
-    test_df = df[groups.isin(test_groups)].copy()
-    if train_df.empty or test_df.empty:
-        indices = np.arange(len(df))
-        train_idx, test_idx = train_test_split(indices, test_size=test_ratio, random_state=42, stratify=df['label'] if df['label'].nunique() > 1 else None)
-        return df.iloc[train_idx].copy(), df.iloc[test_idx].copy()
-    return train_df, test_df
+def _split_train_and_test(df: pd.DataFrame, test_ratio: float):
+    indices = np.arange(len(df))
+    stratify = df['label'] if df['label'].nunique() > 1 else None
+    train_idx, test_idx = train_test_split(
+        indices,
+        test_size=test_ratio,
+        random_state=42,
+        shuffle=True,
+        stratify=stratify,
+    )
+    return df.iloc[train_idx].copy(), df.iloc[test_idx].copy()
 
 
-def _build_folds(train_df: pd.DataFrame, group_col: str, resolved_folds: int):
+def _build_folds(train_df: pd.DataFrame, resolved_folds: int):
     if resolved_folds <= 1:
         all_indices = np.arange(len(train_df))
         return [(all_indices, np.array([], dtype=int))]
-
-    groups = train_df[group_col].astype(str)
-    unique_groups = groups.unique()
-    if len(unique_groups) >= resolved_folds:
-        splitter = GroupKFold(n_splits=resolved_folds)
-        return list(splitter.split(train_df, train_df['label'], groups))
-
-    train_ratio = (resolved_folds - 1) / resolved_folds
-    val_ratio = 1 / resolved_folds
-    if len(unique_groups) >= 2:
-        train_groups, val_groups = train_test_split(unique_groups, test_size=val_ratio / max(train_ratio + val_ratio, 1e-9), random_state=42)
-        train_idx = np.flatnonzero(groups.isin(train_groups).to_numpy())
-        val_idx = np.flatnonzero(groups.isin(val_groups).to_numpy())
-    else:
-        row_indices = np.arange(len(train_df))
-        train_idx, val_idx = train_test_split(row_indices, test_size=val_ratio / max(train_ratio + val_ratio, 1e-9), random_state=42)
-    return [(train_idx, val_idx)]
+    row_indices = np.arange(len(train_df))
+    stratify = train_df['label'] if train_df['label'].nunique() > 1 else None
+    folds = []
+    for fold_seed in range(resolved_folds):
+        train_idx, val_idx = train_test_split(
+            row_indices,
+            test_size=1 / resolved_folds,
+            random_state=42 + fold_seed,
+            shuffle=True,
+            stratify=stratify,
+        )
+        folds.append((train_idx, val_idx))
+    return folds
 
 
 def _hyperparameters_for_response(sensor: str, params: dict, resolved_split: dict):
@@ -396,8 +379,7 @@ def _fit_random_forest(sensor: str, train_df: pd.DataFrame, test_df: pd.DataFram
     split_cfg = _resolve_split_configuration(params.get('train_split', 0.7), params.get('val_split', 0.15), params.get('test_split', 0.15), params.get('n_folds', 2))
     resolved_split = split_cfg["resolved"]
     candidates = _rf_candidate_grid(params)
-    group_col = get_group_column(sensor)
-    folds = _build_folds(train_df, group_col, resolved_split["k_folds"])
+    folds = _build_folds(train_df, resolved_split["k_folds"])
     history = []
     best = None
     total_folds = max(1, len(folds))
@@ -527,7 +509,7 @@ def _fit_random_forest(sensor: str, train_df: pd.DataFrame, test_df: pd.DataFram
         "resolved_split": resolved_split,
         "training_history": history,
         "hyperparameters": best["hyperparameters"],
-        "group_counts": train_df.groupby(group_col)['label'].count().to_dict(),
+        "group_counts": {},
         "confusion_matrix": confusion,
         "labels": [DISPLAY_LABELS[sensor].get(label, str(label)) for label in std_labels],
         "feature_importances": feature_importances,
@@ -564,7 +546,7 @@ def train_model(sensor, n_estimators=100, max_depth=None, min_impurity_decrease=
         return {"error": "Database table is empty."}
 
     feature_cols = get_feature_cols(sensor)
-    train_df, test_df = _split_train_and_test(df, get_group_column(sensor), min(max(float(test_split), 0.05), 0.5))
+    train_df, test_df = _split_train_and_test(df, min(max(float(test_split), 0.05), 0.5))
     if train_df.empty or test_df.empty:
         return {"error": "Unable to produce non-empty train/test partitions."}
 

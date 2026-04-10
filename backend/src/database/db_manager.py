@@ -265,8 +265,19 @@ class DatabaseManager:
             print(f"[DB] Error merging multiple tables {source_sessions} into {target_session}: {e}")
             return False
 
-    def get_session_data(self, sensor_type: str, session_name: str, limit: int = None, offset: int = 0) -> Dict:
-        """Fetch rows from a specific session table with optional pagination."""
+    def get_session_data(
+        self,
+        sensor_type: str,
+        session_name: str,
+        limit: int = None,
+        offset: int = 0,
+        sort_by: str = "id",
+        order: str = "asc",
+        label: Optional[int] = None,
+        row_from: Optional[int] = None,
+        row_to: Optional[int] = None,
+    ) -> Dict:
+        """Fetch rows from a specific session table with sorting, filtering, and optional pagination."""
         try:
             sensor = sensor_type.upper()
             
@@ -284,13 +295,37 @@ class DatabaseManager:
             conn.row_factory = sqlite3.Row # Access columns by name
             cursor = conn.cursor()
 
-            # Get total count first
-            cursor.execute(f"SELECT COUNT(*) FROM {session_name}")
+            sort_columns = {
+                "id": "id",
+                "label": "label",
+                "timestamp": "timestamp",
+            }
+            sort_column = sort_columns.get(str(sort_by or "id").lower(), "id")
+            sort_order = "DESC" if str(order or "asc").lower() == "desc" else "ASC"
+
+            where_clauses = []
+            filter_params = []
+
+            if label is not None:
+                where_clauses.append("label = ?")
+                filter_params.append(int(label))
+            if row_from is not None:
+                where_clauses.append("id >= ?")
+                filter_params.append(int(row_from))
+            if row_to is not None:
+                where_clauses.append("id <= ?")
+                filter_params.append(int(row_to))
+
+            where_sql = f" WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
+
+            # Get total count after filters
+            count_query = f"SELECT COUNT(*) FROM {session_name}{where_sql}"
+            cursor.execute(count_query, filter_params)
             total_count = cursor.fetchone()[0]
 
-            # Fetch paginated data
-            query = f"SELECT * FROM {session_name}"
-            params = []
+            # Fetch filtered and sorted data
+            query = f"SELECT * FROM {session_name}{where_sql} ORDER BY {sort_column} {sort_order}"
+            params = list(filter_params)
             
             if limit is not None:
                 query += " LIMIT ? OFFSET ?"

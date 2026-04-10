@@ -1,11 +1,16 @@
 {
   "active_models": {
     "EEG": "Neo",
-    "EOG": "dino ml"
+    "EOG": "dino ml",
+    "EMG": "Nept"
+  },
+  "adc_settings": {
+    "resolution_bits": 14,
+    "vref_mv": 3300
   },
   "channel_mapping": {
     "ch0": {
-      "enabled": false,
+      "enabled": true,
       "label": "Fp1 / Oz (Ref: A1, A2)",
       "sensor": "EMG"
     },
@@ -15,5 +20,15 @@
       "sensor": "EEG"
     }
   },
-  "num_channels": 2
+  "display": {
+    "scannerX": 0,
+    "showGrid": true,
+    "timeWindowMs": 10000
+  },
+  "num_channels": 2,
+  "sampling_rate": 512,
+  "ui_settings": {
+    "showGrid": true,
+    "timeWindowMs": 10000
+  }
 }

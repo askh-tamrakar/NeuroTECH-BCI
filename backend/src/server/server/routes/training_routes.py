@@ -6,25 +6,85 @@ from src.server.server.config_manager import load_config, save_config
 from src.server.server.extensions import socketio
 from src.database.db_manager import db_manager
 from src.server.server.lsl_service import extract_emg_features, extract_emg_features as extract_features_for_sensor
-# Note: original code routed `extract_features_for_sensor` to specific functions.
-# We need to reimplement that routing or import it.
-# EOG features are also needed.
 from src.server.server.lsl_service import extract_eog_features
 from scipy import stats as scipy_stats
 
-# Imports for ML logic
-from src.learning.model_trainer import (
-    train_model, train_emg_model, train_eog_model,
-    evaluate_saved_model, list_saved_models, delete_model, load_model, get_model_tree_structure
+from src.learning.emg_trainer import (
+    train_emg_model,
+    train_eog_model,
+    evaluate_saved_model,
+    list_saved_models,
+    delete_model,
+    load_model,
+    get_model_tree_structure,
 )
-from src.learning.eog_trainer import (
-    train_eog_model, evaluate_saved_eog_model, 
-    list_saved_models as list_saved_eog_models, 
-    delete_model as delete_eog_model, 
-    load_model as load_eog_model
+from src.learning.eeg_lda_trainer import (
+    train_eeg_lda_model,
+    list_saved_models as list_saved_eeg_models,
+    delete_model as delete_eeg_model,
+    load_model as load_eeg_model,
+    evaluate_eeg_lda_model,
+)
+from src.server.server.services.training_job_service import (
+    create_training_job,
+    job_snapshot,
+    request_training_job_cancel,
+    run_training_job,
 )
 
 training_bp = Blueprint('training', __name__)
+
+
+def _normalize_training_table(sensor: str, table_name):
+    if not table_name or table_name == 'ALL':
+        return f"{sensor.lower()}_windows"
+    return table_name
+
+
+def _table_exists(sensor: str, table_name: str) -> bool:
+    conn = db_manager.connect(sensor)
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table_name,))
+        return cursor.fetchone() is not None
+    finally:
+        conn.close()
+
+
+def _table_count(sensor: str, table_name: str) -> int:
+    conn = db_manager.connect(sensor)
+    try:
+        return int(conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0])
+    finally:
+        conn.close()
+
+
+def _model_handlers(sensor: str):
+    sensor = sensor.upper()
+    if sensor == 'EEG':
+        return {
+            "train": train_eeg_lda_model,
+            "list": list_saved_eeg_models,
+            "load": load_eeg_model,
+            "delete": delete_eeg_model,
+            "evaluate": evaluate_eeg_lda_model,
+        }
+    if sensor not in {'EMG', 'EOG'}:
+        raise ValueError(f"Unknown sensor type {sensor}")
+    return {
+        "train": train_emg_model if sensor == 'EMG' else train_eog_model,
+        "list": lambda: list_saved_models(sensor),
+        "load": lambda model_name: load_model(sensor, model_name),
+        "delete": lambda model_name: delete_model(sensor, model_name),
+        "evaluate": lambda table_name=None, model_name=None: evaluate_saved_model(sensor=sensor, table_name=table_name, model_name=model_name),
+    }
+
+
+def _start_training_job(sensor: str, trainer, trainer_kwargs):
+    model_name = trainer_kwargs.get('model_name') or f"{sensor.lower()}_model"
+    job = create_training_job(sensor=sensor.upper(), model_name=model_name)
+    run_training_job(job['job_id'], trainer, trainer_kwargs)
+    return job
 
 def extract_features_wrapper(sensor: str, samples: list, sr: int = 512) -> dict:
     """Route to sensor-specific feature extraction."""
@@ -38,80 +98,73 @@ def extract_features_wrapper(sensor: str, samples: list, sr: int = 512) -> dict:
 
 @training_bp.route('/api/train-emg-rf', methods=['POST'])
 def api_train_emg():
-    try:
-        params = request.get_json() or {}
-        target_table = params.get('table_name', 'emg_windows')
-        
-        if target_table == 'ALL':
-            target_table = 'emg_windows'
-
-        try:
-            conn = db_manager.connect('EMG')
-            cursor = conn.cursor()
-            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (target_table,))
-            if not cursor.fetchone():
-                 return jsonify({"error": f"Table {target_table} not found"}), 404
-                 
-            n = conn.execute(f"SELECT COUNT(*) FROM {target_table}").fetchone()[0]
-            conn.close()
-            
-            print(f"[Training] Train Request on {target_table}. Contains {n} samples.")
-            if n == 0:
-                return jsonify({"error": "Database is empty (0 samples). Please Record Data and hit Stop."}), 400
-        except Exception as e:
-            print(f"[Training] DB Check failed: {e}")
-
-        n_est = int(params.get('n_estimators', 100))
-        max_d = params.get('max_depth')
-        if max_d == 'None' or max_d is None: max_d = None
-        else: max_d = int(max_d)
-        
-        test_size = float(params.get('test_size', 0.2))
-        min_impurity_decrease = float(params.get('min_impurity_decrease', 0.0))
-        
-        model_name = params.get('model_name', 'emg_rf')
-        
-        result = train_emg_model(
-            n_estimators=n_est, 
-            max_depth=max_d, 
-            min_impurity_decrease=min_impurity_decrease,
-            test_size=test_size, 
-            table_name=target_table, 
-            model_name=model_name
-        )
-        if "error" in result:
-             return jsonify(result), 400
-        return jsonify(result)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    return _train_sensor_model('EMG')
 
 @training_bp.route('/api/train-eog-rf', methods=['POST'])
 def api_train_eog():
-    try:
-        params = request.get_json() or {}
-        n_est = int(params.get('n_estimators', 100))
-        max_d = params.get('max_depth')
-        table_name = params.get('table_name') # Extract session table name
-        if table_name == 'ALL': table_name = 'eog_windows'
-        model_name = params.get('model_name', 'eog_rf')
+    return _train_sensor_model('EOG')
 
-        if max_d == 'None' or max_d is None: max_d = None
-        else: max_d = int(max_d)
-        
-        test_size = float(params.get('test_size', 0.2))
-        min_impurity_decrease = float(params.get('min_impurity_decrease', 0.0))
-        
-        result = train_eog_model(
-            n_estimators=n_est, 
-            max_depth=max_d, 
-            min_impurity_decrease=min_impurity_decrease,
-            test_size=test_size, 
-            table_name=table_name, 
-            model_name=model_name
-        )
-        if "error" in result:
-             return jsonify(result), 400
-        return jsonify(result)
+
+@training_bp.route('/api/train-eeg-lda', methods=['POST'])
+def api_train_eeg():
+    return _train_sensor_model('EEG')
+
+
+def _train_sensor_model(sensor: str):
+    try:
+        params = dict(request.get_json() or {})
+        sensor = sensor.upper()
+        table_name = _normalize_training_table(sensor, params.get('table_name'))
+        if not _table_exists(sensor, table_name):
+            return jsonify({"error": f"Table {table_name} not found"}), 404
+
+        total_rows = _table_count(sensor, table_name)
+        if total_rows <= 0:
+            return jsonify({"error": "Database is empty (0 samples). Please Record Data and hit Stop."}), 400
+
+        params['table_name'] = table_name
+        params['model_name'] = params.get('model_name') or f"{sensor.lower()}_model"
+        params['n_folds'] = max(1, int(params.get('n_folds', 1) or 1))
+
+        job = _start_training_job(sensor, _model_handlers(sensor)['train'], params)
+        return jsonify({
+            "job_id": job["job_id"],
+            "status": job["status"],
+            "sensor": sensor,
+            "model_name": job["model_name"],
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@training_bp.route('/api/train-jobs/<job_id>', methods=['GET'])
+def api_get_training_job(job_id):
+    snapshot = job_snapshot(job_id)
+    if not snapshot:
+        return jsonify({"error": f"Training job {job_id} not found"}), 404
+    return jsonify(snapshot)
+
+
+@training_bp.route('/api/train-jobs/<job_id>/cancel', methods=['POST'])
+def api_cancel_training_job(job_id):
+    snapshot = request_training_job_cancel(job_id)
+    if not snapshot:
+        return jsonify({"error": f"Training job {job_id} not found"}), 404
+    return jsonify(snapshot)
+
+
+@training_bp.route('/api/dataset-size/<sensor>', methods=['GET'])
+def api_dataset_size(sensor):
+    try:
+        sensor = sensor.upper()
+        table_name = f"{sensor.lower()}_windows"
+        if not _table_exists(sensor, table_name):
+            return jsonify({"sensor": sensor, "table_name": table_name, "total": 0})
+        return jsonify({
+            "sensor": sensor,
+            "table_name": table_name,
+            "total": _table_count(sensor, table_name),
+        })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -132,81 +185,40 @@ def api_eval_eog():
     params = request.get_json() or {}
     table_name = params.get('table_name')
     model_name = params.get('model_name')
-    res = evaluate_saved_eog_model(table_name=table_name, model_name=model_name)
+    res = evaluate_saved_model(sensor='EOG', table_name=table_name, model_name=model_name)
+    if "error" in res:
+        return jsonify(res), 400
+    return jsonify(res)
+
+
+@training_bp.route('/api/model/evaluate/eeg', methods=['POST'])
+def api_eval_eeg():
+    params = request.get_json() or {}
+    table_name = params.get('table_name')
+    model_name = params.get('model_name')
+    res = evaluate_eeg_lda_model(table_name=table_name, model_name=model_name)
     if "error" in res:
         return jsonify(res), 400
     return jsonify(res)
 
 @training_bp.route('/api/models/emg', methods=['GET'])
 def api_list_models():
-    """List all saved EMG models (Inlined logic for stability)."""
-    try:
-        # models = list_saved_models()
-        # Inline Listing Logic
-        from pathlib import Path
-        import json
-        from src.utils.paths import get_models_dir
-        
-        MODELS_DIR = get_models_dir('EMG')
-        
-        # Get active model to mark it
-        from src.utils.config import config_manager
-        active_name = config_manager.get_active_model('EMG')
-        
-        models = []
-        if MODELS_DIR.exists():
-            all_files = list(MODELS_DIR.glob("*.joblib"))
-            for p in all_files:
-                if p.name.endswith("_scaler.joblib"): continue
-                
-                name = p.stem
-                meta_path = MODELS_DIR / f"{name}_meta.json"
-                meta = {}
-                if meta_path.exists():
-                    try:
-                        with open(meta_path, 'r') as f: meta = json.load(f)
-                    except: pass
-                
-                models.append({
-                    "name": name,
-                    "path": str(p),
-                    "created_at": meta.get("created_at"),
-                    "accuracy": meta.get("accuracy"),
-                    "hyperparameters": {k:v for k,v in meta.items() if k not in ["created_at", "accuracy"]},
-                    "active": (name == active_name)
-                })
-            models.sort(key=lambda x: x.get("created_at") or "", reverse=True)
-            
-        return jsonify(models)
-    except Exception as e:
-        import traceback
-        tb = traceback.format_exc()
-        print(f"[Training] ❌ Error listing EMG models: {tb}")
-        return jsonify({"error": str(e), "traceback": tb}), 500
+    return api_list_models_generic('EMG')
 
 @training_bp.route('/api/models/eog', methods=['GET'])
 def api_list_eog_models():
-    """List all saved EOG models."""
-    try:
-        # Use existing EOG trainer which is known good
-        models = list_saved_eog_models()
-        return jsonify(models)
-    except Exception as e:
-        import traceback
-        tb = traceback.format_exc()
-        print(f"[Training] ❌ Error listing EOG models: {tb}")
-        return jsonify({"error": str(e), "traceback": tb}), 500
+    return api_list_models_generic('EOG')
+
+
+@training_bp.route('/api/models/eeg', methods=['GET'])
+def api_list_eeg_models():
+    return api_list_models_generic('EEG')
 
 @training_bp.route('/api/models/<sensor>', methods=['GET'])
 def api_list_models_generic(sensor):
-    """List all saved models for a sensor (Generic Route)."""
     try:
-        if sensor.upper() == 'EMG':
-            return api_list_models()
-        elif sensor.upper() == 'EOG':
-            return api_list_eog_models()
-        else:
-            return jsonify({"error": f"Unknown sensor type {sensor}"}), 400
+        sensor = sensor.upper()
+        return jsonify(_model_handlers(sensor)['list']())
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -214,88 +226,55 @@ def api_list_models_generic(sensor):
 
 @training_bp.route('/api/models/emg/<model_name>', methods=['DELETE'])
 def api_delete_model(model_name):
-    """Delete a specific EMG model."""
-    try:
-        result = delete_model('EMG', model_name)
-        if "errors" in result and result["errors"]:
-             return jsonify(result), 400 # Partial success or fail
-        return jsonify(result)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    return api_delete_model_generic('EMG', model_name)
 
 @training_bp.route('/api/models/eog/<model_name>', methods=['DELETE'])
 def api_delete_eog_model(model_name):
-    """Delete a specific EOG model."""
+    return api_delete_model_generic('EOG', model_name)
+
+
+@training_bp.route('/api/models/eeg/<model_name>', methods=['DELETE'])
+def api_delete_eeg_model(model_name):
+    return api_delete_model_generic('EEG', model_name)
+
+
+@training_bp.route('/api/models/<sensor>/<model_name>', methods=['DELETE'])
+def api_delete_model_generic(sensor, model_name):
     try:
-        result = delete_eog_model(model_name)
-        if "errors" in result and result["errors"]:
-             return jsonify(result), 400 
+        result = _model_handlers(sensor)['delete'](model_name)
+        if "error" in result:
+            return jsonify(result), 400
         return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 @training_bp.route('/api/models/emg/load', methods=['POST'])
 def api_load_model():
-    """Load a specific EMG model to be active."""
-    try:
-        params = request.get_json() or {}
-        model_name = params.get('model_name')
-        if not model_name:
-            return jsonify({"error": "model_name required"}), 400
-            
-        result = load_model('EMG', model_name)
-        if "error" in result:
-             return jsonify(result), 400
-        
-        # Update Real-time Detector
-        if state.rps_detector:
-            print(f"[Training] Reloading RPS Detector with {model_name}")
-            state.rps_detector.load_model(model_name, verbose=False)
-            
-        return jsonify(result)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    return api_load_model_generic('EMG')
 
 @training_bp.route('/api/models/eog/load', methods=['POST'])
 def api_load_eog_model():
-    """Load a specific EOG model to be active."""
-    try:
-        params = request.get_json() or {}
-        model_name = params.get('model_name')
-        if not model_name:
-            return jsonify({"error": "model_name required"}), 400
-            
-        result = load_eog_model(model_name)
-        if "error" in result:
-             return jsonify(result), 400
-             
-        # Update Persisted Config so Router sees it
-        try:
-             from src.utils.config import config_manager
-             config_manager.set_active_model('EOG', model_name)
-             print(f"[Training] Set active EOG model to {model_name}")
-        except Exception as e:
-             print(f"[Training] Warning: Failed to update config manager: {e}")
-            
-        return jsonify(result)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    return api_load_model_generic('EOG')
+
+
+@training_bp.route('/api/models/eeg/load', methods=['POST'])
+def api_load_eeg_model():
+    return api_load_model_generic('EEG')
 
 @training_bp.route('/api/models/<sensor>/load', methods=['POST'])
 def api_load_model_generic(sensor):
-    """Load a specific model (Generic)."""
     try:
         params = request.get_json() or {}
         model_name = params.get('model_name')
         if not model_name:
             return jsonify({"error": "model_name required"}), 400
 
-        result = load_model(sensor, model_name)
+        sensor = sensor.upper()
+        result = _model_handlers(sensor)['load'](model_name)
         if "error" in result:
              return jsonify(result), 400
         
-        # Update Real-time Detector
-        if sensor.upper() == 'EMG' and state.rps_detector:
+        if sensor == 'EMG' and state.rps_detector:
              state.rps_detector.load_model(model_name, verbose=False)
 
         return jsonify(result)
