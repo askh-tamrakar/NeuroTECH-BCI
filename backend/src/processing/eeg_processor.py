@@ -20,8 +20,8 @@ class EEGFilterProcessor:
         
         # Initialize state
         self.zi_hp = lfilter_zi(self.b_hp, self.a_hp) * 0.0
-        self.zi_notch = lfilter_zi(self.b_notch, self.a_notch) * 0.0 if (self.notch_enabled and self.a_notch is not None) else None
-        self.zi_bp = lfilter_zi(self.b_bp, self.a_bp) * 0.0 if (self.bp_enabled and self.a_bp is not None) else None
+        self.zi_notch = lfilter_zi(self.b_notch, self.a_notch) * 0.0 if (self.notch_enabled and getattr(self, 'a_notch', None) is not None) else None
+        self.zi_bp = lfilter_zi(self.b_bp, self.a_bp) * 0.0 if (self.bp_enabled and getattr(self, 'a_bp', None) is not None) else None
 
     def _load_params(self):
         # 1. Default Global Config
@@ -63,14 +63,14 @@ class EEGFilterProcessor:
              self.b_notch, self.a_notch = None, None
 
         # 3. Bandpass
-        self.b_bp, self.a_bp = None, None
         if self.bp_enabled:
             low = self.bp_low / nyq
-            high = min(self.bp_high, nyq * 0.95) / nyq  # clamp to 95% Nyquist
-            if 0 < low < high < 1:
-                self.b_bp, self.a_bp = butter(self.bp_order, [low, high], btype="bandpass", analog=False)
+            high = self.bp_high / nyq
+            if low <= 0 or high >= 1:
+                # Fallback if invalid
+                self.b_bp, self.a_bp = [1.0], [1.0] 
             else:
-                self.bp_enabled = False  # disable if still invalid after clamp
+                self.b_bp, self.a_bp = butter(self.bp_order, [low, high], btype="bandpass", analog=False)
 
     def update_config(self, config: dict, sr: int):
         """Update filter parameters if config changed."""
@@ -89,8 +89,8 @@ class EEGFilterProcessor:
             # Reset states
             try:
                 self.zi_hp = lfilter_zi(self.b_hp, self.a_hp) * 0.0
-                self.zi_notch = lfilter_zi(self.b_notch, self.a_notch) * 0.0 if (self.notch_enabled and self.a_notch is not None) else None
-                self.zi_bp = lfilter_zi(self.b_bp, self.a_bp) * 0.0 if (self.bp_enabled and self.a_bp is not None) else None
+                self.zi_notch = lfilter_zi(self.b_notch, self.a_notch) * 0.0 if (self.notch_enabled and getattr(self, 'a_notch', None) is not None) else None
+                self.zi_bp = lfilter_zi(self.b_bp, self.a_bp) * 0.0 if (self.bp_enabled and getattr(self, 'a_bp', None) is not None) else None
             except Exception as e:
                 print(f"[EEG] ⚠️ Filter state reset error: {e}")
                 # Fallback to zeros (no steady state init)
