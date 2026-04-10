@@ -73,8 +73,8 @@ class EMGFilterProcessor:
             low = self.bp_low / nyq
             high = self.bp_high / nyq
             if low <= 0 or high >= 1:
-                # Fallback if invalid
-                self.b_bp, self.a_bp = [1.0], [1.0] 
+                # Fallback if invalid (a must have len>=2 for lfilter_zi)
+                self.b_bp, self.a_bp = [1.0, 0.0], [1.0, 0.0] 
             else:
                 self.b_bp, self.a_bp = butter(self.bp_order, [low, high], btype="bandpass", analog=False)
 
@@ -83,7 +83,7 @@ class EMGFilterProcessor:
             wn_env = self.envelope_cutoff / nyq
             self.b_env, self.a_env = butter(self.envelope_order, wn_env, btype="low", analog=False)
         else:
-            self.b_env, self.a_env = [1.0], [1.0]
+            self.b_env, self.a_env = [1.0, 0.0], [1.0, 0.0]
 
     def update_config(self, config: dict, sr: int):
         """Update filter parameters if config changed."""

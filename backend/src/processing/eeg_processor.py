@@ -67,8 +67,8 @@ class EEGFilterProcessor:
             low = self.bp_low / nyq
             high = self.bp_high / nyq
             if low <= 0 or high >= 1:
-                # Fallback if invalid
-                self.b_bp, self.a_bp = [1.0], [1.0] 
+                # Fallback if invalid (a must have len>=2 for lfilter_zi)
+                self.b_bp, self.a_bp = [1.0, 0.0], [1.0, 0.0] 
             else:
                 self.b_bp, self.a_bp = butter(self.bp_order, [low, high], btype="bandpass", analog=False)
 
