@@ -26,10 +26,14 @@ function OverviewGrid({ onSelect }) {
       <p className="eeg-overview-subtitle">Select a neuro-application to begin session.</p>
       <div className="eeg-app-grid">
         {OVERVIEW_APPS.map((app) => (
-          <div key={app.id} className="eeg-app-card" onClick={() => onSelect(app.id)}>
-            <div className="eeg-app-icon"><app.icon size={28} /></div>
-            <h3>{app.title}</h3>
-            <p>{app.desc}</p>
+          <div key={app.id} className={`eeg-app-card card-${app.id}`} onClick={() => onSelect(app.id)}>
+            <div className="eeg-card-decoration decoration-orb orb-1" />
+            <div className="eeg-card-decoration decoration-orb orb-2" />
+            <div className="card-shimmer" />
+            
+            <div className="eeg-app-icon"><app.icon size={36} /></div>
+            <h3 className="card-title-premium">{app.title}</h3>
+            <p className="card-desc-premium">{app.desc}</p>
           </div>
         ))}
       </div>
@@ -70,11 +74,25 @@ function EEGContent() {
   useEffect(() => {
     if (lastEvent) {
       if (lastEvent.event === 'eeg_mode_result') {
-        setEegResult(lastEvent.output || lastEvent)
-      } else if (lastEvent.event === 'eeg_prediction' || lastEvent.output?.event === 'eeg_prediction') {
-        setEegResult(lastEvent.output || lastEvent)
-      } else if (lastEvent.features || lastEvent.band_powers) {
-        setEegResult(lastEvent)
+        const output = lastEvent.output || {};
+        setEegResult({
+          ...output,
+          band_powers: lastEvent.band_powers,
+          eeg_mapped: lastEvent.eeg_mapped,
+          features: lastEvent.features,
+        });
+      } else if (lastEvent.event === 'eeg_prediction' || lastEvent.output?.event === 'eeg_prediction' || lastEvent.features || lastEvent.band_powers) {
+        setEegResult(prev => {
+          if (!prev) return lastEvent.output || lastEvent;
+          const data = lastEvent.output || lastEvent;
+          return {
+            ...prev,
+            features: data.features || prev.features,
+            band_powers: data.band_powers || prev.band_powers,
+            predicted_frequency: data.predicted_frequency !== undefined ? data.predicted_frequency : prev.predicted_frequency,
+            peak_frequency: data.peak_frequency !== undefined ? data.peak_frequency : prev.peak_frequency
+          };
+        });
       }
     }
   }, [lastEvent])
@@ -112,7 +130,7 @@ function EEGContent() {
   } else if (normalizedView === 'meditation') {
     content = <MeditationView result={eegResult} wsEvent={lastEvent} wsUrl={streamConnected ? activeWsUrl : null} currentView={normalizedView} onNavigate={handleSelectView} onBackToMenu={handleBackToMenu} />
   } else if (normalizedView === 'bubble') {
-    content = <BubbleGameView result={eegResult} isConnected={streamConnected} />
+    content = <BubbleGameView result={eegResult} isConnected={streamConnected} onBackToMenu={handleBackToMenu} />
   } else if (normalizedView === 'ssvep') {
     content = <SSVEPView isConnected={streamConnected} wsEvent={lastEvent} onBackToMenu={handleBackToMenu} onNavigate={handleSelectView} />
   } else if (normalizedView !== 'overview') {
@@ -194,7 +212,7 @@ function EEGContent() {
         <button
           type="button"
           onClick={() => setSidebarCollapsed((prev) => !prev)}
-          className="absolute -right-5 top-1/2 z-20 flex h-16 w-6 -translate-y-1/2 items-center justify-center rounded-r-xl border border-l-0 border-[var(--primary)]/35 bg-[var(--surface)] text-[var(--primary)] shadow-[0_10px_30px_rgba(0,0,0,0.35)] transition-all hover:border-[var(--primary)]/60 hover:bg-[var(--primary)]/10"
+          className="absolute -right-5 top-1/2 z-[999] flex h-16 w-6 -translate-y-1/2 items-center justify-center rounded-r-xl border border-l-0 border-[var(--primary)]/35 bg-[var(--surface)] text-[var(--primary)] shadow-[0_10px_30px_rgba(0,0,0,0.35)] transition-all hover:border-[var(--primary)]/60 hover:bg-[var(--primary)]/10"
           title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >
           {sidebarCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}

@@ -178,13 +178,21 @@ const EEGDashboardContent = ({ wsEvent, isConnected, wsUrl }) => {
           features: wsEvent.features,
         });
       }
-      // Priority 2: Feature Router predictions (F1/F2)
-      else if (wsEvent.event === 'eeg_prediction' || wsEvent.output?.event === 'eeg_prediction') {
-        setEegResult(wsEvent.output || wsEvent);
-      }
-      // Priority 3: Catch-all for any object containing relevant EEG fields
-      else if (wsEvent.features || wsEvent.band_powers) {
-        setEegResult(wsEvent);
+      // Priority 2 & 3: Background Router Events (Predictions or Features)
+      else if (wsEvent.event === 'eeg_prediction' || wsEvent.output?.event === 'eeg_prediction' || wsEvent.features || wsEvent.band_powers) {
+        setEegResult(prev => {
+          if (!prev) return wsEvent.output || wsEvent;
+          const data = wsEvent.output || wsEvent;
+          // Strict merge: only update features, bands, and frequency data.
+          // NEVER overwrite frontend mode manager keys (state, stress_score, focus_score).
+          return {
+            ...prev,
+            features: data.features || prev.features,
+            band_powers: data.band_powers || prev.band_powers,
+            predicted_frequency: data.predicted_frequency !== undefined ? data.predicted_frequency : prev.predicted_frequency,
+            peak_frequency: data.peak_frequency !== undefined ? data.peak_frequency : prev.peak_frequency
+          };
+        });
       }
     }
   }, [wsEvent]);
@@ -217,7 +225,7 @@ const EEGDashboardContent = ({ wsEvent, isConnected, wsUrl }) => {
       {/* ── TOGGLE BUTTON ── */}
       <button
         onClick={() => setSidebarVisible(prev => !prev)}
-        className={`absolute top-1/2 -translate-y-1/2 z-[100] p-2 rounded-r-md bg-[var(--surface)]/90 backdrop-blur-md border border-l-0 border-[var(--primary)]/30 text-[var(--text)] shadow-lg transition-all duration-500 hover:bg-[var(--primary)]/20 ${sidebarVisible ? 'left-[21rem]' : 'left-0'}`}
+        className={`absolute top-1/2 -translate-y-1/2 z-[999] p-2 rounded-r-md bg-[var(--surface)]/90 backdrop-blur-md border border-l-0 border-[var(--primary)]/30 text-[var(--text)] shadow-lg transition-all duration-500 hover:bg-[var(--primary)]/20 ${sidebarVisible ? 'left-[21rem]' : 'left-0'}`}
         title={sidebarVisible ? "Hide Sidebar" : "Show Sidebar"}
       >
         {sidebarVisible ? <ChevronLeft size={24} /> : <ChevronRight size={24} />}

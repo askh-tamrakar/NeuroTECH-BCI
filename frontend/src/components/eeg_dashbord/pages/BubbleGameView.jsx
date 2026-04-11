@@ -22,6 +22,10 @@ const BubbleGameView = ({ result, isConnected, onBackToMenu }) => {
   const { setSidebarSlot, setSidebarMode } = useSidebar();
 
   useEffect(() => {
+    setSidebarMode('page');
+  }, [setSidebarMode]);
+
+  useEffect(() => {
     setSidebarSlot(
       <BubbleSidebar
         onBackToMenu={onBackToMenu}
@@ -31,9 +35,8 @@ const BubbleGameView = ({ result, isConnected, onBackToMenu }) => {
         containerRef={containerRef}
       />
     );
-    setSidebarMode('page');
     return () => setSidebarSlot(null);
-  }, [onBackToMenu, stressScore, focusScore, globalRunning, setSidebarSlot, setSidebarMode]);
+  }, [onBackToMenu, stressScore, focusScore, globalRunning, setSidebarSlot]);
 
   useEffect(() => { themeRef.current = currentTheme; }, [currentTheme]);
   useEffect(() => { resultRef.current = result; }, [result]);

@@ -178,44 +178,39 @@ def detect_mind_state(feature_vector):
     stress_index = _safe(feature_vector, 10)
     engagement_index = _safe(feature_vector, 11)
 
-    # Proportional power (exclude gamma — mostly artifact on Fpz)
-    total = delta + theta + alpha + beta + 1e-6
-    p_delta = delta / total
-    p_theta = theta / total
-    p_alpha = alpha / total
-    p_beta = beta / total
+    # Proportional cognitive power (exclude delta and gamma — heavily artifacted on Fpz)
+    # Delta is still captured in absolute form for specific drowsy checks, but excluded from ratio pool
+    # so blinks don't crush the cognitive band signals.
+    total_tab = theta + alpha + beta + 1e-6
+    p_theta = theta / total_tab
+    p_alpha = alpha / total_tab
+    p_beta = beta / total_tab
+
+    # Global delta ratio strictly for drowsiness bounding
+    p_delta_global = delta / (delta + total_tab)
 
     # ── Confidence formulas (each 0-100, balanced competition) ──────────
     #
-    # Focus: needs beta above baseline (~15%) + engagement
-    #   Beta-dominant (p_beta=0.50,ei=2.64): (0.35)*180+0.88*25 = 63+22 = 85
-    #   Alpha-dominant (p_beta=0.07): 0 → ~1
-    focus_beta = max(0.0, p_beta - 0.15) * 180
+    # Focus: needs beta above baseline TAB (~20%) + engagement
+    focus_beta = max(0.0, p_beta - 0.20) * 120
     eng_norm = min(1.0, engagement_index / 3.0)
-    focus_conf = min(100, int(focus_beta + eng_norm * 25))
+    focus_conf = min(100, int(focus_beta + eng_norm * 50))
 
-    # Calm: dominant alpha, light calm_index bonus
-    #   Alpha-dominant (p_alpha=0.87,ci=12.6): 0.87*90+1.0*15 = 78+15 = 93
-    #   Beta-dominant (p_alpha=0.19,ci=0.75): 0.19*90+0.19*15 = 17+3 = 20
+    # Calm: dominant alpha in TAB
     ci_norm = min(1.0, calm_index / 4.0)
-    calm_conf = min(100, int(p_alpha * 90 + ci_norm * 15))
+    calm_conf = min(100, int(p_alpha * 80 + ci_norm * 20))
 
     # Relaxed: simultaneous alpha AND theta (meditation-like)
-    #   Theta+alpha both 40%: (0.40*0.5+0.40*0.5)*150 = 60
     relax_blend = p_alpha * 0.50 + p_theta * 0.50
-    relaxed_conf = min(100, int(relax_blend * 150))
+    relaxed_conf = min(100, int(relax_blend * 100))
 
-    # Stressed: driven primarily by stress_index, not raw beta
-    #   This separates stress (anxious beta) from focus (engaged beta)
-    #   Beta-dom (si=1.33): 0.67*80+0.50*30 = 53+15 = 68
-    #   Very stressed (si=4.0): 1.0*80+0.70*30 = 80+21 = 100
+    # Stressed: driven primarily by stress_index and beta dominance
     si_norm = min(1.0, stress_index / 2.0)
-    stressed_conf = min(100, int(si_norm * 80 + p_beta * 30))
+    stressed_conf = min(100, int(si_norm * 70 + p_beta * 50))
 
-    # Drowsy: needs high delta+theta (both slow waves)
-    #   Truly drowsy (d=40%,t=35%): 0.40*100+0.35*60 = 40+21 = 61
-    #   Normal awake (d=12%,t=19%): 0.12*100+0.19*60 = 12+11 = 23
-    drowsy_conf = min(100, int(p_delta * 100 + p_theta * 60))
+    # Drowsy: needs high theta-dominance over alpha/beta, heavily dampened delta 
+    # response to avoid blink artifacts triggering drowsy false-positives.
+    drowsy_conf = min(100, int(p_theta * 70 + max(0.0, p_delta_global - 0.6) * 50))
 
     # Dampen focus when stress_index is very high (anxious arousal ≠ attention)
     if stress_index > 1.5:
