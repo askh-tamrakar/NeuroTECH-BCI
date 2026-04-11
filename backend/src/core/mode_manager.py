@@ -104,12 +104,12 @@ class ModeManager:
         # so the UI and backend are aligned cleanly on one-channel setups.
         try:
             from ..server.server.state import state
-            if state.channel_mapping and "ch0" in state.channel_mapping:
-                state.channel_mapping["ch0"]["sensor"] = "EEG"
+            if state.channel_mapping and 0 in state.channel_mapping:
+                state.channel_mapping[0]["type"] = "EEG"
                 if "visual" in preset_lower or "ssvep" in preset_lower or "oz" in preset_lower:
-                    state.channel_mapping["ch0"]["label"] = "Oz"
+                    state.channel_mapping[0]["label"] = "Oz"
                 else:
-                    state.channel_mapping["ch0"]["label"] = "Fp1"
+                    state.channel_mapping[0]["label"] = "Fp1"
         except ImportError:
             pass # Server state might not be active in some tests
 
@@ -208,6 +208,15 @@ class ModeManager:
 
     def has_eeg_channel(self):
         """Check if any channel in sensor config is mapped to EEG."""
+        try:
+            from ..server.server.state import state
+            if hasattr(state, 'channel_mapping'):
+                for ch_idx, info in state.channel_mapping.items():
+                    if str(info.get("type", "")).upper() == "EEG" and info.get("enabled", True):
+                        return True
+        except ImportError:
+            pass
+
         mapping = config_manager.get_channel_mapping() or {}
         for ch_key, info in mapping.items():
             if str(info.get("sensor", "")).upper() == "EEG" and info.get("enabled", True):

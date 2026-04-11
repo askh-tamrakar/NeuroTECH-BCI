@@ -1,8 +1,8 @@
 {
   "EOG": {
-    "detection_method": "Threshold"
+    "detection_method": "ML"
   },
   "Servo": {
-    "enabled": true
+    "enabled": false
   }
 }
