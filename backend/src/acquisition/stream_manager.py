@@ -232,7 +232,7 @@ class StreamManagerApp:
                         # Spin off a thread for EACH client to avoid blocking
                         t = threading.Thread(target=self._handle_client, args=(conn, addr), daemon=True)
                         t.start()
-                        self.raw_clients.append(addr)
+                        self.raw_clients.append((conn, addr))
                         self.connection_var.set(f"Connected (Raw): {len(self.raw_clients)} clients")
                         
                     elif name == "Processed":
@@ -320,7 +320,8 @@ class StreamManagerApp:
                             ch1_uv = (ch1_raw * scale) - half_vref
                             
                             # Push to LSL
-                            self.lsl_stream.push_sample([ch0_uv, ch1_uv])
+                            if self.lsl_stream:
+                                self.lsl_stream.push_sample([ch0_uv, ch1_uv])
                             # Optional: Log occasionally?
                             if self.packet_count % 2560 == 0:
                                 self.log(f"P: {counter} | {ch0_uv:.2f} uV") 
@@ -337,8 +338,7 @@ class StreamManagerApp:
             self.log(f"Client connection error ({addr}): {e}")
         finally:
             conn.close()
-            if addr in self.raw_clients:
-                self.raw_clients.remove(addr)
+            self.raw_clients = [c for c in self.raw_clients if c[1] != addr]
             self.root.after_idle(lambda: self.connection_var.set(f"Connected (Raw): {len(self.raw_clients)} clients"))
             self.log(f"Raw Client disconnected: {addr}")
 
@@ -405,6 +405,13 @@ class StreamManagerApp:
                                 client.sendall(data)
                             except Exception:
                                 pass
+                                
+                if hasattr(self, 'raw_clients'):
+                    for r_conn, r_addr in list(self.raw_clients):
+                        try:
+                            r_conn.sendall(data)
+                        except Exception:
+                            pass
         except Exception as e:
             self.log(f"Events Handler Error: {e}")
         finally:

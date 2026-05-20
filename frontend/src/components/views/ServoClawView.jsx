@@ -522,14 +522,23 @@ export default function ServoClawView({ wsEvent, isConnected }) {
                         <div className="border-t border-border pt-4">
                             <span className="text-xs font-bold text-muted uppercase tracking-wider mb-3 block">Manual Override</span>
                             <div className="grid grid-cols-2 gap-3">
-                                <button className="py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-sm font-bold text-text transition-colors" onClick={() => testMovement('Open Claw')}>
-                                    Open
+                                <button className="py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-sm font-bold text-text transition-colors" onClick={() => testMovement('Rock')}>
+                                    Rock (Close)
                                 </button>
-                                <button className="py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-sm font-bold text-text transition-colors" onClick={() => testMovement('Close Claw')}>
-                                    Close
+                                <button className="py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-sm font-bold text-text transition-colors" onClick={() => testMovement('Paper')}>
+                                    Paper (Open)
                                 </button>
-                                <button className="col-span-2 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-sm font-bold text-text transition-colors" onClick={() => testMovement('Stop')}>
-                                    Emergency Stop
+                                <button className="py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-sm font-bold text-text transition-colors" onClick={() => testMovement('Scissors')}>
+                                    Scissors (Mid)
+                                </button>
+                                <button className="py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-sm font-bold text-text transition-colors" onClick={() => testMovement('SingleBlink')}>
+                                    Single Blink (+5°)
+                                </button>
+                                <button className="py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-sm font-bold text-text transition-colors" onClick={() => testMovement('DoubleBlink')}>
+                                    Double Blink (-5°)
+                                </button>
+                                <button className="py-2 bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 rounded-xl text-sm font-bold text-red-400 transition-colors" onClick={() => testMovement('Stop')}>
+                                    Stop
                                 </button>
                             </div>
                         </div>
