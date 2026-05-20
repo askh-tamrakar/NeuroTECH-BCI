@@ -24,8 +24,10 @@ class SessionManager:
         }
         self.prediction_active = {
             'EMG': False,
-            'EOG': False
+            'EOG': False,
+            'EEG': False
         }
+        
         
     def start_recording(self, sensor_type, label, session_name="Default"):
         self.is_recording = True

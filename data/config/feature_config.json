@@ -1,4 +1,7 @@
 {
+  "EOG": {
+    "detection_method": "ML"
+  },
   "Servo": {
     "enabled": false
   }

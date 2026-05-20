@@ -152,22 +152,42 @@ def save_config(config: dict) -> bool:
 
 DETECTION_STATE_PATH = _CONFIG_DIR / "detection_state.json"
 
-def get_detection_state() -> bool:
-    """Read detection active state from file."""
+def get_detection_state() -> dict:
+    """Read detection active state from file, returning a dictionary of state flags."""
     try:
         if DETECTION_STATE_PATH.exists():
             with open(DETECTION_STATE_PATH, 'r') as f:
                 data = json.load(f)
-                return data.get("active", False)
-        return False
+                if isinstance(data, dict):
+                    defaults = {"active": False, "EMG": False, "EOG": False, "EEG": False}
+                    return {**defaults, **data}
+        return {"active": False, "EMG": False, "EOG": False, "EEG": False}
     except:
-        return False
+        return {"active": False, "EMG": False, "EOG": False, "EEG": False}
 
 def set_detection_state(active: bool):
-    """Write detection active state to file."""
+    """Write simple detection active state to file."""
     try:
         DETECTION_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        current = get_detection_state()
+        current["active"] = active
+        # If enabling prediction, make sure at least one detector is active. If none are active, activate them all.
+        if active and not (current.get("EMG") or current.get("EOG") or current.get("EEG")):
+            current["EMG"] = True
+            current["EOG"] = True
+            current["EEG"] = True
         with open(DETECTION_STATE_PATH, 'w') as f:
-            json.dump({"active": active}, f)
+            json.dump(current, f)
     except Exception as e:
         print(f"[ConfigManager] ❌ Error saving detection state: {e}")
+
+def set_detection_state_map(state_map: dict):
+    """Write granular detection active state map to file."""
+    try:
+        DETECTION_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        current = get_detection_state()
+        current.update(state_map)
+        with open(DETECTION_STATE_PATH, 'w') as f:
+            json.dump(current, f)
+    except Exception as e:
+        print(f"[ConfigManager] ❌ Error saving detection state map: {e}")

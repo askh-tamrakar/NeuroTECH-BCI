@@ -3,6 +3,7 @@ import { BrainCircuit, Activity, ImageIcon, Menu, ChevronLeft, Gamepad2, Setting
 import { soundHandler } from '../../handlers/SoundHandler';
 import CustomSelect from '../ui/inputs/CustomSelect';
 import { buildApiUrl } from '../../utils/runtimeConnection';
+import { CalibrationApi } from '../../services/calibrationApi';
 import '../../styles/views/RPSGame.css';
 
 const MOVES = ['ROCK', 'PAPER', 'SCISSORS'];
@@ -148,8 +149,13 @@ const RPSGame = ({ wsEvent }) => {
     }, [difficulty]);
 
     const togglePrediction = (active) => {
-        fetch(buildApiUrl(`/api/emg/predict/${active ? 'start' : 'stop'}`), { method: 'POST' })
-            .catch(err => console.error("Prediction toggle failed:", err));
+        if (active) {
+            CalibrationApi.togglePrediction('EOG', false).catch(e => {});
+            CalibrationApi.togglePrediction('EEG', false).catch(e => {});
+            CalibrationApi.togglePrediction('EMG', true).catch(err => console.error("EMG prediction start failed:", err));
+        } else {
+            CalibrationApi.togglePrediction('EMG', false).catch(err => console.error("EMG prediction stop failed:", err));
+        }
     };
 
     const clearResetCountdown = useCallback(() => {

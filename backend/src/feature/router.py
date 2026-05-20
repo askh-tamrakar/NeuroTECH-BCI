@@ -183,10 +183,28 @@ class FeatureRouter:
                 sample, ts = self.inlet.pull_sample(timeout=0.1)
 
                 if sample:
+                    # Get global active status
+                    global_active = False
+                    if isinstance(self.detection_active, dict):
+                        global_active = self.detection_active.get("active", False)
+                    elif isinstance(self.detection_active, bool):
+                        global_active = self.detection_active
+                        
                     # Route to pipeline
                     for ch_idx, val in enumerate(sample):
                         if ch_idx in self.pipeline:
                             extractor, detector, sensor_type = self.pipeline[ch_idx]
+                            
+                            # Check if the specific detector is active
+                            sensor_active = False
+                            if isinstance(self.detection_active, dict):
+                                sensor_active = self.detection_active.get(sensor_type, False)
+                            else:
+                                sensor_active = global_active
+                                
+                            if not (global_active and sensor_active):
+                                continue
+                                
                             features = extractor.process(val)
                             
                             if features:

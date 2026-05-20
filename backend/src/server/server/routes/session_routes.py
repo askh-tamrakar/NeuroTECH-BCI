@@ -252,17 +252,31 @@ def api_emg_clear():
         print(f"Failed to clear DB: {e}")
     return jsonify({"status": "cleared"})
 
+def update_detection_active_file(sensor_type, is_active):
+    from src.server.server.config_manager import set_detection_state_map, get_detection_state
+    
+    current = get_detection_state()
+    state_map = {sensor_type: is_active}
+    
+    if is_active:
+        state_map["active"] = True
+    else:
+        # Check if other sensors are still active
+        other_active = False
+        for k, v in current.items():
+            if k in ["EMG", "EOG", "EEG"] and k != sensor_type:
+                if v:
+                    other_active = True
+        if not other_active:
+            state_map["active"] = False
+            
+    set_detection_state_map(state_map)
+
 @session_bp.route('/api/emg/predict/<action>', methods=['POST'])
 def api_emg_predict_toggle(action):
-    from src.server.server.config_manager import set_detection_state, get_detection_state
-    
-    if action == 'start':
-        state.session.prediction_active['EMG'] = True
-        set_detection_state(True)
-    elif action == 'stop':
-        state.session.prediction_active['EMG'] = False
-        set_detection_state(False)
-        
+    is_active = (action == 'start')
+    state.session.prediction_active['EMG'] = is_active
+    update_detection_active_file('EMG', is_active)
     return jsonify({"status": "ok", "predicting": state.session.prediction_active['EMG']})
 
 
@@ -340,8 +354,43 @@ def api_eog_clear():
 
 @session_bp.route('/api/eog/predict/<action>', methods=['POST'])
 def api_eog_predict_toggle(action):
-    if action == 'start':
-        state.session.prediction_active['EOG'] = True
-    elif action == 'stop':
-        state.session.prediction_active['EOG'] = False
+    is_active = (action == 'start')
+    state.session.prediction_active['EOG'] = is_active
+    update_detection_active_file('EOG', is_active)
     return jsonify({"status": "ok", "predicting": state.session.prediction_active['EOG']})
+
+@session_bp.route('/api/eeg/predict/<action>', methods=['POST'])
+def api_eeg_predict_toggle(action):
+    is_active = (action == 'start')
+    if 'EEG' not in state.session.prediction_active:
+        state.session.prediction_active['EEG'] = False
+    state.session.prediction_active['EEG'] = is_active
+    update_detection_active_file('EEG', is_active)
+    return jsonify({"status": "ok", "predicting": state.session.prediction_active['EEG']})
+
+@session_bp.route('/api/detectors/predict/<action>', methods=['POST'])
+def api_detectors_predict_toggle(action):
+    from src.server.server.config_manager import set_detection_state_map
+    is_active = (action == 'start')
+    state.session.prediction_active['EMG'] = is_active
+    state.session.prediction_active['EOG'] = is_active
+    if 'EEG' not in state.session.prediction_active:
+        state.session.prediction_active['EEG'] = False
+    state.session.prediction_active['EEG'] = is_active
+    set_detection_state_map({
+        "active": is_active,
+        "EMG": is_active,
+        "EOG": is_active,
+        "EEG": is_active
+    })
+    return jsonify({"status": "ok", "predicting": is_active})
+
+@session_bp.route('/api/detectors/predict/status', methods=['GET'])
+def api_detectors_predict_status():
+    from src.server.server.config_manager import get_detection_state
+    current = get_detection_state()
+    # Sync in-memory states
+    for k in ["EMG", "EOG", "EEG"]:
+        if k in current:
+            state.session.prediction_active[k] = current[k]
+    return jsonify(current)

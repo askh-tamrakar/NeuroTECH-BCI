@@ -9,6 +9,7 @@ import MeditationView from '../eeg_dashbord/pages/MeditationView';
 import BubbleGameView from '../eeg_dashbord/pages/BubbleGameView';
 import { SidebarProvider, useSidebar } from '../eeg_dashbord/pages/SidebarContext';
 import MainSidebar from '../eeg_dashbord/sidebar/MainSidebar';
+import { CalibrationApi } from '../../services/calibrationApi';
 
 const OVERVIEW_APPS = [
   { id: 'music', title: 'Music Control', icon: Music, desc: 'Control playback using frontal lobe focus states.' },
@@ -145,6 +146,18 @@ const EEGDashboardContent = ({ wsEvent, isConnected, wsUrl }) => {
   const [eegResult, setEegResult] = useState(null);
   const { sidebarMode, setSidebarMode, sidebarSlot } = useSidebar();
   const [sidebarVisible, setSidebarVisible] = useState(true);
+
+  useEffect(() => {
+    // When inside EEG dashboard, stop EMG and EOG, and start EEG.
+    CalibrationApi.togglePrediction('EMG', false).catch(e => {});
+    CalibrationApi.togglePrediction('EOG', false).catch(e => {});
+    CalibrationApi.togglePrediction('EEG', true).catch(e => {});
+
+    return () => {
+      // When leaving EEG dashboard, stop EEG.
+      CalibrationApi.togglePrediction('EEG', false).catch(e => {});
+    };
+  }, []);
 
   useEffect(() => {
     let modePreset = "frontal_fp1";

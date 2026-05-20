@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import { soundHandler } from '../../handlers/SoundHandler'
 import { buildApiUrl } from '../../utils/runtimeConnection'
+import { CalibrationApi } from '../../services/calibrationApi'
 
 const getEventEmoji = (type) => {
     switch (type) {
@@ -48,8 +49,13 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
     const normalizeModelName = useCallback((name) => String(name || '').toLowerCase().replace(/[^a-z0-9]/g, ''), []);
 
     const togglePrediction = useCallback((active) => {
-        fetch(buildApiUrl(`/api/eog/predict/${active ? 'start' : 'stop'}`), { method: 'POST' })
-            .catch(err => console.error("EOG prediction toggle failed:", err));
+        if (active) {
+            CalibrationApi.togglePrediction('EMG', false).catch(e => {});
+            CalibrationApi.togglePrediction('EEG', false).catch(e => {});
+            CalibrationApi.togglePrediction('EOG', true).catch(err => console.error("EOG prediction start failed:", err));
+        } else {
+            CalibrationApi.togglePrediction('EOG', false).catch(err => console.error("EOG prediction stop failed:", err));
+        }
     }, []);
 
     // Game state

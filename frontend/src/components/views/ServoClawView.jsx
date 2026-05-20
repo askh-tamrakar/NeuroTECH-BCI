@@ -11,6 +11,7 @@ export default function ServoClawView({ wsEvent, isConnected }) {
     const [ssvepActive, setSsvepActive] = useState(false);
     const [rpsActive, setRpsActive] = useState(false);
     const [blinkActive, setBlinkActive] = useState(false);
+    const [manualTab, setManualTab] = useState('emg');
 
     const [clawStatus, setClawStatus] = useState('Idle');
     const [lastAction, setLastAction] = useState('Waiting for BCI input...');
@@ -25,10 +26,11 @@ export default function ServoClawView({ wsEvent, isConnected }) {
     React.useEffect(() => {
         const fetchData = async () => {
             try {
-                const [eogRes, emgRes, configRes] = await Promise.all([
+                const [eogRes, emgRes, configRes, predStatus] = await Promise.all([
                     fetch(buildApiUrl('/api/models/eog')),
                     fetch(buildApiUrl('/api/models/emg')),
-                    fetch(buildApiUrl('/api/config'))
+                    fetch(buildApiUrl('/api/config')),
+                    CalibrationApi.getPredictionStatus()
                 ]);
 
                 const eogModels = await eogRes.json();
@@ -45,6 +47,13 @@ export default function ServoClawView({ wsEvent, isConnected }) {
                         rest_threshold: configData.features.EEG.rest_threshold || 0.6,
                         ratio_threshold: configData.features.EEG.ratio_threshold || 1.2
                     });
+                }
+
+                if (predStatus) {
+                    setSsvepActive(!!predStatus.EEG);
+                    setRpsActive(!!predStatus.EMG);
+                    setBlinkActive(!!predStatus.EOG);
+                    updateClawStatus(!!predStatus.EEG, !!predStatus.EMG, !!predStatus.EOG);
                 }
             } catch (err) {
                 console.error("Failed to load models/config for Servo Claw:", err);
@@ -149,7 +158,20 @@ export default function ServoClawView({ wsEvent, isConnected }) {
             newAngle = 48;
         } else if (typeof e === 'string' && e.startsWith('TARGET_')) {
             action = `Preset (${e})`;
-            newAngle = 82;
+            try {
+                const freq = parseFloat(e.replace('TARGET_', '').replace('HZ', '').replace('_', '.'));
+                const defaultFreqs = [8.0, 10.0, 12.0, 15.0, 18.0, 20.0];
+                const presetAngles = [97, 82, 66, 48, 24, 1];
+                for (let index = 0; index < defaultFreqs.length; index++) {
+                    if (Math.abs(defaultFreqs[index] - freq) < 0.1) {
+                        newAngle = presetAngles[Math.min(index, presetAngles.length - 1)];
+                        break;
+                    }
+                }
+            } catch (err) {
+                console.error("Error parsing target frequency:", err);
+                newAngle = 82;
+            }
         }
 
         if (action) {
@@ -333,10 +355,10 @@ export default function ServoClawView({ wsEvent, isConnected }) {
                     </div>
 
                     {/* Bottom Section: Logs & Settings */}
-                    <div className="mt-4 flex-1 grid grid-cols-1 min-h-0 md:grid-cols-2 gap-6">
+                    <div className="mt-4 grid grid-cols-1 min-h-0 md:grid-cols-2 gap-6">
 
                         {/* Event Logger */}
-                        <div className="flex flex-1 flex-col gap-4 min-h-0 border border-border/50 rounded-2xl bg-surface p-5 shadow-inner">
+                        <div className="flex flex-col gap-4 border border-border/50 rounded-2xl bg-surface p-5 shadow-inner h-[320px]">
                             <div className="flex items-center justify-between border-b border-border/50 pb-2">
                                 <h2 className="text-sm font-bold opacity-80 flex items-center gap-2 uppercase tracking-widest text-muted">
                                     <Activity size={16} />
@@ -347,14 +369,14 @@ export default function ServoClawView({ wsEvent, isConnected }) {
                                 </span>
                             </div>
 
-                            <div className="flex-1 overflow-y-auto space-y-1.5 pr-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none]">
+                            <div className="flex-1 overflow-y-auto space-y-1.5 pr-2 custom-scrollbar">
                                 {eventLogs.length === 0 ? (
                                     <div className="h-full flex items-center justify-center text-muted text-sm italic">
                                         Awaiting detection events...
                                     </div>
                                 ) : (
                                     eventLogs.map(log => (
-                                        <div key={log.id} className="font-mono text-sm leading-relaxed text-primary/90 truncate py-0.5">
+                                        <div key={log.id} className="font-mono text-xs leading-relaxed text-primary/95 py-0.5 border-b border-white/5 last:border-0">
                                             <span dangerouslySetInnerHTML={{ __html: log.text.replace(/(\[.*?\])/g, '<span class="text-muted/60 font-bold">$1</span>').replace('->', '<span class="text-white/50 px-1">-></span>').replace(/Event:(.*?)->/, 'Event:<span class="text-primary font-bold px-1">$1</span>->') }} />
                                         </div>
                                     ))
@@ -363,21 +385,21 @@ export default function ServoClawView({ wsEvent, isConnected }) {
                         </div>
 
                         {/* Settings Controls */}
-                        <div className="flex flex-col gap-4 h-full border border-border/50 rounded-2xl bg-surface p-5 shadow-inner [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none]">
+                        <div className="flex flex-col gap-4 border border-border/50 rounded-2xl bg-surface p-5 shadow-inner h-[320px] overflow-y-auto custom-scrollbar">
                             <h2 className="text-sm font-bold opacity-80 flex items-center gap-2 uppercase tracking-widest text-muted border-b border-border/50 pb-2">
                                 <Settings size={16} />
                                 Modality Config
                             </h2>
 
-                            <div className="flex flex-col gap-4 mt-2">
+                            <div className="flex flex-col gap-4 mt-1">
                                 {/* EOG Model */}
                                 <div className="flex flex-col gap-1.5">
-                                    <label className="text-xs font-bold text-muted uppercase flex items-center gap-1.5">
-                                        <Zap size={12} className="text-primary/70" />
+                                    <label className="text-[11px] font-bold text-muted uppercase flex items-center gap-1.5">
+                                        <Zap size={11} className="text-primary/70" />
                                         EOG Active Model
                                     </label>
                                     <select
-                                        className="bg-bg border border-border text-sm rounded-md px-3 py-2 w-full outline-none focus:border-primary/50 transition-colors"
+                                        className="bg-bg border border-border text-xs rounded-md px-3 py-1.5 w-full outline-none focus:border-primary/50 transition-colors"
                                         value={models.eog.find(m => m.active)?.name || ''}
                                         onChange={(e) => {
                                             const newEogModels = [...models.eog].map(m => ({ ...m, active: m.name === e.target.value }));
@@ -394,12 +416,12 @@ export default function ServoClawView({ wsEvent, isConnected }) {
 
                                 {/* EMG Model */}
                                 <div className="flex flex-col gap-1.5">
-                                    <label className="text-xs font-bold text-muted uppercase flex items-center gap-1.5">
-                                        <BrainCircuit size={12} className="text-primary/70" />
+                                    <label className="text-[11px] font-bold text-muted uppercase flex items-center gap-1.5">
+                                        <BrainCircuit size={11} className="text-primary/70" />
                                         EMG Active Model
                                     </label>
                                     <select
-                                        className="bg-bg border border-border text-sm rounded-md px-3 py-2 w-full outline-none focus:border-primary/50 transition-colors"
+                                        className="bg-bg border border-border text-xs rounded-md px-3 py-1.5 w-full outline-none focus:border-primary/50 transition-colors"
                                         value={models.emg.find(m => m.active)?.name || ''}
                                         onChange={(e) => {
                                             const newEmgModels = [...models.emg].map(m => ({ ...m, active: m.name === e.target.value }));
@@ -416,17 +438,17 @@ export default function ServoClawView({ wsEvent, isConnected }) {
 
                                 {/* EEG Thresholds */}
                                 <div className="flex flex-col gap-1.5">
-                                    <label className="text-xs font-bold text-muted uppercase flex items-center gap-1.5">
-                                        <Activity size={12} className="text-primary/70" />
+                                    <label className="text-[11px] font-bold text-muted uppercase flex items-center gap-1.5">
+                                        <Activity size={11} className="text-primary/70" />
                                         SSVEP Thresholds
                                     </label>
                                     <div className="grid grid-cols-2 gap-3">
                                         <div className="flex flex-col gap-1">
-                                            <span className="text-xs text-muted/80">Rest Ratio</span>
+                                            <span className="text-[10px] text-muted/80">Rest Ratio</span>
                                             <input
                                                 type="number"
                                                 step="0.05"
-                                                className="bg-bg border border-border rounded px-3 py-1.5 text-sm outline-none focus:border-primary/50 transition-colors"
+                                                className="bg-bg border border-border rounded px-2.5 py-1 text-xs outline-none focus:border-primary/50 transition-colors"
                                                 value={eegConfig.rest_threshold}
                                                 onChange={(e) => {
                                                     const val = parseFloat(e.target.value);
@@ -436,11 +458,11 @@ export default function ServoClawView({ wsEvent, isConnected }) {
                                             />
                                         </div>
                                         <div className="flex flex-col gap-1">
-                                            <span className="text-xs text-muted/80">Target Ratio</span>
+                                            <span className="text-[10px] text-muted/80">Target Ratio</span>
                                             <input
                                                 type="number"
                                                 step="0.1"
-                                                className="bg-bg border border-border rounded px-3 py-1.5 text-sm outline-none focus:border-primary/50 transition-colors"
+                                                className="bg-bg border border-border rounded px-2.5 py-1 text-xs outline-none focus:border-primary/50 transition-colors"
                                                 value={eegConfig.ratio_threshold}
                                                 onChange={(e) => {
                                                     const val = parseFloat(e.target.value);
@@ -519,33 +541,103 @@ export default function ServoClawView({ wsEvent, isConnected }) {
                         </div>
 
                         {/* Manual override controls for testing */}
-                        <div className="border-t border-border pt-4">
-                            <span className="text-xs font-bold text-muted uppercase tracking-wider mb-3 block">Manual Override</span>
-                            <div className="grid grid-cols-2 gap-3">
-                                <button className="py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-sm font-bold text-text transition-colors" onClick={() => testMovement('Rock')}>
-                                    Rock (Close)
-                                </button>
-                                <button className="py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-sm font-bold text-text transition-colors" onClick={() => testMovement('Paper')}>
-                                    Paper (Open)
-                                </button>
-                                <button className="py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-sm font-bold text-text transition-colors" onClick={() => testMovement('Scissors')}>
-                                    Scissors (Mid)
-                                </button>
-                                <button className="py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-sm font-bold text-text transition-colors" onClick={() => testMovement('SingleBlink')}>
-                                    Single Blink (+5°)
-                                </button>
-                                <button className="py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-sm font-bold text-text transition-colors" onClick={() => testMovement('DoubleBlink')}>
-                                    Double Blink (-5°)
-                                </button>
-                                <button className="py-2 bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 rounded-xl text-sm font-bold text-red-400 transition-colors" onClick={() => testMovement('Stop')}>
-                                    Stop
-                                </button>
+                        <div className="border-t border-border pt-5">
+                            <div className="flex items-center justify-between mb-4">
+                                <span className="text-xs font-bold text-muted uppercase tracking-wider">Manual Override</span>
+                                <div className="flex bg-white/5 p-0.5 rounded-lg border border-white/5">
+                                    {['emg', 'eog', 'eeg'].map((tab) => (
+                                        <button
+                                            key={tab}
+                                            onClick={() => setManualTab(tab)}
+                                            className={`px-2.5 py-1 text-xs font-bold rounded-md transition-all ${manualTab === tab ? 'bg-primary text-primary-contrast shadow-sm' : 'text-muted hover:text-text'}`}
+                                        >
+                                            {tab.toUpperCase()}
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
+
+                            {/* EMG Tab */}
+                            {manualTab === 'emg' && (
+                                <div className="grid grid-cols-3 gap-2 animate-in fade-in duration-200">
+                                    <button className="py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-xs font-bold text-text transition-colors flex flex-col items-center justify-center gap-1.5" onClick={() => testMovement('Rock')}>
+                                        <span>✊ Rock</span>
+                                        <span className="text-[10px] text-muted font-normal">(Close)</span>
+                                    </button>
+                                    <button className="py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-xs font-bold text-text transition-colors flex flex-col items-center justify-center gap-1.5" onClick={() => testMovement('Paper')}>
+                                        <span>✋ Paper</span>
+                                        <span className="text-[10px] text-muted font-normal">(Open)</span>
+                                    </button>
+                                    <button className="py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-xs font-bold text-text transition-colors flex flex-col items-center justify-center gap-1.5" onClick={() => testMovement('Scissors')}>
+                                        <span>✌️ Scissors</span>
+                                        <span className="text-[10px] text-muted font-normal">(Mid)</span>
+                                    </button>
+                                </div>
+                            )}
+
+                            {/* EOG Tab */}
+                            {manualTab === 'eog' && (
+                                <div className="grid grid-cols-2 gap-3 animate-in fade-in duration-200">
+                                    <button className="py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-xs font-bold text-text transition-colors flex flex-col items-center justify-center gap-1" onClick={() => testMovement('SingleBlink')}>
+                                        <span>👁️ Single Blink</span>
+                                        <span className="text-[10px] text-muted font-normal">(+5° Close)</span>
+                                    </button>
+                                    <button className="py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-xs font-bold text-text transition-colors flex flex-col items-center justify-center gap-1" onClick={() => testMovement('DoubleBlink')}>
+                                        <span>👁️👁️ Double Blink</span>
+                                        <span className="text-[10px] text-muted font-normal">(-5° Open)</span>
+                                    </button>
+                                </div>
+                            )}
+
+                            {/* EEG Tab */}
+                            {manualTab === 'eeg' && (
+                                <div className="grid grid-cols-3 gap-2 animate-in fade-in duration-200">
+                                    {[
+                                        { label: '8 Hz', cmd: 'TARGET_8_0HZ', angle: '97°' },
+                                        { label: '10 Hz', cmd: 'TARGET_10_0HZ', angle: '82°' },
+                                        { label: '12 Hz', cmd: 'TARGET_12_0HZ', angle: '66°' },
+                                        { label: '15 Hz', cmd: 'TARGET_15_0HZ', angle: '48°' },
+                                        { label: '18 Hz', cmd: 'TARGET_18_0HZ', angle: '24°' },
+                                        { label: '20 Hz', cmd: 'TARGET_20_0HZ', angle: '1°' }
+                                    ].map((target) => (
+                                        <button
+                                            key={target.cmd}
+                                            className="py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-[11px] font-bold text-text transition-colors flex flex-col items-center justify-center"
+                                            onClick={() => testMovement(target.cmd)}
+                                        >
+                                            <span>🎯 {target.label}</span>
+                                            <span className="text-[9px] text-muted font-normal">{target.angle}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+
+                            {/* Stop/Reset */}
+                            <button className="mt-4 w-full py-2.5 bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 rounded-xl text-xs font-bold text-red-400 transition-colors flex items-center justify-center gap-2" onClick={() => testMovement('Stop')}>
+                                <Square size={12} />
+                                Stop & Reset Hardware
+                            </button>
                         </div>
                     </div>
                 </div>
 
             </div>
+            <style>{`
+                .custom-scrollbar::-webkit-scrollbar {
+                    width: 6px;
+                }
+                .custom-scrollbar::-webkit-scrollbar-track {
+                    background: transparent;
+                }
+                .custom-scrollbar::-webkit-scrollbar-thumb {
+                    background: rgba(var(--color-primary-rgb), 0.15);
+                    border-radius: 4px;
+                    transition: background 0.2s ease;
+                }
+                .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+                    background: rgba(var(--color-primary-rgb), 0.35);
+                }
+            `}</style>
         </div>
     );
 }

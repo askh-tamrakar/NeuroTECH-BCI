@@ -323,17 +323,19 @@ class ConfigManager:
 
     # ============== DETECTION STATE ==============
 
-    def get_detection_state(self) -> bool:
-        """Read detection active state from file."""
+    def get_detection_state(self) -> Dict[str, Any]:
+        """Read detection active state from file, returning a dictionary of state flags."""
         state_path = self.config_dir / "detection_state.json"
         try:
             if state_path.exists():
                 with open(state_path, 'r') as f:
                     data = json.load(f)
-                    return data.get("active", False)
-            return False
+                    if isinstance(data, dict):
+                        defaults = {"active": False, "EMG": False, "EOG": False, "EEG": False}
+                        return {**defaults, **data}
+            return {"active": False, "EMG": False, "EOG": False, "EEG": False}
         except:
-            return False
+            return {"active": False, "EMG": False, "EOG": False, "EEG": False}
 
     # ============== FACADE (UNIFIED) ==============
 

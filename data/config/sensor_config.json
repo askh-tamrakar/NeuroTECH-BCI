@@ -1,7 +1,7 @@
 {
   "active_models": {
     "EEG": "Neo",
-    "EMG": "Shubh",
+    "EMG": "Venus",
     "EOG": "Dino"
   },
   "adc_settings": {

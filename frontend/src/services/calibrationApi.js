@@ -356,5 +356,19 @@ export const CalibrationApi = {
             console.error('Error sending manual claw command:', error);
             throw error;
         }
+    },
+
+    /**
+     * Get real-time prediction status for all detectors.
+     */
+    async getPredictionStatus() {
+        try {
+            const response = await fetchWithBase('/api/detectors/predict/status');
+            if (!response.ok) return null;
+            return response.json();
+        } catch (error) {
+            console.error('[CalibrationApi] Error getting prediction status:', error);
+            return null;
+        }
     }
 };
