@@ -9,9 +9,9 @@ import numpy as np
 from scipy.signal import butter, lfilter, lfilter_zi
 
 class EOGFilterProcessor:
-    def __init__(self, config: dict, sr: int = 512, channel_key: str = None):
+    def __init__(self, config: dict, sr: int = 512, channel_key: str = ""):
         self.config = config
-        self.sr = int(sr)
+        self.sr = sr
         self.channel_key = channel_key
         
         self._load_params()
@@ -82,7 +82,7 @@ class EOGFilterProcessor:
         old_state = (self.hp_cutoff, self.lp_cutoff, self.notch_enabled, self.bp_enabled, self.bp_low, self.bp_high)
         
         self.config = config
-        self.sr = int(sr)
+        self.sr = sr
         self._load_params()
         
         new_state = (self.hp_cutoff, self.lp_cutoff, self.notch_enabled, self.bp_enabled, self.bp_low, self.bp_high)
