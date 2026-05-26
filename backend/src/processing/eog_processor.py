@@ -90,7 +90,7 @@ class EOGFilterProcessor:
         if old_state != new_state:
             print(f"[EOG] Config changed -> Redesign filters")
             self._design_filters()
-            # Reset state
+            # Reset ALL filter states (including zi_hp)
             self.zi_hp = lfilter_zi(self.b_hp, self.a_hp) * 0.0
             self.zi_lp = lfilter_zi(self.b_lp, self.a_lp) * 0.0
             self.zi_notch = lfilter_zi(self.b_notch, self.a_notch) * 0.0 if self.notch_enabled else None

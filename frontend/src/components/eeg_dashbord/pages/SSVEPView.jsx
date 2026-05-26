@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import SSVEPStimulus from './SSVEPStimulus';
 import { soundHandler } from '../../../handlers/SoundHandler';
 import { CalibrationApi } from '../../../services/calibrationApi';
+import { ConfigService } from '../../../services/ConfigService';
 import SSVEPSidebar from '../sidebar/SSVEPSidebar';
 import { useSidebar } from './SidebarContext';
 import { Activity, Brain, Play, Square, Sun, Target, Zap } from 'lucide-react';
@@ -233,8 +234,7 @@ export default function SSVEPView({ isConnected, wsEvent, onBackToMenu }) {
 
     // --- Load Config on Mount ---
     useEffect(() => {
-        fetch('/api/config')
-            .then(res => res.json())
+        ConfigService.loadConfig()
             .then(data => {
                 const eeg = data?.features?.EEG;
                 if (eeg) {
@@ -384,15 +384,10 @@ export default function SSVEPView({ isConnected, wsEvent, onBackToMenu }) {
                     }
                 };
 
-                const response = await fetch('/api/config', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
+                const success = await ConfigService.saveConfig(payload);
 
-                if (!response.ok) throw new Error('Sync failed');
+                if (!success) throw new Error('Sync failed');
             } catch (err) {
-                console.error(`Sync error: ${err.message}`);
             } finally {
                 setTimeout(() => setIsSyncing(false), 300);
             }

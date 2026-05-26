@@ -149,14 +149,20 @@ class ConfigWriter:
                 # Will raise JSONDecodeError if invalid
                 json.loads(json_str)
 
-            # Create backup
+            # Create timestamped backup
             if backup and self.config_path.exists():
-                backup_path = self.config_path.with_suffix(".json.bak")
+                timestamp = time.strftime("%Y%m%d_%H%M%S")
+                backup_path = self.config_path.with_suffix(f".json.{timestamp}.bak")
                 try:
                     with open(self.config_path, "r", encoding="utf-8") as src:
                         with open(backup_path, "w", encoding="utf-8") as dst:
                             dst.write(src.read())
                     logger.info(f"📦 Backup created: {backup_path}")
+                    # Also update .json.bak as the latest backup for quick restore
+                    latest_path = self.config_path.with_suffix(".json.bak")
+                    with open(self.config_path, "r", encoding="utf-8") as src:
+                        with open(latest_path, "w", encoding="utf-8") as dst:
+                            dst.write(src.read())
                 except Exception as e:
                     logger.warning(f"⚠️ Backup failed: {e}")
 

@@ -5,7 +5,7 @@ from src.server.server.state import state
 from src.server.server.config_manager import load_config, save_config
 from src.server.server.extensions import socketio
 from src.database.db_manager import db_manager
-from src.server.server.lsl_service import extract_emg_features, extract_emg_features as extract_features_for_sensor
+from src.server.server.lsl_service import extract_emg_features
 from src.server.server.lsl_service import extract_eog_features
 from scipy import stats as scipy_stats
 

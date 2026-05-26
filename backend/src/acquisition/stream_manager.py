@@ -25,7 +25,6 @@ class StreamManagerApp:
         # Configuration
         self.port = 6000
         self.is_running = False
-        self.is_running = False
         self.server_socket_raw = None
         self.server_socket_proc = None
         self.server_socket_events = None

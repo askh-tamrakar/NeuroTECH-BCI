@@ -111,7 +111,7 @@ def load_config() -> dict:
 
 
 def save_config(config: dict) -> bool:
-    """Save config to disk (Splits into sensor_config.json and filter_config.json)."""
+    """Save config to disk (Splits into sensor_config.json, filter_config.json, and feature_config.json)."""
     try:
         if not isinstance(config, dict):
             raise ValueError("Config must be dict")
@@ -133,12 +133,10 @@ def save_config(config: dict) -> bool:
                 json.dump(feature_payload, f, indent=2)
             print(f"[ConfigManager] 💾 Features saved to {FEATURE_CONFIG_PATH}")
 
-        # 3. Save Sensor/Display Config to sensor_config.json (exclude modular sections)
-        sensor_payload = config.copy()
-        if 'filters' in sensor_payload:
-            del sensor_payload['filters']
-        if 'features' in sensor_payload:
-            del sensor_payload['features']
+        # 3. Save Sensor/Display Config to sensor_config.json
+        # Preserve all keys except the modular ones that go to separate files
+        modular_keys = {'filters', 'features'}
+        sensor_payload = {k: v for k, v in config.items() if k not in modular_keys}
         
         with open(CONFIG_PATH, 'w') as f:
             json.dump(sensor_payload, f, indent=2)

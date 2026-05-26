@@ -179,8 +179,8 @@ class FeatureRouter:
                     last_check_time = time.time()
 
                 # 2. Pull data from inlet
-                # Use short timeout to allow loop to cycle back to config check
-                sample, ts = self.inlet.pull_sample(timeout=0.1)
+                # Use adaptive timeout to avoid CPU spin when no data
+                sample, ts = self.inlet.pull_sample(timeout=0.5)
 
                 if sample:
                     # Get global active status

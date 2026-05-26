@@ -14,7 +14,10 @@ class EEGFrequencyDetector:
         self._load_config()
         
     def _load_config(self):
-        eeg_config = self.config.get("features", {}).get("EEG", {})
+        # Support both wrapped {"features": {"EEG": ...}} and direct {"EEG": ...} config structures
+        raw_eeg = self.config.get("EEG", {})
+        wrapped_eeg = self.config.get("features", {}).get("EEG", {})
+        eeg_config = wrapped_eeg if wrapped_eeg else raw_eeg
         
         # SSVEP Settings
         self.sampling_rate = self.config.get("sampling_rate", 512)

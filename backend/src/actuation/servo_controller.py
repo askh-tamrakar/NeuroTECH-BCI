@@ -75,9 +75,19 @@ class ServoController:
             
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.sock.settimeout(5)
-            # Add a small delay to ensure StreamManager is listening
-            time.sleep(2)
-            self.sock.connect((self.target_ip, self.target_port))
+            # Retry loop with exponential backoff instead of arbitrary sleep
+            max_retries = 10
+            for attempt in range(max_retries):
+                try:
+                    self.sock.connect((self.target_ip, self.target_port))
+                    break
+                except (ConnectionRefusedError, OSError) as e:
+                    if attempt < max_retries - 1:
+                        wait = min(0.5 * (2 ** attempt), 5.0)
+                        print(f"  Retry {attempt+1}/{max_retries} in {wait:.1f}s...")
+                        time.sleep(wait)
+                    else:
+                        raise e
             print("Connected to StreamManager Relay via TCP.")
             return True
         except Exception as e:

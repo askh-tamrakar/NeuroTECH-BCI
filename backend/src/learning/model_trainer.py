@@ -63,8 +63,8 @@ def get_feature_cols(sensor):
     if sensor == 'EMG':
         return ['rms', 'mav', 'var', 'wl', 'peak', 'range', 'iemg', 'entropy', 'energy', 'kurtosis', 'skewness', 'ssc', 'wamp']
     elif sensor == 'EOG':
-        # EOG features from BlinkExtractor
-        return ['duration_ms', 'max_amplitude', 'min_amplitude', 'peak_to_peak', 'variance', 'kurtosis', 'skewness', 'entropy', 'activity_sum']
+        # EOG features from BlinkExtractor (must match DB schema and EOGMLDetector)
+        return ['amplitude', 'duration_ms', 'rise_time_ms', 'fall_time_ms', 'asymmetry', 'peak_count', 'kurtosis', 'skewness']
     elif sensor == 'EEG':
          # EEG features from EEGExtractor
          return ['bp_delta', 'bp_theta', 'bp_alpha', 'bp_beta', 'bp_gamma', 'rel_delta', 'rel_theta', 'rel_alpha', 'rel_beta', 'rel_gamma', 'mean', 'std', 'max', 'min']

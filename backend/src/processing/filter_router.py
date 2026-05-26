@@ -169,7 +169,6 @@ class FilterRouter:
         self.config = load_config()
         self.sr = int(self.config.get("sampling_rate", DEFAULT_SR))
         self.inlet = None
-        self.inlet = None
         # self.outlet = None  # Replaced by stream_socket
         self.stream_socket = None
         self.stream_connected = False
@@ -460,6 +459,20 @@ class FilterRouter:
                                 except Exception as e:
                                     print(f"[Router] Stream push error: {e}")
                                     self.stream_connected = False
+                            elif not self.stream_connected:
+                                # Attempt reconnection every ~1 second (at 512Hz, every 512 samples)
+                                if sample_count % 512 == 0:
+                                    try:
+                                        self.stream_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                                        self.stream_socket.settimeout(2.0)
+                                        self.stream_socket.connect(('localhost', 6001))
+                                        self.stream_connected = True
+                                        print("[Router] ✅ Reconnected to Stream Manager (Processed)")
+                                    except Exception:
+                                        if self.stream_socket:
+                                            try: self.stream_socket.close()
+                                            except: pass
+                                        self.stream_socket = None
 
                             sample_count += 1
                             

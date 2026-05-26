@@ -15,34 +15,35 @@ const CONFIG_DEFAULTS = {
     },
     filters: {
         EMG: {
-            type: 'high_pass',
-            cutoff: 20.0,
-            order: 4,
             notch_enabled: true,
             notch_freq: 50,
+            notch_q: 30,
             bandpass_enabled: true,
-            bandpass_low: 20,
-            bandpass_high: 250
+            bandpass_high: 250,
+            bandpass_low: 70,
+            bandpass_order: 4,
+            envelope_enabled: true,
+            envelope_cutoff: 8,
+            envelope_order: 4
         },
         EOG: {
-            type: 'low_pass',
-            cutoff: 10.0,
-            order: 4
+            notch_enabled: true,
+            notch_freq: 50,
+            notch_q: 5,
+            bandpass_enabled: true,
+            bandpass_high: 10,
+            bandpass_low: 0.4,
+            bandpass_order: 1
         },
         EEG: {
-            filters: [
-                {
-                    type: 'notch',
-                    freq: 50.0,
-                    Q: 30
-                },
-                {
-                    type: 'bandpass',
-                    low: 0.5,
-                    high: 45.0,
-                    order: 4
-                }
-            ]
+            notch_enabled: true,
+            notch_freq: 50,
+            notch_q: 30,
+            bandpass_enabled: true,
+            bandpass_high: 100,
+            bandpass_low: 1,
+            bandpass_order: 4,
+            cutoff: 1
         }
     },
     display: {
@@ -78,8 +79,10 @@ export const ConfigService = {
                     delete config.channel_mapping.ch3;
                 }
 
-                // Ensure num_channels is up to date
-                config.num_channels = 2
+                // Keep num_channels from backend config if available, else derive from channel_mapping
+                if (!config.num_channels && config.channel_mapping) {
+                    config.num_channels = Object.keys(config.channel_mapping).length;
+                }
 
                 // -----------------------------------------------------------
 

@@ -104,7 +104,7 @@ def log_system(msg, icon=Theme.SYS):
 
 
 def runtime_prompt() -> str:
-    return "NeuroTECH Loded >>> "
+    return "NeuroTECH Loaded >>> "
 
 
 ALLOWLIST = [

@@ -29,11 +29,9 @@ class EOGMLDetector:
                     from src.utils.config import config_manager
                     model_name = config_manager.get_active_model('EOG')
                 except ImportError:
-                    # Fallback if config_manager not easily accessible (should not happen in router)
                     model_name = None
                     
             if not model_name:
-                # Fallback to default name
                 model_name = "eog_rf"
 
             # Locate model paths via centralized data directory
@@ -57,12 +55,13 @@ class EOGMLDetector:
                     if not scaler_path.exists(): missing.append(f"Scaler ({scaler_path.name})")
                     print(f"[EOGMLDetector] ❌ [ERROR] Model files missing for {model_name}: {', '.join(missing)}")
                     print(f"               Searched in: {models_dir}")
-                # We can choose to keep previous model or set to None
-                # self.model = None 
-                pass
+                self.model = None
+                self.scaler = None
                 
         except Exception as e:
             print(f"[EOGMLDetector] ❌ [FATAL] Error loading model {model_name}: {e}")
+            self.model = None
+            self.scaler = None
         
     def predict_class(self, features: dict) -> str | None:
         """

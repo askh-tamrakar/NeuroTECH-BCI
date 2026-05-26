@@ -129,6 +129,40 @@ class HIDController:
         except Exception as e:
             log.error(f"Action Error: {e}")
 
+    def _handle_blink_event(self, event_name, data):
+        """Handle blink events by mapping to keyboard/mouse actions from config."""
+        eog_features = self.config.get("features", {}).get("EOG", {})
+        blink_actions = eog_features.get("blink_actions", {})
+        action_cfg = blink_actions.get(event_name, {})
+        if action_cfg:
+            mode = action_cfg.get("controlType", "Keyboard")
+            val = action_cfg.get("mappedKey") or action_cfg.get("mappedMouse")
+            if mode and val:
+                self.execute_action(mode, val)
+            else:
+                log.debug(f"No action mapped for {event_name}")
+        else:
+            # Default: SingleBlink = Space, DoubleBlink not mapped
+            if event_name == "SingleBlink":
+                log.info("SingleBlink → default Space")
+                self.keyboard.press(Key.space)
+                time.sleep(0.1)
+                self.keyboard.release(Key.space)
+
+    def _handle_rps_event(self, event_name, data):
+        """Handle RPS gesture events by mapping to keyboard/mouse actions from config."""
+        rps_features = self.config.get("features", {}).get("RPS", {})
+        rps_actions = rps_features.get("gesture_actions", {})
+        action_cfg = rps_actions.get(event_name, {})
+        if action_cfg:
+            mode = action_cfg.get("controlType", "Keyboard")
+            val = action_cfg.get("mappedKey") or action_cfg.get("mappedMouse")
+            if mode and val:
+                self.execute_action(mode, val)
+            else:
+                log.debug(f"No action mapped for {event_name}")
+        # No default for RPS gestures — must be explicitly configured
+
     def run(self):
         self.running = True
         log.info("HID Controller Loop Starting...")
@@ -155,12 +189,23 @@ class HIDController:
                         data = json.loads(sample[0])
                         event_name = data.get("event")
                         print(f"Received Event: {event_name}")
-                        if event_name and (event_name.startswith("TARGET_") or event_name == "DETECTION"):
+                        if not event_name:
+                            continue
+                        # Handle SSVEP target events
+                        if event_name.startswith("TARGET_") or event_name == "DETECTION":
                             type, val = self._get_mapped_action(event_name)
                             if type and val:
                                 self.execute_action(type, val)
                             else:
                                 log.warning(f"No mapping found for {event_name}")
+                        # Handle blink events
+                        elif event_name in ("SingleBlink", "DoubleBlink"):
+                            self._handle_blink_event(event_name, data)
+                        # Handle RPS gesture events
+                        elif event_name in ("Rock", "Paper", "Scissors"):
+                            self._handle_rps_event(event_name, data)
+                        else:
+                            log.debug(f"Unhandled event type: {event_name}")
                     except Exception as e:
                         print(f"Event Parse Error: {e}")
                         
