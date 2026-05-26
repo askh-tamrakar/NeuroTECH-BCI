@@ -1,0 +1,374 @@
+import { fetchWithBase } from '../utils/runtimeConnection';
+
+/**
+ * @typedef {'EMG' | 'EOG' | 'EEG'} SensorType
+ */
+
+/**
+ * @typedef {'realtime' | 'recording'} CalibrationMode
+ */
+
+/**
+ * @typedef {Object} CalibrationWindow
+ * @property {string} id
+ * @property {SensorType} sensor
+ * @property {CalibrationMode} mode
+ * @property {number} startTime
+ * @property {number} endTime
+ * @property {string} label
+ * @property {string} [predictedLabel]
+ * @property {'correct' | 'incorrect' | 'pending'} status
+ * @property {boolean} [isMissedActual]
+ */
+
+/**
+ * @typedef {Object} SensorConfig
+ * @property {Object} channel_mapping
+ * @property {Object} features
+ * @property {Object} filters
+ * @property {number} sampling_rate
+ */
+
+/**
+ * Mock API service for calibration orchestration.
+ */
+export const CalibrationApi = {
+    /**
+     * Fetches the current sensor configuration.
+     * @returns {Promise<SensorConfig>}
+     */
+    async fetchSensorConfig() {
+        console.log('[CalibrationApi] Fetching sensor config...');
+        const response = await fetchWithBase('/api/config');
+        if (!response.ok) {
+            // Fallback or mock if backend is not ready
+            return {
+                channel_mapping: {},
+                features: {
+                    EMG: { Rock: { rms: [400, 800] }, Rest: { rms: [0, 200] } },
+                    EOG: { SingleBlink: { threshold: 0.5 }, DoubleBlink: { threshold: 1.0 } },
+                    EEG: { profiles: { Concentration: { power: 10 }, Relaxation: { power: 5 } } }
+                },
+                filters: {},
+                sampling_rate: 512
+            };
+        }
+        return response.json();
+    },
+
+    /**
+     * Saves the updated sensor configuration.
+     * @param {SensorConfig} updatedConfig 
+     */
+    async saveSensorConfig(updatedConfig) {
+        console.log('[CalibrationApi] Saving sensor config:', updatedConfig);
+        const response = await fetchWithBase('/api/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updatedConfig)
+        });
+        return response.ok;
+    },
+
+    /**
+     * Signals the backend to start a calibration session.
+     * @param {SensorType} sensorType 
+     * @param {CalibrationMode} mode 
+     * @param {string} classLabel 
+     * @param {number} windowDurationMs 
+     */
+    async startCalibration(sensorType, mode, classLabel, windowDurationMs, sessionName = null, extra = {}) {
+        console.log(`[CalibrationApi] Starting ${mode} calibration for ${sensorType} (${classLabel})`);
+        const response = await fetchWithBase('/api/calibration/start', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                sensor: sensorType,
+                mode,
+                class_label: classLabel,
+                window_duration_ms: windowDurationMs,
+                session_name: sessionName,
+                ...extra
+            })
+        });
+        if (!response.ok) {
+            const txt = await response.text();
+            throw new Error(`Failed to start calibration: ${response.status} ${txt}`);
+        }
+        return response.json();
+    },
+
+    /**
+     * Signals the backend to stop the current calibration session.
+     * @param {SensorType} sensorType 
+     */
+    async stopCalibration(sensorType) {
+        console.log(`[CalibrationApi] Stopping calibration for ${sensorType}`);
+        const response = await fetchWithBase('/api/calibration/stop', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sensor: sensorType })
+        });
+        if (!response.ok) {
+            const txt = await response.text();
+            throw new Error(`Failed to stop calibration: ${response.status} ${txt}`);
+        }
+        return response.json();
+    },
+
+    /**
+     * Triggers the calibration logic on a set of labeled windows.
+     * @param {SensorType} sensorType 
+     * @param {CalibrationWindow[]} labeledWindows 
+     * @returns {Promise<Object>} Proposed parameter updates
+     */
+    async runCalibration(sensorType, labeledWindows) {
+        console.log(`[CalibrationApi] Running calibration for ${sensorType} with ${labeledWindows.length} windows`);
+        // Legacy mock - use calibrateThresholds instead
+        return { recommendations: {}, summary: { total: 0, correct: 0, missed: 0 } };
+    },
+
+    /**
+     * Calibrate detection thresholds using all collected windows.
+     * @param {SensorType} sensorType
+     * @param {CalibrationWindow[]} windows - All collected windows with features
+     * @returns {Promise<Object>} Calibration results with updated thresholds and accuracy
+     */
+    async calibrateThresholds(sensorType, windows, sessionName = null) {
+        console.log(`[CalibrationApi] Calibrating thresholds for ${sensorType} with ${windows.length} windows`);
+
+        try {
+            // Prepare windows payload with action, features, status
+            const windowsPayload = windows.map(w => ({
+                action: w.label,
+                features: w.features || {},
+                status: w.status
+            }));
+
+            const response = await fetchWithBase('/api/calibrate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    sensor: sensorType,
+                    windows: windowsPayload,
+                    session_name: sessionName
+                })
+            });
+
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.error || 'Calibration failed');
+            }
+
+            const result = await response.json();
+            console.log('[CalibrationApi] Calibration result:', result);
+            return result;
+        } catch (err) {
+            console.error('[CalibrationApi] Calibration error:', err);
+            throw err;
+        }
+    },
+
+    /**
+     * Send a single window (samples) to the backend for saving and feature extraction.
+     * @param {string} sensorType
+     * @param {{action: string, channel?: number, samples: number[], timestamps?: number[]}} windowPayload
+     */
+    async sendWindow(sensorType, windowPayload, sessionName = null) {
+        try {
+            const body = {
+                sensor: sensorType,
+                action: windowPayload.action,
+                channel: windowPayload.channel,
+                samples: windowPayload.samples,
+                timestamps: windowPayload.timestamps,
+                metadata: windowPayload.metadata,
+                session_name: sessionName // Pass session name
+            };
+
+            const resp = await fetchWithBase('/api/window', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+
+            if (!resp.ok) {
+                const txt = await resp.text();
+                throw new Error(`Server error: ${resp.status} ${txt}`);
+            }
+
+            return resp.json();
+        } catch (err) {
+            console.error('[CalibrationApi] sendWindow error', err);
+            throw err;
+        }
+    },
+
+    /**
+     * Send a single window for PREDICTION only (Test Mode).
+     * @param {string} sensorType 
+     * @param {{action: string, samples: number[]}} windowPayload 
+     */
+    async sendPredictionWindow(sensorType, windowPayload) {
+        try {
+            const body = {
+                sensor: sensorType,
+                action: windowPayload.action, // Used as ground truth label or empty
+                label: windowPayload.action,
+                samples: windowPayload.samples
+            };
+
+            const resp = await fetchWithBase('/api/prediction/window/predict', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+
+            if (!resp.ok) {
+                const txt = await resp.text();
+                throw new Error(`Prediction error: ${resp.status} ${txt}`);
+            }
+
+            return resp.json();
+        } catch (err) {
+            console.error('[CalibrationApi] sendPredictionWindow error', err);
+            throw err;
+        }
+    },
+
+    /**
+     * Lists all available recordings from the server.
+     * @returns {Promise<Array<{name: string, size: number, created: number}>>}
+     */
+    async listRecordings() {
+        try {
+            const response = await fetchWithBase('/api/recordings');
+            if (!response.ok) throw new Error('Failed to list recordings');
+            return response.json();
+        } catch (error) {
+            console.error('[CalibrationApi] Error listing recordings:', error);
+            return [];
+        }
+    },
+
+    /**
+     * Fetches the content of a specific recording.
+     * @param {string} filename 
+     * @returns {Promise<Object>}
+     */
+    async getRecording(filename) {
+        try {
+            const response = await fetchWithBase(`/api/recordings/${encodeURIComponent(filename)}`);
+            console.log(response);
+            if (!response.ok) throw new Error('Failed to fetch recording');
+            return response.json();
+        } catch (error) {
+            console.error('[CalibrationApi] Error getting recording:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * Start EMG recording for a specific label.
+     * @param {number} label - 0=Rest, 1=Rock, 2=Paper, 3=Scissors
+     */
+    async startEmgRecording(label) {
+        try {
+            const response = await fetchWithBase('/api/emg/start', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ label })
+            });
+            return response.json();
+        } catch (error) {
+            console.error('[CalibrationApi] Error starting EMG recording:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * Stop EMG recording.
+     */
+    async stopEmgRecording() {
+        try {
+            const response = await fetchWithBase('/api/emg/stop', { method: 'POST' });
+            return response.json();
+        } catch (error) {
+            console.error('[CalibrationApi] Error stopping EMG recording:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * Get EMG recording status and counts.
+     */
+    async getEmgStatus() {
+        try {
+            const response = await fetchWithBase('/api/emg/status');
+            if (!response.ok) return null;
+            return response.json();
+        } catch (error) {
+            console.error('[CalibrationApi] Error getting EMG status:', error);
+            return null;
+        }
+    },
+
+    /**
+     * Toggle real-time prediction for a sensor.
+     * @param {string} sensorType 
+     * @param {boolean} isActive 
+     */
+    async togglePrediction(sensorType, isActive) {
+        sensorType = sensorType.toUpperCase();
+        const action = isActive ? 'start' : 'stop';
+        let endpoint = '';
+        if (sensorType === 'ALL') {
+            endpoint = `/api/detectors/predict/${action}`;
+        } else {
+            endpoint = `/api/${sensorType.toLowerCase()}/predict/${action}`;
+        }
+        
+        try {
+            const response = await fetchWithBase(endpoint, { method: 'POST' });
+            if (!response.ok) throw new Error('Failed to toggle prediction');
+            return await response.json();
+        } catch (error) {
+            console.error(`Error toggling prediction for ${sensorType}:`, error);
+            throw error;
+        }
+    },
+
+    /**
+     * Sends a manual override command to the servo claw.
+     * @param {string} action - The action string (e.g., "Rock", "Paper", "Scissors", "SingleBlink", "DoubleBlink")
+     * @returns {Promise<Object>} The API response
+     */
+    async sendManualClawCommand(action) {
+        try {
+            const response = await fetchWithBase('/api/servo/manual', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action })
+            });
+            if (!response.ok) throw new Error('Failed to send manual claw command');
+            return await response.json();
+        } catch (error) {
+            console.error('Error sending manual claw command:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * Get real-time prediction status for all detectors.
+     */
+    async getPredictionStatus() {
+        try {
+            const response = await fetchWithBase('/api/detectors/predict/status');
+            if (!response.ok) return null;
+            return response.json();
+        } catch (error) {
+            console.error('[CalibrationApi] Error getting prediction status:', error);
+            return null;
+        }
+    }
+};
