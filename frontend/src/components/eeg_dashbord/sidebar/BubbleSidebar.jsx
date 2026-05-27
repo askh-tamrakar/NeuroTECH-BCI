@@ -31,12 +31,6 @@ const BubbleSidebar = ({
                 </div>
             </div>
 
-            {/* Global Play/Stop */}
-            <div className="shrink-0 mb-1">
-                <button onClick={() => globalRunning ? containerRef.current?.stopGameHandler() : containerRef.current?.startGameHandler()} className={`w-full py-3.5 rounded-xl text-sm font-black uppercase tracking-[3px] transition-all flex items-center justify-center gap-3 border-2 shadow-glow ${globalRunning ? 'bg-red-500/10 border-red-500/40 text-red-500 hover:bg-red-500/20' : 'bg-green-500/10 border-green-500/40 text-green-500 hover:bg-green-500/20'}`}>
-                    {globalRunning ? <><Square size={20} /> END SESSION</> : <><Play size={20} /> NEW SESSION</>}
-                </button>
-            </div>
 
             {/* Neural Metrics */}
             <div className="bg-[var(--bg)]/50 border border-[var(--primary)]/20 rounded-xl p-3 shrink-0 flex flex-col gap-3">
@@ -96,16 +90,16 @@ const BubbleSidebar = ({
             {/* Live Band Analysis */}
             <div className="bg-[var(--bg)]/60 border border-[var(--primary)]/30 rounded-xl p-3 shrink-0 backdrop-blur-md pb-4 pt-4">
                 <h4 className="text-[10px] font-bold text-[var(--primary)]/80 uppercase tracking-[2px] mb-4 flex justify-between items-center">
-                    <span>EEG Bands (Live · Peak)</span>
+                    <span>EEG Bands (Live)</span>
                     <span className="w-1.5 h-1.5 rounded-full bg-[var(--primary)] animate-pulse shadow-glow" />
                 </h4>
                 <div className="flex flex-col gap-2">
                     {[
                         { id: 'delta', label: 'δ DELTA', color: '#4466ff' },
-                        { id: 'theta', label: 'θ THETA', color: 'var(--glow-violet)' },
-                        { id: 'alpha', label: 'α ALPHA', color: 'var(--glow-green)' },
-                        { id: 'beta', label: 'β BETA', color: 'var(--primary)' },
-                        { id: 'gamma', label: 'γ GAMMA', color: 'var(--glow-amber)' },
+                        { id: 'theta', label: 'θ THETA', color: '#8b5cf6' },
+                        { id: 'alpha', label: 'α ALPHA', color: '#10b981' },
+                        { id: 'beta', label: 'β BETA', color: 'var(--primary, #06b6d4)' },
+                        { id: 'gamma', label: 'γ GAMMA', color: '#f59e0b' },
                     ].map(b => (
                         <div key={b.id} className="flex items-center gap-2">
                             <span className="text-[10px] tracking-widest font-bold opacity-60 w-[48px] shrink-0" style={{ color: b.color }}>{b.label}</span>
@@ -113,7 +107,6 @@ const BubbleSidebar = ({
                                 <div id={`bf-${b.id}`} className="h-full rounded-full transition-all duration-150 shadow-md" style={{ background: b.color, width: '0%' }} />
                             </div>
                             <span id={`bv-${b.id}`} className="text-[10px] w-8 text-right font-black" style={{ color: b.color }}>0%</span>
-                            <span id={`pk-${b.id}`} className="text-[9px] w-6 text-right font-black text-amber-500/80">0%</span>
                         </div>
                     ))}
                 </div>
