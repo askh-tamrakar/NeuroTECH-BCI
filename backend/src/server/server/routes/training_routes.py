@@ -58,6 +58,20 @@ def _table_count(sensor: str, table_name: str) -> int:
     finally:
         conn.close()
 
+def _batch_count(sensor: str, table_name: str) -> int:
+    conn = db_manager.connect(sensor)
+    try:
+        cursor = conn.cursor()
+        cursor.execute(f"PRAGMA table_info({table_name})")
+        columns = [row[1] for row in cursor.fetchall()]
+        if 'batch_id' in columns:
+            count = conn.execute(f"SELECT COUNT(DISTINCT batch_id) FROM {table_name} WHERE batch_id IS NOT NULL").fetchone()[0]
+            if count > 0:
+                return int(count)
+        return int(conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0])
+    finally:
+        conn.close()
+
 
 def _model_handlers(sensor: str):
     sensor = sensor.upper()
@@ -164,7 +178,7 @@ def api_dataset_size(sensor):
         return jsonify({
             "sensor": sensor,
             "table_name": table_name,
-            "total": _table_count(sensor, table_name),
+            "total": _batch_count(sensor, table_name),
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -305,7 +319,7 @@ def api_get_tree():
 
 @training_bp.route('/api/window', methods=['POST'])
 def api_save_window():
-    """Accept a recorded window, save as CSV/DB, compute features and update config thresholds."""
+    """Accept a recorded window, split into 5 overlapping sub-windows with batch_id, save to DB."""
     try:
         from src.calibration.calibration_manager import calibration_manager
         
@@ -321,17 +335,8 @@ def api_save_window():
         if sensor is None or action is None or samples is None:
             return jsonify({"error": "Missing required fields: sensor, action, samples"}), 400
 
-        # Compute features
         sr = state.config.get('sampling_rate', 512) if state.config else 512
-        features = extract_features_wrapper(sensor, samples, sr)
 
-        ts = time.time()
-
-        # Load config and update thresholds
-        cfg = state.config or load_config()
-        cfg_features = cfg.setdefault('features', {})
-        sensor_features = cfg_features.setdefault(sensor, {})
-        
         # Session handling
         session_name = payload.get('session_name', 'Manual_Windows')
         if not session_name: session_name = 'Manual_Windows'
@@ -349,19 +354,85 @@ def api_save_window():
         if label_int == -1 and action.isdigit():
              label_int = int(action)
         if label_int == -1: label_int = 0
-        
-        if sensor.upper() == 'EMG':
-            db_manager.insert_window(features, label_int, session_id=str(int(ts)), table_name=table_name)
-            # Also insert into the global evaluation table (skip if merged session)
-            if "merge" not in table_name.lower():
-                db_manager.insert_window(features, label_int, session_id=str(int(ts)), table_name="emg_windows")
-        elif sensor.upper() == 'EOG':
-            db_manager.insert_eog_window(features, label_int, session_id=str(int(ts)), table_name=table_name)
-            # Also insert into the global evaluation table (skip if merged session)
-            if "merge" not in table_name.lower():
-                db_manager.insert_eog_window(features, label_int, session_id=str(int(ts)), table_name="eog_windows")
+
+        # Ensure batch_id column exists
+        from src.server.server.routes.session_routes import _ensure_batch_id_column
+        _ensure_batch_id_column(table_name)
+        if "merge" not in table_name.lower():
+            _ensure_batch_id_column("emg_windows")
+
+        ts = time.time()
+        session_id = str(int(ts))
+        saved_count = 0
+
+        if sensor.upper() == 'EMG' and len(samples) >= 256:
+            # === EMG: Split parent window into 5 overlapping sub-windows ===
+            raw_data = np.array(samples, dtype=float)
+            
+            # Determine parent window size and sub-window size from samples
+            parent_size = len(raw_data)
+            # Sub-window = 60% of parent (e.g., parent=1500ms → sub=900ms)
+            sub_window_ms = 900
+            parent_window_ms = 1500
+            
+            # If the actual sample count differs from 1500ms@sr, scale proportionally
+            expected_parent = int(sr * parent_window_ms / 1000)
+            if abs(parent_size - expected_parent) > 10:
+                # Adjust sub-window size proportionally based on actual samples
+                sub_window_ms = int(parent_window_ms * 0.6)
+            
+            sub_size = int(sr * sub_window_ms / 1000)
+            num_sub_windows = 5
+            sub_step = max(1, (parent_size - sub_size) // (num_sub_windows - 1)) if num_sub_windows > 1 else 0
+            
+            # Generate batch_id for this parent window
+            batch_id = f"{abs(hash(str(ts) + str(label_int) + str(saved_count))):06x}"[:6].zfill(6)
+            
+            for sub_idx in range(num_sub_windows):
+                sub_start = sub_idx * sub_step
+                sub_end = sub_start + sub_size
+                if sub_end > parent_size:
+                    sub_end = parent_size
+                    sub_start = max(0, sub_end - sub_size)
+                sub_window = raw_data[sub_start:sub_end]
+                
+                if len(sub_window) < sub_size * 0.7:
+                    continue
+                
+                feats = extract_features_wrapper(sensor, sub_window.tolist(), sr)
+                feats['timestamp'] = ts + sub_idx * 0.001
+                
+                if db_manager.insert_window(feats, label_int, session_id=session_id, table_name=table_name, batch_id=batch_id):
+                    saved_count += 1
+                    if "merge" not in table_name.lower():
+                        db_manager.insert_window(feats, label_int, session_id=session_id, table_name="emg_windows", batch_id=batch_id)
+            
+            print(f"[TrainingRoutes] Split parent ({parent_size} samples) → {saved_count} sub-windows, batch={batch_id}")
+            
+            # Auto-calibration: use the FIRST sub-window's features for threshold updates
+            if saved_count > 0:
+                # Re-extract from full window for config update (legacy behavior)
+                features = extract_features_wrapper(sensor, samples, sr)
+            else:
+                features = {}
+        else:
+            # === Non-EMG or too few samples: save as single window (legacy) ===
+            features = extract_features_wrapper(sensor, samples, sr)
+            
+            if sensor.upper() == 'EMG':
+                db_manager.insert_window(features, label_int, session_id=session_id, table_name=table_name)
+                if "merge" not in table_name.lower():
+                    db_manager.insert_window(features, label_int, session_id=session_id, table_name="emg_windows")
+            elif sensor.upper() == 'EOG':
+                db_manager.insert_eog_window(features, label_int, session_id=str(int(ts)), table_name=table_name)
+                if "merge" not in table_name.lower():
+                    db_manager.insert_eog_window(features, label_int, session_id=str(int(ts)), table_name="eog_windows")
+            saved_count = 1
 
         # Update Config Logic (Auto-Calibration on fly)
+        cfg = state.config or load_config()
+        cfg_features = cfg.setdefault('features', {})
+        sensor_features = cfg_features.setdefault(sensor, {})
         action_entry = sensor_features.setdefault(action, {})
         updated = {}
 
@@ -382,8 +453,6 @@ def api_save_window():
                 action_entry[k] = [new_lo, new_hi]
                 updated[k] = [new_lo, new_hi]
 
-        # Disable saving config to disk on EVERY window to prevent Continuous Reload loops
-        # save_success = save_config(cfg)
         save_success = True
         
         # --- PREDICTION / DETECTION LOGIC ---

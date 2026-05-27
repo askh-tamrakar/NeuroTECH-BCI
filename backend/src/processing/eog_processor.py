@@ -6,7 +6,7 @@ EOG filter processor (Passive)
 """
 
 import numpy as np
-from scipy.signal import butter, lfilter, lfilter_zi
+from scipy.signal import butter, lfilter, lfilter_zi, sosfilt, sosfilt_zi
 
 class EOGFilterProcessor:
     def __init__(self, config: dict, sr: int = 512, channel_key: str = ""):
@@ -17,9 +17,10 @@ class EOGFilterProcessor:
         self._load_params()
         self._design_filters()
         
-        self.zi_lp = lfilter_zi(self.b_lp, self.a_lp) * 0.0
+        self.zi_hp = sosfilt_zi(self.sos_hp) * 0.0 if getattr(self, 'sos_hp', None) is not None else None
+        self.zi_lp = sosfilt_zi(self.sos_lp) * 0.0 if getattr(self, 'sos_lp', None) is not None else None
         self.zi_notch = lfilter_zi(self.b_notch, self.a_notch) * 0.0 if self.notch_enabled else None
-        self.zi_bp = lfilter_zi(self.b_bp, self.a_bp) * 0.0 if self.bp_enabled else None
+        self.zi_bp = sosfilt_zi(self.sos_bp) * 0.0 if self.bp_enabled and getattr(self, 'sos_bp', None) is not None else None
 
     def _load_params(self):
         # 1. Default Global Config
@@ -52,16 +53,19 @@ class EOGFilterProcessor:
     def _design_filters(self):
         nyq = self.sr / 2.0
         
-        # 1. High Pass
+        # 1. High Pass (Use SOS for stability at low cutoffs)
         if self.hp_cutoff > 0:
             wn_hp = self.hp_cutoff / nyq
-            self.b_hp, self.a_hp = butter(self.hp_order, wn_hp, btype="high", analog=False)
+            self.sos_hp = butter(self.hp_order, wn_hp, btype="high", analog=False, output='sos')
         else:
-            self.b_hp, self.a_hp = [1.0], [1.0]
+            self.sos_hp = None
 
         # 2. Low Pass
-        wn_lp = self.lp_cutoff / nyq
-        self.b_lp, self.a_lp = butter(self.lp_order, wn_lp, btype="low", analog=False)
+        if self.lp_cutoff > 0 and self.lp_cutoff < nyq:
+            wn_lp = self.lp_cutoff / nyq
+            self.sos_lp = butter(self.lp_order, wn_lp, btype="low", analog=False, output='sos')
+        else:
+            self.sos_lp = None
 
         # 3. Notch
         if self.notch_enabled:
@@ -73,9 +77,9 @@ class EOGFilterProcessor:
             low = self.bp_low / nyq
             high = self.bp_high / nyq
             if low <= 0 or high >= 1:
-                self.b_bp, self.a_bp = [1.0, 0.0], [1.0, 0.0]  # Safe fallback for lfilter_zi
+                self.sos_bp = None
             else:
-                self.b_bp, self.a_bp = butter(self.bp_order, [low, high], btype="bandpass", analog=False)
+                self.sos_bp = butter(self.bp_order, [low, high], btype="bandpass", analog=False, output='sos')
 
     def update_config(self, config: dict, sr: int):
         """Update filter parameters if config changed."""
@@ -90,37 +94,43 @@ class EOGFilterProcessor:
         if old_state != new_state:
             print(f"[EOG] Config changed -> Redesign filters")
             self._design_filters()
-            # Reset ALL filter states (including zi_hp)
-            self.zi_hp = lfilter_zi(self.b_hp, self.a_hp) * 0.0
-            self.zi_lp = lfilter_zi(self.b_lp, self.a_lp) * 0.0
+            # Reset ALL filter states
+            self.zi_hp = sosfilt_zi(self.sos_hp) * 0.0 if getattr(self, 'sos_hp', None) is not None else None
+            self.zi_lp = sosfilt_zi(self.sos_lp) * 0.0 if getattr(self, 'sos_lp', None) is not None else None
             self.zi_notch = lfilter_zi(self.b_notch, self.a_notch) * 0.0 if self.notch_enabled else None
-            self.zi_bp = lfilter_zi(self.b_bp, self.a_bp) * 0.0 if self.bp_enabled else None
+            self.zi_bp = sosfilt_zi(self.sos_bp) * 0.0 if self.bp_enabled and getattr(self, 'sos_bp', None) is not None else None
 
     def process_sample(self, val: float) -> float:
         """Process a single sample value."""
-        # 1. High Pass (Removes DC Drift)
-        if not hasattr(self, 'zi_hp'): 
-            self.zi_hp = lfilter_zi(self.b_hp, self.a_hp) * 0.0
+        # Note: In most processing, if bandpass is enabled, it handles both low and high cutoffs.
+        # However, we apply all enabled stages sequentially as per configuration.
         
-        out, self.zi_hp = lfilter(self.b_hp, self.a_hp, [val], zi=self.zi_hp)
-        out = out[0]
+        out = val
+        
+        # 1. High Pass (Removes DC Drift)
+        if getattr(self, 'sos_hp', None) is not None:
+            if not hasattr(self, 'zi_hp') or self.zi_hp is None:
+                self.zi_hp = sosfilt_zi(self.sos_hp) * 0.0
+            filtered, self.zi_hp = sosfilt(self.sos_hp, [out], zi=self.zi_hp)
+            out = filtered[0]
 
         # 2. Low Pass (Standard EOG)
-        if not hasattr(self, 'zi_lp'): 
-            self.zi_lp = lfilter_zi(self.b_lp, self.a_lp) * 0.0
-            
-        out, self.zi_lp = lfilter(self.b_lp, self.a_lp, [out], zi=self.zi_lp)
-        out = out[0]
+        if getattr(self, 'sos_lp', None) is not None:
+            if not hasattr(self, 'zi_lp') or self.zi_lp is None:
+                self.zi_lp = sosfilt_zi(self.sos_lp) * 0.0
+            filtered, self.zi_lp = sosfilt(self.sos_lp, [out], zi=self.zi_lp)
+            out = filtered[0]
         
         # 3. Notch
-        if self.notch_enabled and self.zi_notch is not None:
-             filtered, self.zi_notch = lfilter(self.b_notch, self.a_notch, [out], zi=self.zi_notch)
-             out = filtered[0]
+        if self.notch_enabled and getattr(self, 'zi_notch', None) is not None:
+            filtered, self.zi_notch = lfilter(self.b_notch, self.a_notch, [out], zi=self.zi_notch)
+            out = filtered[0]
              
         # 4. Bandpass
-        if self.bp_enabled and getattr(self, 'zi_bp', None) is not None:
-             filtered, self.zi_bp = lfilter(self.b_bp, self.a_bp, [out], zi=self.zi_bp)
-             out = filtered[0]
+        if self.bp_enabled and getattr(self, 'sos_bp', None) is not None:
+            if not hasattr(self, 'zi_bp') or self.zi_bp is None:
+                self.zi_bp = sosfilt_zi(self.sos_bp) * 0.0
+            filtered, self.zi_bp = sosfilt(self.sos_bp, [out], zi=self.zi_bp)
+            out = filtered[0]
 
         return float(out)
-

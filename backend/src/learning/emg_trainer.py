@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, confusion_matrix
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, GroupShuffleSplit, GroupKFold
 from sklearn.preprocessing import StandardScaler
 
 from src.database.db_manager import db_manager
@@ -183,14 +183,20 @@ def _prepare_dataframe(sensor: str, table_name: str):
 
 def _split_train_and_test(df: pd.DataFrame, test_ratio: float):
     indices = np.arange(len(df))
-    stratify = df['label'] if df['label'].nunique() > 1 else None
-    train_idx, test_idx = train_test_split(
-        indices,
-        test_size=test_ratio,
-        random_state=42,
-        shuffle=True,
-        stratify=stratify,
-    )
+    if 'batch_id' in df.columns and df['batch_id'].notna().any():
+        gss = GroupShuffleSplit(n_splits=1, test_size=test_ratio, random_state=42)
+        # Handle cases where batch_id might be missing for some rows by filling them
+        groups = df['batch_id'].fillna('unknown_batch')
+        train_idx, test_idx = next(gss.split(df, groups=groups))
+    else:
+        stratify = df['label'] if df['label'].nunique() > 1 else None
+        train_idx, test_idx = train_test_split(
+            indices,
+            test_size=test_ratio,
+            random_state=42,
+            shuffle=True,
+            stratify=stratify,
+        )
     return df.iloc[train_idx].copy(), df.iloc[test_idx].copy()
 
 
@@ -199,8 +205,21 @@ def _build_folds(train_df: pd.DataFrame, resolved_folds: int):
         all_indices = np.arange(len(train_df))
         return [(all_indices, np.array([], dtype=int))]
     row_indices = np.arange(len(train_df))
-    stratify = train_df['label'] if train_df['label'].nunique() > 1 else None
     folds = []
+    
+    if 'batch_id' in train_df.columns and train_df['batch_id'].notna().any():
+        groups = train_df['batch_id'].fillna('unknown_batch')
+        n_groups = train_df['batch_id'].nunique()
+        actual_folds = min(resolved_folds, n_groups) if n_groups > 1 else 1
+        
+        if actual_folds > 1:
+            gkf = GroupKFold(n_splits=actual_folds)
+            for train_idx, val_idx in gkf.split(train_df, groups=groups):
+                folds.append((train_idx, val_idx))
+            return folds
+
+    # Fallback if no batch_id or not enough groups
+    stratify = train_df['label'] if train_df['label'].nunique() > 1 else None
     for fold_seed in range(resolved_folds):
         train_idx, val_idx = train_test_split(
             row_indices,
@@ -435,8 +454,8 @@ def _fit_random_forest(sensor: str, train_df: pd.DataFrame, test_df: pd.DataFram
                 hyperparameters["selected_hyperparameters"],
                 float(train_accuracy),
                 float(val_accuracy),
-                int(len(fold_train)),
-                int(len(fold_val)),
+                int(fold_train['batch_id'].nunique()) if 'batch_id' in fold_train.columns and fold_train['batch_id'].notna().any() else int(len(fold_train)),
+                int(fold_val['batch_id'].nunique()) if 'batch_id' in fold_val.columns and fold_val['batch_id'].notna().any() else int(len(fold_val)),
             )
             _save_json(rejected_paths["meta"], {
                 **history_item,
@@ -478,6 +497,12 @@ def _fit_random_forest(sensor: str, train_df: pd.DataFrame, test_df: pd.DataFram
     confusion = confusion_matrix(y_test, y_pred, labels=std_labels).tolist()
     feature_importances = dict(zip(feature_cols, best["model"].feature_importances_.tolist()))
 
+    all_df = pd.concat([train_df, test_df], axis=0)
+    has_batch = 'batch_id' in all_df.columns and all_df['batch_id'].notna().any()
+    n_samples_total = int(all_df['batch_id'].nunique()) if has_batch else int(len(all_df))
+    n_train_samples = int(train_df['batch_id'].nunique()) if has_batch else int(len(train_df))
+    n_test_samples = int(test_df['batch_id'].nunique()) if has_batch else int(len(test_df))
+
     metadata = {
         "sensor": sensor,
         "model_name": model_name,
@@ -486,9 +511,9 @@ def _fit_random_forest(sensor: str, train_df: pd.DataFrame, test_df: pd.DataFram
         "candidate_index": best["history_item"]["candidate_index"],
         "fold_index": best["history_item"]["fold_index"],
         "classifier": "Random Forest",
-        "session_name": _extract_session_names(pd.concat([train_df, test_df], axis=0), table_name)[0] if _extract_session_names(pd.concat([train_df, test_df], axis=0), table_name) else table_name,
-        "session_names": _extract_session_names(pd.concat([train_df, test_df], axis=0), table_name),
-        "n_samples": int(len(train_df) + len(test_df)),
+        "session_name": _extract_session_names(all_df, table_name)[0] if _extract_session_names(all_df, table_name) else table_name,
+        "session_names": _extract_session_names(all_df, table_name),
+        "n_samples": n_samples_total,
         "train_accuracy": best["train_accuracy"],
         "validation_accuracy": best["validation_accuracy"],
         "test_accuracy": test_accuracy,
@@ -497,10 +522,10 @@ def _fit_random_forest(sensor: str, train_df: pd.DataFrame, test_df: pd.DataFram
         "fold_std": float(np.std([item["validation_accuracy"] for item in history])) if history else 0.0,
         "fold_min": float(min(item["validation_accuracy"] for item in history)) if history else best["validation_accuracy"],
         "split_summary": {
-            "total_samples": int(len(train_df) + len(test_df)),
-            "train_samples": int(round((resolved_split["k_folds"] - 1) * len(train_df) / resolved_split["k_folds"])) if len(history) > 1 else history[0]["n_train_samples"],
-            "val_samples": int(round(len(train_df) / resolved_split["k_folds"])) if len(history) > 1 else history[0]["n_validation_samples"],
-            "test_samples": int(len(test_df)),
+            "total_samples": n_samples_total,
+            "train_samples": int(round((resolved_split["k_folds"] - 1) * n_train_samples / resolved_split["k_folds"])) if len(history) > 1 else history[0]["n_train_samples"],
+            "val_samples": int(round(n_train_samples / resolved_split["k_folds"])) if len(history) > 1 else history[0]["n_validation_samples"],
+            "test_samples": n_test_samples,
         },
         "train_ratio": resolved_split["train_ratio"],
         "val_ratio": resolved_split["val_ratio"],

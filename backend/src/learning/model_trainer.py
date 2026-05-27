@@ -142,12 +142,44 @@ def train_model(sensor, n_estimators=100, max_depth=None, min_impurity_decrease=
     if len(y.unique()) < 2:
          return {"error": "Need at least 2 different classes to train (e.g. Rest vs Action)."}
 
-    # Test/Train Split
-    try:
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, stratify=y, random_state=42)
-    except ValueError:
-        # Fallback if specific class has too few samples
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state=42)
+    # --- Test/Train Split by batch_id (if available) ---
+    if 'batch_id' in df.columns and df['batch_id'].notna().any():
+        print(f"[{sensor}] Splitting train/test by batch_id (not sample-level)")
+        unique_batches = df['batch_id'].dropna().unique()
+        n_batches = len(unique_batches)
+        
+        if n_batches >= 5:
+            # Shuffle batch IDs deterministically
+            rng = np.random.RandomState(42)
+            shuffled = rng.permutation(unique_batches)
+            split_idx = int(n_batches * (1 - test_size))
+            train_batches = set(shuffled[:split_idx])
+            test_batches = set(shuffled[split_idx:])
+            
+            train_mask = df['batch_id'].isin(train_batches)
+            test_mask = df['batch_id'].isin(test_batches)
+            
+            X_train = X[train_mask]
+            X_test = X[test_mask]
+            y_train = y[train_mask]
+            y_test = y[test_mask]
+            
+            print(f"[{sensor}] Batch split: {len(train_batches)} train batches ({len(X_train)} windows), "
+                  f"{len(test_batches)} test batches ({len(X_test)} windows)")
+        else:
+            # Too few batches — fall back to sample-level split
+            print(f"[{sensor}] Only {n_batches} batches — falling back to sample-level split")
+            try:
+                X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, stratify=y, random_state=42)
+            except ValueError:
+                X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state=42)
+    else:
+        # No batch_id column — traditional random split
+        print(f"[{sensor}] No batch_id column — using sample-level random split")
+        try:
+            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, stratify=y, random_state=42)
+        except ValueError:
+            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state=42)
 
     # Scale Features
     scaler = StandardScaler()

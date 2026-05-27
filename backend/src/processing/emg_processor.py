@@ -6,7 +6,7 @@ EMG filter processor (Passive)
 """
 
 import numpy as np
-from scipy.signal import butter, lfilter, lfilter_zi
+from scipy.signal import butter, lfilter, lfilter_zi, sosfilt, sosfilt_zi
 
 class EMGFilterProcessor:
     def __init__(self, config: dict, sr: int = 512, channel_key: str = None):
@@ -18,10 +18,10 @@ class EMGFilterProcessor:
         self._design_filters()
         
         # Initialize state
-        self.zi_hp = lfilter_zi(self.b_hp, self.a_hp) * 0.0
+        self.zi_hp = sosfilt_zi(self.sos_hp) * 0.0 if getattr(self, 'sos_hp', None) is not None else None
         self.zi_notch = lfilter_zi(self.b_notch, self.a_notch) * 0.0 if (self.notch_enabled and getattr(self, 'a_notch', None) is not None) else None
-        self.zi_bp = lfilter_zi(self.b_bp, self.a_bp) * 0.0 if (self.bp_enabled and getattr(self, 'a_bp', None) is not None) else None
-        self.zi_env = lfilter_zi(self.b_env, self.a_env) * 0.0 if self.envelope_enabled else None
+        self.zi_bp = sosfilt_zi(self.sos_bp) * 0.0 if (self.bp_enabled and getattr(self, 'sos_bp', None) is not None) else None
+        self.zi_env = sosfilt_zi(self.sos_env) * 0.0 if self.envelope_enabled and getattr(self, 'sos_env', None) is not None else None
 
     def _load_params(self):
         # 1. Default Global Config
@@ -57,15 +57,17 @@ class EMGFilterProcessor:
         nyq = self.sr / 2.0
         
         # 1. High Pass
-        wn_hp = self.hp_cutoff / nyq
-        self.b_hp, self.a_hp = butter(self.hp_order, wn_hp, btype="high", analog=False)
+        if self.hp_cutoff > 0:
+            wn_hp = self.hp_cutoff / nyq
+            self.sos_hp = butter(self.hp_order, wn_hp, btype="high", analog=False, output='sos')
+        else:
+            self.sos_hp = None
 
         # 2. Notch
         if self.notch_enabled and self.notch_freq > 0:
             from scipy.signal import iirnotch
             self.b_notch, self.a_notch = iirnotch(self.notch_freq, self.notch_q, fs=self.sr)
         else:
-             # If enabled but invalid freq, disable it implicitly for this run
              self.b_notch, self.a_notch = None, None
 
         # 3. Bandpass
@@ -73,21 +75,22 @@ class EMGFilterProcessor:
             low = self.bp_low / nyq
             high = self.bp_high / nyq
             if low <= 0 or high >= 1:
-                # Fallback if invalid (a must have len>=2 for lfilter_zi)
-                self.b_bp, self.a_bp = [1.0, 0.0], [1.0, 0.0] 
+                self.sos_bp = None
             else:
-                self.b_bp, self.a_bp = butter(self.bp_order, [low, high], btype="bandpass", analog=False)
+                self.sos_bp = butter(self.bp_order, [low, high], btype="bandpass", analog=False, output='sos')
+        else:
+            self.sos_bp = None
 
         # 4. Envelope (Low Pass)
         if self.envelope_enabled:
             wn_env = self.envelope_cutoff / nyq
-            self.b_env, self.a_env = butter(self.envelope_order, wn_env, btype="low", analog=False)
+            self.sos_env = butter(self.envelope_order, wn_env, btype="low", analog=False, output='sos')
         else:
-            self.b_env, self.a_env = [1.0, 0.0], [1.0, 0.0]
+            self.sos_env = None
 
     def update_config(self, config: dict, sr: int):
         """Update filter parameters if config changed."""
-        old_state = (self.hp_cutoff, self.notch_enabled, self.notch_freq, self.bp_enabled, self.bp_low, self.bp_high)
+        old_state = (self.hp_cutoff, self.notch_enabled, self.notch_freq, self.bp_enabled, self.bp_low, self.bp_high, self.envelope_enabled, self.envelope_cutoff)
         
         self.config = config
         self.sr = int(sr)
@@ -101,41 +104,53 @@ class EMGFilterProcessor:
             
             # Reset states
             try:
-                self.zi_hp = lfilter_zi(self.b_hp, self.a_hp) * 0.0
+                self.zi_hp = sosfilt_zi(self.sos_hp) * 0.0 if getattr(self, 'sos_hp', None) is not None else None
                 self.zi_notch = lfilter_zi(self.b_notch, self.a_notch) * 0.0 if (self.notch_enabled and getattr(self, 'a_notch', None) is not None) else None
-                self.zi_bp = lfilter_zi(self.b_bp, self.a_bp) * 0.0 if (self.bp_enabled and getattr(self, 'a_bp', None) is not None) else None
-                self.zi_env = lfilter_zi(self.b_env, self.a_env) * 0.0 if self.envelope_enabled else None
+                self.zi_bp = sosfilt_zi(self.sos_bp) * 0.0 if (self.bp_enabled and getattr(self, 'sos_bp', None) is not None) else None
+                self.zi_env = sosfilt_zi(self.sos_env) * 0.0 if self.envelope_enabled and getattr(self, 'sos_env', None) is not None else None
             except Exception as e:
                 print(f"[EMG] ⚠️ Filter state reset error: {e}")
-                # Fallback to zeros (no steady state init)
-                self.zi_hp = np.zeros(max(len(self.a_hp), len(self.b_hp)) - 1)
-                if self.notch_enabled: self.zi_notch = np.zeros(max(len(self.a_notch), len(self.b_notch)) - 1)
-                if self.bp_enabled: self.zi_bp = np.zeros(max(len(self.a_bp), len(self.b_bp)) - 1)
-                if self.envelope_enabled: self.zi_env = np.zeros(max(len(self.a_env), len(self.b_env)) - 1)
+                self.zi_hp = None
+                self.zi_notch = None
+                self.zi_bp = None
+                self.zi_env = None
 
     def process_sample(self, val: float) -> float:
-        """Process a single sample value."""
+        """Process a single sample value through HP -> Notch -> Bandpass only.
+        Returns the filtered (oscillating) EMG signal - suitable for graphing and feature extraction.
+        Envelope is NOT applied here; use get_envelope() separately if needed."""
+        out = val
+        
         # 1. High Pass
-        out, self.zi_hp = lfilter(self.b_hp, self.a_hp, [val], zi=self.zi_hp)
-        out = out[0]
+        if getattr(self, 'sos_hp', None) is not None:
+            if getattr(self, 'zi_hp', None) is None:
+                self.zi_hp = sosfilt_zi(self.sos_hp) * 0.0
+            filtered, self.zi_hp = sosfilt(self.sos_hp, [out], zi=self.zi_hp)
+            out = filtered[0]
 
         # 2. Notch
-        if self.notch_enabled and self.zi_notch is not None:
+        if self.notch_enabled and getattr(self, 'zi_notch', None) is not None:
             filtered, self.zi_notch = lfilter(self.b_notch, self.a_notch, [out], zi=self.zi_notch)
             out = filtered[0]
             
         # 3. Bandpass
-        if self.bp_enabled and self.zi_bp is not None:
-             filtered, self.zi_bp = lfilter(self.b_bp, self.a_bp, [out], zi=self.zi_bp)
-             out = filtered[0]
-
-        # 4. Envelope
-        if self.envelope_enabled and self.zi_env is not None:
-            # Rectify
-            rectified = abs(out)
-            # Low Pass
-            enveloped, self.zi_env = lfilter(self.b_env, self.a_env, [rectified], zi=self.zi_env)
-            out = enveloped[0]
+        if self.bp_enabled and getattr(self, 'sos_bp', None) is not None:
+            if getattr(self, 'zi_bp', None) is None:
+                self.zi_bp = sosfilt_zi(self.sos_bp) * 0.0
+            filtered, self.zi_bp = sosfilt(self.sos_bp, [out], zi=self.zi_bp)
+            out = filtered[0]
 
         return float(out)
 
+    def get_envelope(self, filtered_val: float) -> float | None:
+        """Apply envelope (rectify + low-pass) to an already-filtered sample.
+        Returns the enveloped value, or None if envelope is disabled."""
+        if not self.envelope_enabled or getattr(self, 'sos_env', None) is None:
+            return None
+        rectified = abs(filtered_val)
+        
+        if getattr(self, 'zi_env', None) is None:
+            self.zi_env = sosfilt_zi(self.sos_env) * 0.0
+            
+        enveloped, self.zi_env = sosfilt(self.sos_env, [rectified], zi=self.zi_env)
+        return float(enveloped[0])

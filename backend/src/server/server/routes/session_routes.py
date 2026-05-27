@@ -109,6 +109,17 @@ def api_rename_session(sensor_type, session_name):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@session_bp.route('/api/sessions/<sensor_type>/<session_name>/clear', methods=['DELETE'])
+def api_clear_session_data(sensor_type, session_name):
+    """Clear all rows from a session table without deleting the table."""
+    try:
+        result = db_manager.clear_table(sensor_type, session_name)
+        if "error" in result:
+            return jsonify({"error": result["error"]}), 500
+        return jsonify({"status": "cleared", "session": session_name})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @session_bp.route('/api/sessions/<sensor_type>/merge_multiple', methods=['POST'])
 def api_merge_multiple_sessions(sensor_type):
     """Merge multiple sessions into a new session."""
@@ -149,28 +160,34 @@ def api_emg_stop():
     # Capture table name BEFORE stopping
     target_table = state.session.current_table_name or "emg_windows"
     
+    # Accept window_size_ms from request (default 900ms)
+    data = request.get_json(silent=True) or {}
+    configured_window_ms = int(data.get('window_size_ms', 900))
+    
     state.session.is_recording = False # Stop adding samples
-    # We allow processing the buffer now
-    # Process and save collected data to DB
+    
     try:
         session_id = str(uuid.uuid4())
         data_store = state.session.data_store['EMG']
         
         saved_count = 0
         
+        # Ensure batch_id column exists (migration for older tables)
+        _ensure_batch_id_column(target_table)
+        if "merge" not in target_table.lower():
+            _ensure_batch_id_column("emg_windows")
+        
         for label_str, samples in data_store.items():
-            # Paranoid check: ensure we don't do 'if samples'
             if samples is None:
                 continue
-            if len(samples) < 64:  # Relaxed from 100 to 64 (~0.125s) just to capture *something*
+            if len(samples) < 64:
                 continue
                 
-            # Convert label string to int if possible (for DB efficiency/schema)
+            # Convert label string to int
             label_map = {'Rest': 0, 'Rock': 1, 'Paper': 2, 'Scissors': 3}
             label_int = label_map.get(label_str, -1)
             
             if label_int == -1:
-                # 1. Try case-insensitive matching
                 label_map_lower = {k.lower(): v for k, v in label_map.items()}
                 label_int = label_map_lower.get(label_str.lower(), -1)
                 
@@ -187,31 +204,55 @@ def api_emg_stop():
             
             # Windowing parameters
             sr = state.sr or 512
-            window_size = int(sr * 0.5)  # 0.5s window
-            step_size = int(window_size * 0.5) # 50% overlap
             
-            # Slice and dice
+            # Parent window = always 1500ms, produces exactly 5 sub-windows of configured size
+            parent_window_ms = 1500
+            sub_window_ms = configured_window_ms
+            
+            parent_size = int(sr * parent_window_ms / 1000)
+            sub_size = int(sr * sub_window_ms / 1000)
+            num_sub_windows = 5
+            sub_step = (parent_size - sub_size) // (num_sub_windows - 1) if num_sub_windows > 1 else 0
+            
+            step_size = int(parent_size * 0.5)  # 50% overlap between parent windows
+            
             num_samples = len(raw_data)
-            if num_samples < window_size:
+            if num_samples < parent_size:
                 continue
+            
+            print(f"[Session_Routes] 📊 Windowing: parent={parent_window_ms}ms ({parent_size} samples), "
+                  f"sub={sub_window_ms}ms ({sub_size} samples), {num_sub_windows} sub-windows/batch")
+            
+            for i in range(0, num_samples - parent_size, step_size):
+                parent_window = raw_data[i : i + parent_size]
                 
-            for i in range(0, num_samples - window_size, step_size):
-                window = raw_data[i : i + window_size]
+                # Generate 6-digit hex batch ID for this parent window
+                batch_id = f"{abs(hash(str(session_id) + str(label_int) + str(i))):06x}"[:6].zfill(6)
                 
-                # Extract features
-                feats = extract_emg_features(window, sr)
-                feats['timestamp'] = time.time()
-                
-                # Save to DB (Specific Table)
-                if db_manager.insert_window(feats, label_int, session_id, table_name=target_table):
-                    saved_count += 1
-                    # Also append to global table if not a merged session
-                    if "merge" not in target_table.lower():
-                        db_manager.insert_window(feats, label_int, session_id, table_name="emg_windows")
+                # Split parent into 5 overlapping sub-windows
+                for sub_idx in range(num_sub_windows):
+                    sub_start = sub_idx * sub_step
+                    sub_end = sub_start + sub_size
+                    if sub_end > len(parent_window):
+                        sub_end = len(parent_window)
+                        sub_start = max(0, sub_end - sub_size)
+                    sub_window = parent_window[sub_start:sub_end]
+                    
+                    if len(sub_window) < sub_size * 0.8:
+                        continue  # Skip tiny tail windows
+                    
+                    # Extract features from sub-window
+                    feats = extract_emg_features(sub_window, sr)
+                    feats['timestamp'] = time.time()
+                    
+                    # Save to DB with batch_id
+                    if db_manager.insert_window(feats, label_int, session_id, table_name=target_table, batch_id=batch_id):
+                        saved_count += 1
+                        if "merge" not in target_table.lower():
+                            db_manager.insert_window(feats, label_int, session_id, table_name="emg_windows", batch_id=batch_id)
                     
         print(f"[Session_Routes] 💾 Saved {saved_count} EMG windows to {target_table}")
         
-        # Finally reset session state
         state.session.reset_recording_state()
         
     except Exception as e:
@@ -221,6 +262,22 @@ def api_emg_stop():
         return jsonify({"status": "stopped", "error": str(e), "traceback": tb_str, "saved_windows": 0})
 
     return jsonify({"status": "stopped", "saved_windows": saved_count if 'saved_count' in locals() else 0})
+
+
+def _ensure_batch_id_column(table_name: str):
+    """Add batch_id column to existing EMG tables that lack it (idempotent)."""
+    try:
+        conn = db_manager.connect('EMG')
+        cursor = conn.cursor()
+        cursor.execute(f"PRAGMA table_info({table_name})")
+        columns = [row[1] for row in cursor.fetchall()]
+        if 'batch_id' not in columns:
+            cursor.execute(f"ALTER TABLE {table_name} ADD COLUMN batch_id TEXT")
+            conn.commit()
+            print(f"[DB] ✅ Added batch_id column to {table_name}")
+        conn.close()
+    except Exception as e:
+        print(f"[DB] ⚠️ Could not add batch_id to {table_name}: {e}")
 
 @session_bp.route('/api/emg/status', methods=['GET'])
 def api_emg_status():

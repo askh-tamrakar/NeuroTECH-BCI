@@ -110,10 +110,6 @@ const RPSGame = ({ wsEvent }) => {
     // Models
     const [models, setModels] = useState([]);
     const [selectedModel, setSelectedModel] = useState('');
-    const [lastDetectionMeta, setLastDetectionMeta] = useState(null);
-    const [feedbackPending, setFeedbackPending] = useState(false);
-    const [showCorrectionPicker, setShowCorrectionPicker] = useState(false);
-    const [feedbackSaving, setFeedbackSaving] = useState(false);
 
     // Stats
     const [score, setScore] = useState({ player: 0, computer: 0 });
@@ -170,14 +166,11 @@ const RPSGame = ({ wsEvent }) => {
         clearResetCountdown();
         setPlayerMove(null);
         setResult(null);
-        setLastDetectionMeta(null);
-        setFeedbackPending(false);
-        setShowCorrectionPicker(false);
         processingRef.current = false;
         pickComputerMove();
 
         if (!manualMode) {
-            setGameState('waiting_for_rest');
+            setGameState('waiting');
             // Keep prediction running for auto-restart
         } else {
             setGameState('waiting');
@@ -266,6 +259,7 @@ const RPSGame = ({ wsEvent }) => {
     // Event Log State
     const [eventLogs, setEventLogs] = useState([]);
     const [currentPrediction, setCurrentPrediction] = useState('REST');
+    const [backendDetectionState, setBackendDetectionState] = useState('waiting');
 
     // -------------------------------------------------------------
     // EVENT LOGGING (runs ONLY when wsEvent changes to prevent double logs)
@@ -276,6 +270,9 @@ const RPSGame = ({ wsEvent }) => {
         // Unified Real-time prediction handling
         if (wsEvent.event === 'emg_prediction' || wsEvent.type === 'emg_prediction') {
             setCurrentPrediction(String(wsEvent.label || 'REST').toUpperCase());
+            if (wsEvent.detection_state) {
+                setBackendDetectionState(wsEvent.detection_state);
+            }
             return;
         }
 
@@ -302,14 +299,6 @@ const RPSGame = ({ wsEvent }) => {
         const eventName = String(wsEvent.event || wsEvent.type || '').toUpperCase();
         const livePrediction = String(wsEvent.label || '').toUpperCase();
 
-        // Check for Auto-Restart Logic (Waiting for Rest)
-        if (gameState === 'waiting_for_rest') {
-            if (eventName === 'REST' || (eventName === 'EMG_PREDICTION' && livePrediction === 'REST')) {
-                setGameState('waiting');
-            }
-            return;
-        }
-
         // Check if we are in waiting state
         if (gameState !== 'waiting' || processingRef.current || !eventName || eventName.trim() === '') return;
 
@@ -328,14 +317,6 @@ const RPSGame = ({ wsEvent }) => {
         setPlayerMove(pMove);
         setComputerMove(cMove); // Ensure it's set in state for rendering
         soundHandler.playRPSMove(); // Play sound on move selection
-        setLastDetectionMeta(detectedEvent ? {
-            prediction: pMove,
-            confidence: detectedEvent.confidence || 0,
-            features: detectedEvent.features || null
-        } : null);
-        const hasFeedback = Boolean(!manualMode && detectedEvent?.features);
-        setFeedbackPending(hasFeedback);
-        setShowCorrectionPicker(false);
 
         // Log manual gesture for UI
         if (manualMode) {
@@ -357,9 +338,7 @@ const RPSGame = ({ wsEvent }) => {
 
         setGameState('revealed');
 
-        if (!hasFeedback) {
-            startResetCountdown();
-        }
+        startResetCountdown();
     };
 
     // Manual UI helpers
@@ -368,41 +347,6 @@ const RPSGame = ({ wsEvent }) => {
         if (gameState !== 'waiting' || processingRef.current || matchWinner) return;
         handlePlayerMove(move);
     };
-
-    const submitFeedback = async (correctedLabel = null) => {
-        if (!lastDetectionMeta?.features) {
-            setFeedbackPending(false);
-            setShowCorrectionPicker(false);
-            return;
-        }
-
-        try {
-            setFeedbackSaving(true);
-            const response = await fetch(buildApiUrl('/api/emg/feedback'), {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    prediction: lastDetectionMeta.prediction,
-                    corrected_label: correctedLabel || lastDetectionMeta.prediction,
-                    confidence: lastDetectionMeta.confidence,
-                    features: lastDetectionMeta.features,
-                })
-            });
-            if (!response.ok) {
-                throw new Error(`EMG feedback failed (${response.status})`);
-            }
-        } catch (err) {
-            console.error("Failed to save EMG feedback:", err);
-        } finally {
-            setFeedbackSaving(false);
-            setFeedbackPending(false);
-            setShowCorrectionPicker(false);
-            if (!matchWinner) {
-                resetGame();
-            }
-        }
-    };
-
     const toggleManualMode = () => {
         // switching modes won't reset the current round, but will ignore WS events when manual
         setManualMode((v) => !v);
@@ -512,10 +456,20 @@ const RPSGame = ({ wsEvent }) => {
         setGameState('waiting');
         pickComputerMove();
         soundHandler.playRPSStart(); // Play sound on game start
-        // Enable prediction only if not in manual mode
-        if (!manualMode) {
-            togglePrediction(true);
+        
+        // Ensure manual mode is disabled so sensor input works
+        setManualMode(false);
+        
+        // Load selected model to ensure backend is fully prepared
+        if (selectedModel) {
+            fetch(buildApiUrl('/api/models/emg/load'), {
+                method: 'POST',
+                body: JSON.stringify({ model_name: selectedModel }),
+                headers: { 'Content-Type': 'application/json' }
+            }).catch(e => console.error("Error loading model on play:", e));
         }
+        
+        togglePrediction(true);
     };
 
     return (
@@ -549,13 +503,10 @@ const RPSGame = ({ wsEvent }) => {
 
                         {gameState === 'waiting' && !manualMode && (
                             <span className="pulse text-lg md:text-xl font-bold">
-                                {currentPrediction === 'REST' || currentPrediction === 'UNKNOWN'
-                                    ? "Waiting for Gesture..."
-                                    : "Recording..."}
+                                {backendDetectionState === 'recording'
+                                    ? "Recording..."
+                                    : "Waiting for Gesture..."}
                             </span>
-                        )}
-                        {gameState === 'waiting_for_rest' && !manualMode && (
-                            <span className="animate-pulse text-yellow-400 text-lg md:text-xl font-bold">Release Gesture...</span>
                         )}
                         {gameState === 'waiting' && manualMode && (
                             <span className="pulse text-lg md:text-xl font-bold">Manual Mode: press <strong className="text-primary font-black">R</strong>/<strong className="text-primary font-black">P</strong>/<strong className="text-primary font-black">S</strong></span>
@@ -581,45 +532,6 @@ const RPSGame = ({ wsEvent }) => {
                     <div className="w-1/3 flex justify-end">
                         <div className="flex flex-col items-end gap-2">
                             <div className="rps-title text-right m-0 whitespace-nowrap">NEURO RPS</div>
-                            {feedbackPending && lastDetectionMeta && (
-                                <div className="w-full min-w-[260px] max-w-[360px] flex flex-col items-end gap-3 bg-surface/80 border border-border rounded-2xl px-4 py-3 shadow-xl animate-in fade-in duration-300">
-                                    <div className="text-xs font-bold uppercase tracking-widest text-muted">Detection Feedback</div>
-                                    <div className="text-sm text-text text-right">
-                                        Detected: <span className="font-black text-primary">{lastDetectionMeta.prediction}</span>
-                                    </div>
-                                    {!showCorrectionPicker ? (
-                                        <div className="flex gap-2">
-                                            <button
-                                                onClick={() => submitFeedback()}
-                                                disabled={feedbackSaving}
-                                                className="px-4 py-2 rounded-xl bg-green-500/10 border border-green-500/30 text-green-400 font-bold hover:bg-green-500/20 transition-colors"
-                                            >
-                                                YES
-                                            </button>
-                                            <button
-                                                onClick={() => setShowCorrectionPicker(true)}
-                                                disabled={feedbackSaving}
-                                                className="px-4 py-2 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 font-bold hover:bg-red-500/20 transition-colors"
-                                            >
-                                                NO
-                                            </button>
-                                        </div>
-                                    ) : (
-                                        <div className="flex flex-wrap items-center justify-end gap-2">
-                                            {MOVES.map((move) => (
-                                                <button
-                                                    key={move}
-                                                    onClick={() => submitFeedback(move)}
-                                                    disabled={feedbackSaving}
-                                                    className="px-3 py-2 rounded-xl bg-primary/10 border border-primary/30 text-primary font-bold hover:bg-primary/20 transition-colors"
-                                                >
-                                                    {move}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-                            )}
                         </div>
                     </div>
                 </div>

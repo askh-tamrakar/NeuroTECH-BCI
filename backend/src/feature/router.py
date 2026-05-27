@@ -213,11 +213,17 @@ class FeatureRouter:
                                 
                                 # Process based on sensor type
                                 if sensor_type == "EMG":
-                                    instant_label, confirmed_label = detection_result
+                                    if detection_result and len(detection_result) == 3:
+                                        instant_label, confirmed_label, detection_state = detection_result
+                                    elif detection_result and len(detection_result) == 2:
+                                        instant_label, confirmed_label = detection_result
+                                        detection_state = "waiting"
+                                    else:
+                                        instant_label, confirmed_label, detection_state = "Rest", None, "waiting"
                                     
                                     # 1. Emit Real-time Prediction (Instant Feedback)
                                     # We emit this every frame for the UI
-                                    self._emit_event("emg_prediction", ch_idx, sensor_type, features, ts, extra_data={"label": instant_label})
+                                    self._emit_event("emg_prediction", ch_idx, sensor_type, features, ts, extra_data={"label": instant_label, "detection_state": detection_state})
                                     
                                     # 2. Emit Confirmed Gesture (Game Move)
                                     if confirmed_label:

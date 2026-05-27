@@ -119,19 +119,22 @@ class RPSDetector:
                 self._last_err_time = time.time()
             return "Error", 0.0
 
-    def detect(self, features: dict) -> tuple[str, str | None]:
+    def detect(self, features: dict) -> tuple[str, str | None, str]:
         """
         Stateful detection logic:
         - If Rest -> Resolve any pending candidates.
         - If Gesture -> Add to candidates.
-        Returns: (InstantLabel, ConfirmedLabel or None)
+        Returns: (InstantLabel, ConfirmedLabel or None, DetectionState)
         """
         label, confidence = self.predict_instant(features)
         
         # Determine if this instant frame is "Active" (valid gesture) or "Rest"
-        is_confident = confidence > self.confidence_threshold
-        is_active = is_confident and label in ['Rock', 'Paper', 'Scissors']
-        is_rest = is_confident and label == 'Rest'
+        # Ignoring confidence threshold as per user request to rely purely on predicted label
+        is_active = label in ['Rock', 'Paper', 'Scissors']
+        is_rest = label == 'Rest' or label == 'Unknown'
+        
+        # Default state
+        detection_state = "waiting"
         
         # State Machine
         if is_active:
@@ -140,29 +143,31 @@ class RPSDetector:
                 self.candidates = []
             
             self.candidates.append(label)
-            return label, None # Don't emit confirmed move yet, but return instant label
+            detection_state = "recording"
+            return label, None, detection_state # Don't emit confirmed move yet, but return instant label and state
             
         elif is_rest:
             if self.collecting_candidates:
                 # End of a gesture, resolve it!
                 if self.candidates:
-                    counts = Counter(self.candidates)
-                    most_common = counts.most_common(1)[0][0]
+                    valid_candidates = [c for c in self.candidates if c in ['Rock', 'Paper', 'Scissors']]
+                    if valid_candidates:
+                        counts = Counter(valid_candidates)
+                        most_common = counts.most_common(1)[0][0]
+                    else:
+                        most_common = "Rest"
                     
                     self.collecting_candidates = False
                     self.candidates = []
-                    # Return (InstantLabel, ConfirmedLabel)
-                    return label, most_common
+                    # Return (InstantLabel, ConfirmedLabel, DetectionState)
+                    return label, most_common, "waiting"
                 else:
                     self.collecting_candidates = False
-                    return label, "Rest"
+                    return label, "Rest", "waiting"
             else:
-                return label, "Rest"
+                return label, "Rest", "waiting"
                 
-        else:
-            return label, None
-            
-        return None
+        return label, None, "waiting"
 
     def update_config(self, config: dict):
         self.config = config

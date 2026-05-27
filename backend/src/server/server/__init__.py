@@ -17,6 +17,7 @@ from src.server.server.routes.recording_routes import recording_bp
 from src.server.server.routes.training_routes import training_bp
 from src.server.server.routes.prediction_routes import prediction_bp
 from src.server.server.routes.eeg_routes import eeg_bp
+from src.server.server.routes.calibration_routes import calibration_bp
 
 # Define Project Root for template folder
 # src/web/server/__init__.py -> ../../../ = root or ../../../../ depending on structure
@@ -88,6 +89,7 @@ def create_app():
     app.register_blueprint(training_bp)
     app.register_blueprint(prediction_bp)
     app.register_blueprint(eeg_bp)
+    app.register_blueprint(calibration_bp)
     
     # Index Route
     @app.route('/')

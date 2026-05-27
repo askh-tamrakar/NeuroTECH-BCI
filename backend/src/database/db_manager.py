@@ -67,10 +67,22 @@ class DatabaseManager:
                 label INTEGER NOT NULL,
                 session_id TEXT,
                 timestamp REAL,
+                batch_id TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
         cursor.execute(f'CREATE INDEX IF NOT EXISTS idx_{table_name}_label ON {table_name}(label)')
+        # Migrate existing tables: add batch_id column if missing, then create index
+        self._migrate_add_column(cursor, table_name, 'batch_id', 'TEXT')
+        cursor.execute(f'CREATE INDEX IF NOT EXISTS idx_{table_name}_batch ON {table_name}(batch_id)')
+
+    @staticmethod
+    def _migrate_add_column(cursor, table_name: str, column_name: str, column_type: str):
+        """Add a column to an existing table if it doesn't already exist (idempotent)."""
+        cursor.execute(f"PRAGMA table_info({table_name})")
+        columns = [row[1] for row in cursor.fetchall()]
+        if column_name not in columns:
+            cursor.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}")
 
     def _create_eog_table(self, cursor, table_name):
         cursor.execute(f'''
@@ -318,10 +330,24 @@ class DatabaseManager:
 
             where_sql = f" WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
 
+            # Check if table has batch_id
+            cursor.execute(f"PRAGMA table_info({session_name})")
+            columns = [col[1] for col in cursor.fetchall()]
+            
             # Get total count after filters
-            count_query = f"SELECT COUNT(*) FROM {session_name}{where_sql}"
-            cursor.execute(count_query, filter_params)
-            total_count = cursor.fetchone()[0]
+            if 'batch_id' in columns:
+                count_query = f"SELECT COUNT(DISTINCT batch_id) FROM {session_name}{where_sql} AND batch_id IS NOT NULL" if where_sql else f"SELECT COUNT(DISTINCT batch_id) FROM {session_name} WHERE batch_id IS NOT NULL"
+                cursor.execute(count_query, filter_params)
+                total_count = cursor.fetchone()[0]
+                if total_count == 0:
+                    # Fallback if no batch_ids are populated
+                    count_query = f"SELECT COUNT(*) FROM {session_name}{where_sql}"
+                    cursor.execute(count_query, filter_params)
+                    total_count = cursor.fetchone()[0]
+            else:
+                count_query = f"SELECT COUNT(*) FROM {session_name}{where_sql}"
+                cursor.execute(count_query, filter_params)
+                total_count = cursor.fetchone()[0]
 
             # Fetch filtered and sorted data
             query = f"SELECT * FROM {session_name}{where_sql} ORDER BY {sort_column} {sort_order}"
@@ -392,22 +418,22 @@ class DatabaseManager:
             return False
 
     # --- EMG Methods ---
-    def insert_window(self, features: Dict[str, float], label: int, session_id: str = None, table_name: str = "emg_windows") -> bool:
+    def insert_window(self, features: Dict[str, float], label: int, session_id: str = None, table_name: str = "emg_windows", batch_id: str = None) -> bool:
         try:
             conn = self.connect('EMG')
             cursor = conn.cursor()
             cursor.execute(f'''
                 INSERT INTO {table_name} (
                     rms, mav, var, wl, peak, range, iemg, entropy, energy, kurtosis, skewness, ssc, wamp,
-                    label, session_id, timestamp
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    label, session_id, timestamp, batch_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 features.get('rms', 0), features.get('mav', 0),
                 features.get('var', 0), features.get('wl', 0), features.get('peak', 0),
                 features.get('range', 0), features.get('iemg', 0), features.get('entropy', 0),
                 features.get('energy', 0), features.get('kurtosis', 0), features.get('skewness', 0),
                 features.get('ssc', 0), features.get('wamp', 0),
-                label, session_id, features.get('timestamp', 0)
+                label, session_id, features.get('timestamp', 0), batch_id
             ))
             conn.commit()
             conn.close()
