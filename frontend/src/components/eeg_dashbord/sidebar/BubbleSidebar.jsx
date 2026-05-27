@@ -10,6 +10,8 @@ const BubbleSidebar = ({
     globalRunning,
     containerRef,
     onBackToMenu,
+    betaThreshold,
+    setBetaThreshold
 }) => {
     const focusDash = 201 - (Math.min(100, focusScore || 0) / 100) * 201;
     const stressDash = 201 - (Math.min(100, stressScore || 0) / 100) * 201;
@@ -72,6 +74,23 @@ const BubbleSidebar = ({
                 <div className="text-[9px] text-center text-[var(--muted)]/60 tracking-wider">
                     {stressScore > 70 ? 'High stress = more bubbles' : focusScore > 60 ? 'High focus = auto-popping' : 'Relax or focus to play'}
                 </div>
+            </div>
+
+            {/* Beta Threshold Control */}
+            <div className="bg-[var(--bg)]/50 border border-[var(--primary)]/20 rounded-xl p-3 shrink-0 flex flex-col gap-3">
+                <h4 className="text-[10px] font-bold text-[var(--muted)]/80 uppercase tracking-widest flex justify-between items-center">
+                    <span>Beta Threshold</span>
+                    <span className="text-[var(--primary)] font-black">{betaThreshold ? betaThreshold.toFixed(2) : '0.40'}</span>
+                </h4>
+                <input
+                    type="range"
+                    min="0.1"
+                    max="0.9"
+                    step="0.05"
+                    value={betaThreshold || 0.4}
+                    onChange={(e) => setBetaThreshold && setBetaThreshold(parseFloat(e.target.value))}
+                    className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer accent-[var(--primary)]"
+                />
             </div>
 
             {/* Live Band Analysis */}
