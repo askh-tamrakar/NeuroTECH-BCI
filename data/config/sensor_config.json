@@ -1,12 +1,6 @@
 {
   "active_models": {
-    "EEG": "Neo",
-    "EMG": "Venus",
-    "EOG": "Dino"
-  },
-  "adc_settings": {
-    "resolution_bits": 14,
-    "vref_mv": 3300
+    "EEG": "test"
   },
   "channel_mapping": {
     "ch0": {
@@ -17,18 +11,7 @@
     "ch1": {
       "enabled": true,
       "label": "UNUSED",
-      "sensor": "EOG"
+      "sensor": "EEG"
     }
-  },
-  "display": {
-    "scannerX": 0,
-    "showGrid": true,
-    "timeWindowMs": 10000
-  },
-  "num_channels": 2,
-  "sampling_rate": 512,
-  "ui_settings": {
-    "showGrid": true,
-    "timeWindowMs": 10000
   }
 }

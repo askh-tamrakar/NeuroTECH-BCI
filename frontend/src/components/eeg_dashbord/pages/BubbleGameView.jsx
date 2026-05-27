@@ -294,6 +294,29 @@ const BubbleGameView = ({ result, isConnected, onBackToMenu }) => {
             </div>
           </div>
 
+          {/* Game Control Panel */}
+          <div className="game-control-panel">
+            <div className="slider-container">
+              <span className="slider-label">Beta Threshold:</span>
+              <input 
+                type="range" 
+                min="0.1" max="0.9" step="0.05" 
+                value={betaThreshold} 
+                onChange={(e) => setBetaThreshold(parseFloat(e.target.value))} 
+              />
+              <span className="value-display">{betaThreshold.toFixed(2)}</span>
+            </div>
+            <div className="button-group">
+              <button disabled={isConnected || globalRunning}>Connect Device</button>
+              <button disabled={!isConnected}>Disconnect</button>
+              <button disabled={!isConnected || globalRunning} onClick={() => containerRef.current?.startGameHandler()}>Start Stream</button>
+              <button disabled={!globalRunning} onClick={() => containerRef.current?.stopGameHandler()}>Stop Stream</button>
+            </div>
+            <div className="status">
+              {!isConnected ? "Not connected" : (!globalRunning ? "Connected but not streaming" : "Connected and streaming data")}
+            </div>
+          </div>
+
           {/* Game Over */}
           <div id="gameOverScreen" className={`${showGameOver ? 'flex' : 'hidden'} absolute inset-0 z-[200] flex-col items-center justify-center bg-[var(--bg)]/90 backdrop-blur-xl pointer-events-auto`}>
             <h1 className="font-display text-5xl md:text-6xl font-black tracking-widest text-white drop-shadow-[0_0_30px_var(--primary)] mb-8 text-center leading-tight">SESSION<br />ENDED</h1>

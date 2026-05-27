@@ -26,9 +26,20 @@
 }
 
 @keyframes floatUpFade {
-  0% { transform: translateY(0) scale(0.6); opacity: 0; }
-  10% { transform: translateY(-5px) scale(1.1); opacity: 1; }
-  100% { transform: translateY(-40px) scale(0.9); opacity: 0; }
+  0% {
+    transform: translateY(0) scale(0.6);
+    opacity: 0;
+  }
+
+  10% {
+    transform: translateY(-5px) scale(1.1);
+    opacity: 1;
+  }
+
+  100% {
+    transform: translateY(-40px) scale(0.9);
+    opacity: 0;
+  }
 }
 
 /* Wave Canvas container tweaks */
@@ -48,10 +59,20 @@
   border-radius: 50%;
   display: inline-block;
 }
-.dot.simulating { background: #f59e0b; box-shadow: 0 0 8px #f59e0b; animation: pulse 2s infinite; }
-.dot.connected { background: #22c55e; box-shadow: 0 0 8px #22c55e; animation: pulse 2s infinite; }
 
-/* ── UNDERWATER BALLOON STYLES ────────────────//////
+.dot.simulating {
+  background: #f59e0b;
+  box-shadow: 0 0 8px #f59e0b;
+  animation: pulse 2s infinite;
+}
+
+.dot.connected {
+  background: #22c55e;
+  box-shadow: 0 0 8px #22c55e;
+  animation: pulse 2s infinite;
+}
+
+/* ── UNDERWATER BALLOON STYLES ──────────────── */
 
 .underwater-bg {
   background: linear-gradient(to bottom, #012438, #051d35);
@@ -70,14 +91,19 @@
   height: 100%;
   opacity: 0.6;
   z-index: 0;
-  background-image: radial-gradient(circle at center, rgba(255,255,255,0.03) 0%, transparent 8%);
+  background-image: radial-gradient(circle at center, rgba(255, 255, 255, 0.03) 0%, transparent 8%);
   background-size: 100px 100px;
   animation: bubbleFlow 20s linear infinite;
 }
 
 @keyframes bubbleFlow {
-  0% { background-position: 0 0; }
-  100% { background-position: 0 1000px; }
+  0% {
+    background-position: 0 0;
+  }
+
+  100% {
+    background-position: 0 1000px;
+  }
 }
 
 /* Underwater light rays */
@@ -92,8 +118,13 @@
 }
 
 @keyframes rayMove {
-  0% { transform: rotate(20deg) translateY(-100%); }
-  100% { transform: rotate(20deg) translateY(100%); }
+  0% {
+    transform: rotate(20deg) translateY(-100%);
+  }
+
+  100% {
+    transform: rotate(20deg) translateY(100%);
+  }
 }
 
 .balloon-container {
@@ -148,10 +179,23 @@
 }
 
 @keyframes floatBalloon {
-  0%, 100% { transform: translateY(0) rotate(0deg); }
-  25% { transform: translateY(-10px) rotate(2deg); }
-  50% { transform: translateY(-15px) rotate(0deg); }
-  75% { transform: translateY(-10px) rotate(-2deg); }
+
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+
+  25% {
+    transform: translateY(-10px) rotate(2deg);
+  }
+
+  50% {
+    transform: translateY(-15px) rotate(0deg);
+  }
+
+  75% {
+    transform: translateY(-10px) rotate(-2deg);
+  }
 }
 
 .focus-bubble {
@@ -166,7 +210,114 @@
 }
 
 @keyframes bubbleRise {
-  0% { opacity: 0.7; transform: scale(0); }
-  20% { opacity: 0.9; transform: scale(1); }
-  100% { opacity: 0; transform: translate(var(--tx), var(--ty)) scale(1.2); }
+  0% {
+    opacity: 0.7;
+    transform: scale(0);
+  }
+
+  20% {
+    opacity: 0.9;
+    transform: scale(1);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate(var(--tx), var(--ty)) scale(1.2);
+  }
+}
+
+/* ── CONTROL PANEL STYLES ──────────────── */
+
+.game-control-panel {
+  position: absolute;
+  bottom: 20px;
+  left: 600px;
+  background: rgba(0, 50, 100, 0.3);
+  padding: 15px;
+  border-radius: 10px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(5px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  border: 1px solid rgba(0, 200, 255, 0.3);
+  z-index: 200;
+}
+
+.game-control-panel .slider-container {
+  display: flex;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.game-control-panel .slider-label {
+  color: white;
+  margin-right: 10px;
+  width: 120px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  font-size: 14px;
+  font-weight: bold;
+}
+
+.game-control-panel input[type="range"] {
+  -webkit-appearance: none;
+  width: 200px;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  outline: none;
+}
+
+.game-control-panel input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 20px;
+  height: 20px;
+  background: #00b4ff;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 0 5px rgba(0, 180, 255, 0.8);
+}
+
+.game-control-panel .value-display {
+  color: white;
+  margin-left: 10px;
+  min-width: 40px;
+  text-align: right;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+.game-control-panel .button-group {
+  display: flex;
+  gap: 10px;
+}
+
+.game-control-panel button {
+  background: rgba(0, 150, 255, 0.3);
+  border: 1px solid rgba(0, 200, 255, 0.3);
+  color: white;
+  padding: 10px 20px;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: all 0.3s;
+  font-weight: bold;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  font-size: 12px;
+}
+
+.game-control-panel button:hover:not(:disabled) {
+  background: rgba(0, 180, 255, 0.5);
+  box-shadow: 0 0 10px rgba(0, 180, 255, 0.5);
+}
+
+.game-control-panel button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: rgba(100, 100, 100, 0.3);
+}
+
+.game-control-panel .status {
+  color: white;
+  margin-top: 10px;
+  font-size: 12px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
 }
