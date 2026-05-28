@@ -467,7 +467,7 @@ def _fit_random_forest(sensor: str, train_df: pd.DataFrame, test_df: pd.DataFram
             if progress_callback:
                 progress_callback({
                     "status": "running",
-                    "progress": min(0.95, completed_runs / total_runs),
+                    "progress": completed_runs / total_runs,
                     "candidate_index": candidate_index,
                     "total_candidates": total_candidates,
                     "fold_index": fold_number,
@@ -550,7 +550,7 @@ def _fit_random_forest(sensor: str, train_df: pd.DataFrame, test_df: pd.DataFram
     if progress_callback:
         progress_callback({
             "status": "finalizing",
-            "progress": 0.98,
+            "progress": 1.0,
             "candidate_index": best["history_item"]["candidate_index"],
             "total_candidates": total_candidates,
             "fold_index": best["history_item"]["fold_index"],
@@ -714,4 +714,9 @@ def get_model_tree_structure(sensor='EMG', model_name=None, tree_index=0):
     if not hasattr(model, "estimators_"):
         return {"error": "Tree structure is not available for this model type"}
     tree_index = max(0, min(int(tree_index), len(model.estimators_) - 1))
-    return tree_to_json(model.estimators_[tree_index], feature_cols)
+    return {
+        "status": "success",
+        "tree_index": tree_index,
+        "total_trees": len(model.estimators_),
+        "tree_structure": tree_to_json(model.estimators_[tree_index], feature_cols)
+    }

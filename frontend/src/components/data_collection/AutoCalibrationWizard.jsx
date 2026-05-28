@@ -1,15 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Target, CheckCircle, Brain, Play, Square, X, Loader2 } from 'lucide-react';
 import { soundHandler } from '../../handlers/SoundHandler';
 
 export default function AutoCalibrationWizard({
     isActive,
     onClose,
+    onSequenceComplete = null,
     sensor,
     onStartRecording,
     onStopRecording,
     setTargetLabel,
-    setAutoLimit,
     readyCount,
     isRecording,
     targetCount = 10,
@@ -20,12 +20,14 @@ export default function AutoCalibrationWizard({
     const [step, setStep] = useState('intro');
     const [labelIndex, setLabelIndex] = useState(0);
     const [countdown, setCountdown] = useState(3);
+    // Guard: prevent re-triggering advance when readyCount stays >= targetCount
+    const isAdvancingRef = useRef(false);
 
     // Store callbacks in ref to avoid re-triggering countdown effect
-    const callbacksRef = React.useRef({ labels, targetCount, setTargetLabel, setAutoLimit, onStartRecording });
+    const callbacksRef = React.useRef({ labels, targetCount, setTargetLabel, onStartRecording, onSequenceComplete });
     useEffect(() => {
-        callbacksRef.current = { labels, targetCount, setTargetLabel, setAutoLimit, onStartRecording };
-    }, [labels, targetCount, setTargetLabel, setAutoLimit, onStartRecording]);
+        callbacksRef.current = { labels, targetCount, setTargetLabel, onStartRecording, onSequenceComplete };
+    }, [labels, targetCount, setTargetLabel, onStartRecording, onSequenceComplete]);
 
     // Reset state when wizard opens
     useEffect(() => {
@@ -33,6 +35,7 @@ export default function AutoCalibrationWizard({
             setStep('intro');
             setLabelIndex(0);
             setCountdown(3);
+            isAdvancingRef.current = false;
         }
     }, [isActive]);
 
@@ -43,39 +46,53 @@ export default function AutoCalibrationWizard({
             if (countdown > 0) {
                 timer = setTimeout(() => setCountdown(c => c - 1), 1000);
             } else {
-                // Countdown finished, start recording
-                const { labels: cLabels, targetCount: cTargetCount, setTargetLabel: cSetTargetLabel, setAutoLimit: cSetAutoLimit, onStartRecording: cOnStartRecording } = callbacksRef.current;
+                // Countdown finished, start recording for the current label
+                const { labels: cLabels, setTargetLabel: cSetTargetLabel, onStartRecording: cOnStartRecording } = callbacksRef.current;
                 const target = cLabels[labelIndex];
                 cSetTargetLabel(target);
-                cSetAutoLimit(cTargetCount);
+                // NOTE: Do NOT call setAutoLimit here — the total target is already
+                // set to perClassLimit * labels.length by DataCollectionView when the wizard opens
                 setTimeout(() => {
                     cOnStartRecording(target);
                     setStep('recording');
-                    soundHandler.playRPSStart(); // generic start sound
+                    soundHandler.playRPSStart();
                 }, 100);
             }
         }
         return () => clearTimeout(timer);
     }, [step, countdown, labelIndex]);
 
-    // Monitor recording progress
+    // Monitor recording progress — advance to next label when readyCount hits targetCount
     useEffect(() => {
-        if (step === 'recording') {
-            if (readyCount >= targetCount && !isRecording) {
-                // Finished recording this label
-                soundHandler.playRPSWin(); // success sound
-                if (labelIndex + 1 < labels.length) {
-                    // Next label
-                    setLabelIndex(i => i + 1);
-                    setCountdown(3);
-                    setStep('countdown');
-                } else {
-                    // All done
-                    setStep('done');
-                }
-            }
+        if (step !== 'recording') return;
+        if (readyCount < targetCount) return;
+        if (isAdvancingRef.current) return;
+        isAdvancingRef.current = true;
+
+        soundHandler.playRPSWin();
+
+        // Advance to next label or done
+        const { labels: cLabels, setTargetLabel: cSetTargetLabel, onStartRecording: cOnStartRecording, onSequenceComplete: cOnSequenceComplete } = callbacksRef.current;
+        const nextIndex = labelIndex + 1;
+        if (nextIndex < cLabels.length) {
+            const nextLabel = cLabels[nextIndex];
+            setLabelIndex(nextIndex);
+            cSetTargetLabel(nextLabel);
+            // Skip inter-label countdown — go directly to next gesture.
+            // handleStartCalibration internally calls startAutoWindowing which
+            // already calls stopAutoWindowing first, so no explicit stop needed.
+            setTimeout(() => {
+                cOnStartRecording(nextLabel);
+                soundHandler.playRPSStart();
+                isAdvancingRef.current = false;
+            }, 200);
+        } else {
+            setStep('done');
+            cOnSequenceComplete?.();
+            setTimeout(() => { isAdvancingRef.current = false; }, 200);
         }
-    }, [step, readyCount, targetCount, isRecording, labelIndex, labels.length]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [step, readyCount, targetCount]);
 
     if (!isActive) return null;
 
@@ -192,14 +209,14 @@ export default function AutoCalibrationWizard({
                         </div>
                         <div>
                             <h2 className={`${inline ? 'text-lg' : 'text-3xl'} font-black text-white mb-1`}>Complete!</h2>
-                            <p className="text-muted text-xs">Collected {targetCount} captures per gesture.</p>
+                            <p className="text-muted text-xs">Collected {targetCount} captures per gesture. Press Append to save.</p>
                         </div>
                         <div className={`flex gap-2 w-full mt-4`}>
                             <button
                                 onClick={onClose}
                                 className={`flex-1 py-2 bg-primary/20 text-primary border border-primary/50 hover:bg-primary/30 rounded-xl font-bold transition-all ${inline ? 'text-xs' : ''}`}
                             >
-                                Finish
+                                Close Wizard
                             </button>
                         </div>
                     </div>

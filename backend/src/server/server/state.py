@@ -1,5 +1,7 @@
 import collections
 
+from src.server.server.session_manager import SessionManager
+
 class WebServerState:
     def __init__(self):
         self.inlet = None
@@ -15,7 +17,7 @@ class WebServerState:
         self.rps_detector = None
         self.emg_buffer = collections.deque(maxlen=512) # 1 second buffer at 512Hz
         self.last_pred_time = 0
-        self.session = None # Assigned by main app or initialized here? Initialize in app setup.
+        self.session = SessionManager()
 
         # Hybrid recording (server-side CSV + metadata.json)
         self.hybrid_recorder = None      # HybridRecorder instance

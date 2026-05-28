@@ -3705,5 +3705,20 @@
   },
   "artifact_path": "E:\\WebSite\\NeuroTECH-BCI\\data\\EMG\\models\\Venus.joblib",
   "created_at": "2026-04-11T01:10:26.165111",
-  "table_name": "emg_session_rps_1"
+  "table_name": "emg_session_rps_1",
+  "calibration_shifts": {
+    "rms": -46.943657168562375,
+    "mav": -34.368303570212646,
+    "var": -1756.4196483506942,
+    "wl": -86.48882110686185,
+    "peak": -118.64991255283354,
+    "range": -107.28408171496044,
+    "iemg": -15067.129134665143,
+    "entropy": 1.3918615573185393,
+    "energy": -1687172.5265087425,
+    "kurtosis": -0.9214851724141878,
+    "skewness": -1.4180162055432717,
+    "ssc": 259.3758333333333,
+    "wamp": 49.47999999999999
+  }
 }

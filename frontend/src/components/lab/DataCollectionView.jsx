@@ -6,6 +6,7 @@ import EEGDataCollectionPanel from '../data_collection/EEGDataCollectionPanel';
 import ConfigPanel from '../data_collection/ConfigPanel';
 import SessionManagerPanel from '../data_collection/SessionManagerPanel';
 import AutoCalibrationWizard from '../data_collection/AutoCalibrationWizard';
+import CalibrationReport from '../data_collection/CalibrationReport';
 import InlineModeToggle from '../ui/inputs/InlineModeToggle';
 import { CalibrationApi } from '../../services/calibrationApi';
 import CustomSelect from '../ui/inputs/CustomSelect';
@@ -86,6 +87,8 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
     const [config, setConfig] = useState(initialConfig || {});
     const [isCalibrating, setIsCalibrating] = useState(false);
     const [showWizard, setShowWizard] = useState(false);
+    const [wizardSequenceDone, setWizardSequenceDone] = useState(false);
+    const [calibrationReport, setCalibrationReport] = useState(null);
     const [runInProgress, setRunInProgress] = useState(false);
 
     // Data states
@@ -103,6 +106,11 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
     const [isBatchSaving, setIsBatchSaving] = useState(false);
 
     const [totalPredictedCount, setTotalPredictedCount] = useState(0);
+
+    // Calibration Mode States
+    const [isCalibrationMode, setIsCalibrationMode] = useState(false);
+    const [models, setModels] = useState([]);
+    const [selectedModel, setSelectedModel] = useState("");
 
     // Worker Instances
     const sessionWorkerRef = useRef(null);
@@ -134,6 +142,7 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
     const [batchSize, setBatchSize] = useState(settings?.collectionState?.batchSize || 5);
     const [numBatches, setNumBatches] = useState(settings?.collectionState?.numBatches || 6);
     const [autoLimit, setAutoLimit] = useState(settings?.collectionState?.autoLimit || 30);
+    const [calibrationPerClassLimit, setCalibrationPerClassLimit] = useState(5);
     const [autoCalibrate, setAutoCalibrate] = useState(settings?.collectionState?.autoCalibrate || false); // Auto-calibration toggle
     const [windowDuration, setWindowDuration] = useState(settings?.collectionState?.windowDuration || 900); // ms
     const [timeWindow, setTimeWindow] = useState(settings?.collectionState?.timeWindow || 5000); // visible sweep window length for calibration plot
@@ -293,6 +302,7 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
 
     const fullCurrentSessionName = React.useMemo(() => {
         if (!sessionName) return null;
+        if (sessionName === 'emg_calibration') return 'emg_calibration';
         if (sessionName.includes("_session_")) return sessionName;
         return `${activeSensor.toLowerCase()}_session_${sessionName}`;
     }, [sessionName, activeSensor]);
@@ -359,7 +369,7 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
         [activeSensor, windowDuration]
     );
     const autoTargetCount = useMemo(() => Math.max(1, batchSize * numBatches), [batchSize, numBatches]);
-    const producedStatuses = useMemo(() => new Set(['pending', 'recording', 'collected', 'saved', 'correct']), []);
+    const producedStatuses = useMemo(() => new Set(['collected', 'saved', 'correct']), []);
 
     const windowDurationOptions = useMemo(() => {
         if (activeSensor === 'EEG') return [1000, 1500, 2000, 3000];
@@ -603,7 +613,9 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
                 numBatches,
                 windowDuration: actualCaptureWindowMs,
                 timeWindow,
-                isCalibrating
+                isCalibrating,
+                isCalibrationMode,
+                calibrationPerClassLimit
             }
         });
 
@@ -618,9 +630,9 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
     useEffect(() => {
         windowWorkerRef.current?.postMessage({
             type: 'UPDATE_STATE',
-            payload: { activeSensor, activeChannelIndex, targetLabel, mode, autoLimit, autoCalibrate, batchSize, numBatches, windowDuration: actualCaptureWindowMs, timeWindow }
+            payload: { activeSensor, activeChannelIndex, targetLabel, mode, autoLimit, autoCalibrate, batchSize, numBatches, windowDuration: actualCaptureWindowMs, timeWindow, isCalibrationMode, calibrationPerClassLimit }
         });
-    }, [activeSensor, activeChannelIndex, targetLabel, mode, autoLimit, autoCalibrate, batchSize, numBatches, actualCaptureWindowMs, timeWindow]);
+    }, [activeSensor, activeChannelIndex, targetLabel, mode, autoLimit, autoCalibrate, batchSize, numBatches, actualCaptureWindowMs, timeWindow, isCalibrationMode, calibrationPerClassLimit]);
 
     // Ensure config is loaded on mount
     useEffect(() => {
@@ -636,6 +648,26 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
             loadConfig();
         }
     }, [initialConfig]);
+
+    // Fetch available EMG models
+    const refreshEmgModels = useCallback(async () => {
+        if (activeSensor === 'EMG') {
+            try {
+                const list = await CalibrationApi.fetchModels('EMG');
+                setModels(list);
+                if (list.length > 0 && !selectedModel) {
+                    const activeModel = list.find(m => m.active);
+                    setSelectedModel(activeModel ? activeModel.name : list[0].name);
+                }
+            } catch (err) {
+                console.error("Error fetching EMG models:", err);
+            }
+        }
+    }, [activeSensor, selectedModel]);
+
+    useEffect(() => {
+        refreshEmgModels();
+    }, [refreshEmgModels]);
 
 
     // Recording mode states
@@ -831,7 +863,7 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
                 } else {
                     setCurrentBatchIndex(0);
                     setIsBatchProducing(false);
-                    startAutoWindowing();
+                    startAutoWindowing({ label });
                 }
             }
         }
@@ -1068,7 +1100,7 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
                     apiBaseUrl: runtimeApiUrl,
                     sensor: activeSensor,
                     mode,
-                    session_name: sessionName,
+                    session_name: isCalibrationMode ? 'emg_calibration' : sessionName,
                     windows: windowsToSave.map((window) => ({
                         id: window.id,
                         sensor: activeSensor,
@@ -1081,7 +1113,7 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
                 }
             });
         });
-    }, [runtimeApiUrl, activeSensor, buildWindowMetadata, mode, sessionName]);
+    }, [runtimeApiUrl, activeSensor, buildWindowMetadata, mode, sessionName, isCalibrationMode]);
 
     /**
      * Saves all collected windows to the database.
@@ -1090,7 +1122,9 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
         if (appendLockRef.current) return;
         const appendCountLimit = Array.isArray(explicitWindowIds) && explicitWindowIds.length > 0
             ? explicitWindowIds.length
-            : (autoCalibrate ? Math.max(1, batchSize) : Math.max(1, autoLimit));
+            : isCalibrationMode
+                ? Number.MAX_SAFE_INTEGER   // save ALL collected windows at once
+                : (autoCalibrate ? Math.max(1, batchSize) : Math.max(1, autoLimit));
         const explicitIdSet = Array.isArray(explicitWindowIds) && explicitWindowIds.length > 0
             ? new Set(explicitWindowIds)
             : null;
@@ -1144,7 +1178,9 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
                     .filter(Boolean);
 
                 await dispatchBatchSave(windowsForSave);
-                const sessionTableName = `${activeSensor.toLowerCase()}_session_${sessionName}`;
+                const sessionTableName = isCalibrationMode
+                    ? 'emg_calibration'
+                    : `${activeSensor.toLowerCase()}_session_${sessionName}`;
 
                 refreshSessionData(true, { fullName: sessionTableName });
             }
@@ -1154,7 +1190,7 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
             setRunInProgress(false);
             appendLockRef.current = false;
         }
-    }, [mode, activeSensor, markedWindows, autoCalibrate, batchSize, autoLimit, dispatchBatchSave, refreshSessionData, requestFullWindows]);
+    }, [mode, activeSensor, markedWindows, autoCalibrate, batchSize, autoLimit, dispatchBatchSave, refreshSessionData, requestFullWindows, isCalibrationMode]);
 
     const producedCount = useMemo(
         () => markedWindows.filter((window) => producedStatuses.has(window.status)).length,
@@ -1173,9 +1209,13 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
         .map((window) => window.id);
     const activeBatchSavedCount = activeBatchWindows.filter((window) => ['saved', 'correct'].includes(window.status)).length;
     const activeBatchErrorCount = activeBatchWindows.filter((window) => ['error', 'incorrect'].includes(window.status)).length;
+    const calibrationTotal = useMemo(
+        () => calibrationPerClassLimit * ((SENSOR_LABELS[activeSensor] || []).length || 4),
+        [calibrationPerClassLimit, activeSensor]
+    );
     const manualProgressPercent = useMemo(
-        () => Math.min(100, (producedCount / Math.max(1, autoLimit)) * 100),
-        [producedCount, autoLimit]
+        () => Math.min(100, (producedCount / Math.max(1, isCalibrationMode ? calibrationTotal : autoLimit)) * 100),
+        [producedCount, autoLimit, isCalibrationMode, calibrationTotal]
     );
     const batchProgressPercent = useMemo(
         () => Math.min(100, (completedBatchCount / Math.max(1, numBatches)) * 100),
@@ -1236,7 +1276,8 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
         if (!isCalibrating) return;
 
         if (!autoCalibrate) {
-            if (activeSensor !== 'EEG' && producedCount >= Math.max(1, autoLimit)) {
+            // In calibration mode the wizard manages per-class limits — don't auto-stop here
+            if (activeSensor !== 'EEG' && !isCalibrationMode && producedCount >= Math.max(1, autoLimit)) {
                 handleStopCalibration();
             }
             return;
@@ -1285,6 +1326,7 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
         isCalibrating,
         autoCalibrate,
         activeSensor,
+        isCalibrationMode,
         producedCount,
         autoLimit,
         currentBatchIndex,
@@ -1454,6 +1496,63 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
         });
     };
 
+    // Run Runtime Calibration logic for active model
+    const handleRunRuntimeCalibration = useCallback(async () => {
+        if (!selectedModel) return;
+        setRunInProgress(true);
+        try {
+            soundHandler.playRPSStart();
+            const result = await CalibrationApi.runRuntimeCalibration(selectedModel);
+            console.log("Runtime calibration successful:", result);
+
+            // Show quality report if returned
+            if (result?.quality_report) {
+                setCalibrationReport(result.quality_report);
+            }
+
+            // Clear the calibration table automatically after each calibration run!
+            await CalibrationApi.clearCalibrationTable();
+            handleClearAllWindows();
+
+            // Refresh details
+            refreshSessionData(true, { fullName: 'emg_calibration' });
+        } catch (err) {
+            console.error("Runtime calibration error:", err);
+        } finally {
+            setRunInProgress(false);
+        }
+    }, [selectedModel, handleClearAllWindows, refreshSessionData]);
+
+    // Toggle Calibration Mode
+    const handleToggleCalibrationMode = useCallback(async (enabled) => {
+        setIsCalibrationMode(enabled);
+        if (enabled) {
+            setSessionName("emg_calibration");
+            setAutoCalibrate(false); // Force manual mode
+            setWizardSequenceDone(false);
+            handleClearAllWindows();
+            
+            try {
+                await CalibrationApi.clearCalibrationTable();
+                console.log("Calibration table cleared on entry.");
+            } catch (err) {
+                console.error("Failed to clear calibration table:", err);
+            }
+            
+            // Explicitly fetch the emg_calibration table details
+            sessionWorkerRef.current?.postMessage({
+                type: 'FETCH_DETAILS',
+                payload: { fullName: 'emg_calibration', limit: 20, offset: 0, isReset: true }
+            });
+        } else {
+            const now = new Date();
+            const defaultName = `Session_${now.getDate()}_${now.getHours()}${now.getMinutes()}`;
+            setSessionName(defaultName);
+            handleClearAllWindows();
+            refreshSessionData(true, { fullName: `emg_session_${defaultName}` });
+        }
+    }, [handleClearAllWindows, refreshSessionData]);
+
     // Run calibration logic
     const runCalibration = useCallback(async (isAuto = false) => {
         if (!markedWindows || markedWindows.length === 0) return;
@@ -1620,6 +1719,11 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
 
             if (isTyping && !(isStructuralKey && matchesHotkey)) return;
 
+            if (code === km.startStop && isCalibrationMode && !showWizard) {
+                e.preventDefault();
+                setShowWizard(true);
+                return;
+            }
             if (code === km.startStop) {
                 e.preventDefault();
                 if (isCalibrating) handleStopCalibration();
@@ -1711,7 +1815,7 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [isCalibrating, handleStartCalibration, handleStopCalibration, settings?.keymap?.collection, activeSensor, handleAppendSamples, availableLabels, windowDurationOptions, autoCalibrate, deleteLatestWorkingWindow, handleClearAllWindows]);
+    }, [isCalibrating, handleStartCalibration, handleStopCalibration, settings?.keymap?.collection, activeSensor, handleAppendSamples, availableLabels, windowDurationOptions, autoCalibrate, deleteLatestWorkingWindow, handleClearAllWindows, isCalibrationMode, showWizard]);
 
 
 
@@ -2012,7 +2116,7 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
                                         options={availableLabels}
                                     />
                                     {activeSensor === 'EMG' && (
-                                        <div className="rounded-lg border border-border/70 bg-surface/60 p-2 text-[11px] leading-relaxed text-muted">
+                                        <div className="rounded-lg border border-border/70 bg-surface/60 p-2 text-[11px] leading-relaxed text-muted mt-2">
                                             Each EMG capture uses a {windowDuration} ms analysis window. The full burst lasts {actualCaptureWindowMs} ms and is sliced into 5 saved windows with a 150 ms stride.
                                         </div>
                                     )}
@@ -2023,15 +2127,18 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
                             {showWizard ? (
                                 <AutoCalibrationWizard
                                     isActive={showWizard}
-                                    onClose={() => setShowWizard(false)}
+                                    onClose={() => {
+                                        setShowWizard(false);
+                                        if (!wizardSequenceDone) handleToggleCalibrationMode(false);
+                                    }}
+                                    onSequenceComplete={() => setWizardSequenceDone(true)}
                                     sensor={activeSensor}
                                     onStartRecording={(label) => handleStartCalibration(label)}
                                     onStopRecording={handleStopCalibration}
                                     setTargetLabel={setTargetLabel}
-                                    setAutoLimit={setAutoLimit}
-                                    readyCount={markedWindows.filter(w => w.label === targetLabel && producedStatuses.has(w.status)).length}
+                                    readyCount={markedWindows.filter(w => w.label === targetLabel && ['collected', 'saved', 'correct'].includes(w.status)).length}
                                     isRecording={isCalibrating}
-                                    targetCount={autoLimit}
+                                    targetCount={calibrationPerClassLimit}
                                     labels={SENSOR_LABELS[activeSensor]}
                                     inline={true}
                                 />
@@ -2051,8 +2158,14 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
                                         )}
                                     </button>
                                     <button
-                                        onClick={() => setShowWizard(true)}
-                                        className="w-full py-3 bg-surface border border-primary/30 text-primary rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-primary/5 transition-all text-sm uppercase tracking-wider"
+                                        onClick={() => {
+                                            const labels = SENSOR_LABELS[activeSensor] || [];
+                                            const perClass = autoLimit;
+                                            setCalibrationPerClassLimit(perClass);
+                                            handleToggleCalibrationMode(true);
+                                            setShowWizard(true);
+                                        }}
+                                        className="w-full py-3 bg-surface border border-primary/30 text-primary rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-primary/5 transition-all text-sm uppercase tracking-wider animate-pulse hover:animate-none"
                                     >
                                         <Target size={16} /> CALIBRATION WIZARD
                                     </button>
@@ -2307,6 +2420,12 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
                             onDeleteRow={(rowId) => sessionWorkerRef.current?.postMessage({ type: 'DELETE_ROW', payload: { fullName: fullCurrentSessionName, rowId } })}
                             onClearSession={(name) => sessionWorkerRef.current?.postMessage({ type: 'CLEAR_SESSION', payload: { name } })}
                             onCreateSession={(name) => sessionWorkerRef.current?.postMessage({ type: 'CREATE_SESSION', payload: { name } })}
+                            isCalibrationMode={isCalibrationMode}
+                            showCalibrateButton={isCalibrationMode && activeSensor === 'EMG'}
+                            onCalibrate={handleRunRuntimeCalibration}
+                            models={models}
+                            selectedModel={selectedModel}
+                            onModelChange={setSelectedModel}
                         />
                     ) : (
                         <ConfigPanel config={config} sensor={activeSensor} onSave={setConfig} />
@@ -2372,7 +2491,7 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
                                             onDeleteAll={handleClearAllWindows}
                                             progressMode={autoCalibrate ? 'batches' : 'captures'}
                                             progressCurrent={autoCalibrate ? completedBatchCount : producedCount}
-                                            progressTotal={autoCalibrate ? numBatches : autoLimit}
+                                            progressTotal={autoCalibrate ? numBatches : (isCalibrationMode ? calibrationTotal : autoLimit)}
                                             progressPercent={autoCalibrate ? batchProgressPercent : manualProgressPercent}
                                             currentBatchIndex={currentBatchIndex}
                                         />
@@ -2398,13 +2517,31 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
                             onDeleteAll={handleClearAllWindows}
                             progressMode={autoCalibrate ? 'batches' : 'captures'}
                             progressCurrent={autoCalibrate ? completedBatchCount : producedCount}
-                            progressTotal={autoCalibrate ? numBatches : autoLimit}
+                            progressTotal={autoCalibrate ? numBatches : (isCalibrationMode ? calibrationTotal : autoLimit)}
                             progressPercent={autoCalibrate ? batchProgressPercent : manualProgressPercent}
                             currentBatchIndex={currentBatchIndex}
+                            isCalibrationMode={isCalibrationMode}
+                            perClassLimit={isCalibrationMode ? calibrationPerClassLimit : null}
+                            numClasses={(SENSOR_LABELS[activeSensor] || []).length || 4}
+                            onPerClassLimitChange={setCalibrationPerClassLimit}
                         />
                     )}
                 </div>
             </div>
+
+            {/* Calibration Quality Report Modal */}
+            {calibrationReport && (
+                <CalibrationReport
+                    report={calibrationReport}
+                    onClose={() => setCalibrationReport(null)}
+                    onRecalibrate={() => {
+                        setCalibrationReport(null);
+                        setWizardSequenceDone(false);
+                        setShowWizard(true);
+                        handleToggleCalibrationMode(true);
+                    }}
+                />
+            )}
         </div>
     );
 }

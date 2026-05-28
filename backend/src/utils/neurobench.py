@@ -81,6 +81,7 @@ class ChannelGenerator:
             "gamma": 0.02
         }
         self.current_state = "Neutral"
+        self.emg_hold = None
 
     def set_role(self, role):
         with self.lock:
@@ -115,13 +116,58 @@ class ChannelGenerator:
         with self.lock:
             self.scale = float(scale)
 
+    def _get_emg_profile(self, intensity):
+        intensity = (intensity or "light").lower()
+        return {
+            "light": (0.12, 0.35),
+            "medium": (0.25, 0.75),
+            "strong": (0.45, 1.25),
+        }.get(intensity, (0.12, 0.35))
+
+    def _queue_emg_burst(self, intensity="light", duration=None):
+        dur, amp = self._get_emg_profile(intensity)
+        ev = {
+            "type": "emg_burst",
+            "t0": None,
+            "dur": dur if duration is None else duration,
+            "amp": amp,
+        }
+        self.events.append(ev)
+
     def trigger_emg(self, intensity="light"):
         """Intensity: light | medium | strong -> enqueue burst event"""
         with self.lock:
-            dur = {"light": 0.12, "medium": 0.25, "strong": 0.45}.get(intensity, 0.12)
-            amp = {"light": 0.35, "medium": 0.75, "strong": 1.25}.get(intensity, 0.35)
-            ev = {"type": "emg_burst", "t0": None, "dur": dur, "amp": amp}
-            self.events.append(ev)
+            self._queue_emg_burst(intensity)
+
+    def start_emg_hold(self, intensity="light"):
+        with self.lock:
+            self.emg_hold = {
+                "intensity": (intensity or "light").lower(),
+                "started_at": time.perf_counter(),
+            }
+
+    def stop_emg_hold(self, intensity=None, keep_min_duration=True):
+        with self.lock:
+            hold = self.emg_hold
+            if not hold:
+                return False
+            if intensity is not None and hold["intensity"] != intensity:
+                return False
+
+            self.emg_hold = None
+            if keep_min_duration:
+                min_duration, _ = self._get_emg_profile(hold["intensity"])
+                elapsed = max(0.0, time.perf_counter() - hold["started_at"])
+                remaining = min_duration - elapsed
+                if remaining > 0:
+                    self._queue_emg_burst(hold["intensity"], duration=remaining)
+            return True
+
+    def clear_emg_hold(self):
+        with self.lock:
+            was_active = self.emg_hold is not None
+            self.emg_hold = None
+            return was_active
 
     def trigger_eog(self, dir_name="blink"):
         with self.lock:
@@ -156,6 +202,7 @@ class ChannelGenerator:
             scale = self.scale
             band_powers = dict(self.band_powers)
             events = list(self.events)  # shallow copy
+            emg_hold = dict(self.emg_hold) if self.emg_hold else None
             
         # Convert bg_uv (microvolts) to internal "units" 
         # (Original neurobench scale was approx 1 unit = 330 uV)
@@ -200,6 +247,18 @@ class ChannelGenerator:
             val += 0.0  # Clean baseline, actions only
         else:
             val += 0.0
+
+        if emg_hold:
+            _, hold_amp = self._get_emg_profile(emg_hold["intensity"])
+            hold_age = max(0.0, time.perf_counter() - emg_hold["started_at"])
+            attack = min(1.0, hold_age / 0.05)
+            modulation = 0.7 + 0.3 * math.sin(2 * math.pi * 3.0 * t_seconds)
+            texture = (
+                0.55 * self.random.gauss(0, 1)
+                + 0.25 * math.sin(2 * math.pi * 80.0 * t_seconds)
+                + 0.20 * math.sin(2 * math.pi * 130.0 * t_seconds)
+            )
+            val += hold_amp * attack * modulation * texture
 
         # event processing (bursts / pulses) — events store t0 when first used
         with self.lock:
@@ -403,6 +462,7 @@ class MainWindow(QtWidgets.QMainWindow):
         super().__init__()
         self.setWindowTitle(APP_NAME)
         self.resize(1100, 700)
+        self.setFocusPolicy(QtCore.Qt.StrongFocus)
         self.config = self.load_config()
         # state
 
@@ -415,6 +475,12 @@ class MainWindow(QtWidgets.QMainWindow):
         self.target_port = self.config.get("target_port", 6000)
         self.streaming = False
         self.binary = self.config.get("binary", True)
+        self._emg_keymap = {
+            int(QtCore.Qt.Key.Key_A): "light",
+            int(QtCore.Qt.Key.Key_S): "medium",
+            int(QtCore.Qt.Key.Key_D): "strong",
+        }
+        self._active_emg_keys = {}
 
         # two channel generators
         self.ch_gens = [ChannelGenerator(), ChannelGenerator()]
@@ -446,6 +512,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.timer.setInterval(100)  # UI refresh ~10 Hz (relaxed)
         self.timer.timeout.connect(self._on_timer)
         self.timer.start()
+
+        app = QtWidgets.QApplication.instance()
+        if app is not None:
+            app.installEventFilter(self)
 
         # generator loop in background
         print(f"[{datetime.now()}] Starting generator thread...")
@@ -681,14 +751,14 @@ class MainWindow(QtWidgets.QMainWindow):
         # EMG buttons
         emg_box = QtWidgets.QGroupBox("EMG actions")
         emg_layout = QtWidgets.QHBoxLayout()
-        b_light = QtWidgets.QPushButton("Light")
-        b_med = QtWidgets.QPushButton("Medium")
-        b_str = QtWidgets.QPushButton("Strong")
+        b_light = QtWidgets.QPushButton("Light (A)")
+        b_med = QtWidgets.QPushButton("Medium (S)")
+        b_str = QtWidgets.QPushButton("Strong (D)")
         emg_layout.addWidget(b_light); emg_layout.addWidget(b_med); emg_layout.addWidget(b_str)
         emg_box.setLayout(emg_layout)
-        b_light.clicked.connect(lambda: self._emg_action(ch_index, "light"))
-        b_med.clicked.connect(lambda: self._emg_action(ch_index, "medium"))
-        b_str.clicked.connect(lambda: self._emg_action(ch_index, "strong"))
+        for button, intensity in ((b_light, "light"), (b_med, "medium"), (b_str, "strong")):
+            button.pressed.connect(lambda ch=ch_index, level=intensity: self._emg_hold_start(ch, level))
+            button.released.connect(lambda ch=ch_index, level=intensity: self._emg_hold_stop(ch, level))
         v.addWidget(emg_box)
 
         # EEG Brain States & Waves
@@ -806,6 +876,73 @@ class MainWindow(QtWidgets.QMainWindow):
     def _emg_action(self, ch, intensity):
         self.log(f"EMG trigger ch{ch} intensity={intensity}")
         self.ch_gens[ch].trigger_emg(intensity)
+
+    def _emg_hold_start(self, ch, intensity):
+        self.log(f"EMG hold start ch{ch} intensity={intensity}")
+        self.ch_gens[ch].start_emg_hold(intensity)
+
+    def _emg_hold_stop(self, ch, intensity):
+        if self.ch_gens[ch].stop_emg_hold(intensity=intensity, keep_min_duration=True):
+            self.log(f"EMG hold end ch{ch} intensity={intensity}")
+
+    def _keyboard_emg_targets(self):
+        return [ch for ch, generator in enumerate(self.ch_gens) if generator.role == "EMG"]
+
+    def _should_handle_emg_key(self):
+        focus_widget = QtWidgets.QApplication.focusWidget()
+        blocked_types = (
+            QtWidgets.QLineEdit,
+            QtWidgets.QPlainTextEdit,
+            QtWidgets.QTextEdit,
+            QtWidgets.QComboBox,
+            QtWidgets.QAbstractSpinBox,
+        )
+        return not isinstance(focus_widget, blocked_types)
+
+    def _handle_emg_key_press(self, event):
+        if event.isAutoRepeat() or not self.isActiveWindow() or not self._should_handle_emg_key():
+            return False
+
+        key = int(event.key())
+        intensity = self._emg_keymap.get(key)
+        if intensity is None or key in self._active_emg_keys:
+            return False
+
+        targets = self._keyboard_emg_targets()
+        if not targets:
+            self.log("Keyboard EMG ignored: no channel is mapped to EMG")
+            return True
+
+        self._active_emg_keys[key] = [(ch, intensity) for ch in targets]
+        for ch in targets:
+            self._emg_hold_start(ch, intensity)
+        return True
+
+    def _handle_emg_key_release(self, event):
+        if event.isAutoRepeat() or not self.isActiveWindow():
+            return False
+
+        key = int(event.key())
+        active_targets = self._active_emg_keys.pop(key, None)
+        if not active_targets:
+            return False
+
+        for ch, intensity in active_targets:
+            self._emg_hold_stop(ch, intensity)
+        return True
+
+    def _clear_emg_holds(self):
+        self._active_emg_keys.clear()
+        for ch, generator in enumerate(self.ch_gens):
+            if generator.clear_emg_hold():
+                self.log(f"EMG hold cleared ch{ch}")
+
+    def eventFilter(self, watched, event):
+        if event.type() == QtCore.QEvent.Type.KeyPress and self._handle_emg_key_press(event):
+            return True
+        if event.type() == QtCore.QEvent.Type.KeyRelease and self._handle_emg_key_release(event):
+            return True
+        return super().eventFilter(watched, event)
 
     def _eog_action(self, ch, name):
         self.log(f"EOG trigger ch{ch} dir={name}")
@@ -950,6 +1087,8 @@ class MainWindow(QtWidgets.QMainWindow):
     def stop_stream(self):
         if not self.streaming:
             return
+
+        self._clear_emg_holds()
         
         # 1. Clear queue to prevent "hangover" data
         with self.sample_queue.mutex:
@@ -1067,6 +1206,10 @@ class MainWindow(QtWidgets.QMainWindow):
     def closeEvent(self, event):
         # stop threads
         self._gen_stop.set()
+        self._clear_emg_holds()
+        app = QtWidgets.QApplication.instance()
+        if app is not None:
+            app.removeEventFilter(self)
         if self.stream_writer:
             self.stream_writer.stop()
             self.stream_writer.join(timeout=0.5)

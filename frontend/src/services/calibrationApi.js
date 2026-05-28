@@ -370,5 +370,70 @@ export const CalibrationApi = {
             console.error('[CalibrationApi] Error getting prediction status:', error);
             return null;
         }
+    },
+
+    /**
+     * Triggers the runtime calibration calculations for the selected model.
+     * @param {string} modelName 
+     */
+    async runRuntimeCalibration(modelName = null) {
+        console.log(`[CalibrationApi] Running runtime calibration for model: ${modelName || 'Active Model'}`);
+        const response = await fetchWithBase('/api/emg/runtime-calibrate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ model_name: modelName })
+        });
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Runtime calibration failed');
+        }
+        return response.json();
+    },
+
+    /**
+     * Clears all samples in the emg_calibration table.
+     */
+    async clearCalibrationTable() {
+        console.log('[CalibrationApi] Clearing emg_calibration table...');
+        const response = await fetchWithBase('/api/sessions/EMG/emg_calibration/clear', {
+            method: 'DELETE'
+        });
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Failed to clear calibration table');
+        }
+        return response.json();
+    },
+
+    /**
+     * Fetches all saved models for a given sensor.
+     * @param {SensorType} sensor 
+     */
+    async fetchModels(sensor) {
+        console.log(`[CalibrationApi] Fetching models for ${sensor}...`);
+        const response = await fetchWithBase(`/api/models/${sensor.toLowerCase()}`);
+        if (!response.ok) {
+            throw new Error(`Failed to fetch models for ${sensor}`);
+        }
+        return response.json();
+    },
+
+    /**
+     * Loads a specific model on the backend for prediction.
+     * @param {SensorType} sensor 
+     * @param {string} modelName 
+     */
+    async loadModel(sensor, modelName) {
+        console.log(`[CalibrationApi] Loading model ${modelName} for ${sensor}...`);
+        const response = await fetchWithBase(`/api/models/${sensor.toLowerCase()}/load`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ model_name: modelName })
+        });
+        if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.error || `Failed to load model ${modelName}`);
+        }
+        return response.json();
     }
 };

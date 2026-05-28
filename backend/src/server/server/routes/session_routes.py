@@ -1,6 +1,5 @@
 from flask import Blueprint, jsonify, request
 import uuid
-import uuid
 import numpy as np
 import time
 from src.server.server.state import state
@@ -9,6 +8,7 @@ from src.database.db_manager import db_manager
 # Import extract_emg_features from lsl_service to avoid duplication if possible, 
 # but lsl_service.py has it.
 from src.server.server.lsl_service import extract_emg_features, extract_eog_features # Assume we export this
+from src.config.window_config import compute_sub_window_params, split_parent_into_sub_windows
 
 session_bp = Blueprint('session', __name__)
 
@@ -47,7 +47,7 @@ def api_get_session_data(sensor_type, session_name):
         data = db_manager.get_session_data(
             sensor_type,
             session_name,
-            limit=limit,
+            limit=limit, # type: ignore
             offset=offset,
             sort_by=sort_by,
             order=order,
@@ -201,48 +201,40 @@ def api_emg_stop():
             raw_data = np.array(samples)
             if raw_data.ndim > 1 and raw_data.shape[1] == 1:
                 raw_data = raw_data.flatten()
-            
-            # Windowing parameters
+
+            # Windowing parameters (unified via window_config)
             sr = state.sr or 512
-            
+
             # Parent window = always 1500ms, produces exactly 5 sub-windows of configured size
             parent_window_ms = 1500
             sub_window_ms = configured_window_ms
-            
-            parent_size = int(sr * parent_window_ms / 1000)
-            sub_size = int(sr * sub_window_ms / 1000)
-            num_sub_windows = 5
-            sub_step = (parent_size - sub_size) // (num_sub_windows - 1) if num_sub_windows > 1 else 0
-            
-            step_size = int(parent_size * 0.5)  # 50% overlap between parent windows
-            
+
+            parent_size, sub_size, sub_step = compute_sub_window_params(
+                sr, sub_window_ms=sub_window_ms, parent_window_ms=parent_window_ms, num_sub_windows=5
+            )
+
+            # No overlap between successive parent bursts (stride = full parent length)
+            step_size = parent_size
+
             num_samples = len(raw_data)
             if num_samples < parent_size:
                 continue
-            
+
             print(f"[Session_Routes] 📊 Windowing: parent={parent_window_ms}ms ({parent_size} samples), "
-                  f"sub={sub_window_ms}ms ({sub_size} samples), {num_sub_windows} sub-windows/batch")
-            
-            for i in range(0, num_samples - parent_size, step_size):
+                  f"sub={sub_window_ms}ms ({sub_size} samples), 5 sub-windows/batch, stride={step_size} samples (no overlap)")
+
+            for i in range(0, num_samples - parent_size + 1, step_size):
                 parent_window = raw_data[i : i + parent_size]
-                
+
                 # Generate 6-digit hex batch ID for this parent window
                 batch_id = f"{abs(hash(str(session_id) + str(label_int) + str(i))):06x}"[:6].zfill(6)
-                
+
                 # Split parent into 5 overlapping sub-windows
-                for sub_idx in range(num_sub_windows):
-                    sub_start = sub_idx * sub_step
-                    sub_end = sub_start + sub_size
-                    if sub_end > len(parent_window):
-                        sub_end = len(parent_window)
-                        sub_start = max(0, sub_end - sub_size)
-                    sub_window = parent_window[sub_start:sub_end]
-                    
-                    if len(sub_window) < sub_size * 0.8:
-                        continue  # Skip tiny tail windows
-                    
+                for sub_window, sub_idx in split_parent_into_sub_windows(
+                    parent_window, sub_size, sub_step, num_sub_windows=5
+                ):
                     # Extract features from sub-window
-                    feats = extract_emg_features(sub_window, sr)
+                    feats = extract_emg_features(sub_window.tolist(), sr)
                     feats['timestamp'] = time.time()
                     
                     # Save to DB with batch_id
@@ -355,13 +347,13 @@ def api_eog_start():
 def api_eog_stop():
     target_table = state.session.current_table_name or "eog_windows"
     state.session.is_recording = False 
-    
+    saved_count = 0
+
     # Process and save EOG data
     try:
         session_id = str(uuid.uuid4())
         data_store = state.session.data_store['EOG']
-        saved_count = 0
-        
+
         for label_str, samples in data_store.items():
             if len(samples) < 50:
                 continue
@@ -379,11 +371,11 @@ def api_eog_stop():
             window_size = int(sr * 0.6) # 600ms to capture full blink
             step_size = int(window_size * 0.5)
             
-            for i in range(0, len(raw_data) - window_size, step_size):
+            for i in range(0, len(raw_data) - window_size + 1, step_size):
                 window = raw_data[i : i + window_size]
                 
                 # Extract
-                feats = extract_eog_features(window, sr)
+                feats = extract_eog_features(window.tolist(), sr)
                 feats['timestamp'] = time.time()
                 
                 if db_manager.insert_eog_window(feats, label_int, session_id, table_name=target_table):

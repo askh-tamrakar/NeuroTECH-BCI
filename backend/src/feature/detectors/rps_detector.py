@@ -50,8 +50,21 @@ class RPSDetector:
             if model_path.exists() and scaler_path.exists():
                 self.model = joblib.load(model_path)
                 self.scaler = joblib.load(scaler_path)
+                
+                # Load metadata if exists
+                meta_path = models_dir / f"{clean_name}_meta.json"
+                self.metadata = {}
+                if meta_path.exists():
+                    import json
+                    try:
+                        with open(meta_path, 'r', encoding='utf-8') as f:
+                            self.metadata = json.load(f)
+                    except Exception as meta_err:
+                        print(f"[RPSDetector] Error loading metadata: {meta_err}")
+                
                 if verbose:
-                    print(f"\n{'='*50}\n[RPSDetector] 🔄 MODEL SWITCHED: {model_name}\n{'='*50}\n", flush=True)
+                    shifts_count = len(self.metadata.get('calibration_shifts', {}))
+                    print(f"\n{'='*50}\n[RPSDetector] 🔄 MODEL SWITCHED: {model_name} (Shifts: {shifts_count})\n{'='*50}\n", flush=True)
             else:
                 print(f"[RPSDetector] [WARN] Model {model_name} not found at {model_path}")
                 # Fallback to defaults? or keep previous?
@@ -74,11 +87,28 @@ class RPSDetector:
             feature_cols = ['rms', 'mav', 'var', 'wl', 'peak', 'range', 'iemg', 'entropy', 'energy', 'kurtosis', 'skewness', 'ssc', 'wamp']
             
             row = []
+            rest_mean = getattr(self, 'metadata', {}).get('rest_mean_features', {}) if hasattr(self, 'metadata') else {}
+            rest_std  = getattr(self, 'metadata', {}).get('rest_std_features', {})  if hasattr(self, 'metadata') else {}
+            mvc       = getattr(self, 'metadata', {}).get('mvc_features', {})       if hasattr(self, 'metadata') else {}
+            old_shifts = getattr(self, 'metadata', {}).get('calibration_shifts', {}) if hasattr(self, 'metadata') else {}
             for col in feature_cols:
                 val = features.get(col, 0.0)
                 # handle potential missing 'range' vs 'rng' if any
                 if col == 'range' and 'range' not in features and 'rng' in features:
                    val = features['rng']
+
+                if rest_mean and col in rest_mean:
+                    # Stage 1: REST Z-Score normalization
+                    val = (val - rest_mean[col]) / max(rest_std.get(col, 1e-6), 1e-6)
+                    # Stage 2: MVC scaling
+                    if mvc and col in mvc:
+                        val = val / max(mvc[col], 1e-6)
+                    # Stage 3: Clamp to [-5, 5]
+                    val = float(np.clip(val, -5.0, 5.0))
+                elif old_shifts and col in old_shifts:
+                    # Backward-compat fallback for models calibrated with old shift system
+                    val = val - old_shifts[col]
+
                 row.append(val)
             
             # 2. VALIDATION (Robustness)

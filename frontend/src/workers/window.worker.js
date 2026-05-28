@@ -11,6 +11,8 @@ let batchSize = 5;
 let numBatches = 6;
 let windowDuration = 1500;
 let timeWindow = 5000;
+let isCalibrationMode = false;
+let calibrationPerClassLimit = 5;
 const GAP_DURATION = 500;
 const COUNTABLE_STATUSES = new Set(['pending', 'recording', 'collected', 'saved', 'correct']);
 let currentBatchIndex = 0;
@@ -43,6 +45,8 @@ self.onmessage = function (e) {
             if (payload.numBatches !== undefined) numBatches = payload.numBatches;
             if (payload.windowDuration !== undefined) windowDuration = payload.windowDuration;
             if (payload.timeWindow !== undefined) timeWindow = payload.timeWindow;
+            if (payload.isCalibrationMode !== undefined) isCalibrationMode = payload.isCalibrationMode;
+            if (payload.calibrationPerClassLimit !== undefined) calibrationPerClassLimit = payload.calibrationPerClassLimit;
 
             if (payload.isCalibrating) {
                 startAutoWindowing();
@@ -59,6 +63,8 @@ self.onmessage = function (e) {
             if (payload.numBatches !== undefined) numBatches = payload.numBatches;
             if (payload.windowDuration !== undefined) windowDuration = payload.windowDuration;
             if (payload.timeWindow !== undefined) timeWindow = payload.timeWindow;
+            if (payload.isCalibrationMode !== undefined) isCalibrationMode = payload.isCalibrationMode;
+            if (payload.calibrationPerClassLimit !== undefined) calibrationPerClassLimit = payload.calibrationPerClassLimit;
             break;
         case 'UPDATE_SIGNAL_TIME':
             prevSignalTime = latestSignalTime;
@@ -73,6 +79,7 @@ self.onmessage = function (e) {
             checkPendingCollections();
             break;
         case 'START_WINDOWING':
+            if (payload?.label !== undefined) targetLabel = payload.label;
             startAutoWindowing(payload || {});
             break;
         case 'STOP_WINDOWING':
@@ -121,7 +128,11 @@ function startAutoWindowing(options = {}) {
             ? markedWindows.filter((window) =>
                 Number(window.batchIndex || 0) === currentBatchIndex && COUNTABLE_STATUSES.has(window.status)
             ).length
-            : markedWindows.filter((window) => COUNTABLE_STATUSES.has(window.status)).length;
+            : isCalibrationMode
+                ? markedWindows.filter((window) =>
+                    window.label === targetLabel && COUNTABLE_STATUSES.has(window.status)
+                ).length
+                : markedWindows.filter((window) => COUNTABLE_STATUSES.has(window.status)).length;
 
         if (autoCalibrate && currentBatchCount >= desiredBatchSize) {
             self.postMessage({
@@ -135,7 +146,8 @@ function startAutoWindowing(options = {}) {
             stopAutoWindowing();
             return;
         }
-        if (!autoCalibrate && currentBatchCount >= autoLimit) {
+        const effectiveLimit = isCalibrationMode ? calibrationPerClassLimit : autoLimit;
+        if (!autoCalibrate && currentBatchCount >= effectiveLimit) {
             stopAutoWindowing();
             return;
         }

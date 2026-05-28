@@ -6,7 +6,7 @@ import { buildApiUrl, getSocketIoConnection } from '../../utils/runtimeConnectio
 import {
     Trash2, Rocket, ArrowRight, Save, Target, ListOrdered,
     Database, Hand, Eye, Network, Grid3X3, Brain, PieChart,
-    RefreshCw, Sliders, ChevronLeft, ChevronRight, Circle,
+    RefreshCw, Sliders, ChevronLeft, ChevronRight, Circle, RotateCcw, Square, X,
     ArrowRightFromLine, Info, BookOpen, BrainCircuit,
     Clock, Activity, Fingerprint, Layers, Timer, Cpu, GitMerge,
     Search, Zap, GitBranch, MousePointer2
@@ -765,7 +765,8 @@ const HistoryDetailCard = ({ item, decimalCandidateDisplay = false }) => {
     );
 };
 
-const TrainingHistoryCard = ({ title = 'Training History', history = [], selectedItem, onSelectItem, decimalCandidateDisplay = false }) => {
+const TrainingHistoryCard = ({ title = 'Training History', history = [], selectedItem, onSelectItem, decimalCandidateDisplay = false, totalCandidates = 0, totalFolds = 0 }) => {
+    const totalModels = totalCandidates && totalFolds ? totalCandidates * totalFolds : null;
     return (
         <div className={`${card} h-full flex flex-col overflow-hidden`}>
             <div className="p-3 border-b border-[var(--border)] flex items-center justify-between shrink-0">
@@ -773,7 +774,7 @@ const TrainingHistoryCard = ({ title = 'Training History', history = [], selecte
                     <ListOrdered className="w-5 h-5 text-[var(--primary)]" />
                     <span className="text-[18px] font-black text-[var(--muted)] uppercase tracking-[0.2em]">{title}</span>
                 </div>
-                <span className="text-[15px] text-[var(--muted)] font-bold">{history.length} Models</span>
+                <span className="text-[15px] text-[var(--muted)] font-bold">{history.length}{totalModels ? ` / ${totalModels}` : ''} Models</span>
             </div>
             <div className="flex-1 min-h-0 grid grid-cols-12 gap-4 p-3 ">
                 <div className="col-span-12 lg:col-span-7 h-full min-h-0">
@@ -954,6 +955,15 @@ const HyperparametersCard = ({ params, setParamsTab, activeTab, models = [] }) =
 };
 
 const TrainingStatusDashboard = ({ job, countdown, params, selectedHistoryItem, onSelectHistory }) => {
+    const [liveElapsed, setLiveElapsed] = useState(null);
+    useEffect(() => {
+        if (!job?._started_at) { setLiveElapsed(null); return; }
+        const compute = () => setLiveElapsed(Math.max(0, Math.floor(Date.now() / 1000 - job._started_at)));
+        compute();
+        const t = setInterval(compute, 1000);
+        return () => clearInterval(t);
+    }, [job?._started_at]);
+
     const latestFold = job?.history?.[job.history.length - 1];
     const latestCandidateIndex = latestFold?.candidate_index ?? latestFold?.candidate_idx;
     const currentCandidateFolds = latestCandidateIndex === undefined
@@ -998,7 +1008,7 @@ const TrainingStatusDashboard = ({ job, countdown, params, selectedHistoryItem, 
                         <div className="flex items-center gap-3">
                             <Clock size={24} className="text-[var(--primary)]" />
                             <div className="text-3xl font-black text-[var(--text)] font-mono leading-none">
-                                {formatDuration(job?.elapsed_seconds)}
+                                {formatDuration(liveElapsed ?? job?.elapsed_seconds)}
                             </div>
                         </div>
                     </div>
@@ -1035,14 +1045,12 @@ const TrainingStatusDashboard = ({ job, countdown, params, selectedHistoryItem, 
                             <div className="relative flex items-center justify-center mb-20">
                                 <Activity size={32} className="absolute left-[-40px] text-[var(--primary)] animate-pulse" />
                                 <span className="text-[90px] font-black text-[var(--graph-line-1)] font-mono leading-none tracking-tighter">
-                                    {job?.progress ? (
-                                        (job.progress * 100 < 1 && job.progress > 0)
-                                            ? (job.progress * 100).toFixed(1)
-                                            : Math.round(job.progress * 100)
-                                    ) : '--'}
-                                    <span className="text-3xl opacity-80 ml-[10px] text-[var(--label)]">
-                                        {job?.progress ? '%' : ''}
-                                    </span>
+                                    {job?.progress ? (() => {
+                                        const pctVal = job.progress * 100;
+                                        const whole = Math.floor(pctVal);
+                                        const dec = (pctVal % 1).toFixed(2).slice(1);
+                                        return <>{whole}<span className="text-[30px] opacity-80 text-[var(--label)] ml-[6px]">{dec}</span><span className="text-[30px] opacity-80 text-[var(--label)] ml-[3px]">%</span></>;
+                                    })() : '--'}
                                 </span>
                             </div>
 
@@ -1093,19 +1101,38 @@ const TrainingStatusDashboard = ({ job, countdown, params, selectedHistoryItem, 
                         <span className="text-xs font-black text-[var(--muted)] uppercase tracking-[0.2em]">Active Configuration</span>
                     </div>
                     <div className="flex-1 p-4 grid grid-cols-2 gap-2.5 overflow-y-auto [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-                        {Object.entries(params)
-                            .filter(([k]) => !['table_name', 'model_name', 'train_ratio', 'val_ratio', 'test_ratio', 'random_state', 'n_estimators_min', 'n_estimators_max', 'max_depth_min', 'max_depth_max', 'min_impurity_decrease_min', 'min_impurity_decrease_max', 'tol_min', 'tol_max'].includes(k))
-                            .map(([key, val]) => (
+                        {(() => {
+                            const HIDE = new Set(['table_name', 'model_name', 'random_state']);
+                            const isRangeControl = (k) => k.endsWith('_min') || k.endsWith('_max') || k.endsWith('_step');
+                            const formatVal = (k, v) => {
+                                if (k === 'k_folds') return job?.total_folds ?? v;
+                                if (k === 'train_ratio' || k === 'val_ratio' || k === 'test_ratio') return v != null ? `${Math.round(Number(v) * 100)}%` : '--';
+                                return v;
+                            };
+                            const labelFor = (k) => {
+                                if (k === 'train_ratio') return 'Train Split';
+                                if (k === 'val_ratio') return 'Val Split';
+                                if (k === 'test_ratio') return 'Test Split';
+                                return k.replace(/_/g, ' ');
+                            };
+                            const entries = Object.entries(params)
+                                .filter(([k]) => !HIDE.has(k) && !isRangeControl(k))
+                                .map(([k, v]) => [k, formatVal(k, v)]);
+                            if (job?.total_candidates && !entries.find(([k]) => k === 'total_candidates')) {
+                                entries.splice(1, 0, ['total_candidates', job.total_candidates]);
+                            }
+                            return entries.map(([key, val]) => (
                                 <div key={key} className="p-3 rounded-xl bg-[var(--bg)] border border-[var(--border)] group-hover/params:border-[var(--primary)]/30 transition-colors flex items-center justify-between">
                                     <div className="flex items-center gap-3">
                                         <div className="p-2 rounded-lg bg-[var(--surface)] border border-[var(--border)] flex items-center justify-center text-[var(--muted)]">
                                             {getParamIcon(key)}
                                         </div>
-                                        <span className="text-[10px] font-black text-[var(--muted)] uppercase tracking-wider">{key.replace(/_/g, ' ')}</span>
+                                        <span className="text-[10px] font-black text-[var(--muted)] uppercase tracking-wider">{labelFor(key)}</span>
                                     </div>
                                     <span className="text-sm font-black text-[var(--text)] font-mono">{val?.toString() || '--'}</span>
                                 </div>
-                            ))}
+                            ));
+                        })()}
                     </div>
                 </div>
             </div>
@@ -1119,6 +1146,8 @@ const TrainingStatusDashboard = ({ job, countdown, params, selectedHistoryItem, 
                     onSelectItem={onSelectHistory}
                     detailLabel="Model Performance Analysis"
                     decimalCandidateDisplay={true}
+                    totalCandidates={job?.total_candidates || 0}
+                    totalFolds={job?.total_folds || 0}
                 />
             </div>
         </div >
@@ -1637,6 +1666,27 @@ const DecisionTreeCard = ({ structure, treeIndex, totalTrees, onTreeChange, load
         setLocalShowHistory(showHistoryProp);
     }, [showHistoryProp]);
 
+    // Stable ref so the keydown handler always calls the latest onTreeChange
+    // without re-attaching the listener on every parent render.
+    const onTreeChangeRef = useRef(onTreeChange);
+    useEffect(() => { onTreeChangeRef.current = onTreeChange; });
+
+    useEffect(() => {
+        if (localShowHistory) return;
+        const handler = (e) => {
+            if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+            if (e.key === 'ArrowLeft' && treeIndex > 0) {
+                e.preventDefault();
+                onTreeChangeRef.current(treeIndex - 1);
+            } else if (e.key === 'ArrowRight' && treeIndex < totalTrees - 1) {
+                e.preventDefault();
+                onTreeChangeRef.current(treeIndex + 1);
+            }
+        };
+        window.addEventListener('keydown', handler);
+        return () => window.removeEventListener('keydown', handler);
+    }, [treeIndex, totalTrees, localShowHistory]);
+
     const showHistory = localShowHistory;
     const setShowHistory = setLocalShowHistory;
     return (
@@ -1720,6 +1770,7 @@ const DecisionTreeCard = ({ structure, treeIndex, totalTrees, onTreeChange, load
                         >
                             {structure ? (
                                 <Tree
+                                    key={treeIndex}
                                     data={structure}
                                     orientation="vertical"
                                     translate={{ x: 400, y: 50 }}
@@ -1744,12 +1795,13 @@ const DecisionTreeCard = ({ structure, treeIndex, totalTrees, onTreeChange, load
 const ControlPanel = ({
     onTrain,
     onStopTraining,
+    onRetrain,
     loading,
     trainingActive = false,
+    modelLoaded = false,
     sessions,
     selectedSession,
     onSessionSelect,
-    onRefreshSessions,
     activeTab,
     setActiveTab,
     modelName,
@@ -1825,57 +1877,71 @@ const ControlPanel = ({
                     ]}
                     placeholder="Select Session..."
                 />
-                <button onClick={onRefreshSessions} disabled={sessionLocked} className="p-2.5 border-[2px] border-[var(--border)] rounded-lg hover:bg-[var(--bg)] text-[var(--text)] disabled:opacity-40 disabled:cursor-not-allowed" title="Refresh Sessions"><RefreshCw className="w-5 h-5" /></button>
+                <button
+                    onClick={trainingActive ? onStopTraining : modelLoaded ? onRetrain : undefined}
+                    disabled={!trainingActive && !modelLoaded}
+                    title={trainingActive ? 'Stop Training' : modelLoaded ? 'Retrain Saved Model' : 'No action'}
+                    className={`p-2.5 rounded-lg border-[2px] flex items-center justify-center transition-all active:scale-90 shrink-0 ${
+                        trainingActive
+                            ? 'bg-red-600 border-red-500 text-white hover:bg-red-500 shadow-[0_0_12px_rgba(239,68,68,0.4)]'
+                            : modelLoaded
+                                ? 'bg-amber-500 border-amber-400 text-white hover:bg-amber-400 shadow-[0_0_12px_rgba(245,158,11,0.35)]'
+                                : 'border-[var(--border)] text-[var(--muted)] opacity-30 cursor-not-allowed'
+                    }`}
+                >
+                    {trainingActive
+                        ? <X size={18} />
+                        : <RefreshCw size={18} />}
+                </button>
             </div>
         </div>
-
-        {/* Actions */}
-        <div className="grid grid-cols-1 gap-3 overflow-visible">
-            {/* Shimmer Effect */}
-            <button
-                onClick={trainingActive ? onStopTraining : onTrain}
-                disabled={loading && !trainingActive}
-                className={`w-full flex items-center justify-center py-3 rounded-xl font-bold text-[10px] tracking-[0.15em] transition-all shadow-[0_0_20px_rgba(var(--primary-rgb),0.2)] hover:shadow-[0_0_30px_rgba(var(--primary-rgb),0.4)] hover:scale-[1.05] hover:z-50 active:scale-95 group relative overflow-hidden disabled:opacity-20 ${trainingActive ? 'bg-red-500 text-white' : 'bg-primary text-primary-contrast'}`}
-            >
-                <div className="absolute inset-0 bg-white/30 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000 ease-in-out skew-x-12" />
-                <span className="relative z-10 text-xl gap-4 flex items-center justify-center w-full">
-                    {trainingActive ?
-                        <>
-                            <motion.span
-                                initial={{ rotate: 0 }}
-                                whileInView={{
-                                    rotate: [0, -10, 10, -10, 10, 0],
-                                    y: [0, -2, 0]
-                                }}
-                                transition={{ duration: 0.5, repeat: Infinity }}
-                                className="inline-block"
-                            >
-                                <Rocket size={34} />
-                            </motion.span>
-                            Trainning...
-
-                        </>
-                        : loading ? 'Training...' : (
-                            <>
-                                Train
-                                <motion.span
-                                    initial={{ rotate: 0 }}
-                                    whileHover={{
-                                        rotate: [0, -10, 10, -10, 10, 0],
-                                        y: [0, -2, 0]
-                                    }}
-                                    transition={{ duration: 0.5, repeat: Infinity }}
-                                    className="inline-block"
-                                >
-                                    <Rocket size={34} />
-                                </motion.span>
-                                Model
-                            </>
-                        )}
-                </span>
-            </button>
-        </div>
     </div>
+);
+
+// Train button extracted from ControlPanel so hover:scale-[1.05] is not clipped
+// by ancestor overflow-hidden containers.
+const TrainButton = ({ onTrain, loading, trainingActive }) => (
+    <button
+        onClick={!trainingActive ? onTrain : undefined}
+        disabled={loading && !trainingActive}
+        className={`w-full flex items-center justify-center py-3 rounded-xl font-bold text-[10px] tracking-[0.15em] transition-all shadow-[0_0_20px_rgba(var(--primary-rgb),0.2)] hover:shadow-[0_0_30px_rgba(var(--primary-rgb),0.4)] hover:scale-[1.05] hover:z-50 active:scale-95 group relative overflow-hidden disabled:opacity-20 ${trainingActive ? 'bg-red-500 text-white' : 'bg-primary text-primary-contrast'}`}
+    >
+        <div className="absolute inset-0 bg-white/30 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000 ease-in-out skew-x-12" />
+        <span className="relative z-10 text-xl gap-4 flex items-center justify-center w-full">
+            {trainingActive ? (
+                <>
+                    <motion.span
+                        initial={{ rotate: 0 }}
+                        whileInView={{
+                            rotate: [0, -10, 10, -10, 10, 0],
+                            y: [0, -2, 0]
+                        }}
+                        transition={{ duration: 0.5, repeat: Infinity }}
+                        className="inline-block"
+                    >
+                        <Rocket size={34} />
+                    </motion.span>
+                    Trainning...
+                </>
+            ) : loading ? 'Training...' : (
+                <>
+                    Train
+                    <motion.span
+                        initial={{ rotate: 0 }}
+                        whileHover={{
+                            rotate: [0, -10, 10, -10, 10, 0],
+                            y: [0, -2, 0]
+                        }}
+                        transition={{ duration: 0.5, repeat: Infinity }}
+                        className="inline-block"
+                    >
+                        <Rocket size={34} />
+                    </motion.span>
+                    Model
+                </>
+            )}
+        </span>
+    </button>
 );
 
 export default function MLTrainingView({ onSwitchLab }) {
@@ -2103,7 +2169,7 @@ export default function MLTrainingView({ onSwitchLab }) {
             soundHandler.stopRockySliding();
         }
         return () => soundHandler.stopRockySliding();
-    }, [trainingJob, countdown]);
+    }, [trainingJob?.status, trainingJob?.job_id, countdown]);
 
     // Also re-fetch if session changes? Maybe useful for context, but not critical for model list.
     useEffect(() => {
@@ -2130,9 +2196,8 @@ export default function MLTrainingView({ onSwitchLab }) {
         const model = selectedModelName;
         if (!model) return;
 
-        setTreeIndex(index);
         setTreeLoading(true);
-        soundHandler.playMLTreeStep(); // Play sound on tree step
+        soundHandler.playMLTreeStep();
         try {
             const res = await fetch(buildApiUrl('/api/model/tree'), {
                 method: 'POST',
@@ -2142,7 +2207,11 @@ export default function MLTrainingView({ onSwitchLab }) {
             if (res.ok) {
                 const data = await res.json();
                 if (data.tree_structure) {
-                    // Update whichever result is active
+                    // Move setTreeIndex here so it batches with the structure update.
+                    // Both treeIndex (key) and structure change in one render → Tree remounts
+                    // with the correct new data. If setTreeIndex fired first, the Tree would
+                    // remount with stale structure, then ignore the second prop-only update.
+                    setTreeIndex(index);
                     if (activeResult) {
                         setResults(prev => ({
                             ...prev,
@@ -2346,7 +2415,6 @@ export default function MLTrainingView({ onSwitchLab }) {
 
     useEffect(() => {
         if (!trainingJob?.job_id) {
-            finalizedJobRef.current = null;
             return;
         }
         if (finalizedJobRef.current === trainingJob.job_id) return;
@@ -2360,16 +2428,15 @@ export default function MLTrainingView({ onSwitchLab }) {
             setLoading(false);
             soundHandler.playSuccess();
             setCountdown(5);
+            let countVal = 5;
             const timer = setInterval(() => {
-                setCountdown(c => {
-                    const next = (typeof c === 'number' ? c : 5) - 1;
-                    if (next <= 0) {
-                        clearInterval(timer);
-                        clearTrainingJobState();
-                        return 0;
-                    }
-                    return next;
-                });
+                countVal -= 1;
+                if (countVal <= 0) {
+                    clearInterval(timer);
+                    clearTrainingJobState();
+                } else {
+                    setCountdown(countVal);
+                }
             }, 1000);
             return () => clearInterval(timer);
         }
@@ -2385,9 +2452,16 @@ export default function MLTrainingView({ onSwitchLab }) {
         }
     }, [trainingJob, activeTab, clearTrainingJobState, restoreCompletedJob]);
 
-    const handleTrain = async () => {
+    const handleRetrain = () => {
+        if (!selectedModelName) return;
+        setTrainModelNameInput(selectedModelName);
+        handleTrain(selectedModelName);
+    };
+
+    const handleTrain = async (nameOverride = null) => {
         soundHandler.playMLTrain();
-        if (!trainModelNameInput.trim()) {
+        const resolvedName = (nameOverride || trainModelNameInput).trim();
+        if (!resolvedName) {
             setError("Please name your model");
             return;
         }
@@ -2400,7 +2474,7 @@ export default function MLTrainingView({ onSwitchLab }) {
                 'EEG': buildApiUrl('/api/train-eeg-lda')
             };
 
-            const modelNameFinal = trainModelNameInput.trim();
+            const modelNameFinal = resolvedName;
 
             const validKForBackend = parseInt(activeParams.k_folds);
             const enforcedKForBackend = isNaN(validKForBackend) ? 1 : Math.max(1, Math.min(20, validKForBackend));
@@ -2474,27 +2548,28 @@ export default function MLTrainingView({ onSwitchLab }) {
             </div>}
 
             {/* CONTENT scrollable container */}
-            <div className="flex-1 overflow-hidden">
+            <div className="flex-1 min-h-0 overflow-visible">
                 <div className="h-full grid grid-cols-12 grid-rows-6 gap-4 overflow-visible">
                     {/* LEFT SIDEBAR CONTROLS (Span 3) - NOW CONTAINS ACCURACY & FEATURES TOO */}
                     <div className="col-span-12 lg:col-span-3 row-span-6 flex flex-col gap-5 min-h-0">
                         {/* 1. CONTROLS */}
-                        <div className="shrink-0">
+                        <div className="shrink-0 flex flex-col gap-4 overflow-visible">
                             <ControlPanel
                                 onTrain={handleTrain}
                                 onStopTraining={handleStopTraining}
+                                onRetrain={handleRetrain}
                                 loading={loading}
                                 trainingActive={!!trainingJob}
+                                modelLoaded={!!selectedModelName}
                                 evalLoading={evalLoading}
                                 sessions={availableSessions}
                                 selectedSession={selectedSession}
                                 onSessionSelect={setSelectedSession}
-                                onRefreshSessions={fetchSessions}
                                 onSwitchLab={onSwitchLab}
                                 activeTab={activeTab}
                                 setActiveTab={setActiveTab}
                                 modelName={trainModelNameInput}
-                                sessionLocked={!!selectedModelName}
+                                sessionLocked={!!selectedModelName || !!trainingJob}
                                 onModelNameFocus={() => {
                                     if (!selectedModelName) return;
                                     setSelectedModels(prev => ({ ...prev, [activeTab]: null }));
@@ -2510,6 +2585,12 @@ export default function MLTrainingView({ onSwitchLab }) {
                                         setEvalResults(prev => ({ ...prev, [activeTab]: null }));
                                     }
                                 }}
+                            />
+                            {/* Real Train button — outside ControlPanel so hover:scale-[1.05] is not clipped */}
+                            <TrainButton
+                                onTrain={handleTrain}
+                                loading={loading}
+                                trainingActive={!!trainingJob}
                             />
                         </div>
 

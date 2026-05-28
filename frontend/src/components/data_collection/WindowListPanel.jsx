@@ -141,6 +141,10 @@ function WindowListPanel({
     progressTotal = 1,
     progressPercent = 0,
     currentBatchIndex = 0,
+    isCalibrationMode = false,
+    perClassLimit = null,
+    numClasses = 4,
+    onPerClassLimitChange,
 }) {
     // Stats calculated in a single pass for efficiency
     const { recordingCount, processedCount, savedCount } = useMemo(() => {
@@ -153,7 +157,13 @@ function WindowListPanel({
         return { recordingCount: rec, processedCount: proc, savedCount: sav };
     }, [windows]);
 
-    const targetCount = Math.max(1, autoCalibrate ? (batchSize * numBatches) : (autoLimit || 30));
+    const targetCount = Math.max(1,
+        isCalibrationMode && perClassLimit !== null
+            ? (perClassLimit * numClasses)
+            : autoCalibrate
+                ? (batchSize * numBatches)
+                : (autoLimit || 30)
+    );
     const statsTotal = processedCount + recordingCount + savedCount;
     const progress = Math.min(100, Number(progressPercent) || 0);
     const progressLabel = progressMode === 'batches' ? 'Batches' : 'Captures';
@@ -177,16 +187,26 @@ function WindowListPanel({
                     <div className="flex items-center gap-2">
                         <div className="flex items-center gap-1.5 px-2 py-1 bg-[var(--bg)] border border-[var(--border)] rounded shadow-sm">
                             <span className="text-[12px] font-bold text-[var(--text-secondary)] uppercase">Target:</span>
-                            <span className="text-sm font-mono font-bold text-[var(--primary)]" title="Calculated: Batch Size × Batches">
+                            <span
+                                className="text-sm font-mono font-bold text-[var(--primary)]"
+                                title={isCalibrationMode && perClassLimit !== null ? `${perClassLimit} per class × ${numClasses} classes` : 'Batch Size × Batches'}
+                            >
                                 {targetCount}
                             </span>
+                            {isCalibrationMode && perClassLimit !== null && (
+                                <span className="text-[10px] text-muted font-bold">×{numClasses}</span>
+                            )}
                         </div>
-                        <span className={`text-[14px] pl-1 border-l-2 border-t-2 border-b-2 border-[var(--border)] font-bold uppercase ${autoCalibrate ? 'text-[var(--primary)]' : 'text-[var(--text-secondary)]'}`}>Auto</span>
+                        <span className={`text-[14px] pl-1 border-l-2 border-t-2 border-b-2 border-[var(--border)] font-bold uppercase ${(autoCalibrate && !isCalibrationMode) ? 'text-[var(--primary)]' : 'text-[var(--text-secondary)]'}`}>Auto</span>
                         <button
-                            onClick={() => onAutoCalibrateChange?.(!autoCalibrate)}
-                            className={`w-8 h-4 rounded-full relative transition-colors border-2 border-border ${autoCalibrate ? 'bg-primary border-text' : 'bg-bg'}`}
+                            onClick={() => {
+                                if (isCalibrationMode) return;
+                                onAutoCalibrateChange?.(!autoCalibrate);
+                            }}
+                            disabled={isCalibrationMode}
+                            className={`w-8 h-4 rounded-full relative transition-colors border-2 border-border ${isCalibrationMode ? 'opacity-50 cursor-not-allowed bg-bg border-border/40' : autoCalibrate ? 'bg-primary border-text' : 'bg-bg'}`}
                         >
-                            <div className={`absolute top-0.5 bottom-0.5 w-3 rounded-full shadow transition-all ${autoCalibrate ? 'left-[calc(100%-14px)] bg-bg' : 'left-0.5 bg-text'}`} />
+                            <div className={`absolute top-0.5 bottom-0.5 w-3 rounded-full shadow transition-all ${(autoCalibrate && !isCalibrationMode) ? 'left-[calc(100%-14px)] bg-bg' : 'left-0.5 bg-text'}`} />
                         </button>
                     </div>
                 </div>
@@ -242,7 +262,7 @@ function WindowListPanel({
                             : 'bg-emerald-500 text-white hover:opacity-90 shadow-glow'
                             }`}
                     >
-                        Save Captures
+                        {isCalibrationMode ? 'Append Captures' : 'Save Captures'}
                     </button>
 
                     {autoCalibrate ? (
@@ -268,6 +288,17 @@ function WindowListPanel({
                                 />
                             </div>
                         </>
+                    ) : isCalibrationMode && perClassLimit !== null ? (
+                        <div className="flex items-center gap-1 bg-bg border border-border rounded-lg pl-1 h-[34px] shrink-0">
+                            <span className="text-[12px] font-bold text-muted uppercase tracking-wider whitespace-nowrap">Per Class</span>
+                            <CustomNumberInput
+                                value={perClassLimit}
+                                onChange={(value) => onPerClassLimitChange?.(Number(value))}
+                                min={1}
+                                borderless
+                                className="w-[50px]"
+                            />
+                        </div>
                     ) : (
                         <div className="flex items-center gap-1 bg-bg border border-border rounded-lg pl-1 h-[34px] shrink-0">
                             <span className="text-[12px] font-bold text-muted uppercase tracking-wider">Limit</span>

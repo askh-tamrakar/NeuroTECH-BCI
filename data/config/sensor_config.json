@@ -1,7 +1,7 @@
 {
   "active_models": {
     "EEG": "Neo",
-    "EMG": "Venus",
+    "EMG": "night",
     "EOG": "dino-ml"
   },
   "adc_settings": {

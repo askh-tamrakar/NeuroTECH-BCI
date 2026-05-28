@@ -7,6 +7,7 @@ from src.server.server.extensions import socketio
 from src.database.db_manager import db_manager
 from src.server.server.lsl_service import extract_emg_features
 from src.server.server.lsl_service import extract_eog_features
+from src.config.window_config import compute_sub_window_params, split_parent_into_sub_windows
 from scipy import stats as scipy_stats
 
 from src.learning.emg_trainer import (
@@ -54,20 +55,6 @@ def _table_exists(sensor: str, table_name: str) -> bool:
 def _table_count(sensor: str, table_name: str) -> int:
     conn = db_manager.connect(sensor)
     try:
-        return int(conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0])
-    finally:
-        conn.close()
-
-def _batch_count(sensor: str, table_name: str) -> int:
-    conn = db_manager.connect(sensor)
-    try:
-        cursor = conn.cursor()
-        cursor.execute(f"PRAGMA table_info({table_name})")
-        columns = [row[1] for row in cursor.fetchall()]
-        if 'batch_id' in columns:
-            count = conn.execute(f"SELECT COUNT(DISTINCT batch_id) FROM {table_name} WHERE batch_id IS NOT NULL").fetchone()[0]
-            if count > 0:
-                return int(count)
         return int(conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0])
     finally:
         conn.close()
@@ -178,7 +165,7 @@ def api_dataset_size(sensor):
         return jsonify({
             "sensor": sensor,
             "table_name": table_name,
-            "total": _batch_count(sensor, table_name),
+            "total": _table_count(sensor, table_name),
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -209,8 +196,12 @@ def api_eval_eog():
 @training_bp.route('/api/model/evaluate/eeg', methods=['POST'])
 def api_eval_eeg():
     params = request.get_json() or {}
-    table_name = params.get('table_name')
-    model_name = params.get('model_name')
+    table_name_raw = params.get('table_name')
+    model_name_raw = params.get('model_name')
+    if not isinstance(table_name_raw, str) or not isinstance(model_name_raw, str):
+        return jsonify({"error": "table_name and model_name must be strings"}), 400
+    table_name = table_name_raw
+    model_name = model_name_raw
     res = evaluate_eeg_lda_model(table_name=table_name, model_name=model_name)
     if "error" in res:
         return jsonify(res), 400
@@ -381,34 +372,26 @@ def api_save_window():
                 # Adjust sub-window size proportionally based on actual samples
                 sub_window_ms = int(parent_window_ms * 0.6)
             
-            sub_size = int(sr * sub_window_ms / 1000)
-            num_sub_windows = 5
-            sub_step = max(1, (parent_size - sub_size) // (num_sub_windows - 1)) if num_sub_windows > 1 else 0
-            
+            _, sub_size, sub_step = compute_sub_window_params(
+                sr, sub_window_ms=sub_window_ms, parent_window_ms=parent_window_ms, num_sub_windows=5
+            )
+
             # Generate batch_id for this parent window
             batch_id = f"{abs(hash(str(ts) + str(label_int) + str(saved_count))):06x}"[:6].zfill(6)
-            
-            for sub_idx in range(num_sub_windows):
-                sub_start = sub_idx * sub_step
-                sub_end = sub_start + sub_size
-                if sub_end > parent_size:
-                    sub_end = parent_size
-                    sub_start = max(0, sub_end - sub_size)
-                sub_window = raw_data[sub_start:sub_end]
-                
-                if len(sub_window) < sub_size * 0.7:
-                    continue
-                
+
+            for sub_window, sub_idx in split_parent_into_sub_windows(
+                raw_data, sub_size, sub_step, num_sub_windows=5, min_frac=0.7
+            ):
                 feats = extract_features_wrapper(sensor, sub_window.tolist(), sr)
                 feats['timestamp'] = ts + sub_idx * 0.001
-                
+
                 if db_manager.insert_window(feats, label_int, session_id=session_id, table_name=table_name, batch_id=batch_id):
                     saved_count += 1
                     if "merge" not in table_name.lower():
                         db_manager.insert_window(feats, label_int, session_id=session_id, table_name="emg_windows", batch_id=batch_id)
-            
+
             print(f"[TrainingRoutes] Split parent ({parent_size} samples) → {saved_count} sub-windows, batch={batch_id}")
-            
+
             # Auto-calibration: use the FIRST sub-window's features for threshold updates
             if saved_count > 0:
                 # Re-extract from full window for config update (legacy behavior)
@@ -463,7 +446,19 @@ def api_save_window():
         if sensor.upper() == 'EMG' and state.rps_detector:
             try:
                 # Use stateless prediction for test windows
-                pred_label, pred_conf = state.rps_detector.predict_instant(features)
+                pred_result = state.rps_detector.predict_instant(features)
+                pred_label = "Unknown"
+                pred_conf = 0.0
+
+                if isinstance(pred_result, (list, tuple)) and len(pred_result) >= 2:
+                    pred_label, pred_conf = pred_result[0], pred_result[1]
+                elif isinstance(pred_result, dict):
+                    pred_label = pred_result.get("label", "Unknown")
+                    pred_conf = pred_result.get("confidence", 0.0)
+                elif isinstance(pred_result, str):
+                    pred_label = pred_result
+                elif pred_result is not None:
+                    pred_label = str(pred_result)
                 
                 # If confidence is reasonable, use it
                 if pred_label != "Unknown" and pred_conf > 0.4:

@@ -32,6 +32,7 @@ class DatabaseManager:
         # EMG
         conn = self.connect('EMG')
         self._create_emg_table(conn.cursor(), "emg_windows")
+        self._create_emg_table(conn.cursor(), "emg_calibration")
         conn.commit()
         conn.close()
 
@@ -139,7 +140,10 @@ class DatabaseManager:
         if not safe_suffix: safe_suffix = "default"
         
         sensor = sensor_type.upper()
-        table_name = f"{sensor.lower()}_session_{safe_suffix}"
+        if safe_suffix == "emg_calibration":
+            table_name = "emg_calibration"
+        else:
+            table_name = f"{sensor.lower()}_session_{safe_suffix}"
         
         conn = self.connect(sensor)
         cursor = conn.cursor()
@@ -295,12 +299,14 @@ class DatabaseManager:
             
             # Validate table name strictly to prevent injection
             prefix = f"{sensor.lower()}_session_"
-            if not session_name.startswith(prefix):
+            if session_name == "emg_calibration":
+                pass
+            elif not session_name.startswith(prefix):
                  # Assume it's the full table name passed from frontend
                  return {"rows": [], "total": 0}
             
             # Additional safety verify it exists in list?
-            if session_name not in self.get_session_tables(sensor):
+            if session_name != "emg_calibration" and session_name not in self.get_session_tables(sensor):
                 return {"rows": [], "total": 0}
 
             conn = self.connect(sensor)
@@ -389,7 +395,9 @@ class DatabaseManager:
             
             # Validate table name similar to get_session_data
             prefix = f"{sensor.lower()}_session_"
-            if not session_name.startswith(prefix):
+            if session_name == "emg_calibration":
+                pass
+            elif not session_name.startswith(prefix):
                  # Try sanitize/lookup if needed, but stick to strict matching for safety like get_session_data
                  # Or allow if it's in the known table list (expensive?)
                  # For now, strict prefix check as frontend sends full name

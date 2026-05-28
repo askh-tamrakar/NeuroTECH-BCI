@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import AnimatedList from '../ui/display/AnimatedList';
 import CustomSelect from '../ui/inputs/CustomSelect';
-import { Trash, ClipboardX, Trash2, FolderPlus, RefreshCw, Edit2, GitMerge, Check, X, ArchiveX, ArrowUpDown, ArrowUp, ArrowDown, ListFilter, ArrowDownToLine, ArrowUpToLine } from 'lucide-react';
+import { Trash, ClipboardX, Trash2, FolderPlus, RefreshCw, Edit2, GitMerge, Check, X, ArchiveX, ArrowUpDown, ArrowUp, ArrowDown, ListFilter, ArrowDownToLine, ArrowUpToLine, Brain, ChevronDown } from 'lucide-react';
 
 export default function SessionManagerPanel({
     activeSensor,
@@ -25,7 +25,13 @@ export default function SessionManagerPanel({
     onMergeSessions,
     onDeleteRow,
     onClearSession,
-    onCreateSession
+    onCreateSession,
+    isCalibrationMode = false,
+    showCalibrateButton = false,
+    onCalibrate,
+    models = [],
+    selectedModel = "",
+    onModelChange,
 }) {
     const SENSOR_LABEL_MAP = {
         'EMG': { 0: 'Rest', 1: 'Rock', 2: 'Paper', 3: 'Scissors' },
@@ -43,6 +49,19 @@ export default function SessionManagerPanel({
 
     const [newSessionInput, setNewSessionInput] = useState("");
     const lastSessionRef = useRef(null);
+
+    const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
+    const modelDropdownRef = useRef(null);
+
+    useEffect(() => {
+        const clickOutside = (e) => {
+            if (modelDropdownRef.current && !modelDropdownRef.current.contains(e.target)) {
+                setIsModelDropdownOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', clickOutside);
+        return () => document.removeEventListener('mousedown', clickOutside);
+    }, []);
 
     // New states for rename and multi-merge
     const [renamingSession, setRenamingSession] = useState(null);
@@ -150,6 +169,7 @@ export default function SessionManagerPanel({
 
     // Helper to get full table name from the current short name
     const fullCurrentSessionName = useMemo(() => {
+        if (currentSessionName === 'emg_calibration') return 'emg_calibration';
         if (!sessions || sessions.length === 0 || !currentSessionName) return null;
 
         // 1. Try exact match (unlikely if strictly short names are passed, but possible)
@@ -289,8 +309,79 @@ export default function SessionManagerPanel({
                         <FolderPlus size={18} className="text-primary" />
                         <span className="text-sm font-bold text-inter uppercase tracking-wider truncate max-w-[150px]">
                             {currentSessionName ? currentSessionName.replace(`${activeSensor.toLowerCase()}_session_`, '') : 'Select a Session'}
-                        </span>
+        </span>
                     </div>
+
+                    {showCalibrateButton && (
+                        <div className="flex items-center gap-2">
+                            {/* Model Selector Custom Dropdown */}
+                            <div ref={modelDropdownRef} className="relative flex items-center gap-1 bg-surface-dark pl-2 pr-1 py-0.5 rounded border border-border h-9 shrink-0 flex-1 min-w-[170px] max-w-[220px]">
+                                <Brain size={16} className="text-primary shrink-0" />
+                                <button
+                                    type="button"
+                                    onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}
+                                    className="bg-transparent border-none text-[11px] font-bold text-text focus:ring-0 w-full cursor-pointer h-full outline-none flex items-center justify-between text-left pr-1"
+                                >
+                                    <span className="truncate">
+                                        {selectedModel ? (
+                                            (() => {
+                                                const m = models.find(mod => (mod.name || mod) === selectedModel);
+                                                const modelName = m?.name || selectedModel;
+                                                const accuracyText = m?.accuracy ? ` (${(m.accuracy * 100).toFixed(0)}% Acc)` : '';
+                                                return `${modelName}${accuracyText}`;
+                                            })()
+                                        ) : "Select Model..."}
+                                    </span>
+                                    <ChevronDown size={14} className={`text-muted transition-transform duration-200 ${isModelDropdownOpen ? 'rotate-180' : ''}`} />
+                                </button>
+
+                                {isModelDropdownOpen && (
+                                    <div className="absolute left-0 right-0 top-full mt-1 z-50 bg-surface border border-border rounded-lg shadow-lg overflow-y-auto max-h-[132px] [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']">
+                                        <div className="py-1">
+                                            {models.map(m => {
+                                                const modelName = m?.name || m;
+                                                const accuracyText = m?.accuracy ? ` (${(m.accuracy * 100).toFixed(0)}% Acc)` : '';
+                                                const isSelected = selectedModel === modelName;
+                                                return (
+                                                    <button
+                                                        key={modelName}
+                                                        type="button"
+                                                        onClick={() => {
+                                                            onModelChange?.(modelName);
+                                                            setIsModelDropdownOpen(false);
+                                                        }}
+                                                        className={`w-full px-3 py-2 text-[11px] text-left font-bold transition-all flex items-center justify-between hover:bg-primary/10 hover:text-primary ${
+                                                            isSelected ? 'bg-primary/20 text-primary' : 'text-text'
+                                                        }`}
+                                                    >
+                                                        <span className="truncate">{modelName}{accuracyText}</span>
+                                                        {isSelected && <Check size={12} className="text-primary shrink-0 ml-1" />}
+                                                    </button>
+                                                );
+                                            })}
+                                            {models.length === 0 && (
+                                                <div className="px-3 py-2 text-[10px] text-muted italic text-center">
+                                                    No models available
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            <button
+                                onClick={onCalibrate}
+                                disabled={!selectedModel}
+                                className={`flex items-center gap-2 px-4 rounded border shrink-0 h-9 font-black text-xs uppercase tracking-widest shadow-md transition-all ${
+                                    selectedModel 
+                                        ? 'bg-primary hover:bg-primary/95 text-primary-contrast border-primary hover:scale-105 active:scale-95 animate-pulse' 
+                                        : 'bg-bg text-muted border-border cursor-not-allowed opacity-50'
+                                }`}
+                            >
+                                <Brain size={16} fill="currentColor" /> Calibrate
+                            </button>
+                        </div>
+                    )}
 
                     <div className="h-8 w-[1px] bg-[var(--section-border)] opacity-20 shrink-0 mx-1"></div>
 
@@ -380,17 +471,6 @@ export default function SessionManagerPanel({
                         </div>
 
                         <div className="flex items-center gap-1 h-9">
-                            {!isTestMode && (
-                                <button
-                                    onClick={() => onClearSession(fullCurrentSessionName)}
-                                    className="px-3 hover:bg-red-500/20 text-muted hover:text-red-500 rounded border border-transparent hover:border-red-500/30 transition-all flex items-center gap-1.5 h-full"
-                                    title="Clear All Rows"
-                                >
-                                    <Trash2 size={16} />
-                                    <span className="text-xs font-bold uppercase hidden xl:block">Clear</span>
-                                </button>
-                            )}
-                            <div className="h-6 w-[1px] bg-white/10 mx-1"></div>
                             <button
                                 onClick={() => onFetchDetails({
                                     fullName: fullCurrentSessionName,
@@ -545,193 +625,195 @@ export default function SessionManagerPanel({
             </div>
 
             {/* RIGHT PANE: Session List */}
-            <div className="w-1/3 min-w-[180px] max-w-[250px] flex flex-col bg-[var(--panel-bg)] rounded-lg border border-[var(--border)] overflow-hidden">
-                <div className="p-3 border-b border-[var(--border)] bg-[var(--surface)]">
-                    <h3 className="font-bold text-base text-[var(--title)] uppercase tracking-wide flex items-center justify-between pr-2 mb-2">
-                        <span>Sessions</span>
-                        <div className="flex gap-1 items-center">
-                            {!isTestMode && (
-                                <button
-                                    onClick={() => {
-                                        setMergeMode(!mergeMode);
-                                        if (!mergeMode) {
-                                            setSelectedMergeSessions([]);
-                                            setMergeTargetName("");
+            {!isCalibrationMode && (
+                <div className="w-1/3 min-w-[180px] max-w-[250px] flex flex-col bg-[var(--panel-bg)] rounded-lg border border-[var(--border)] overflow-hidden">
+                    <div className="p-3 border-b border-[var(--border)] bg-[var(--surface)]">
+                        <h3 className="font-bold text-base text-[var(--title)] uppercase tracking-wide flex items-center justify-between pr-2 mb-2">
+                            <span>Sessions</span>
+                            <div className="flex gap-1 items-center">
+                                {!isTestMode && (
+                                    <button
+                                        onClick={() => {
+                                            setMergeMode(!mergeMode);
+                                            if (!mergeMode) {
+                                                setSelectedMergeSessions([]);
+                                                setMergeTargetName("");
+                                            }
+                                        }}
+                                        className={`p-1 rounded transition-colors ${mergeMode ? 'bg-accent text-white' : 'text-muted hover:text-accent'}`}
+                                        title="Merge Multiple Sessions"
+                                    >
+                                        <GitMerge size={16} />
+                                    </button>
+                                )}
+                                <button onClick={() => onFetchDetails({ fullName: fullCurrentSessionName, limit: LIMIT, offset: 0, isReset: true, sortBy, order, label: filterLabel === 'all' ? null : filterLabel, from: rowFrom || null, to: rowTo || null })} className="text-muted hover:text-primary p-1">
+                                    <RefreshCw size={16} />
+                                </button>
+                            </div>
+                        </h3>
+
+                        {/* Create New - Hidden in Test Mode */}
+                        {!isTestMode && !mergeMode && (
+                            <div className="flex gap-1">
+                                <input
+                                    ref={inputRef}
+                                    className="w-full bg-bg border border-border rounded px-2 py-1 text-xs text-text focus:border-primary outline-none font-mono"
+                                    placeholder="New Session..."
+                                    value={newSessionInput}
+                                    onChange={e => setNewSessionInput(e.target.value)}
+                                    onKeyDown={e => {
+                                        if (e.key === 'Enter') {
+                                            handleCreate();
+                                            e.target.blur();
+                                        } else if (e.key === 'Escape') {
+                                            e.target.blur();
                                         }
                                     }}
-                                    className={`p-1 rounded transition-colors ${mergeMode ? 'bg-accent text-white' : 'text-muted hover:text-accent'}`}
-                                    title="Merge Multiple Sessions"
+                                />
+                                <button
+                                    onClick={handleCreate}
+                                    className="px-2 bg-primary text-white text-xs font-bold rounded hover:opacity-90 transition-opacity"
                                 >
-                                    <GitMerge size={16} />
+                                    <FolderPlus size={16} />
                                 </button>
-                            )}
-                            <button onClick={() => onFetchDetails({ fullName: fullCurrentSessionName, limit: LIMIT, offset: 0, isReset: true, sortBy, order, label: filterLabel === 'all' ? null : filterLabel, from: rowFrom || null, to: rowTo || null })} className="text-muted hover:text-primary p-1">
-                                <RefreshCw size={16} />
-                            </button>
-                        </div>
-                    </h3>
+                            </div>
+                        )}
 
-                    {/* Create New - Hidden in Test Mode */}
-                    {!isTestMode && !mergeMode && (
-                        <div className="flex gap-1">
-                            <input
-                                ref={inputRef}
-                                className="w-full bg-bg border border-border rounded px-2 py-1 text-xs text-text focus:border-primary outline-none font-mono"
-                                placeholder="New Session..."
-                                value={newSessionInput}
-                                onChange={e => setNewSessionInput(e.target.value)}
-                                onKeyDown={e => {
-                                    if (e.key === 'Enter') {
-                                        handleCreate();
-                                        e.target.blur();
-                                    } else if (e.key === 'Escape') {
-                                        e.target.blur();
+                        {/* Merge Controls */}
+                        {!isTestMode && mergeMode && (
+                            <div className="flex flex-col gap-2 mt-2 p-2 bg-surface/50 border border-accent/20 rounded-md">
+                                <div className="text-xs font-bold text-accent uppercase flex justify-between">
+                                    Merge Mode
+                                    <span className="text-muted">{selectedMergeSessions.length} selected</span>
+                                </div>
+                                <input
+                                    className="w-full bg-bg border border-border rounded px-2 py-1 text-xs text-text focus:border-accent outline-none font-mono"
+                                    placeholder="New merged name..."
+                                    value={mergeTargetName}
+                                    onChange={e => setMergeTargetName(e.target.value)}
+                                    onKeyDown={e => e.key === 'Enter' && handleMultiMergeSubmit()}
+                                />
+                                <div className="flex gap-1">
+                                    <button
+                                        onClick={handleMultiMergeSubmit}
+                                        disabled={selectedMergeSessions.length < 2 || !mergeTargetName.trim()}
+                                        className="flex-1 py-1 bg-accent text-white text-xs font-bold rounded hover:opacity-90 disabled:opacity-50 transition-opacity flex justify-center items-center gap-1"
+                                    >
+                                        <Check size={14} /> Merge
+                                    </button>
+                                    <button
+                                        onClick={() => setMergeMode(false)}
+                                        className="flex-1 py-1 bg-surface border border-border text-muted text-xs font-bold rounded hover:text-text hover:bg-white/5 transition-all text-center"
+                                    >
+                                        Cancel
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="flex-grow overflow-hidden relative p-0 bg-surface/30">
+                        {isLoading ? (
+                            <div className="flex flex-col items-center justify-center h-full text-muted space-y-2 pb-10">
+                                <RefreshCw size={40} className="animate-spin opacity-40" />
+                                <span className="text-sm">Fetching sessions...</span>
+                            </div>
+                        ) : sessions.length === 0 && !isLoading ? (
+                            <div className="flex flex-col items-center justify-center h-full text-muted opacity-60 space-y-2 pb-10">
+                                <ArchiveX size={50} strokeWidth={1.5} />
+                                <span className="text-xl italic">No saved sessions</span>
+                            </div>
+                        ) : (
+                            <AnimatedList
+                                items={sessions}
+                                selectedIndex={activeSessionIndex}
+                                onItemSelect={handleSessionSelect}
+                                enableArrowNavigation={false}
+                                className="h-full"
+                                itemClassName="text-xs font-mono py-1 px-2 mb-0.5"
+                                renderItem={(sessionName, index, isSelected) => {
+                                    const cleanName = sessionName.replace(`${activeSensor.toLowerCase()}_session_`, '');
+
+                                    if (renamingSession === sessionName) {
+                                        return (
+                                            <div className="flex justify-between items-center pr-1 py-0.5 rounded-md bg-surface border border-primary">
+                                                <input
+                                                    autoFocus
+                                                    value={renameInput}
+                                                    onChange={e => setRenameInput(e.target.value)}
+                                                    onKeyDown={e => { if (e.key === 'Enter') handleRenameSubmit(sessionName, e); if (e.key === 'Escape') setRenamingSession(null); }}
+                                                    className="w-full bg-transparent text-text text-sm pl-1 outline-none"
+                                                />
+                                                <div className="flex gap-1 shrink-0">
+                                                    <button onClick={(e) => handleRenameSubmit(sessionName, e)} className="text-emerald-500 hover:bg-emerald-500/20 p-1 rounded">
+                                                        <Check size={16} />
+                                                    </button>
+                                                    <button onClick={(e) => { e.stopPropagation(); setRenamingSession(null); }} className="text-red-500 hover:bg-red-500/20 p-1 rounded">
+                                                        <X size={16} />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        );
                                     }
+
+                                    if (mergeMode) {
+                                        const isChecked = selectedMergeSessions.includes(sessionName);
+                                        return (
+                                            <div
+                                                onClick={() => toggleMergeSelection(sessionName)}
+                                                className={`flex justify-between items-center rounded-md cursor-pointer transition-all ${isChecked ? 'bg-accent/10 border border-accent/20' : 'hover:bg-white/5 border border-transparent'}`}
+                                            >
+                                                <div className="flex items-center gap-3 pl-2">
+                                                    <div className={`w-4 h-4 rounded flex items-center justify-center transition-all ${isChecked ? 'bg-accent border-accent' : 'bg-transparent border-2 border-muted/50'}`}>
+                                                        {isChecked && <Check size={12} className="text-white" />}
+                                                    </div>
+                                                    <span className={`pl-1 ml-2 text-base truncate ${isChecked ? 'font-bold text-accent' : 'text-muted'}`}>
+                                                        {cleanName}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        );
+                                    }
+
+                                    return (
+                                        <div onClick={() => {
+                                            handleSessionSelect(sessionName, index);
+                                            if (inputRef && inputRef.current) inputRef.current.blur();
+                                        }} className={`flex justify-between items-center pr-2 py-0.5 rounded-md cursor-pointer transition-all group ${isSelected
+                                            ? 'bg-primary/10 border border-primary/20 text-primary'
+                                            : 'hover:bg-white/5 border border-transparent text-muted hover:text-text'
+                                            }`}>
+                                            <span className={`text-base truncate ${isSelected ? 'font-bold' : ''}`}>
+                                                {cleanName}
+                                            </span>
+                                            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                {!isTestMode && (
+                                                    <>
+                                                        <button
+                                                            onClick={(e) => { e.stopPropagation(); setRenamingSession(sessionName); setRenameInput(cleanName); }}
+                                                            className={`p-0.5 rounded hover:bg-primary/10 hover:text-primary transition-all text-border ${isSelected ? 'text-primary/50' : 'text-border group-hover:text-muted'}`}
+                                                            title="Rename Session"
+                                                        >
+                                                            <Edit2 size={16} />
+                                                        </button>
+                                                    </>
+                                                )}
+                                                <button
+                                                    onClick={(e) => handleDeleteSessionProxy(sessionName, e)}
+                                                    className={`p-0.5 rounded hover:bg-red-500/20 hover:text-red-400 transition-all ${isSelected ? 'text-primary/50' : 'text-border group-hover:text-muted'}`}
+                                                    title="Delete Session"
+                                                >
+                                                    <Trash size={16} />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    );
                                 }}
                             />
-                            <button
-                                onClick={handleCreate}
-                                className="px-2 bg-primary text-white text-xs font-bold rounded hover:opacity-90 transition-opacity"
-                            >
-                                <FolderPlus size={16} />
-                            </button>
-                        </div>
-                    )}
-
-                    {/* Merge Controls */}
-                    {!isTestMode && mergeMode && (
-                        <div className="flex flex-col gap-2 mt-2 p-2 bg-surface/50 border border-accent/20 rounded-md">
-                            <div className="text-xs font-bold text-accent uppercase flex justify-between">
-                                Merge Mode
-                                <span className="text-muted">{selectedMergeSessions.length} selected</span>
-                            </div>
-                            <input
-                                className="w-full bg-bg border border-border rounded px-2 py-1 text-xs text-text focus:border-accent outline-none font-mono"
-                                placeholder="New merged name..."
-                                value={mergeTargetName}
-                                onChange={e => setMergeTargetName(e.target.value)}
-                                onKeyDown={e => e.key === 'Enter' && handleMultiMergeSubmit()}
-                            />
-                            <div className="flex gap-1">
-                                <button
-                                    onClick={handleMultiMergeSubmit}
-                                    disabled={selectedMergeSessions.length < 2 || !mergeTargetName.trim()}
-                                    className="flex-1 py-1 bg-accent text-white text-xs font-bold rounded hover:opacity-90 disabled:opacity-50 transition-opacity flex justify-center items-center gap-1"
-                                >
-                                    <Check size={14} /> Merge
-                                </button>
-                                <button
-                                    onClick={() => setMergeMode(false)}
-                                    className="flex-1 py-1 bg-surface border border-border text-muted text-xs font-bold rounded hover:text-text hover:bg-white/5 transition-all text-center"
-                                >
-                                    Cancel
-                                </button>
-                            </div>
-                        </div>
-                    )}
+                        )}
+                    </div>
                 </div>
-
-                <div className="flex-grow overflow-hidden relative p-0 bg-surface/30">
-                    {isLoading ? (
-                        <div className="flex flex-col items-center justify-center h-full text-muted space-y-2 pb-10">
-                            <RefreshCw size={40} className="animate-spin opacity-40" />
-                            <span className="text-sm">Fetching sessions...</span>
-                        </div>
-                    ) : sessions.length === 0 && !isLoading ? (
-                        <div className="flex flex-col items-center justify-center h-full text-muted opacity-60 space-y-2 pb-10">
-                            <ArchiveX size={50} strokeWidth={1.5} />
-                            <span className="text-xl italic">No saved sessions</span>
-                        </div>
-                    ) : (
-                        <AnimatedList
-                            items={sessions}
-                            selectedIndex={activeSessionIndex}
-                            onItemSelect={handleSessionSelect}
-                            enableArrowNavigation={false}
-                            className="h-full"
-                            itemClassName="text-xs font-mono py-1 px-2 mb-0.5"
-                            renderItem={(sessionName, index, isSelected) => {
-                                const cleanName = sessionName.replace(`${activeSensor.toLowerCase()}_session_`, '');
-
-                                if (renamingSession === sessionName) {
-                                    return (
-                                        <div className="flex justify-between items-center pr-1 py-0.5 rounded-md bg-surface border border-primary">
-                                            <input
-                                                autoFocus
-                                                value={renameInput}
-                                                onChange={e => setRenameInput(e.target.value)}
-                                                onKeyDown={e => { if (e.key === 'Enter') handleRenameSubmit(sessionName, e); if (e.key === 'Escape') setRenamingSession(null); }}
-                                                className="w-full bg-transparent text-text text-sm pl-1 outline-none"
-                                            />
-                                            <div className="flex gap-1 shrink-0">
-                                                <button onClick={(e) => handleRenameSubmit(sessionName, e)} className="text-emerald-500 hover:bg-emerald-500/20 p-1 rounded">
-                                                    <Check size={16} />
-                                                </button>
-                                                <button onClick={(e) => { e.stopPropagation(); setRenamingSession(null); }} className="text-red-500 hover:bg-red-500/20 p-1 rounded">
-                                                    <X size={16} />
-                                                </button>
-                                            </div>
-                                        </div>
-                                    );
-                                }
-
-                                if (mergeMode) {
-                                    const isChecked = selectedMergeSessions.includes(sessionName);
-                                    return (
-                                        <div
-                                            onClick={() => toggleMergeSelection(sessionName)}
-                                            className={`flex justify-between items-center rounded-md cursor-pointer transition-all ${isChecked ? 'bg-accent/10 border border-accent/20' : 'hover:bg-white/5 border border-transparent'}`}
-                                        >
-                                            <div className="flex items-center gap-3 pl-2">
-                                                <div className={`w-4 h-4 rounded flex items-center justify-center transition-all ${isChecked ? 'bg-accent border-accent' : 'bg-transparent border-2 border-muted/50'}`}>
-                                                    {isChecked && <Check size={12} className="text-white" />}
-                                                </div>
-                                                <span className={`pl-1 ml-2 text-base truncate ${isChecked ? 'font-bold text-accent' : 'text-muted'}`}>
-                                                    {cleanName}
-                                                </span>
-                                            </div>
-                                        </div>
-                                    );
-                                }
-
-                                return (
-                                    <div onClick={() => {
-                                        handleSessionSelect(sessionName, index);
-                                        if (inputRef && inputRef.current) inputRef.current.blur();
-                                    }} className={`flex justify-between items-center pr-2 py-0.5 rounded-md cursor-pointer transition-all group ${isSelected
-                                        ? 'bg-primary/10 border border-primary/20 text-primary'
-                                        : 'hover:bg-white/5 border border-transparent text-muted hover:text-text'
-                                        }`}>
-                                        <span className={`text-base truncate ${isSelected ? 'font-bold' : ''}`}>
-                                            {cleanName}
-                                        </span>
-                                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                            {!isTestMode && (
-                                                <>
-                                                    <button
-                                                        onClick={(e) => { e.stopPropagation(); setRenamingSession(sessionName); setRenameInput(cleanName); }}
-                                                        className={`p-0.5 rounded hover:bg-primary/10 hover:text-primary transition-all text-border ${isSelected ? 'text-primary/50' : 'text-border group-hover:text-muted'}`}
-                                                        title="Rename Session"
-                                                    >
-                                                        <Edit2 size={16} />
-                                                    </button>
-                                                </>
-                                            )}
-                                            <button
-                                                onClick={(e) => handleDeleteSessionProxy(sessionName, e)}
-                                                className={`p-0.5 rounded hover:bg-red-500/20 hover:text-red-400 transition-all ${isSelected ? 'text-primary/50' : 'text-border group-hover:text-muted'}`}
-                                                title="Delete Session"
-                                            >
-                                                <Trash size={16} />
-                                            </button>
-                                        </div>
-                                    </div>
-                                );
-                            }}
-                        />
-                    )}
-                </div>
-            </div>
+            )}
         </div>
     );
 }

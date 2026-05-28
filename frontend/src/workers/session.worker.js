@@ -180,7 +180,7 @@ async function handleMultiMerge(sourceSessions, targetName) {
 }
 
 async function fetchSessionDetails({ fullName, limit = 20, offset = 0, isReset = false, direction = 'append', sortBy = 'id', order = 'ASC', label = null, from = null, to = null }) {
-    if (!fullName || !fullName.includes('_session_')) return;
+    if (!fullName || (!fullName.includes('_session_') && fullName !== 'emg_calibration')) return;
 
     notifyDetailsLoading(true);
     try {
