@@ -3,6 +3,7 @@ import Sidebar from '../live/Sidebar'
 import LiveView from '../live/LiveView'
 import Brain3D from '../ui/display/Brain3D'
 import FirmwareModal from '../live/FirmwareModal'
+import LoadingScreen from '../ui/display/LoadingScreen'
 import { ConfigService } from '../../services/ConfigService'
 import { DataService } from '../../services/DataService'
 import '../../styles/live/LiveDashboard.css'
@@ -164,7 +165,7 @@ export default function LiveDashboard({ wsData, wsConfig, wsEvent, sendMessage, 
         setIsFirmwareModalOpen, setRecordingTime
     }
 
-    if (loading) return <div className="loading-screen">Loading Config...</div>
+    if (loading) return <LoadingScreen fullscreen label="Loading config..." />
 
     // Render Logic for Mobile Swap
     const isMobileSettings = mobileMainView === 'settings';

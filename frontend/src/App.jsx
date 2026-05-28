@@ -6,6 +6,7 @@ import { soundHandler } from './handlers/SoundHandler'
 import CursorHandler from './components/ui/overlays/CursorHandler'
 import ErrorBoundary from './components/ErrorBoundary'
 import PWAInstallPrompt from './components/PWAInstallPrompt'
+import LoadingScreen from './components/ui/display/LoadingScreen'
 
 const DashboardLayout = lazy(() => import('./components/DashboardLayout.jsx'))
 const TerminalRoute = lazy(() => import('./routes/TerminalRoute.jsx'))
@@ -17,11 +18,7 @@ const LabLayout = lazy(() => import('./routes/LabLayout.jsx'))
 const SettingsRoute = lazy(() => import('./routes/SettingsRoute.jsx'))
 
 function RouteFallback() {
-  return (
-    <div className="min-h-screen flex items-center justify-center">
-      <div className="text-2xl">Loading...</div>
-    </div>
-  )
+  return <LoadingScreen fullscreen />
 }
 
 function AppContent() {
@@ -38,7 +35,7 @@ function AppContent() {
   }, [])
 
   if (loading) {
-    return <RouteFallback />
+    return <LoadingScreen fullscreen label="Authenticating..." />
   }
 
   return (

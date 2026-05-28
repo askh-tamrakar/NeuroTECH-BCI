@@ -6,6 +6,7 @@ import MainSidebar from '../components/eeg_dashbord/sidebar/MainSidebar'
 import { SidebarProvider, useSidebar } from '../components/eeg_dashbord/pages/SidebarContext'
 import { buildApiUrl } from '../utils/runtimeConnection'
 import InlineModeToggle from '../components/ui/inputs/InlineModeToggle'
+import LoadingScreen from '../components/ui/display/LoadingScreen'
 
 const MusicView = lazy(() => import('../components/eeg_dashbord/pages/MusicView'))
 const MeditationView = lazy(() => import('../components/eeg_dashbord/pages/MeditationView'))
@@ -220,7 +221,7 @@ function EEGContent() {
       </div>
 
       <div className="relative flex-grow overflow-hidden">
-        <Suspense fallback={<div className="flex h-full items-center justify-center text-muted">Loading EEG view...</div>}>
+        <Suspense fallback={<LoadingScreen label="Loading EEG view..." />}>
           {content}
         </Suspense>
       </div>

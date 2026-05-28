@@ -1,5 +1,6 @@
 import React, { Suspense, lazy, useMemo } from 'react'
 import { Navigate, useLocation, useNavigate, useOutletContext } from 'react-router-dom'
+import LoadingScreen from '../components/ui/display/LoadingScreen'
 
 const DataCollectionView = lazy(() => import('../components/lab/DataCollectionView'))
 const MLTrainingView = lazy(() => import('../components/lab/MLTrainingView'))
@@ -7,7 +8,7 @@ const MLTrainingView = lazy(() => import('../components/lab/MLTrainingView'))
 function SectionFallback() {
   return (
     <div className="flex-1 flex flex-col min-h-0 w-full">
-      <div className="flex-1 flex items-center justify-center text-muted">Loading lab view...</div>
+      <LoadingScreen label="Loading lab..." />
     </div>
   )
 }
