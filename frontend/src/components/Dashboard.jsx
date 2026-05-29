@@ -218,7 +218,7 @@ export default function Dashboard() {
 
                 {currentPage === 'live' && <LiveDashboard wsData={lastMessage} wsConfig={lastConfig} wsEvent={lastEvent} sendMessage={sendMessage} wsUrl={streamConnected ? activeWsUrl : null} mobileMainView={mobileMainView} setMobileMainView={setMobileMainView} />}
                 {currentPage === 'dino' && <DinoView isConnected={streamConnected} wsEvent={lastEvent} isPaused={false} />}
-                {currentPage === 'eeg_dashboard' && <EEGDashboard isConnected={streamConnected} wsEvent={lastEvent} wsUrl={streamConnected ? activeWsUrl : null} />}
+                {currentPage === 'eeg_dashboard' && <EEGDashboard isConnected={streamConnected} wsEvent={lastEvent} wsUrl={streamConnected ? activeWsUrl : null} connect={connect} disconnect={disconnect} />}
                 {currentPage === 'rps' && <RPSGame wsEvent={lastEvent} />}
                 {currentPage === 'lab' && <LabView wsData={lastMessage} wsEvent={lastEvent} config={lastConfig} wsUrl={streamConnected ? activeWsUrl : null} />}
                 {currentPage === 'servo_claw' && <ServoClawView wsEvent={lastEvent} isConnected={streamConnected} />}
