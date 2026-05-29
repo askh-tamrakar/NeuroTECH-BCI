@@ -133,17 +133,136 @@ const BubbleGameView = ({ result, isConnected, onBackToMenu }) => {
       sessionScoreRef.current.score += 10;
     }
     
+    updateScoreUI();
+  };
+
+  const updateScoreUI = () => {
     const sc = document.getElementById('score-val');
     if (sc) sc.textContent = sessionScoreRef.current.score.toLocaleString();
   };
 
+  const showPopPoints = (container, x, y) => {
+    const pts = document.createElement('div');
+    pts.className = 'pop-text text-green-400 drop-shadow-md';
+    pts.style.left = `${x}px`;
+    pts.style.top = `${y}px`;
+    pts.textContent = '+25';
+    container.appendChild(pts);
+    pts.addEventListener('animationend', () => pts.remove());
+  };
+
+  const stressRef = useRef(stressScore);
+  const focusRef = useRef(focusScore);
+  
+  useEffect(() => {
+    stressRef.current = stressScore;
+    focusRef.current = focusScore;
+  }, [stressScore, focusScore]);
+
+  // Ambient stress bubbles
+  useEffect(() => {
+    if (!globalRunning) return;
+    
+    let animationFrame;
+    let lastSpawn = Date.now();
+    let lastPop = Date.now();
+    
+    const loop = () => {
+      animationFrame = requestAnimationFrame(loop);
+      const now = Date.now();
+      
+      const currentFocus = focusRef.current;
+      const currentStress = stressRef.current;
+      
+      // Spawn rate scales with Focus
+      const spawnInterval = Math.max(100, 1500 - (currentFocus * 12));
+      if (now - lastSpawn > spawnInterval) {
+        lastSpawn = now;
+        
+        const wrap = balloonWrapRef.current;
+        if (!wrap) return;
+        const wrapRect = wrap.getBoundingClientRect();
+        
+        // Find center origin of the big balloon
+        const balloonEl = wrap.querySelector('.focus-balloon');
+        let startX = wrapRect.width / 2;
+        let startY = wrapRect.height / 2;
+        if (balloonEl) {
+          const balloonRect = balloonEl.getBoundingClientRect();
+          startX = (balloonRect.left - wrapRect.left) + balloonRect.width / 2;
+          startY = (balloonRect.top - wrapRect.top) + balloonRect.height / 2;
+        }
+        
+        const bubble = document.createElement('div');
+        bubble.className = 'ambient-bubble';
+        
+        const size = 15 + Math.random() * 25;
+        bubble.style.width = `${size}px`;
+        bubble.style.height = `${size}px`;
+        
+        // Start exactly at the center
+        bubble.style.left = `${startX - size / 2}px`;
+        bubble.style.top = `${startY - size / 2}px`;
+        
+        // Radial outward trajectory (360 degrees)
+        const angle = Math.random() * Math.PI * 2;
+        const radius = 250 + Math.random() * 600;
+        const tx = Math.cos(angle) * radius;
+        const ty = Math.sin(angle) * radius;
+        bubble.style.setProperty('--tx', `${tx}px`);
+        bubble.style.setProperty('--ty', `${ty}px`);
+        
+        // Slower duration inversely proportional to focus
+        const baseDuration = 15 - (currentFocus / 10); // max 15s, min 5s
+        const duration = baseDuration + Math.random() * 3;
+        bubble.style.animationDuration = `${duration}s`;
+        
+        // Click to pop
+        bubble.onclick = () => {
+          const rect = bubble.getBoundingClientRect();
+          const wrapRect = wrap.getBoundingClientRect();
+          showPopPoints(wrap, rect.left - wrapRect.left, rect.top - wrapRect.top);
+          
+          bubble.remove();
+          sessionScoreRef.current.popped += 1;
+          sessionScoreRef.current.score += 25;
+          updateScoreUI();
+        };
+        
+        bubble.addEventListener('animationend', () => {
+          bubble.remove();
+        });
+        
+        wrap.appendChild(bubble);
+      }
+      
+      // Auto-pop ambient bubbles based on Focus
+      if (currentFocus > 40) {
+        const popInterval = Math.max(200, 1500 - (currentFocus * 10));
+        if (now - lastPop > popInterval) {
+          lastPop = now;
+          const wrap = balloonWrapRef.current;
+          if (wrap) {
+            const bubbles = wrap.querySelectorAll('.ambient-bubble');
+            if (bubbles.length > 0) {
+              const target = bubbles[Math.floor(Math.random() * bubbles.length)];
+              target.remove();
+              sessionScoreRef.current.popped += 1;
+              sessionScoreRef.current.score += 15; // Auto pop score
+              updateScoreUI();
+            }
+          }
+        }
+      }
+    };
+    
+    loop();
+    return () => cancelAnimationFrame(animationFrame);
+  }, [globalRunning]);
+
   useEffect(() => {
     if (!globalRunning || !result) return;
     
-    const out = result.output || result;
-    setStressScore(Math.max(0, Math.min(100, Math.round(out.stress_score ?? stressScore))));
-    setFocusScore(Math.max(0, Math.min(100, Math.round(out.focus_score ?? focusScore))));
-
     const bp = result.band_powers;
     if (bp && bp.length >= 5) {
       const total = bp.reduce((a, b) => a + b, 0);
@@ -155,6 +274,21 @@ const BubbleGameView = ({ result, isConnected, onBackToMenu }) => {
           beta: bp[3] / total,
           gamma: bp[4] / total
         };
+
+        let stScore = result.stress_score ?? (result.output && result.output.stress_score);
+        let foScore = result.focus_score ?? (result.output && result.output.focus_score);
+        
+        // Force fallback compute if undefined or strictly 0 (which happens if ML bypasses it)
+        if (stScore == null || stScore <= 0) {
+          const si = rels.beta / (rels.alpha + rels.theta + 1e-6);
+          stScore = (Math.min(si, 2.0) / 2.0) * 100;
+        }
+        if (foScore == null || foScore <= 0) {
+          foScore = (rels.alpha + rels.theta * 0.5) * 200;
+        }
+        
+        setStressScore(Math.max(0, Math.min(100, Math.round(stScore))));
+        setFocusScore(Math.max(0, Math.min(100, Math.round(foScore))));
 
         smootherRef.current.updateAll(rels);
         const smooth = {
@@ -173,7 +307,8 @@ const BubbleGameView = ({ result, isConnected, onBackToMenu }) => {
           if (val) val.textContent = `${pct}%`;
         });
 
-        if (rels.beta >= betaThreshold * 1.1 && smooth.beta >= betaThreshold) {
+        // Ensure we trigger it if we exceed the threshold (with a little tolerance)
+        if (smooth.beta >= betaThreshold * 0.9) {
           createFocusBubbles();
         }
       }

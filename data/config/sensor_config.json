@@ -1,17 +1,24 @@
 {
   "active_models": {
-    "EEG": "test"
+    "EEG": "test",
+    "EOG": "dino-ml",
+    "EMG": "Venus"
   },
   "channel_mapping": {
     "ch0": {
       "enabled": true,
-      "label": "Fp1 / Oz (Ref: A1, A2)",
       "sensor": "EMG"
     },
     "ch1": {
       "enabled": true,
-      "label": "UNUSED",
-      "sensor": "EEG"
+      "sensor": "EOG"
     }
-  }
+  },
+  "display": {
+    "scannerX": 0,
+    "showGrid": true,
+    "timeWindowMs": 10000
+  },
+  "num_channels": 2,
+  "sampling_rate": 512
 }

@@ -39,7 +39,7 @@ const BubbleSidebar = ({
                 </h4>
                 <div className="flex justify-around">
                     {/* Focus Ring */}
-                    <div className="relative w-[80px] h-[80px]">
+                    <div className="relative w-[110px] h-[110px]">
                         <svg viewBox="0 0 80 80" className="w-full h-full -rotate-90">
                             <circle cx="40" cy="40" r="32" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="7" />
                             <circle cx="40" cy="40" r="32" fill="none" stroke="var(--primary)" strokeWidth="7"
@@ -47,12 +47,12 @@ const BubbleSidebar = ({
                                 style={{ transition: 'stroke-dashoffset 0.3s ease-out', filter: 'drop-shadow(0 0 4px var(--primary))' }} />
                         </svg>
                         <div className="absolute inset-0 flex flex-col items-center justify-center">
-                            <span className="font-display font-black text-lg text-white drop-shadow-md">{focusScore || 0}%</span>
-                            <span className="text-[7px] font-bold tracking-widest text-[var(--primary)] uppercase opacity-80">FOCUS</span>
+                            <span className="font-display font-black text-2xl text-white drop-shadow-md">{focusScore || 0}%</span>
+                            <span className="text-[9px] font-bold tracking-widest text-[var(--primary)] uppercase opacity-80 mt-1">FOCUS</span>
                         </div>
                     </div>
                     {/* Stress Ring */}
-                    <div className="relative w-[80px] h-[80px]">
+                    <div className="relative w-[110px] h-[110px]">
                         <svg viewBox="0 0 80 80" className="w-full h-full -rotate-90">
                             <circle cx="40" cy="40" r="32" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="7" />
                             <circle cx="40" cy="40" r="32" fill="none" stroke="#f43f5e" strokeWidth="7"
@@ -60,8 +60,8 @@ const BubbleSidebar = ({
                                 style={{ transition: 'stroke-dashoffset 0.3s ease-out', filter: 'drop-shadow(0 0 4px #f43f5e)' }} />
                         </svg>
                         <div className="absolute inset-0 flex flex-col items-center justify-center">
-                            <span className="font-display font-black text-lg text-white drop-shadow-md">{stressScore || 0}%</span>
-                            <span className="text-[7px] font-bold tracking-widest text-red-400 uppercase opacity-80">STRESS</span>
+                            <span className="font-display font-black text-2xl text-white drop-shadow-md">{stressScore || 0}%</span>
+                            <span className="text-[9px] font-bold tracking-widest text-red-400 uppercase opacity-80 mt-1">STRESS</span>
                         </div>
                     </div>
                 </div>
@@ -70,22 +70,6 @@ const BubbleSidebar = ({
                 </div>
             </div>
 
-            {/* Beta Threshold Control */}
-            <div className="bg-[var(--bg)]/50 border border-[var(--primary)]/20 rounded-xl p-3 shrink-0 flex flex-col gap-3">
-                <h4 className="text-[10px] font-bold text-[var(--muted)]/80 uppercase tracking-widest flex justify-between items-center">
-                    <span>Beta Threshold</span>
-                    <span className="text-[var(--primary)] font-black">{betaThreshold ? betaThreshold.toFixed(2) : '0.40'}</span>
-                </h4>
-                <input
-                    type="range"
-                    min="0.1"
-                    max="0.9"
-                    step="0.05"
-                    value={betaThreshold || 0.4}
-                    onChange={(e) => setBetaThreshold && setBetaThreshold(parseFloat(e.target.value))}
-                    className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer accent-[var(--primary)]"
-                />
-            </div>
 
             {/* Live Band Analysis */}
             <div className="bg-[var(--bg)]/60 border border-[var(--primary)]/30 rounded-xl p-3 shrink-0 backdrop-blur-md pb-4 pt-4">
@@ -101,12 +85,12 @@ const BubbleSidebar = ({
                         { id: 'beta', label: 'β BETA', color: 'var(--primary, #06b6d4)' },
                         { id: 'gamma', label: 'γ GAMMA', color: '#f59e0b' },
                     ].map(b => (
-                        <div key={b.id} className="flex items-center gap-2">
-                            <span className="text-[10px] tracking-widest font-bold opacity-60 w-[48px] shrink-0" style={{ color: b.color }}>{b.label}</span>
-                            <div className="flex-1 h-1.5 bg-white/5 rounded-full overflow-hidden">
+                        <div key={b.id} className="flex items-center gap-3 py-1">
+                            <span className="text-xs tracking-widest font-bold opacity-80 w-[55px] shrink-0" style={{ color: b.color }}>{b.label}</span>
+                            <div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden">
                                 <div id={`bf-${b.id}`} className="h-full rounded-full transition-all duration-150 shadow-md" style={{ background: b.color, width: '0%' }} />
                             </div>
-                            <span id={`bv-${b.id}`} className="text-[10px] w-8 text-right font-black" style={{ color: b.color }}>0%</span>
+                            <span id={`bv-${b.id}`} className="text-xs w-10 text-right font-black" style={{ color: b.color }}>0%</span>
                         </div>
                     ))}
                 </div>
