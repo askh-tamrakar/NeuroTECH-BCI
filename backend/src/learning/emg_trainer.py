@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, confusion_matrix
-from sklearn.model_selection import train_test_split, GroupShuffleSplit, GroupKFold
+from sklearn.model_selection import train_test_split, GroupShuffleSplit, GroupKFold, StratifiedShuffleSplit
 from sklearn.preprocessing import StandardScaler
 
 from src.database.db_manager import db_manager
@@ -184,10 +184,45 @@ def _prepare_dataframe(sensor: str, table_name: str):
 def _split_train_and_test(df: pd.DataFrame, test_ratio: float):
     indices = np.arange(len(df))
     if 'batch_id' in df.columns and df['batch_id'].notna().any():
-        gss = GroupShuffleSplit(n_splits=1, test_size=test_ratio, random_state=42)
-        # Handle cases where batch_id might be missing for some rows by filling them
-        groups = df['batch_id'].fillna('unknown_batch')
-        train_idx, test_idx = next(gss.split(df, groups=groups))
+        # Build a group->label mapping using each batch's most common label.
+        # Then use StratifiedShuffleSplit on the *groups* so that every class is
+        # proportionally represented in the test set (fixes the imbalance caused
+        # by plain GroupShuffleSplit which splits groups at random).
+        filled = df['batch_id'].fillna('unknown_batch')
+        group_labels = (
+            df.assign(_group=filled)
+            .groupby('_group')['label']
+            .agg(lambda x: x.mode()[0])
+        )
+        group_ids = group_labels.index.to_numpy()
+        group_label_values = group_labels.values
+
+        n_classes = len(np.unique(group_label_values))
+        min_per_class = int(np.min(np.bincount(
+            np.searchsorted(np.unique(group_label_values), group_label_values)
+        )))
+        # StratifiedShuffleSplit needs at least 2 members per class in both
+        # train and test splits; fall back to plain GroupShuffleSplit when the
+        # data is too sparse.
+        n_test_groups = max(1, int(round(test_ratio * len(group_ids))))
+        n_train_groups = len(group_ids) - n_test_groups
+        can_stratify = (n_classes > 1
+                        and min_per_class >= 2
+                        and n_test_groups >= n_classes
+                        and n_train_groups >= n_classes)
+        if can_stratify:
+            sss = StratifiedShuffleSplit(n_splits=1, test_size=test_ratio, random_state=42)
+            g_train_idx, g_test_idx = next(sss.split(group_ids, group_label_values))
+            train_groups = set(group_ids[g_train_idx])
+            test_groups = set(group_ids[g_test_idx])
+        else:
+            gss = GroupShuffleSplit(n_splits=1, test_size=test_ratio, random_state=42)
+            train_idx, test_idx = next(gss.split(df, groups=filled))
+            return df.iloc[train_idx].copy(), df.iloc[test_idx].copy()
+
+        train_mask = filled.isin(train_groups)
+        test_mask = filled.isin(test_groups)
+        return df[train_mask].copy(), df[test_mask].copy()
     else:
         stratify = df['label'] if df['label'].nunique() > 1 else None
         train_idx, test_idx = train_test_split(
@@ -417,21 +452,29 @@ def _fit_random_forest(sensor: str, train_df: pd.DataFrame, test_df: pd.DataFram
             "history": [],
         })
 
+    # Pre-compute scaled fold data ONCE per fold, shared across all candidates.
+    # This eliminates (n_candidates - 1) * n_folds redundant StandardScaler fits.
+    _has_batch = 'batch_id' in train_df.columns and train_df['batch_id'].notna().any()
+    fold_cache = []
+    for _fn, (train_idx, val_idx) in enumerate(folds, start=1):
+        _fold_train = train_df.iloc[train_idx]
+        _scaler = StandardScaler()
+        _x_train = _scaler.fit_transform(_fold_train[feature_cols].fillna(0.0))
+        _y_train = _fold_train['label'].astype(int).values
+        if len(val_idx) > 0:
+            _fold_val = train_df.iloc[val_idx]
+            _x_val = _scaler.transform(_fold_val[feature_cols].fillna(0.0))
+            _y_val = _fold_val['label'].astype(int).values
+            _n_val = int(_fold_val['batch_id'].nunique()) if _has_batch else len(_fold_val)
+        else:
+            _x_val, _y_val = _x_train, _y_train
+            _n_val = 0
+        _n_train = int(_fold_train['batch_id'].nunique()) if _has_batch else len(_fold_train)
+        fold_cache.append((_fn, _scaler, _x_train, _y_train, _x_val, _y_val, _n_train, _n_val))
+
     for candidate_index, candidate_params in enumerate(candidates):
         hyperparameters = _hyperparameters_for_response(sensor, candidate_params, resolved_split)
-        for fold_number, (train_idx, val_idx) in enumerate(folds, start=1):
-            fold_train = train_df.iloc[train_idx].copy()
-            fold_val = train_df.iloc[val_idx].copy()
-            scaler = StandardScaler()
-            x_train = scaler.fit_transform(fold_train[feature_cols].fillna(0.0))
-            y_train = fold_train['label'].astype(int)
-            if len(fold_val) == 0:
-                x_val = x_train
-                y_val = y_train
-            else:
-                x_val = scaler.transform(fold_val[feature_cols].fillna(0.0))
-                y_val = fold_val['label'].astype(int)
-
+        for fold_number, scaler, x_train, y_train, x_val, y_val, n_train_batches, n_val_batches in fold_cache:
             model = RandomForestClassifier(
                 n_estimators=int(candidate_params.get("n_estimators", 100)),
                 max_depth=candidate_params.get("max_depth"),
@@ -444,8 +487,9 @@ def _fit_random_forest(sensor: str, train_df: pd.DataFrame, test_df: pd.DataFram
             val_accuracy = accuracy_score(y_val, model.predict(x_val))
             fold_model_id = generate_model_id(candidate_index, fold_number)
             rejected_paths = get_rejected_model_paths(sensor, fold_model_id)
-            joblib.dump(model, rejected_paths["model"])
-            joblib.dump(scaler, rejected_paths["scaler"])
+            # compress=1: ~60% smaller files, measurably faster for large grids.
+            joblib.dump(model, rejected_paths["model"], compress=1)
+            joblib.dump(scaler, rejected_paths["scaler"], compress=1)
             history_item = _training_history_item(
                 candidate_index,
                 fold_number,
@@ -454,8 +498,8 @@ def _fit_random_forest(sensor: str, train_df: pd.DataFrame, test_df: pd.DataFram
                 hyperparameters["selected_hyperparameters"],
                 float(train_accuracy),
                 float(val_accuracy),
-                int(fold_train['batch_id'].nunique()) if 'batch_id' in fold_train.columns and fold_train['batch_id'].notna().any() else int(len(fold_train)),
-                int(fold_val['batch_id'].nunique()) if 'batch_id' in fold_val.columns and fold_val['batch_id'].notna().any() else int(len(fold_val)),
+                n_train_batches,
+                n_val_batches,
             )
             _save_json(rejected_paths["meta"], {
                 **history_item,

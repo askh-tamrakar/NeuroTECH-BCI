@@ -11,12 +11,17 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
+from pipeline_logger import PipelineLogger, LogLevel as PLogLevel
+
 
 try:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
 except Exception:
     pass
+
+# Module-level logger — created once, used throughout the orchestrator
+pipeline_logger: PipelineLogger | None = None
 
 
 STDOUT_LOCK = threading.RLock()
@@ -586,6 +591,7 @@ def log_process(runtime: BlockRuntime, verbose: bool):
 
 class PipelineOrchestrator:
     def __init__(self, args):
+        global pipeline_logger
         self.args = args
         self.project_root = Path(__file__).resolve().parent.parent
         self.backend_dir = Path(__file__).resolve().parent
@@ -600,6 +606,9 @@ class PipelineOrchestrator:
         self.pending_reload = set()
         self.watch_snapshot: dict[Path, float] = {}
         self.started_blocks: list[str] = []
+
+        # Initialize session logger
+        pipeline_logger = PipelineLogger(periodic_interval=30.0)
 
     def print_banner(self):
         banner = r"""
@@ -633,7 +642,8 @@ class PipelineOrchestrator:
             f"{Theme.OKGREEN}blocks{Theme.RESET}{Theme.DIM} | "
             f"{Theme.OKCYAN}status{Theme.RESET}{Theme.DIM} | "
             f"{Theme.WARNING}watch{Theme.RESET}{Theme.DIM} | "
-            f"{Theme.FAIL}rl <block>{Theme.RESET}"
+            f"{Theme.FAIL}rl <block>{Theme.RESET}{Theme.DIM} | "
+            f"{Theme.OKBLUE}logs{Theme.RESET}"
         )
         print()
 
@@ -687,6 +697,8 @@ class PipelineOrchestrator:
             return
 
         log_system(f"Launching {spec.name}...", icon=Theme.LAUNCH)
+        if pipeline_logger:
+            pipeline_logger.log_block_event(block_id, spec.name, "start")
         runtime.ready_event = threading.Event()
         runtime.intentional_restart = False
         cmd = spec.command_builder() if spec.command_builder else []
@@ -711,8 +723,12 @@ class PipelineOrchestrator:
             log_system(f"Waiting for {spec.name} to initialize...", icon=Theme.SYS)
             if not runtime.ready_event.wait(timeout=60.0):
                 log_system(f"ERROR: {spec.name} timed out while connecting!", icon=Theme.ERROR)
+                if pipeline_logger:
+                    pipeline_logger.log_block_event(block_id, spec.name, "timeout", reason="ready_pattern not matched within 60s")
                 self.shutdown()
                 return
+            if pipeline_logger:
+                pipeline_logger.log_block_event(block_id, spec.name, "ready")
             time.sleep(0.3)
 
     def stop_block(self, block_id: str, timeout: float = 5.0):
@@ -724,6 +740,8 @@ class PipelineOrchestrator:
 
         runtime.intentional_restart = True
         log_system(f"Terminating {runtime.spec.name}...", icon=Theme.WARN)
+        if pipeline_logger:
+            pipeline_logger.log_block_event(block_id, runtime.spec.name, "stop")
         process.terminate()
         try:
             process.wait(timeout=timeout)
@@ -749,6 +767,10 @@ class PipelineOrchestrator:
         if reason == "manual":
             log_system(f"Reload request accepted for: {pretty}", icon=Theme.INFO)
         log_system(f"Reloading {pretty} ({reason})...", icon=Theme.INFO)
+        if pipeline_logger:
+            for bid in actual_processes:
+                spec = self.specs[bid]
+                pipeline_logger.log_block_event(bid, spec.name, "reload", reason=reason)
 
         for block_id in reversed(ordered):
             self.stop_block(block_id)
@@ -832,6 +854,12 @@ class PipelineOrchestrator:
                     runtime.running = False
                     continue
                 log_system(f"{runtime.spec.name} stopped unexpectedly (exit code: {returncode})", icon=Theme.ERROR)
+                if pipeline_logger:
+                    pipeline_logger.log_block_event(
+                        block_id, runtime.spec.name, "crash",
+                        exit_code=returncode,
+                        reason="unexpected process exit",
+                    )
                 self.shutdown()
                 return
             time.sleep(1.0)
@@ -894,12 +922,22 @@ class PipelineOrchestrator:
             self.reload_blocks(block_ids, reason="manual")
             return
 
+        if cmd == "logs":
+            if pipeline_logger and pipeline_logger._log_dir:
+                log_system(f"Log directory: {pipeline_logger._log_dir}", icon=Theme.INFO)
+                for p in sorted(pipeline_logger._log_dir.iterdir()):
+                    size_kb = p.stat().st_size / 1024
+                    log_system(f"  {p.name:<48} {size_kb:.1f} KB", icon=Theme.INFO)
+            else:
+                log_system("Logger not active.", icon=Theme.WARN)
+            return
+
         if cmd == "exit":
             log_system("Exit command received. Shutting down pipeline...", icon=Theme.WARN)
             self.shutdown()
             return
 
-        log_system(f"Unknown command '{raw}'. Try: blocks, status, watch, watch off, rl <block>, exit.", icon=Theme.WARN)
+        log_system(f"Unknown command '{raw}'. Try: blocks, status, watch, watch off, rl <block>, logs, exit.", icon=Theme.WARN)
 
     def resolve_command_block(self, token: str) -> list[str]:
         resolved = []
@@ -927,6 +965,8 @@ class PipelineOrchestrator:
     def run_background_threads(self):
         threading.Thread(target=self.watch_loop, daemon=True).start()
         threading.Thread(target=self.monitor_loop, daemon=True).start()
+        if pipeline_logger:
+            pipeline_logger.start_periodic(self, interval=30.0)
 
     def shutdown_handler(self, signum, frame):
         self.shutdown()
@@ -941,6 +981,8 @@ class PipelineOrchestrator:
         for block_id in reversed(self.started_blocks):
             self.stop_block(block_id)
         log_system("Shutdown complete.", icon=Theme.SUCCESS)
+        if pipeline_logger:
+            pipeline_logger.finalize(self)
 
     def wait_forever(self):
         while not self.stop_event.is_set():

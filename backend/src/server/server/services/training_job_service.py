@@ -23,6 +23,15 @@ def safe_socket_emit(event_name, payload):
     try:
         if getattr(socketio, "server", None) is not None:
             socketio.emit(event_name, payload)
+            # Yield to the eventlet hub so the packet flushes over the wire
+            # immediately. Without this, CPU-bound training greenlets never
+            # yield and all socket events batch-deliver at the end of training,
+            # making the UI appear stuck at 0% for the entire training duration.
+            try:
+                import eventlet
+                eventlet.sleep(0)
+            except Exception:
+                pass
     except Exception:
         pass
 

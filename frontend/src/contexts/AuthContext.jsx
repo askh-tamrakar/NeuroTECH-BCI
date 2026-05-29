@@ -119,6 +119,8 @@ export function AuthProvider({ children }) {
   // -------------------------------------------------------------------------
 
   const login = async (username, password) => {
+    let remoteError = null
+
     // Try remote first
     try {
       const res = await fetch(`${REMOTE_AUTH_URL}?action=login`, {
@@ -134,12 +136,14 @@ export function AuthProvider({ children }) {
       if (data.status === 'unverified_exists') {
         return { success: false, status: data.status, email: data.email, message: data.message }
       }
-      // Wrong credentials on remote — don't fall through to local with the same creds
-      return { success: false, message: data.message }
+      // Remote reachable but rejected — store the error, still try local
+      // (user may only exist locally, e.g. created during server downtime)
+      remoteError = data.message
     } catch {
-      // Network error — fall back to local
+      // Network error — fall through to local
     }
 
+    // Try local (runs on remote network error OR remote "invalid credentials")
     try {
       const res = await fetch(`${LOCAL_AUTH_BASE}/login`, {
         method: 'POST',
@@ -151,9 +155,10 @@ export function AuthProvider({ children }) {
         _persistSession(data.token, data.user, true)
         return { success: true, local: true }
       }
-      return { success: false, message: data.message }
+      // Both failed — show remote error if remote was reachable, otherwise local error
+      return { success: false, message: remoteError || data.message }
     } catch {
-      return { success: false, message: 'No connection to authentication servers. Make sure the local backend is running.' }
+      return { success: false, message: remoteError || 'No connection to authentication servers. Make sure the local backend is running.' }
     }
   }
 

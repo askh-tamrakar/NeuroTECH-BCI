@@ -394,9 +394,6 @@ class StreamManagerApp:
                     break
                 
                 decoded = data.decode('utf-8', errors='ignore')
-                if "DEG" in decoded:
-                    self.log(f"Relaying DEG command: {decoded.strip()}")
-                    
                 if hasattr(self, 'events_clients'):
                     for client in list(self.events_clients):
                         if client != conn:

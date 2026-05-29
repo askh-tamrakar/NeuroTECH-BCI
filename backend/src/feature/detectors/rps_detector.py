@@ -24,6 +24,7 @@ class RPSDetector:
         self.collecting_candidates = False
         self.candidates = []
         self.last_active_ts = 0.0
+        self.gesture_start_time = 0.0
         
         # Configuration for state machine
         rps_cfg = config.get("features", {}).get("RPS", {})
@@ -171,9 +172,23 @@ class RPSDetector:
             if not self.collecting_candidates:
                 self.collecting_candidates = True
                 self.candidates = []
+                self.gesture_start_time = time.time()
             
             self.candidates.append(label)
             detection_state = "recording"
+
+            # Auto-confirm if gesture is held for too long (prevents getting stuck)
+            hold_duration = time.time() - self.gesture_start_time
+            gesture_hold_timeout = self.config.get("features", {}).get("RPS", {}).get("gesture_hold_timeout", 1.5)
+            if hold_duration >= gesture_hold_timeout and len(self.candidates) >= 5:
+                valid_candidates = [c for c in self.candidates if c in ['Rock', 'Paper', 'Scissors']]
+                if valid_candidates:
+                    counts = Counter(valid_candidates)
+                    most_common = counts.most_common(1)[0][0]
+                    self.collecting_candidates = False
+                    self.candidates = []
+                    return label, most_common, "waiting"
+
             return label, None, detection_state # Don't emit confirmed move yet, but return instant label and state
             
         elif is_rest:

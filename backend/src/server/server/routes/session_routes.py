@@ -14,15 +14,27 @@ session_bp = Blueprint('session', __name__)
 
 @session_bp.route('/api/sessions/<sensor_type>', methods=['GET'])
 def api_list_sessions(sensor_type):
-    """List available session tables."""
+    """List available session tables with per-class batch counts."""
     tables = db_manager.get_session_tables(sensor_type)
-    
-    # FIX: Frontend expects {"tables": ["table1", "table2", ...]}
-    # Previously it returned just list of objects or strings, but frontend checked data.tables
-    
-    # We return the full table names as strings, as frontend parser handles `_session_` split.
-    # We return the full table names as strings, as frontend parser handles `_session_` split.
-    return jsonify({"tables": tables})
+    sensor_up = sensor_type.upper()
+
+    sessions = []
+    for table in tables:
+        entry = {"table": table}
+        try:
+            conn = db_manager.connect(sensor_up)
+            cursor = conn.cursor()
+            cursor.execute(
+                f"SELECT label, COUNT(DISTINCT batch_id) FROM {table} GROUP BY label"
+            )
+            rows = cursor.fetchall()
+            conn.close()
+            entry["class_batch_counts"] = {str(r[0]): r[1] for r in rows}
+        except Exception:
+            entry["class_batch_counts"] = {}
+        sessions.append(entry)
+
+    return jsonify({"tables": tables, "sessions": sessions})
 
 
 @session_bp.route('/api/sessions/<sensor_type>/<session_name>', methods=['GET'])

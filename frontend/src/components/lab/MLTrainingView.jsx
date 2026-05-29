@@ -824,7 +824,7 @@ const HyperparametersCard = ({ params, setParamsTab, activeTab, models = [] }) =
             </div>
 
             <div className="flex-1 min-h-0 relative">
-                <div className="h-full overflow-y-auto [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                <div className="h-full overflow-y-auto overflow-x-hidden [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
                     {/* Global Parameters: Split & Search Resolution */}
 
                     <div className="p-0 border-0 bg-transparent">
@@ -906,11 +906,11 @@ const HyperparametersCard = ({ params, setParamsTab, activeTab, models = [] }) =
 
                             <div className="pb-0 border-0 bg-transparent">
                                 <div className="flex justify-between items-end mb-2 px-1">
-                                    <span className="text-[14px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em]">Impurity</span>
-                                    <div className="text-[16px] font-mono text-[var(--header-text)] font-black truncate">{params.min_impurity_decrease_min || 0} - {params.min_impurity_decrease_max || 0.05}</div>
+                                    <span className="text-[14px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em]">MID</span>
+                                    <div className="text-[13px] font-mono text-[var(--header-text)] font-black leading-tight text-right">{(params.min_impurity_decrease_min ?? 0).toFixed(4)}<span className="text-[var(--muted)]"> – </span>{(params.min_impurity_decrease_max ?? 0.002).toFixed(4)}</div>
                                 </div>
-                                <RangeSlider min={0} max={0.1} step={0.005}
-                                    leftColor="var(--muted)" rightColor="var(--muted)" minValue={params.min_impurity_decrease_min || 0} maxValue={params.min_impurity_decrease_max || 0.05} hideLabels={true} compact={true} color="var(--primary)" onChange={(vals) => setParamsTab({ min_impurity_decrease_min: vals.min, min_impurity_decrease_max: vals.max })} />
+                                <RangeSlider min={0} max={0.002} step={0.0001}
+                                    leftColor="var(--muted)" rightColor="var(--muted)" minValue={params.min_impurity_decrease_min ?? 0} maxValue={params.min_impurity_decrease_max ?? 0.002} hideLabels={true} compact={true} color="var(--primary)" onChange={(vals) => setParamsTab({ min_impurity_decrease_min: vals.min, min_impurity_decrease_max: vals.max })} />
                             </div>
 
                             <div className="p-0 border-0 bg-transparent">
@@ -954,7 +954,7 @@ const HyperparametersCard = ({ params, setParamsTab, activeTab, models = [] }) =
     );
 };
 
-const TrainingStatusDashboard = ({ job, countdown, params, selectedHistoryItem, onSelectHistory }) => {
+const TrainingStatusDashboard = ({ job, countdown, onDismiss, params, selectedHistoryItem, onSelectHistory }) => {
     const [liveElapsed, setLiveElapsed] = useState(null);
     useEffect(() => {
         if (!job?._started_at) { setLiveElapsed(null); return; }
@@ -1045,7 +1045,7 @@ const TrainingStatusDashboard = ({ job, countdown, params, selectedHistoryItem, 
                             <div className="relative flex items-center justify-center mb-20">
                                 <Activity size={32} className="absolute left-[-40px] text-[var(--primary)] animate-pulse" />
                                 <span className="text-[90px] font-black text-[var(--graph-line-1)] font-mono leading-none tracking-tighter">
-                                    {job?.progress ? (() => {
+                                    {job?.progress != null ? (() => {
                                         const pctVal = job.progress * 100;
                                         const whole = Math.floor(pctVal);
                                         const dec = (pctVal % 1).toFixed(2).slice(1);
@@ -1087,10 +1087,14 @@ const TrainingStatusDashboard = ({ job, countdown, params, selectedHistoryItem, 
                     </div>
                     {/* Cooldown Timer */}
                     {countdown !== null && (
-                        <div className="absolute bottom-2 -translate-y-1/2 flex items-center gap-3 px-6 py-3 rounded-2xl bg-[var(--primary)]/20 border border-[var(--primary)] text-[var(--primary)] font-bold animate-bounce shadow-[0_0_30px_rgba(var(--primary-rgb),0.4)] backdrop-blur-md">
+                        <button
+                            onClick={onDismiss}
+                            title="Click to skip"
+                            className="absolute bottom-2 -translate-y-1/2 flex items-center gap-3 px-6 py-3 rounded-2xl bg-[var(--primary)]/20 border border-[var(--primary)] text-[var(--primary)] font-bold animate-bounce shadow-[0_0_30px_rgba(var(--primary-rgb),0.4)] backdrop-blur-md hover:bg-[var(--primary)]/35 active:scale-95 transition-colors cursor-pointer"
+                        >
                             <RefreshCw className="w-5 h-5 animate-spin" />
                             <span className="text-sm uppercase tracking-widest">Finalizing... {countdown}s</span>
-                        </div>
+                        </button>
                     )}
                 </div>
 
@@ -1582,13 +1586,13 @@ const InsightWorkspaceCard = ({ view, result, sensor, params, selectedSessionNam
                     </h3>
                     <button
                         onClick={() => onSwitchView(view === 'matrix' ? 'insight' : 'matrix')}
-                        className="transition-all flex items-center ml-2 gap-3"
+                        className="group/switch transition-all flex items-center ml-2 gap-3"
                         title={view === 'matrix' ? 'Switch to Data Insight' : 'Switch to Confusion Matrix'}
                     >
-                        <ArrowRightFromLine size={22} className="text-[var(--text)] group-hover:text-primary transition-all group-hover:translate-x-1.5" />
+                        <ArrowRightFromLine size={22} className="text-[var(--text)] group-hover/switch:text-primary transition-all group-hover/switch:translate-x-1.5" />
                         {view === 'matrix'
-                            ? <Info size={28} className="text-muted group-hover:text-primary transition-colors" />
-                            : <Grid3X3 size={28} className="text-muted group-hover:text-primary transition-colors" />}
+                            ? <Info size={28} className="text-muted group-hover/switch:text-primary transition-colors" />
+                            : <Grid3X3 size={28} className="text-muted group-hover/switch:text-primary transition-colors" />}
                     </button>
                 </span>
 
@@ -1873,7 +1877,20 @@ const ControlPanel = ({
                     disabled={sessionLocked}
                     options={[
                         { value: "", label: "All Available Data" },
-                        ...sessions.map(s => ({ value: s.table, label: s.name }))
+                        ...sessions.map(s => {
+                            const labelNames = activeTab === 'EOG'
+                                ? { '0': 'Rst', '1': 'SB', '2': 'DB' }
+                                : { '0': 'Rst', '1': 'Rock', '2': 'Pap', '3': 'Sci' };
+                            const counts = s.class_batch_counts || {};
+                            const countStr = Object.keys(labelNames)
+                                .filter(k => counts[k] != null)
+                                .map(k => `${labelNames[k]}:${counts[k]}`)
+                                .join('  ');
+                            return {
+                                value: s.table,
+                                label: countStr ? `${s.name}  •  ${countStr}` : s.name
+                            };
+                        })
                     ]}
                     placeholder="Select Session..."
                 />
@@ -1994,10 +2011,18 @@ export default function MLTrainingView({ onSwitchLab }) {
             const res = await fetch(buildApiUrl(`/api/sessions/${sensor}`));
             if (res.ok) {
                 const data = await res.json();
-                if (data.tables) {
+                if (data.sessions) {
+                    const formatted = data.sessions.map(s => ({
+                        table: s.table,
+                        name: s.table.replace(`${sensor.toLowerCase()}_session_`, ''),
+                        class_batch_counts: s.class_batch_counts || {}
+                    }));
+                    setAvailableSessions(formatted.reverse());
+                } else if (data.tables) {
                     const formatted = data.tables.map(t => ({
                         table: t,
-                        name: t.replace(`${sensor.toLowerCase()}_session_`, '')
+                        name: t.replace(`${sensor.toLowerCase()}_session_`, ''),
+                        class_batch_counts: {}
                     }));
                     setAvailableSessions(formatted.reverse());
                 } else if (Array.isArray(data)) {
@@ -2029,8 +2054,8 @@ export default function MLTrainingView({ onSwitchLab }) {
 
     // Params per sensor
     const [params, setParams] = useState({
-        EMG: { n_estimators_min: 50, n_estimators_max: 200, max_depth_min: 5, max_depth_max: 15, test_ratio: 0.15, val_ratio: 0.17, train_ratio: 0.68, k_folds: 5, search_resolution: 3, min_impurity_decrease_min: 0.001, min_impurity_decrease_max: 0.005 },
-        EOG: { n_estimators_min: 50, n_estimators_max: 200, max_depth_min: 5, max_depth_max: 15, test_ratio: 0.15, val_ratio: 0.17, train_ratio: 0.68, k_folds: 5, search_resolution: 3, min_impurity_decrease_min: 0.001, min_impurity_decrease_max: 0.005 },
+        EMG: { n_estimators_min: 50, n_estimators_max: 200, max_depth_min: 5, max_depth_max: 15, test_ratio: 0.15, val_ratio: 0.17, train_ratio: 0.68, k_folds: 5, search_resolution: 3, min_impurity_decrease_min: 0.0, min_impurity_decrease_max: 0.002 },
+        EOG: { n_estimators_min: 50, n_estimators_max: 200, max_depth_min: 5, max_depth_max: 15, test_ratio: 0.15, val_ratio: 0.17, train_ratio: 0.68, k_folds: 5, search_resolution: 3, min_impurity_decrease_min: 0.0, min_impurity_decrease_max: 0.002 },
         EEG: { tol_min: 0.0001, tol_max: 0.01, solver: 'svd', shrinkage: 'auto', test_ratio: 0.15, val_ratio: 0.17, train_ratio: 0.68, k_folds: 5, search_resolution: 3 }
     });
 
@@ -2186,6 +2211,7 @@ export default function MLTrainingView({ onSwitchLab }) {
     const socketRef = useRef(null);
     const finalizedJobRef = useRef(null);
     const activeTrainingJobIdRef = useRef(null);
+    const dismissedJobIdRef = useRef(null);
 
     // --- TREE INSPECTION STATE ---
     const [treeIndex, setTreeIndex] = useState(0);
@@ -2296,6 +2322,7 @@ export default function MLTrainingView({ onSwitchLab }) {
     }, [activeTab]);
 
     const clearTrainingJobState = useCallback(() => {
+        dismissedJobIdRef.current = activeTrainingJobIdRef.current;
         activeTrainingJobIdRef.current = null;
         setTrainingJob(null);
         setCountdown(null);
@@ -2308,9 +2335,11 @@ export default function MLTrainingView({ onSwitchLab }) {
     }, []);
 
     const handleStopTraining = async () => {
-        if (!trainingJob?.job_id) return;
+        const jobId = trainingJob?.job_id;
+        clearTrainingJobState();
+        if (!jobId) return;
         try {
-            await fetch(buildApiUrl(`/api/train-jobs/${trainingJob.job_id}/cancel`), {
+            await fetch(buildApiUrl(`/api/train-jobs/${jobId}/cancel`), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' }
             });
@@ -2331,6 +2360,7 @@ export default function MLTrainingView({ onSwitchLab }) {
         socket.on('training_job_update', (job) => {
             setTrainingJob(prev => {
                 if (!job?.job_id) return prev;
+                if (dismissedJobIdRef.current === job.job_id) return prev;
                 if (activeTrainingJobIdRef.current && activeTrainingJobIdRef.current !== job.job_id) return prev;
                 if (prev?.job_id && prev.job_id !== job.job_id) return prev;
                 return job;
@@ -2353,6 +2383,7 @@ export default function MLTrainingView({ onSwitchLab }) {
             try {
                 const snapshot = await fetchJobSnapshot(trainingJob.job_id);
                 if (!cancelled) {
+                    if (dismissedJobIdRef.current === snapshot.job_id) return;
                     setTrainingJob(prev => (prev?.job_id === snapshot.job_id || !prev?.job_id ? snapshot : prev));
                 }
             } catch (e) {
@@ -2428,17 +2459,6 @@ export default function MLTrainingView({ onSwitchLab }) {
             setLoading(false);
             soundHandler.playSuccess();
             setCountdown(5);
-            let countVal = 5;
-            const timer = setInterval(() => {
-                countVal -= 1;
-                if (countVal <= 0) {
-                    clearInterval(timer);
-                    clearTrainingJobState();
-                } else {
-                    setCountdown(countVal);
-                }
-            }, 1000);
-            return () => clearInterval(timer);
         }
 
         if (trainingJob.status === 'failed' || trainingJob.status === 'error' || trainingJob.status === 'cancelled') {
@@ -2451,6 +2471,21 @@ export default function MLTrainingView({ onSwitchLab }) {
             clearTrainingJobState();
         }
     }, [trainingJob, activeTab, clearTrainingJobState, restoreCompletedJob]);
+
+    // Dedicated countdown tick — lives outside the trainingJob effect so polling
+    // updates can't cancel the interval via effect cleanup.
+    useEffect(() => {
+        if (countdown === null || countdown <= 0) return;
+        const timer = setTimeout(() => {
+            const next = countdown - 1;
+            if (next <= 0) {
+                clearTrainingJobState();
+            } else {
+                setCountdown(next);
+            }
+        }, 1000);
+        return () => clearTimeout(timer);
+    }, [countdown, clearTrainingJobState]);
 
     const handleRetrain = () => {
         if (!selectedModelName) return;
@@ -2506,14 +2541,23 @@ export default function MLTrainingView({ onSwitchLab }) {
             if (data.job_id) {
                 finalizedJobRef.current = null;
                 setCountdown(null);
+                // Always start as 'queued' — the training thread can finish before the HTTP
+                // response arrives (fast datasets). If we copy data.status ('completed') here,
+                // the finalization effect fires immediately on an empty job object (no result,
+                // progress=0) and the polling useEffect never starts. Forcing 'queued' lets
+                // polling run one cycle and collect the real completed snapshot with result.
                 const nextJob = {
                     job_id: data.job_id,
-                    status: data.status || 'queued',
+                    status: 'queued',
                     sensor: data.sensor || activeTab,
                     model_name: modelNameFinal,
                     progress: 0,
                     history: [],
+                    // Seed the timer immediately so the stopwatch starts from 0
+                    // even before the first socket event / poll response arrives.
+                    _started_at: Date.now() / 1000,
                 };
+                dismissedJobIdRef.current = null;
                 activeTrainingJobIdRef.current = nextJob.job_id;
                 persistTrainingJob(nextJob);
                 setTrainingJob(nextJob);
@@ -2633,6 +2677,7 @@ export default function MLTrainingView({ onSwitchLab }) {
                             <TrainingStatusDashboard
                                 job={trainingJob}
                                 countdown={countdown}
+                                onDismiss={clearTrainingJobState}
                                 params={activeParams}
                                 activeTab={activeTab}
                                 selectedHistoryItem={selectedHistoryItem}
@@ -2665,7 +2710,7 @@ export default function MLTrainingView({ onSwitchLab }) {
                                         />
                                     </div>
 
-                                    <div className="col-span-12 md:col-span-6 row-span-2 min-h-0 flex flex-col overflow-hidden relative group">
+                                    <div className="col-span-12 md:col-span-6 row-span-2 min-h-0 flex flex-col overflow-hidden relative group/insight-card">
                                         <InsightWorkspaceCard
                                             view={insightView === 'history' ? 'matrix' : insightView}
                                             result={activeResult || activeEvalResult}

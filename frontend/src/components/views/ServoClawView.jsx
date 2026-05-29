@@ -113,11 +113,14 @@ export default function ServoClawView({ wsEvent, isConnected }) {
         }
     }, []);
 
-    // Ensure physical servo is disabled when navigating away from this view
+    // Ensure physical servo and all detectors are disabled when navigating away from this view
     React.useEffect(() => {
         return () => {
-            console.log("ServoClawView unmounting - Disabling Servo hardware");
+            console.log("ServoClawView unmounting - Disabling Servo hardware and all detectors");
             updateBackendConfig({ servoEnabled: false });
+            CalibrationApi.togglePrediction('EMG', false).catch(() => {});
+            CalibrationApi.togglePrediction('EOG', false).catch(() => {});
+            CalibrationApi.togglePrediction('EEG', false).catch(() => {});
         };
     }, [updateBackendConfig]);
 
