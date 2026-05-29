@@ -1,10 +1,146 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { VitePWA } from 'vite-plugin-pwa'
+import fs from 'fs'
+import path from 'path'
+
+console.log('--- VITE CONFIG LOADING ---');
+
+// Custom Plugin for File Saving
+const saveDetailsPlugin = () => ({
+  name: 'save-details-middleware',
+  configureServer(server) {
+    console.log('--- MIDDLEWARE REGISTERED ---');
+    server.middlewares.use((req, res, next) => {
+      // Exact match for the internal route
+      if (req.url === '/_internal/save-details' && req.method === 'POST') {
+        console.log('Middleware intercepted request!');
+        let body = '';
+        req.on('data', chunk => { body += chunk.toString() });
+        req.on('end', () => {
+          try {
+            // Locate detail.json
+            const locations = [
+              path.resolve(process.cwd(), 'detail.json'),
+              path.resolve(process.cwd(), 'frontend', 'detail.json') // In case cwd is root
+            ];
+
+            // Prefer existing or default to first
+            let filePath = locations.find(p => fs.existsSync(p)) || locations[0];
+
+            console.log('Writing to:', filePath);
+
+            let existingData = [];
+            if (fs.existsSync(filePath)) {
+              try {
+                existingData = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+                if (!Array.isArray(existingData)) existingData = [];
+              } catch (e) { existingData = []; }
+            }
+
+            const newData = JSON.parse(body);
+            existingData.push(newData);
+
+            fs.writeFileSync(filePath, JSON.stringify(existingData, null, 2));
+
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ status: 'success' }));
+          } catch (err) {
+            console.error('Middleware Write Error:', err);
+            res.statusCode = 500;
+            res.end(JSON.stringify({ error: err.toString() }));
+          }
+        });
+      } else {
+        next();
+      }
+    });
+  }
+});
 
 export default defineConfig({
-  plugins: [react()],
+  base: './',
+  plugins: [
+    react(),
+    saveDetailsPlugin(),
+    VitePWA({
+      registerType: 'autoUpdate',
+      injectRegister: 'auto',
+      includeAssets: ['favicon.png', 'apple-touch-icon.png', 'pwa-192.png', 'pwa-512.png'],
+      manifest: {
+        name: 'NeuroTECH BCI Dashboard',
+        short_name: 'NeuroTECH',
+        description: 'Brain-Computer Interface monitoring and control dashboard',
+        theme_color: '#5b21b6',
+        background_color: '#0f0a1e',
+        display: 'standalone',
+        orientation: 'landscape',
+        start_url: '/',
+        scope: '/',
+        icons: [
+          {
+            src: 'pwa-192.png',
+            sizes: '192x192',
+            type: 'image/png',
+            purpose: 'any'
+          },
+          {
+            src: 'pwa-512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'any maskable'
+          }
+        ],
+        categories: ['medical', 'utilities', 'productivity']
+      },
+      workbox: {
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        globIgnores: [
+          '**/Resources/**',
+          '**/images/scissors*',
+          '**/images/rock*',
+          '**/images/paper*',
+        ],
+        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // 5 MB
+        cleanupOutdatedCaches: true,
+        runtimeCaching: [
+          {
+            urlPattern: /^\/api\//,
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'api-cache',
+              networkTimeoutSeconds: 5,
+            }
+          }
+        ]
+      },
+      devOptions: {
+        enabled: false
+      }
+    })
+  ],
   server: {
-    port: 3000,
-    open: true
+    port: 1972,
+    open: false,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:5005',
+        changeOrigin: true,
+        secure: false,
+      },
+      '/socket.io': {
+        target: 'http://localhost:5005',
+        changeOrigin: true,
+        ws: true,
+        secure: false,
+      }
+    },
+    watch: {
+      ignored: ['**/public/data/**']
+    },
+    allowedHosts: ["squelchingly-thriftier-cecile.ngrok-free.dev"]
+  },
+  build: {
+    chunkSizeWarningLimit: 2500, // Supress >500kb size warnings for large interactive web apps
   }
 })

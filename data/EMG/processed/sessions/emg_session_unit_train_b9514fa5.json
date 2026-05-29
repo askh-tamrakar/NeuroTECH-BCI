@@ -1,0 +1,27 @@
+{
+  "sensor": "EMG",
+  "table_name": "emg_session_unit_train_b9514fa5",
+  "storage_format": "compact_emg_v2",
+  "feature_columns": [
+    "mav",
+    "rms",
+    "iemg",
+    "var",
+    "wl",
+    "zc",
+    "ssc",
+    "mean_freq",
+    "median_freq",
+    "spectral_entropy",
+    "d_mav",
+    "d_rms",
+    "d_iemg",
+    "d_var",
+    "d_wl",
+    "d_zc",
+    "d_ssc",
+    "d_mean_freq",
+    "d_median_freq",
+    "d_spectral_entropy"
+  ]
+}

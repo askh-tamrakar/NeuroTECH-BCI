@@ -1,0 +1,34 @@
+{
+  "active_models": {
+    "EEG": "Neo",
+    "EMG": "night",
+    "EOG": "dino-ml"
+  },
+  "adc_settings": {
+    "resolution_bits": 14,
+    "vref_mv": 3300
+  },
+  "channel_mapping": {
+    "ch0": {
+      "enabled": true,
+      "label": "Fp1 / Oz (Ref: A1, A2)",
+      "sensor": "EMG"
+    },
+    "ch1": {
+      "enabled": true,
+      "label": "UNUSED",
+      "sensor": "EOG"
+    }
+  },
+  "display": {
+    "scannerX": 0,
+    "showGrid": true,
+    "timeWindowMs": 10000
+  },
+  "num_channels": 2,
+  "sampling_rate": 512,
+  "ui_settings": {
+    "showGrid": true,
+    "timeWindowMs": 10000
+  }
+}

@@ -1,0 +1,514 @@
+/* DinoView.css */
+
+/* Eyes Container (Now styled for top-border positioning) */
+.eyes-container {
+    position: absolute;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    top: -1px;
+    z-index: 10;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    gap: 6rem;
+    pointer-events: none;
+}
+
+/* Eye Styles */
+.eye {
+    width: 6rem;
+    height: 6rem;
+    background-color: var(--surface);
+    border-radius: 9999px;
+    border: 4px solid var(--border);
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    transition: transform 0.1s ease-out;
+}
+
+.face-decoration-svg {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    overflow: visible;
+    pointer-events: none;
+    z-index: 20;
+}
+
+.pupil {
+    width: 2rem;
+    height: 2rem;
+    background-color: var(--text);
+    border-radius: 9999px;
+    transition: transform 0.05s ease-out;
+}
+
+/* Animations */
+.blink {
+    animation: blink-animation 0.15s forwards;
+}
+
+.double-blink {
+    animation: double-blink-animation 0.3s forwards;
+}
+
+@keyframes blink-animation {
+    0% {
+        transform: scaleY(1);
+    }
+
+    50% {
+        transform: scaleY(0.1);
+    }
+
+    100% {
+        transform: scaleY(1);
+    }
+}
+
+@keyframes double-blink-animation {
+    0% {
+        transform: scaleY(1);
+    }
+
+    25% {
+        transform: scaleY(0.1);
+    }
+
+    50% {
+        transform: scaleY(1);
+    }
+
+    75% {
+        transform: scaleY(0.1);
+    }
+
+    100% {
+        transform: scaleY(1);
+    }
+}
+
+/*
+ =========================================
+   Refactored Styles (Formerly Tailwind)
+ =========================================
+*/
+
+/* Main Containers */
+.dino-container {
+    height: 100vh;
+    width: 100%;
+    overflow: hidden;
+    /* Padding moved to children for granular control */
+    padding: 0;
+    box-sizing: border-box;
+}
+
+.dino-game-wrapper {
+    display: flex;
+    flex-wrap: wrap;
+    height: 100%;
+    width: 100%;
+}
+
+@media (min-width: 1024px) {
+    .dino-game-wrapper {
+        flex-wrap: nowrap;
+        flex-direction: row-reverse;
+    }
+}
+
+.game-main-area {
+    flex: 1;
+    min-width: 0;
+    width: 0px;
+    padding: 15px;
+    padding-top: 100px;
+    padding-bottom: 45px;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-evenly;
+    align-items: stretch;
+}
+
+.game-card {
+    background-color: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 1rem;
+    padding: 1.25rem;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Game Header */
+.game-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+    padding-left: 0rem;
+    padding-right: 0.5rem;
+}
+
+.game-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.status-dot {
+    width: 0.75rem;
+    height: 0.75rem;
+    border-radius: 9999px;
+    background-color: var(--primary);
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.tuner-button {
+    width: auto;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding-left: 1rem;
+    padding-right: 1rem;
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 700;
+    transition-property: all;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    transition-duration: 150ms;
+    border: 1px solid transparent;
+    /* Reserve space */
+}
+
+.tuner-button.active {
+    background-color: var(--primary);
+    color: var(--bg);
+    border-color: var(--primary);
+}
+
+.tuner-button.inactive {
+    background-color: var(--bg);
+    color: var(--muted);
+    border-color: var(--border);
+}
+
+.tuner-button.inactive:hover {
+    color: var(--text);
+}
+
+/* Game Info Panel (HUD) */
+.game-content-stack {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    flex: 1;
+    gap: 0.5rem;
+}
+
+.game-info-panel {
+    background-color: rgba(var(--bg-rgb), 0.2);
+    backdrop-filter: blur(2px);
+    border-radius: 0.75rem;
+    padding: 2px;
+    border: 2px solid var(--border);
+    position: relative;
+    margin-top: 0;
+    flex-shrink: 1;
+    width: 100%;
+    min-height: 120px;
+    display: flex;
+    justify-content: space-between;
+}
+
+.game-stats-container-left {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    gap: 4rem;
+    padding-left: 1rem;
+    padding-right: 1rem;
+}
+
+.game-stats-container-right {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    gap: 4rem;
+    padding-left: 1rem;
+    padding-right: 1rem;
+}
+
+.stat-group-status {
+    display: flex;
+    justify-content: flex-start;
+}
+
+.stat-group-sensor {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.stat-group-center {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.stat-row-centered {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+}
+
+.eyes-spacer-block {
+    /* Purely for grid spacing to avoid overlapping eyes */
+    flex: 0 0 340px;
+    height: 10px;
+}
+
+.stat-block {
+    display: flex;
+    flex-direction: column;
+}
+
+.stat-block-row {
+    display: flex;
+    flex-direction: row;
+    align-items: baseline;
+    gap: 0.5rem;
+}
+
+.stat-block-start {
+    align-items: center;
+}
+
+
+.stat-block-end {
+    align-items: center;
+}
+
+.mb-1 {
+    margin-bottom: 0.25rem;
+}
+
+.stat-info {
+    font-size: 16px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text);
+}
+
+.stat-label {
+    color: var(--text);
+    font-family: monospace;
+    font-size: 22px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 0.25rem;
+}
+
+.stat-value-status {
+    font-weight: 700;
+    font-size: 25px;
+    text-transform: capitalize;
+}
+
+.stat-value-large {
+    font-weight: 900;
+    font-size: 18px;
+    letter-spacing: 0.01em;
+    line-height: 1;
+}
+
+.stat-value-large.ready {
+    color: var(--accent);
+}
+
+.stat-value-large.playing {
+    color: var(--primary);
+    animation: pulse 2s infinite;
+}
+
+.stat-value-large.paused {
+    color: #f59e0b;
+}
+
+.stat-value-large.gameOver {
+    color: #ef4444;
+}
+
+.stat-value-large.connected {
+    color: #22c55e;
+}
+
+.stat-value-large.disconnected {
+    color: #ef4444;
+}
+
+.stat-counter-primary-light {
+    color: var(--primary);
+    opacity: 0.9;
+    filter: brightness(1.2);
+}
+
+.stat-block-column {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+    text-align: center;
+}
+
+.stat-value-sensor {
+    font-size: 25px;
+    font-weight: 700;
+}
+
+.text-green-500 {
+    color: var(--text-success, #22c55e);
+}
+
+.text-red-500 {
+    color: var(--text-error, #ef4444);
+}
+
+.stat-counter-large {
+    color: var(--primary);
+    font-family: monospace;
+    font-weight: 700;
+    line-height: 1;
+}
+
+/* Canvas Container */
+.dino-canvas-container {
+    background-color: var(--bg);
+    border-radius: 0.75rem;
+    border: 2px solid var(--border);
+    overflow: hidden;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+    flex: 1;
+    width: 100%;
+    min-height: 0;
+    position: relative;
+}
+
+.dino-canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+    touch-action: none;
+    image-rendering: pixelated;
+}
+
+@keyframes pulse {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: .5;
+    }
+}
+
+.animate-pulse {
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Right Sidebar */
+.game-sidebar {
+    width: 100%;
+    height: 100%;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    padding-top: 100px;
+    padding-bottom: 45px;
+    padding-left: 6px;
+}
+
+.game-sidebar::-webkit-scrollbar {
+    display: none;
+}
+
+@media (min-width: 1024px) {
+    .game-sidebar {
+        width: 18rem;
+        min-width: 18rem;
+        flex-shrink: 0;
+        transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), min-width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .game-sidebar.collapsed {
+        width: 4rem;
+        min-width: 4rem;
+        border-right: 1px solid var(--border);
+        padding-right: 6px;
+    }
+}
+
+.camera-container {
+    aspect-ratio: 4 / 3;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+}
+
+.status-eye {
+    animation: pulse 1s infinite;
+}
+
+.status-eye.connected {
+    color: var(--text-success, #10b981);
+}
+
+.status-eye.disconnected {
+    color: var(--text-error, #ff4444);
+}
+
+.spacer-footer-dino {
+    height: 21px;
+    flex-shrink: 0;
+}
+
+/* =============================================
+   Record-Breaking Heartbeat Glow Animation
+   Applied to the "best" counter when the player
+   is actively beating their personal record.
+   ============================================= */
+@keyframes record-heartbeat {
+    0%   { opacity: 1; transform: scale(1);    filter: drop-shadow(0 0 0px var(--primary)); }
+    14%  { opacity: 1; transform: scale(1.15); filter: drop-shadow(0 0 8px var(--primary)); }
+    28%  { opacity: 1; transform: scale(1.05); filter: drop-shadow(0 0 4px var(--primary)); }
+    42%  { opacity: 1; transform: scale(1.18); filter: drop-shadow(0 0 14px var(--primary)); }
+    70%  { opacity: 1; transform: scale(1);    filter: drop-shadow(0 0 2px var(--primary)); }
+    100% { opacity: 1; transform: scale(1);    filter: drop-shadow(0 0 0px var(--primary)); }
+}
+
+.record-glow {
+    display: inline-flex;
+    align-items: center;
+    animation: record-heartbeat 0.9s ease-in-out infinite;
+    color: var(--primary);
+    will-change: transform, filter;
+}
