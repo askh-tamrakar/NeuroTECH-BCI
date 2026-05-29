@@ -365,6 +365,11 @@ class PipelineLogger:
                 return
             self._stop_event.set()
 
+        # Wait for the periodic thread to finish its current iteration cleanly
+        # before the interpreter starts tearing down, to avoid stdout lock contention.
+        if self._periodic_thread and self._periodic_thread.is_alive():
+            self._periodic_thread.join(timeout=5.0)
+
         summary = self._build_summary(orchestrator)
         sid = self._session_id
 

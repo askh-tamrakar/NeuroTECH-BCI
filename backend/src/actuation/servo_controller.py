@@ -6,6 +6,13 @@ import argparse
 from typing import Optional
 from pylsl import StreamInlet, resolve_byprop
 
+# UTF-8 stdout so Unicode symbols don't cause UnicodeEncodeError in subprocesses
+try:
+    if hasattr(sys.stdout, 'reconfigure'):
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+except Exception:
+    pass
+
 from src.utils.config import config_manager
 
 

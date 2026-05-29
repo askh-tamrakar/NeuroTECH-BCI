@@ -6,6 +6,13 @@ import threading
 from pathlib import Path
 from pynput.keyboard import Controller as KeyboardController, Key
 from pynput.mouse import Button, Controller as MouseController
+
+# UTF-8 stdout so Unicode symbols don't cause UnicodeEncodeError in subprocesses
+try:
+    if hasattr(sys.stdout, 'reconfigure'):
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+except Exception:
+    pass
 try:
     import pylsl
     LSL_AVAILABLE = True

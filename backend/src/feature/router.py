@@ -12,7 +12,7 @@ import os
 # UTF-8 encoding for standard output to avoid UnicodeEncodeError in some terminals
 try:
     if hasattr(sys.stdout, 'reconfigure'):
-        sys.stdout.reconfigure(encoding='utf-8')
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 except Exception:
     pass
 
