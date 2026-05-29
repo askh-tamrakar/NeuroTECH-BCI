@@ -1902,7 +1902,7 @@ const ControlPanel = ({
 // by ancestor overflow-hidden containers.
 const TrainButton = ({ onTrain, loading, trainingActive }) => (
     <button
-        onClick={!trainingActive ? onTrain : undefined}
+        onClick={!trainingActive ? () => onTrain() : undefined}
         disabled={loading && !trainingActive}
         className={`w-full flex items-center justify-center py-3 rounded-xl font-bold text-[10px] tracking-[0.15em] transition-all shadow-[0_0_20px_rgba(var(--primary-rgb),0.2)] hover:shadow-[0_0_30px_rgba(var(--primary-rgb),0.4)] hover:scale-[1.05] hover:z-50 active:scale-95 group relative overflow-hidden disabled:opacity-20 ${trainingActive ? 'bg-red-500 text-white' : 'bg-primary text-primary-contrast'}`}
     >

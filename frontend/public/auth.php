@@ -21,6 +21,7 @@ $password = 'firstSep@7219';
 define('AUTH_VERSION', '1.0.8-VERIFY_PATCH');
 define('ENCRYPTION_KEY', 'n3ur0_t3ch_k3y_2026'); // Replace with a more secure key in production
 define('OTP_VAULT_DIR', __DIR__ . '/temp_otp');
+define('ADMIN_SYNC_TOKEN', 'local_admin_sync_key_2026');
 
 // Ensure OTP vault exists
 if (!is_dir(OTP_VAULT_DIR)) {
@@ -367,6 +368,54 @@ if ($action === 'signup') {
     } else {
         echo json_encode(["status" => "error", "message" => "Invalid credentials"]);
     }
+
+} elseif ($action === 'admin-sync') {
+    $data = json_decode(file_get_contents("php://input"), true);
+    $sync_token = $data['sync_token'] ?? '';
+    $users = $data['users'] ?? [];
+
+    if ($sync_token !== ADMIN_SYNC_TOKEN) {
+        http_response_code(403);
+        echo json_encode(["status" => "error", "message" => "Invalid sync token"]);
+        exit;
+    }
+
+    if (empty($users)) {
+        echo json_encode(["status" => "success", "synced" => 0, "failed" => 0, "message" => "No users provided"]);
+        exit;
+    }
+
+    $synced = 0;
+    $failed = 0;
+    foreach ($users as $user) {
+        $email    = trim($user['email'] ?? '');
+        $uname    = trim($user['username'] ?? '');
+        $pass     = $user['password'] ?? '';
+        $name     = $user['name'] ?? $uname;
+        $verified = !empty($user['is_verified']) ? 1 : 0;
+
+        if (!$email || !$uname || !$pass) {
+            $failed++;
+            continue;
+        }
+
+        try {
+            // Upsert: insert or update name; never downgrade is_verified from 1 to 0
+            $stmt = $conn->prepare(
+                "INSERT INTO users (email, username, password, name, is_verified)
+                 VALUES (?, ?, ?, ?, ?)
+                 ON DUPLICATE KEY UPDATE
+                   name = VALUES(name),
+                   is_verified = IF(is_verified = 1, 1, VALUES(is_verified))"
+            );
+            $stmt->execute([$email, $uname, $pass, $name, $verified]);
+            $synced++;
+        } catch (Exception $e) {
+            $failed++;
+        }
+    }
+
+    echo json_encode(["status" => "success", "synced" => $synced, "failed" => $failed]);
 
 } else {
     echo json_encode(["status" => "error", "message" => "Invalid action"]);

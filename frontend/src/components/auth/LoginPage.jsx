@@ -168,7 +168,14 @@ export default function LoginPage() {
         }
       } else if (isSignup) {
         const result = await signup(email, password, name, username, profileImage)
-        if (result.success) {
+        if (result.success && result.skipOtp) {
+          // Local signup — no OTP needed, switch straight to login
+          setMessage('Local account created. You can now sign in.')
+          setTimeout(() => {
+            setIsSignup(false)
+            setMessage('')
+          }, 1500)
+        } else if (result.success) {
           setMessage(`Neural account initiated. check ${email} for access vector.`)
           setShowOtp(true)
           setTimeLeft(60)

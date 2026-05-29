@@ -4,9 +4,15 @@
 # ─────────────────────────────────────────────────────────────────
 
 # ── Web Server & API ─────────────────────────────────────────────
-fastapi>=0.115.0
+flask>=3.0.0
+flask-socketio>=5.3.0
+flask-cors>=4.0.0
 python-socketio>=5.5.0
-uvicorn>=0.32.0
+eventlet>=0.35.0       # Async mode for Flask-SocketIO (WebSocket support)
+simple_websocket>=0.9.0
+requests>=2.28.0       # HTTP client used by local auth sync (auth_routes.py)
+# fastapi>=0.115.0    # Not used by current server (Flask-based)
+# uvicorn>=0.32.0     # Not used by current server
 
 # ── Scientific Computing ─────────────────────────────────────────
 numpy>=1.26.0,<3.0.0
