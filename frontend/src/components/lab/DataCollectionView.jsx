@@ -17,9 +17,11 @@ import { getRuntimeConnection } from '../../utils/runtimeConnection';
 import {
     Activity, Play, Square, Database, Zap,
     Target, ChartSpline, Brain, ArrowRightFromLine,
-    ZoomIn, ArrowUpDown, ArrowDown, ArrowUp, Sigma
+    ZoomIn, ArrowUpDown, ArrowDown, ArrowUp, Sigma, Pencil,
+    FileText, AlertCircle, CheckCircle2, Loader2
 } from 'lucide-react';
 import { soundHandler } from '../../handlers/SoundHandler'
+import { listHybridRecordings, getRecordingMetadata, getRecordingData } from '../../services/hybridRecordingApi';
 
 // Workers
 import SessionWorker from '../../workers/session.worker.js?worker';
@@ -91,11 +93,24 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
     const [calibrationReport, setCalibrationReport] = useState(null);
     const [runInProgress, setRunInProgress] = useState(false);
 
+    // ── Recorded-mode states ────────────────────────────────────────────
+    const [recordingFiles, setRecordingFiles] = useState([]);
+    const [selectedHybridRec, setSelectedHybridRec] = useState(null); // { sensor, session }
+    const [recordingMeta, setRecordingMeta] = useState(null);
+    const [recordingChannelIndex, setRecordingChannelIndex] = useState(0);
+    const [drawModeEnabled, setDrawModeEnabled] = useState(false);
+    const [recordingLoadProgress, setRecordingLoadProgress] = useState(0);
+    const [isRecordingLoading, setIsRecordingLoading] = useState(false);
+    const recordingLoadCancelRef = useRef(false); // cancels in-flight load on new selection
+
     // Data states
     // Data states (chartData removed for Worker optimization)
     // const [chartData, setChartData] = useState([]); // REMOVED
 
     const [markedWindows, setMarkedWindows] = useState([]);
+    // producedCount is driven by the window worker (counts in worker payload)
+    // so we never need to filter a large markedWindows array on the main thread.
+    const [producedCount, setProducedCount] = useState(0);
     const [showEegWindowList, setShowEegWindowList] = useState(false); // Toggle between collection panel and list
     const [activeWindow, setActiveWindow] = useState(null);
     const [targetLabel, setTargetLabel] = useState('Rock'); // e.g., 'Rock', 'Paper', etc.
@@ -478,6 +493,10 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
                         });
                     }
                     break;
+                case 'CLEAR_FILTERED_SUCCESS':
+                    // Refresh the table after filtered rows have been deleted
+                    refreshSessionData(true, { fullName: payload?.fullName });
+                    break;
                 case 'ROW_DELETE_SUCCESS':
                     // OPTIMIZATION: Instead of full reload, filter locally
                     const { rowId } = payload;
@@ -491,7 +510,9 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
             const { type, payload } = e.data;
             switch (type) {
                 case 'WINDOWS_UPDATED':
-                    setMarkedWindows(payload);
+                    // payload is now { windows: Window[], counts: { produced, total } }
+                    setMarkedWindows(payload.windows);
+                    setProducedCount(payload.counts.produced);
                     break;
                 case 'REQUEST_SAMPLES':
                     const { id, start, end, delay } = payload;
@@ -575,21 +596,23 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
             }
 
             if (type === 'SAVE_WINDOW_PROGRESS') {
-                const result = payload?.result || {};
-                if (deletedWindowIdsRef.current.has(result.id)) {
-                    return;
+                // Per-window live update: flip collected → saved/error one at a time.
+                // The window worker's 300ms throttle absorbs these so React only
+                // re-renders ~3×/s regardless of how many windows are saving.
+                if (!deletedWindowIdsRef.current.has(payload.id)) {
+                    windowWorkerRef.current?.postMessage({
+                        type: 'BATCH_WINDOW_COLLECTED',
+                        payload: [{
+                            id: payload.id,
+                            status: payload.status,
+                            features: payload.features,
+                            predictedLabel: payload.predicted_label,
+                            windows_saved: payload.windows_saved ?? 1,
+                        }],
+                    });
                 }
-                windowWorkerRef.current?.postMessage({
-                    type: 'WINDOW_COLLECTED',
-                    payload: {
-                        id: result.id,
-                        status: result.error ? 'error' : 'saved',
-                        features: result.features,
-                        predictedLabel: result.predicted_label,
-                        windows_saved: result.windows_saved ?? 1,
-                    }
-                });
             } else if (type === 'SAVE_WINDOWS_COMPLETE') {
+                // All done — resolve the promise. Status already reflected live.
                 pending.resolve(payload);
                 pendingSaveRequestRef.current = null;
             } else if (type === 'SAVE_WINDOWS_ERROR') {
@@ -766,6 +789,99 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
             fftFreqRange
         });
     }, [zoom, timeWindow, windowDuration, autoLimit, batchSize, numBatches, autoCalibrate, graphMode, emgDisplayMode, fftFreqRange, updateSettings]);
+
+    // ── Recorded-mode: fetch file list when mode or sensor changes ──────
+    useEffect(() => {
+        if (mode !== 'recorded') {
+            // Reset chart when leaving recorded mode
+            if (chartRef.current) {
+                chartRef.current.clearData?.();
+                chartRef.current.setRenderTime?.(null);
+            }
+            return;
+        }
+        setSelectedHybridRec(null);
+        setRecordingMeta(null);
+        setRecordingFiles([]);
+        listHybridRecordings()
+            .then(list => {
+                const filtered = list.filter(r => r.sensor_type === activeSensor);
+                setRecordingFiles(filtered);
+            })
+            .catch(err => console.error('[Recorded] Failed to list recordings:', err));
+    }, [mode, activeSensor]);
+
+    // ── Recorded-mode: load CSV + metadata when a recording is selected ─
+    useEffect(() => {
+        if (!selectedHybridRec || mode !== 'recorded') return;
+
+        const { sensor, session } = selectedHybridRec;
+        recordingLoadCancelRef.current = true; // cancel any previous load
+        const cancelToken = {};
+        recordingLoadCancelRef.current = cancelToken;
+
+        setIsRecordingLoading(true);
+        setRecordingLoadProgress(0);
+        setRecordingMeta(null);
+
+        // Clear chart and switch to recorded mode rendering
+        if (chartRef.current) chartRef.current.clearData?.();
+
+        (async () => {
+            try {
+                // 1. Fetch metadata
+                const meta = await getRecordingMetadata(sensor, session);
+                if (cancelToken !== recordingLoadCancelRef.current) return;
+                setRecordingMeta(meta);
+
+                const startMs = meta.timing.start_timestamp_ms;
+                const sr = meta.acquisition.sampling_rate;
+                const totalRows = meta.integrity.total_rows;
+                const channelIdx = recordingChannelIndex;
+
+                // Tell the chart worker about recorded mode + recording origin
+                // SET_CONFIG is sent via WorkerTimeSeriesChart's useEffect when
+                // chartConfig changes; we trigger it by passing recordedMode through props
+                // instead. But to set recordingStartMs we post directly:
+                if (chartRef.current) {
+                    chartRef.current.setRenderTime?.(startMs + timeWindow / 2);
+                }
+
+                // 2. Stream CSV in 5000-row chunks
+                const CHUNK = 5000;
+                let offset = 0;
+                while (offset < totalRows || offset === 0) {
+                    if (cancelToken !== recordingLoadCancelRef.current) return;
+
+                    const chunk = await getRecordingData(sensor, session, channelIdx, offset, CHUNK);
+                    if (cancelToken !== recordingLoadCancelRef.current) return;
+
+                    const actualTotal = chunk.total_rows;
+                    const points = chunk.values.map((v, i) => ({
+                        time: startMs + ((offset + i) / sr) * 1000,
+                        value: v,
+                    }));
+
+                    if (points.length > 0 && chartRef.current) {
+                        chartRef.current.addData?.(points);
+                    }
+
+                    offset += chunk.values.length;
+                    setRecordingLoadProgress(Math.min(99, Math.round((offset / Math.max(1, actualTotal)) * 100)));
+
+                    if (chunk.values.length < CHUNK || offset >= actualTotal) break;
+                }
+
+                setRecordingLoadProgress(100);
+            } catch (err) {
+                console.error('[Recorded] Load error:', err);
+            } finally {
+                if (cancelToken === recordingLoadCancelRef.current) {
+                    setIsRecordingLoading(false);
+                }
+            }
+        })();
+    }, [selectedHybridRec, recordingChannelIndex]);
 
     // Handlers
     const handleSensorChange = (sensor) => {
@@ -1192,10 +1308,8 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
         }
     }, [mode, activeSensor, markedWindows, autoCalibrate, batchSize, autoLimit, dispatchBatchSave, refreshSessionData, requestFullWindows, isCalibrationMode]);
 
-    const producedCount = useMemo(
-        () => markedWindows.filter((window) => producedStatuses.has(window.status)).length,
-        [markedWindows, producedStatuses]
-    );
+    // producedCount is now a state driven by the window worker's WINDOWS_UPDATED payload.counts.produced
+    // This avoids filtering a large array on every React render.
     const activeBatchWindows = useMemo(
         () => autoCalibrate
             ? markedWindows.filter((window) => Number(window.batchIndex || 0) === currentBatchIndex)
@@ -1861,9 +1975,13 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
             gridColor: '#444',
             themeColor: themeColor, // Pass theme color to worker
             themeAxisColor: axisColor, // Match SignalChart.jsx exactly
-            windowStyles
+            windowStyles,
+            // Recorded mode fields — passed to chart worker via SET_CONFIG
+            recordedMode: mode === 'recorded',
+            recordingStartMs: recordingMeta?.timing?.start_timestamp_ms || 0,
+            sampleRate: recordingMeta?.acquisition?.sampling_rate || 512,
         };
-    }, [currentYDomain, activeChannelIndex, customLineColor, currentTheme]);
+    }, [currentYDomain, activeChannelIndex, customLineColor, currentTheme, mode, recordingMeta]);
 
     const fftChartConfig = React.useMemo(() => {
         const axisColor = currentTheme?.colors?.['--muted'] || '#9ca3af';
@@ -2066,7 +2184,102 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
 
                         <div className="h-[2px] w-full bg-border/95"></div>
 
-                        {/* 2. COLLECTION CONTROLS */}
+                        {/* 2a. RECORDED MODE — file picker + channel selector + info */}
+                        {mode === 'recorded' && (
+                            <div className="space-y-3">
+                                <label className="text-[16px] font-bold text-muted uppercase tracking-wider flex items-center gap-1.5">
+                                    <FileText size={22} /> Recording
+                                </label>
+
+                                {/* Session picker */}
+                                <div className="space-y-1">
+                                    <span className="text-xs text-muted uppercase flex items-center gap-1"><Database size={12} /> Session</span>
+                                    <CustomSelect
+                                        value={selectedHybridRec?.session || ''}
+                                        onChange={(val) => {
+                                            const rec = recordingFiles.find(r => r.session === val);
+                                            if (rec) {
+                                                setRecordingChannelIndex(0);
+                                                setSelectedHybridRec({ sensor: rec.sensor_type, session: rec.session });
+                                            }
+                                        }}
+                                        options={[
+                                            { value: '', label: recordingFiles.length ? '— select recording —' : '(no recordings)' },
+                                            ...recordingFiles.map(r => ({
+                                                value: r.session,
+                                                label: `${r.session}${r.duration_seconds ? ` · ${r.duration_seconds.toFixed(0)}s` : ''}`,
+                                            }))
+                                        ]}
+                                    />
+                                </div>
+
+                                {/* Channel picker — only when multi-channel */}
+                                {recordingMeta && recordingMeta.acquisition.num_channels > 1 && (
+                                    <div className="space-y-1">
+                                        <span className="text-xs text-muted uppercase flex items-center gap-1"><Activity size={12} /> Channel</span>
+                                        <div className="flex flex-wrap gap-1.5">
+                                            {recordingMeta.acquisition.channels.map(ch => (
+                                                <button
+                                                    key={ch.index}
+                                                    onClick={() => setRecordingChannelIndex(ch.index)}
+                                                    className={`px-2.5 py-1 rounded text-xs font-bold border transition-all ${recordingChannelIndex === ch.index
+                                                        ? 'bg-primary/20 text-primary border-primary/50'
+                                                        : 'bg-bg text-muted border-border hover:text-text'
+                                                    }`}
+                                                >
+                                                    {ch.label}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Loading progress */}
+                                {isRecordingLoading && (
+                                    <div className="space-y-1.5">
+                                        <div className="flex items-center justify-between text-xs text-muted">
+                                            <span className="flex items-center gap-1"><Loader2 size={11} className="animate-spin" /> Loading…</span>
+                                            <span>{recordingLoadProgress}%</span>
+                                        </div>
+                                        <div className="h-1.5 w-full rounded-full bg-border overflow-hidden">
+                                            <div
+                                                className="h-full rounded-full bg-primary transition-all duration-200"
+                                                style={{ width: `${recordingLoadProgress}%` }}
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Info card */}
+                                {recordingMeta && !isRecordingLoading && (
+                                    <div className="rounded-xl border border-border/70 bg-bg/60 p-3 space-y-2 text-[11px]">
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-muted uppercase tracking-wider">Duration</span>
+                                            <span className="font-bold tabular-nums">{recordingMeta.timing.duration_seconds?.toFixed(1) ?? '—'}s</span>
+                                        </div>
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-muted uppercase tracking-wider">Sample Rate</span>
+                                            <span className="font-bold tabular-nums">{recordingMeta.acquisition.sampling_rate} Hz</span>
+                                        </div>
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-muted uppercase tracking-wider">Rows</span>
+                                            <span className="font-bold tabular-nums">{recordingMeta.integrity.total_rows?.toLocaleString()}</span>
+                                        </div>
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-muted uppercase tracking-wider">Integrity</span>
+                                            {recordingMeta.integrity.status === 'valid' ? (
+                                                <span className="flex items-center gap-1 text-emerald-400 font-bold"><CheckCircle2 size={11} /> Valid</span>
+                                            ) : (
+                                                <span className="flex items-center gap-1 text-amber-400 font-bold"><AlertCircle size={11} /> Mismatch</span>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* 2b. COLLECTION CONTROLS — hidden in recorded mode */}
+                        {mode !== 'recorded' && (
                         <div className="space-y-3">
                             <label className="text-[16px] font-bold text-muted uppercase tracking-wider flex items-center gap-1.5"><Zap size={22} /> Data Collection</label>
 
@@ -2172,6 +2385,7 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
                                 </div>
                             )}
                         </div>
+                        )} {/* end mode !== 'recorded' collection controls */}
                     </div>
                 </div>
 
@@ -2307,6 +2521,23 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
                                             ))}
                                         </div>
                                     </div>
+
+                                    {/* Draw Mode toggle — only in recorded mode */}
+                                    {mode === 'recorded' && (
+                                        <div className="flex items-center gap-2">
+                                            <button
+                                                onClick={() => setDrawModeEnabled(p => !p)}
+                                                title={drawModeEnabled ? 'Draw Mode ON — drag to annotate' : 'Draw Mode OFF — drag to pan'}
+                                                className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-bold transition-all border ${drawModeEnabled
+                                                    ? 'bg-amber-500/20 text-amber-400 border-amber-500/50 shadow-sm'
+                                                    : 'bg-bg text-muted border-border hover:text-text hover:border-muted/50'
+                                                    }`}
+                                            >
+                                                <Pencil size={13} />
+                                                Draw
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
 
                                 {/* Right: Stats Box */}
@@ -2342,8 +2573,11 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
                                         activeChannelIndex={activeChannelIndex}
                                         channelIndex={activeChannelIndex}
                                         config={chartConfig}
-                                        onWindowSelect={handleManualWindowSelect}
+                                        onWindowSelect={mode !== 'recorded' || drawModeEnabled ? handleManualWindowSelect : undefined}
                                         noBorder={true}
+                                        recordedMode={mode === 'recorded'}
+                                        drawModeEnabled={drawModeEnabled}
+                                        windowDurationMs={windowDuration}
                                     />
                                 </div>
                             </div>
@@ -2419,6 +2653,7 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
                             onMergeSessions={(sourceSessions, targetName) => sessionWorkerRef.current?.postMessage({ type: 'MERGE_SESSIONS', payload: { sourceSessions, targetName } })}
                             onDeleteRow={(rowId) => sessionWorkerRef.current?.postMessage({ type: 'DELETE_ROW', payload: { fullName: fullCurrentSessionName, rowId } })}
                             onClearSession={(name) => sessionWorkerRef.current?.postMessage({ type: 'CLEAR_SESSION', payload: { name } })}
+                            onClearFilteredRows={({ filterLabel, rowFrom, rowTo }) => sessionWorkerRef.current?.postMessage({ type: 'CLEAR_FILTERED_ROWS', payload: { name: fullCurrentSessionName, sensor: activeSensor, filterLabel, rowFrom, rowTo } })}
                             onCreateSession={(name) => sessionWorkerRef.current?.postMessage({ type: 'CREATE_SESSION', payload: { name } })}
                             isCalibrationMode={isCalibrationMode}
                             showCalibrateButton={isCalibrationMode && activeSensor === 'EMG'}
@@ -2432,7 +2667,7 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
                     )}
                 </div>
 
-                {/* Window List */}
+                {/* Window List — always shown */}
                 <div className="lg:col-span-3 h-full min-h-0 overflow-hidden shadow-sm flex flex-col bg-card rounded-md">
                     {activeSensor === 'EEG' ? (
                         <>

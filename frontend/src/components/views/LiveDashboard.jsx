@@ -122,13 +122,23 @@ export default function LiveDashboard({ wsData, wsConfig, wsEvent, sendMessage, 
     }
 
     const discardRecording = async () => {
-        // Delete the server-side recording files
-        if (hybridResult?.path) {
+        // Delete server-side recording files for all sessions (Case 2 may have multiple)
+        if (hybridResult) {
             try {
-                const base = (await import('../../utils/runtimeConnection')).getBaseDataDir?.()
-                // Build relative path from the full path
-                const relPath = hybridResult.path.split(/[\\/]data[\\/]/).pop()
-                if (relPath) await DataService.deleteHybridRecording(relPath)
+                const pathsToDelete = []
+                if (hybridResult.split && Array.isArray(hybridResult.sessions)) {
+                    // Case 2: two separate sensor folders
+                    hybridResult.sessions.forEach(s => {
+                        if (s.path) pathsToDelete.push(s.path)
+                    })
+                } else if (hybridResult.path) {
+                    // Case 1 / 3: single folder
+                    pathsToDelete.push(hybridResult.path)
+                }
+                for (const fullPath of pathsToDelete) {
+                    const relPath = fullPath.split(/[\\/]data[\\/]/).pop()
+                    if (relPath) await DataService.deleteHybridRecording(relPath)
+                }
             } catch (e) {
                 console.warn('[LiveDashboard] Delete error:', e)
             }

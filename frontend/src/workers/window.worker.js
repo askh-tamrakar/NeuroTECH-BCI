@@ -83,10 +83,27 @@ self.onmessage = function (e) {
             startAutoWindowing(payload || {});
             break;
         case 'STOP_WINDOWING':
-            stopAutoWindowing();
+            stopAutoWindowing(true); // explicit stop: cancel all pending windows
+            notifyWindowsUpdate(); // push updated error statuses immediately
             break;
         case 'WINDOW_COLLECTED':
             handleWindowCollected(payload);
+            break;
+        case 'BATCH_WINDOW_COLLECTED':
+            // Accept an array of {id, status, features, predictedLabel, windows_saved} updates
+            // and apply them all at once — one notifyWindowsUpdate() at the end
+            if (Array.isArray(payload)) {
+                payload.forEach(item => {
+                    if (deletedWindowIds.has(item.id)) return;
+                    const existingIdx = markedWindows.findIndex(w => w.id === item.id);
+                    if (existingIdx !== -1) {
+                        markedWindows = markedWindows.map((w, i) =>
+                            i === existingIdx ? { ...w, ...item } : w
+                        );
+                    }
+                });
+                notifyWindowsUpdate();
+            }
             break;
         case 'DELETE_WINDOW':
             deletedWindowIds.add(payload);
@@ -115,7 +132,7 @@ self.onmessage = function (e) {
 };
 
 function startAutoWindowing(options = {}) {
-    stopAutoWindowing();
+    stopAutoWindowing(true); // starting fresh: discard any stale pending from previous run
 
     const desiredBatchSize = Math.max(1, Number(options.batchSize || batchSize || 1));
     currentBatchIndex = autoCalibrate ? Math.max(1, Number(options.batchIndex || currentBatchIndex || 1)) : 0;
@@ -192,10 +209,24 @@ function startAutoWindowing(options = {}) {
     createNextWindow();
 }
 
-function stopAutoWindowing() {
+function stopAutoWindowing(cancelPending = false) {
     if (windowTimer) {
         clearTimeout(windowTimer);
         windowTimer = null;
+    }
+    // cancelPending=true: explicit user stop or starting a fresh run.
+    //   Wipe pendingCollections so stale windows don't inflate the count on
+    //   resume and map them to error so the produced count stays consistent.
+    // cancelPending=false (default): auto-stop because count reached the limit.
+    //   The windows that were already scheduled MUST be allowed to finish
+    //   collection — do NOT clear pendingCollections or mark them error.
+    if (cancelPending) {
+        pendingCollections = [];
+        markedWindows = markedWindows.map(w =>
+            (w.status === 'pending' || w.status === 'recording')
+                ? { ...w, status: 'error' }
+                : w
+        );
     }
 }
 
@@ -278,15 +309,27 @@ function handleWindowCollected(collectedWindow) {
 }
 
 let updateThrottleTimeout = null;
-const UPDATE_THROTTLE_MS = 100; // 10Hz
+const UPDATE_THROTTLE_MS = 300; // ~3Hz — reduces main-thread React reconciliation burden
+const DISPLAY_WINDOW_TAIL = 300; // only last N windows sent; older ones only live in worker
 
 function notifyWindowsUpdate() {
     if (updateThrottleTimeout) return;
 
     updateThrottleTimeout = setTimeout(() => {
+        // Compute counts in the worker so the main thread never needs to filter a large array
+        const producedCount = markedWindows.filter(
+            w => w.status === 'collected' || w.status === 'saved' || w.status === 'correct'
+        ).length;
+
         self.postMessage({
             type: 'WINDOWS_UPDATED',
-            payload: markedWindows.map(toWindowSummary)
+            payload: {
+                windows: markedWindows.slice(-DISPLAY_WINDOW_TAIL).map(toWindowSummary),
+                counts: {
+                    produced: producedCount,
+                    total: markedWindows.length,
+                },
+            },
         });
         updateThrottleTimeout = null;
     }, UPDATE_THROTTLE_MS);

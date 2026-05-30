@@ -33,7 +33,7 @@ export default function LoadingScreen({ label = 'Loading...', fullscreen = false
                 <motion.div
                     animate={{ opacity: [0.7, 1, 0.7] }}
                     transition={{ duration: 1.6, repeat: Infinity, ease: 'easeInOut' }}
-                    className="relative z-10 p-3 rounded-xl bg-[var(--surface)] border border-[var(--border)] shadow-[0_0_20px_rgba(var(--primary-rgb),0.25)]"
+                    className="relative z-10 p-3 rounded-xl"
                 >
                     <BrainCircuit size={28} className="text-[var(--primary)]" />
                 </motion.div>

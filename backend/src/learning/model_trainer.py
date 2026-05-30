@@ -7,7 +7,7 @@ import os
 import glob
 from datetime import datetime
 from pathlib import Path
-from sklearn.ensemble import RandomForestClassifier
+import xgboost as xgb
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, confusion_matrix
@@ -83,7 +83,7 @@ def get_model_paths(sensor, model_name):
         "meta": sensor_dir / f"{clean_name}_meta.json"
     }
 
-def train_model(sensor, n_estimators=100, max_depth=None, min_impurity_decrease=0.0, test_size=0.2, table_name=None, model_name=None):
+def train_model(sensor, n_estimators=100, max_depth=None, min_impurity_decrease=0.0, learning_rate=0.1, gamma=0.0, subsample=0.8, colsample_bytree=0.8, test_size=0.2, table_name=None, model_name=None):
     """
     Generic training function for any sensor.
     """
@@ -186,12 +186,18 @@ def train_model(sensor, n_estimators=100, max_depth=None, min_impurity_decrease=
     X_train_scaled = scaler.fit_transform(X_train)
     X_test_scaled = scaler.transform(X_test)
 
-    # Train Random Forest
-    rf = RandomForestClassifier(
-        n_estimators=n_estimators, 
-        max_depth=max_depth, 
-        min_impurity_decrease=min_impurity_decrease,
-        random_state=42
+    # Train XGBoost
+    rf = xgb.XGBClassifier(
+        n_estimators=n_estimators,
+        max_depth=max_depth if max_depth is not None else 6,
+        learning_rate=0.1,
+        gamma=0.0,
+        subsample=0.8,
+        colsample_bytree=0.8,
+        objective='multi:softprob',
+        tree_method='hist',
+        eval_metric='mlogloss',
+        random_state=42,
     )
     rf.fit(X_train_scaled, y_train)
 
@@ -228,8 +234,8 @@ def train_model(sensor, n_estimators=100, max_depth=None, min_impurity_decrease=
     # Automatically load the newly trained model
     load_model(sensor, model_name)
 
-    # Tree Visualization (First Estimator)
-    tree_struct = tree_to_json(rf.estimators_[0], feature_cols)
+    # Tree Visualization
+    tree_struct = tree_to_json(rf, feature_cols, 0)
 
     return {
         "status": "success",
@@ -246,13 +252,13 @@ def train_model(sensor, n_estimators=100, max_depth=None, min_impurity_decrease=
 
 # Wrappers for backward compatibility / specific use cases
 def train_emg_model(n_estimators=100, max_depth=None, min_impurity_decrease=0.0, test_size=0.2, table_name="emg_windows", model_name="emg_rf"):
-    return train_model('EMG', n_estimators, max_depth, min_impurity_decrease, test_size, table_name, model_name)
+    return train_model('EMG', n_estimators, max_depth, test_size=test_size, table_name=table_name, model_name=model_name)
 
 def train_eog_model(n_estimators=100, max_depth=None, min_impurity_decrease=0.0, test_size=0.2, table_name="eog_windows", model_name="eog_rf"):
-    return train_model('EOG', n_estimators, max_depth, min_impurity_decrease, test_size, table_name, model_name)
+    return train_model('EOG', n_estimators, max_depth, test_size=test_size, table_name=table_name, model_name=model_name)
 
 def train_eeg_model(n_estimators=100, max_depth=None, min_impurity_decrease=0.0, test_size=0.2, table_name="eeg_windows", model_name="eeg_rf"):
-    return train_model('EEG', n_estimators, max_depth, min_impurity_decrease, test_size, table_name, model_name)
+    return train_model('EEG', n_estimators, max_depth, test_size=test_size, table_name=table_name, model_name=model_name)
 
 
 def list_saved_models(sensor='EMG'):

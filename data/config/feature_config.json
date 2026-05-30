@@ -1,8 +1,4 @@
 {
-  "EEG": {
-    "ratio_threshold": 1.2,
-    "rest_threshold": 0.6
-  },
   "Servo": {
     "enabled": false
   }

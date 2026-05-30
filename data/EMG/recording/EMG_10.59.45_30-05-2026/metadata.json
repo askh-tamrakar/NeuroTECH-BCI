@@ -1,0 +1,71 @@
+{
+  "session": {
+    "name": "EMG_10.59.45_30-05-2026",
+    "sensor_type": "EMG",
+    "data_type": "raw",
+    "created": "2026-05-30T10:59:45.407187"
+  },
+  "acquisition": {
+    "sampling_rate": 512,
+    "num_channels": 2,
+    "channels": [
+      {
+        "index": 0,
+        "label": "ch0 - EMG",
+        "sensor": "EMG",
+        "unit": "µV"
+      },
+      {
+        "index": 1,
+        "label": "ch1 - EMG",
+        "sensor": "EMG",
+        "unit": "µV"
+      }
+    ]
+  },
+  "hardware": {
+    "device_id": "Arduino_UNO_R4",
+    "adc_resolution": 14,
+    "gain": 1,
+    "reference_voltage": 3.3
+  },
+  "filters": {
+    "filters": {
+      "EEG": {
+        "bandpass_enabled": true,
+        "bandpass_high": 30.5,
+        "bandpass_low": 0.5,
+        "notch_enabled": true
+      },
+      "EMG": {
+        "bandpass_enabled": true,
+        "bandpass_high": 250,
+        "bandpass_low": 70,
+        "notch_enabled": true,
+        "notch_q": 30
+      },
+      "EOG": {
+        "bandpass_enabled": true,
+        "bandpass_high": 7.8,
+        "bandpass_low": 0.1,
+        "bandpass_order": 4,
+        "notch_enabled": true,
+        "notch_q": 30
+      }
+    }
+  },
+  "timing": {
+    "start_time": "2026-05-30T10:59:45.407187",
+    "start_timestamp_ms": 1780118985407,
+    "end_time": "2026-05-30T11:00:06.547818",
+    "end_timestamp_ms": 1780119006547,
+    "duration_seconds": 21.14,
+    "total_pause_seconds": 0.0
+  },
+  "integrity": {
+    "total_rows": 22722,
+    "expected_rows": 10823,
+    "status": "warning_row_mismatch",
+    "note": "Row count (22722) differs from expected (10823) by 11899 samples"
+  }
+}

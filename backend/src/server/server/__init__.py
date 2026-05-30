@@ -70,6 +70,7 @@ def create_app():
         from src.data.hybrid_recorder import HybridRecorder
         from src.data.recording_service import RecordingService
         state.hybrid_recorder = HybridRecorder()
+        state.extra_recorders = []
         state.recording_service = RecordingService(state.hybrid_recorder)
         print("[App] Hybrid recorder initialized")
     except Exception as e:

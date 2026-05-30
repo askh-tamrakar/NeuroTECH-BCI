@@ -22,6 +22,9 @@ pandas>=2.0.0
 # ── Machine Learning ─────────────────────────────────────────────
 scikit-learn>=1.4.0
 joblib>=1.3.0
+xgboost>=2.0.0
+xgboost>=2.0.0
+xgboost>=2.0
 
 # ── BCI / Signal Acquisition ─────────────────────────────────────
 pylsl>=1.16.2          # Lab Streaming Layer (stream_manager, filter_router, feature router)
@@ -35,6 +38,6 @@ pynput>=1.7.7          # Keyboard/mouse control (hid_controller)
 
 # ── Optional: NeuroBench Signal Simulator (dev tool only) ────────
 # Uncomment the lines below if you use src/utils/neurobench.py
-# PySide6>=6.6.0
-# pyqtgraph>=0.13.0
-# brainflow>=5.12.0
+PySide6>=6.6.0
+pyqtgraph>=0.13.0
+brainflow>=5.12.0

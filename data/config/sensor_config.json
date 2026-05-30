@@ -1,7 +1,7 @@
 {
   "active_models": {
     "EEG": "Neo",
-    "EMG": "rps-1200",
+    "EMG": "xgBoost_luci",
     "EOG": "dino-ml"
   },
   "adc_settings": {
@@ -17,7 +17,7 @@
     "ch1": {
       "enabled": true,
       "label": "UNUSED",
-      "sensor": "EOG"
+      "sensor": "EEG"
     }
   },
   "display": {

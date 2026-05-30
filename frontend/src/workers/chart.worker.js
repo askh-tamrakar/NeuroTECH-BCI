@@ -52,7 +52,14 @@ let config = {
         collected: { fill: 'rgba(56, 189, 248, 0.18)', stroke: '#38bdf8', text: '#f8fafc' },
         saved: { fill: 'rgba(16, 185, 129, 0.16)', stroke: '#10b981', text: '#f8fafc' },
         error: { fill: 'rgba(244, 63, 94, 0.16)', stroke: '#f43f5e', text: '#f8fafc' }
-    }
+    },
+    // Recorded-mode fields
+    recordedMode: false,
+    recordingStartMs: 0,   // absolute ms of recording start (for x-axis labels)
+    sampleRate: 512,       // used for px-per-sample calculation
+    manualRenderTime: null, // when set, getRenderNow() returns this instead of live clock
+    previewPixelX: null,   // draw-mode hover preview pixel position (null = hidden)
+    previewWindowMs: 900,  // draw-mode preview window duration (ms)
 };
 
 // Scanner State
@@ -118,6 +125,53 @@ self.onmessage = function (e) {
         case 'CLEAR_DATA':
             points = [];
             envelopeState = 0;
+            config.manualRenderTime = null;
+            requestRender();
+            break;
+        // --- Recorded-mode controls ---
+        case 'SET_RENDER_TIME':
+            // Jump the viewport to a specific absolute timestamp (ms)
+            config.manualRenderTime = payload.ms;
+            requestRender();
+            break;
+        case 'PAN_VIEW': {
+            // Pan left/right by deltaPx pixels (positive = pan right = reveal earlier data)
+            const { deltaPx } = payload;
+            const leftMargin = 45;
+            const drawWidth = width - leftMargin;
+            const msPerPx = config.timeWindow / drawWidth;
+            const deltaMs = deltaPx * msPerPx;
+            if (config.manualRenderTime == null) {
+                config.manualRenderTime = getRenderNow();
+            }
+            config.manualRenderTime += deltaMs;
+            requestRender();
+            break;
+        }
+        case 'ZOOM_Y': {
+            // Zoom in/out on Y axis; factor > 1 = zoom in (shrink range)
+            const { factor: yFactor } = payload;
+            const midY = (config.yMin + config.yMax) / 2;
+            const halfRange = (config.yMax - config.yMin) / 2;
+            const newHalf = halfRange / yFactor;
+            config.yMin = midY - newHalf;
+            config.yMax = midY + newHalf;
+            requestRender();
+            break;
+        }
+        case 'ZOOM_X': {
+            // Zoom in/out on X axis; factor > 1 = zoom in (shrink timeWindow)
+            // Clamped: 3 s minimum, 20 s maximum
+            const { factor: xFactor } = payload;
+            const newTw = Math.min(20000, Math.max(3000, config.timeWindow / xFactor));
+            config.timeWindow = newTw;
+            requestRender();
+            break;
+        }
+        case 'DRAW_PREVIEW':
+            // Show/hide annotation preview rectangle at mouse position
+            config.previewPixelX = payload.pixelX ?? null;
+            if (payload.windowDurationMs != null) config.previewWindowMs = payload.windowDurationMs;
             requestRender();
             break;
     }
@@ -153,6 +207,9 @@ function handleCalcSelection(payload) {
 }
 
 function getRenderNow() {
+    if (config.recordedMode && config.manualRenderTime != null) {
+        return config.manualRenderTime;
+    }
     if (lastTsHead > 0) {
         return lastTsHead;
     }
@@ -218,28 +275,25 @@ function addData(newPoints) {
 
     points.push(...normalizedPoints);
     
-    // Time-based eviction: keep 3x the visible time window.
-    // This must be generous enough that signal-time-based window collection
-    // (which fires when signal time passes window.endTime + 200ms) can still
-    // read sample data for the full window duration.
-    // With timeWindow=5s, windows span ~1.5s and are collected ~4.2s after creation,
-    // meaning the oldest needed data is ~4.2s old — well within 3*5=15s.
-    const maxAge = (config.timeWindow || 5000) * 3;
-    const cutoffTime = lastTsHead - maxAge;
-    let cutIdx = 0;
-    for (let i = 0; i < points.length; i++) {
-        if (points[i].time >= cutoffTime) {
-            cutIdx = i;
-            break;
+    if (!config.recordedMode) {
+        // Time-based eviction: keep 3x the visible time window (live mode only).
+        // Recorded mode keeps all loaded points for panning.
+        const maxAge = (config.timeWindow || 5000) * 3;
+        const cutoffTime = lastTsHead - maxAge;
+        let cutIdx = 0;
+        for (let i = 0; i < points.length; i++) {
+            if (points[i].time >= cutoffTime) {
+                cutIdx = i;
+                break;
+            }
         }
-    }
-    if (cutIdx > 0) {
-        points = points.slice(cutIdx);
-    }
-    
-    // Hard cap as safety net
-    if (points.length > MAX_POINTS) {
-        points = points.slice(points.length - MAX_POINTS);
+        if (cutIdx > 0) {
+            points = points.slice(cutIdx);
+        }
+        // Hard cap as safety net
+        if (points.length > MAX_POINTS) {
+            points = points.slice(points.length - MAX_POINTS);
+        }
     }
 }
 
@@ -305,8 +359,12 @@ function draw() {
     // We let the CSS background from SignalChart.css handle it or the global CSS.
 
     if (points.length === 0) {
-        // Draw placeholder grid
-        drawGrid(Date.now(), config.timeWindow, config.timeWindow / 2, 45);
+        // In recorded mode use a fixed anchor (recordingStartMs + half-window) so the
+        // empty grid does not auto-scroll with the wall clock.
+        const emptyNow = config.recordedMode
+            ? (config.recordingStartMs || 0) + config.timeWindow / 2
+            : Date.now();
+        drawGrid(emptyNow, config.timeWindow, config.timeWindow / 2, 45);
         return;
     }
 
@@ -424,6 +482,11 @@ function draw() {
     ctx.shadowBlur = 8;
     ctx.shadowColor = config.lineColor;
 
+    // Compute whether to show individual point markers (plus+circle)
+    // Only when pixel-per-sample > 5 to avoid canvas overload at high density
+    const pxPerSample = (drawWidth / config.timeWindow) * (1000 / Math.max(1, config.sampleRate || 512));
+    const showPointMarkers = config.recordedMode && pxPerSample > 5;
+
     ctx.beginPath();
 
     let cursorValue = null;
@@ -462,7 +525,9 @@ function draw() {
                 cursorValue = getPointValue(points[i]);
             }
 
-            ctx.moveTo(startX, startY);
+            if (!showPointMarkers) {
+                ctx.moveTo(startX, startY);
+            }
 
             // Draw line backwards, detecting large gaps to avoid straight-line artifacts
             let prevTime = (i < points.length - 1) ? now : points[i].time;
@@ -473,56 +538,100 @@ function draw() {
 
                 if (x_ms < -200) break; // Optimization
 
-                // Gap detection: only break the path on genuine data loss (>200ms gap)
-                // Small gaps from batch boundaries or jitter should still draw continuous lines
-                const timeDelta = prevTime - p.time;
-                if (timeDelta > 200 && j < i) {
-                    // Start a new sub-path after the gap
-                    const x = timeToPx(x_ms);
-                    const y = valToPy(getPointValue(p));
-                    ctx.moveTo(x, y);
+                const x = timeToPx(x_ms);
+                const y = valToPy(getPointValue(p));
+
+                if (showPointMarkers) {
+                    // Plus+circle marker: circle with arms extending slightly beyond its edge
+                    const r = 4;
+                    const arm = r + 2;
+                    ctx.save();
+                    ctx.fillStyle = config.lineColor;
+                    ctx.strokeStyle = config.lineColor;
+                    ctx.lineWidth = 1.5;
+                    ctx.shadowBlur = 6;
+                    ctx.shadowColor = config.lineColor;
+                    // Circle
+                    ctx.beginPath();
+                    ctx.arc(x, y, r, 0, Math.PI * 2);
+                    ctx.stroke();
+                    // Horizontal arm
+                    ctx.beginPath();
+                    ctx.moveTo(x - arm, y);
+                    ctx.lineTo(x + arm, y);
+                    ctx.stroke();
+                    // Vertical arm
+                    ctx.beginPath();
+                    ctx.moveTo(x, y - arm);
+                    ctx.lineTo(x, y + arm);
+                    ctx.stroke();
+                    ctx.restore();
                 } else {
-                    const x = timeToPx(x_ms);
-                    const y = valToPy(getPointValue(p));
-                    ctx.lineTo(x, y);
+                    // Gap detection: only break the path on genuine data loss (>200ms gap)
+                    const timeDelta = prevTime - p.time;
+                    if (timeDelta > 200 && j < i) {
+                        ctx.moveTo(x, y);
+                    } else {
+                        ctx.lineTo(x, y);
+                    }
                 }
                 prevTime = p.time;
             }
         }
     }
-    ctx.stroke();
+    if (!showPointMarkers) ctx.stroke();
 
     // Reset shadow for other elements
     ctx.shadowBlur = 0;
 
-    // Draw Cursor (Center)
+    // Draw Cursor (Center) — live mode only, not in recorded mode
     const centerPx = timeToPx(centerTimeOffset);
 
-    // 1. Vertical Line (0 x-axis line bold dash)
-    ctx.strokeStyle = 'var(--text-secondary, #ffffff)';
-    ctx.lineWidth = 2; // Bold
-    ctx.setLineDash([8, 8]); // Dash
-    ctx.beginPath();
-    ctx.moveTo(centerPx, 0);
-    ctx.lineTo(centerPx, height);
-    ctx.stroke();
-    ctx.setLineDash([]); // Reset line dash
-
-    // 2. Current Value Dot
-    if (points.length > 0) {
-        const y_px = valToPy(cursorValue ?? getPointValue(points[points.length - 1]));
-
-        ctx.fillStyle = config.lineColor;
-        ctx.shadowBlur = 10; // Neon glow
-        ctx.shadowColor = config.lineColor;
+    if (!config.recordedMode) {
+        // 1. Vertical Line
+        ctx.strokeStyle = 'var(--text-secondary, #ffffff)';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([8, 8]);
         ctx.beginPath();
-        ctx.arc(centerPx, y_px, 4, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.shadowBlur = 0; // Reset
+        ctx.moveTo(centerPx, 0);
+        ctx.lineTo(centerPx, height);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // 2. Current Value Dot
+        if (points.length > 0) {
+            const y_px = valToPy(cursorValue ?? getPointValue(points[points.length - 1]));
+            ctx.fillStyle = config.lineColor;
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = config.lineColor;
+            ctx.beginPath();
+            ctx.arc(centerPx, y_px, 4, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+        }
     }
 
     ctx.restore(); // Restore clip
 
+    // Draw annotation preview window (draw mode hover) — outside clip so it spans full height
+    if (config.recordedMode && config.previewPixelX != null) {
+        const leftM = 45;
+        const dw = width - leftM;
+        const halfPx = (config.previewWindowMs / 2 / config.timeWindow) * dw;
+        const px1 = Math.max(leftM, config.previewPixelX - halfPx);
+        const px2 = Math.min(width, config.previewPixelX + halfPx);
+        const pY = height * 0.1;
+        const aH = height - 2 * pY;
+        ctx.save();
+        ctx.fillStyle = 'rgba(245, 158, 11, 0.18)';
+        ctx.strokeStyle = '#f59e0b';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([5, 4]);
+        ctx.fillRect(px1, pY, px2 - px1, aH);
+        ctx.strokeRect(px1, pY, px2 - px1, aH);
+        ctx.setLineDash([]);
+        ctx.restore();
+    }
 }
 
 function drawGrid(now, timeWindow, centerTimeOffset, leftMargin, padY, availH) {
@@ -608,8 +717,20 @@ function drawGrid(now, timeWindow, centerTimeOffset, leftMargin, padY, availH) {
         if (x_px < leftMargin) continue;
 
         // Draw Label Only
-        const diff = (t_abs - now) / 1000;
-        const label = diff > 0 ? `+${diff.toFixed(2)}s` : `${diff.toFixed(2)}s`;
+        let label;
+        if (config.recordedMode && config.recordingStartMs) {
+            // Show HH:MM:SS offset from recording start
+            const offsetSec = Math.max(0, (t_abs - config.recordingStartMs) / 1000);
+            const hh = Math.floor(offsetSec / 3600);
+            const mm = Math.floor((offsetSec % 3600) / 60);
+            const ss = Math.floor(offsetSec % 60);
+            label = hh > 0
+                ? `${hh}:${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`
+                : `${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
+        } else {
+            const diff = (t_abs - now) / 1000;
+            label = diff > 0 ? `+${diff.toFixed(2)}s` : `${diff.toFixed(2)}s`;
+        }
 
         ctx.globalAlpha = 0.8;
         ctx.fillText(label, x_px, height - 12);

@@ -21,11 +21,16 @@ class DatabaseManager:
         self._init_dbs()
         
     def connect(self, sensor_type: str):
-        """Get database connection for specific sensor."""
+        """Get database connection for specific sensor.
+        Uses WAL journal mode and a 30-second busy timeout so concurrent
+        reads from the API don't block or deadlock the write path."""
         sensor = sensor_type.upper()
         if sensor not in self.db_paths:
             raise ValueError(f"Unknown sensor type: {sensor}")
-        return sqlite3.connect(self.db_paths[sensor])
+        conn = sqlite3.connect(self.db_paths[sensor], timeout=30)
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA synchronous=NORMAL")
+        return conn
 
     def _init_dbs(self):
         """Initialize all databases."""

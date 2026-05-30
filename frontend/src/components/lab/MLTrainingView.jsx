@@ -817,7 +817,7 @@ const HyperparametersCard = ({ params, setParamsTab, activeTab, models = [] }) =
                     <span className="flex items-center text-[var(--graph-text)]  gap-2">
                         Hyperparameters
                         <span className="text-[12px] bg-[var(--bg)] border border-[var(--border)] px-2 py-0.5 rounded-full text-[var(--text)] font-mono">
-                            {view === 'params' ? (activeTab === 'EEG' ? 5 : 7) : models.length}
+                            {view === 'params' ? (activeTab === 'EEG' ? 5 : 9) : models.length}
                         </span>
                     </span>
                 </h3>
@@ -879,48 +879,75 @@ const HyperparametersCard = ({ params, setParamsTab, activeTab, models = [] }) =
                     </div>
 
                     {activeTab !== 'EEG' ? (
-                        <div className="grid grid-cols-2 gap-1 pb-2">
+                        <div className="grid grid-cols-2 gap-x-3 gap-y-1 mb-2">
+                            {/* Estimators Range — full row */}
                             <div className="col-span-2 p-0 border-0 bg-transparent">
-                                <div className="flex justify-between items-end mb-2 px-1">
-                                    <span className="text-[14px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em]">Estimators Range</span>
-                                    <div className="flex items-center gap-2 text-[18px] font-black font-mono text-[var(--header-text)]">
-                                        <span >{params.n_estimators_min || 50}</span>
+                                <div className="flex justify-between items-end mb-1 px-1">
+                                    <span className="text-[13px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em]">Estimators Range</span>
+                                    <div className="flex items-center gap-2 text-[16px] font-black font-mono text-[var(--header-text)]">
+                                        <span>{params.n_estimators_min || 50}</span>
                                         <span className="text-[var(--muted)]">-</span>
-                                        <span >{params.n_estimators_max || 200}</span></div>
+                                        <span>{params.n_estimators_max || 200}</span>
+                                    </div>
                                 </div>
-
                                 <RangeSlider min={5} max={500} step={5}
                                     leftColor="var(--muted)" rightColor="var(--muted)"
                                     minValue={params.n_estimators_min || 50} maxValue={params.n_estimators_max || 200} hideLabels={true} compact={true} color="var(--primary)" onChange={(vals) => setParamsTab({ n_estimators_min: vals.min, n_estimators_max: vals.max })} />
                             </div>
 
+                            {/* Row 2: Max Depth | Learning Rate */}
                             <div className="p-0 border-0 bg-transparent">
-                                <div className="flex justify-between items-end mb-2 px-1">
-                                    <span className="text-[14px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em]">Max Depth</span>
-                                    <div className="flex items-center gap-1 font-mono text-[16px] text-[var(--header-text)] font-black">{params.max_depth_min || 5} - {params.max_depth_max || 15}</div>
+                                <div className="flex justify-between items-end mb-1 px-0.5">
+                                    <span className="text-[12px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.08em] truncate mr-1">Max Depth</span>
+                                    <span className="text-[14px] font-bold text-[var(--header-text)] font-black shrink-0">{params.max_depth_min || 4} – {params.max_depth_max || 8}</span>
                                 </div>
-
                                 <RangeSlider min={2} max={30} step={1}
-                                    leftColor="var(--muted)" rightColor="var(--muted)" minValue={params.max_depth_min || 5} maxValue={params.max_depth_max || 15} hideLabels={true} compact={true} color="var(--primary)" onChange={(vals) => setParamsTab({ max_depth_min: vals.min, max_depth_max: vals.max })} />
+                                    leftColor="var(--muted)" rightColor="var(--muted)" minValue={params.max_depth_min || 4} maxValue={params.max_depth_max || 8} hideLabels={true} compact={true} color="var(--primary)" onChange={(vals) => setParamsTab({ max_depth_min: vals.min, max_depth_max: vals.max })} />
                             </div>
 
-                            <div className="pb-0 border-0 bg-transparent">
-                                <div className="flex justify-between items-end mb-2 px-1">
-                                    <span className="text-[14px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em]">MID</span>
-                                    <div className="text-[13px] font-mono text-[var(--header-text)] font-black leading-tight text-right">{(params.min_impurity_decrease_min ?? 0).toFixed(4)}<span className="text-[var(--muted)]"> – </span>{(params.min_impurity_decrease_max ?? 0.002).toFixed(4)}</div>
+                            <div className="p-0 border-0 bg-transparent">
+                                <div className="flex justify-between items-end mb-1 px-0.5">
+                                    <span className="text-[12px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.08em] truncate mr-1">LEARN RATE</span>
+                                    <span className="text-[14px] font-bold text-[var(--header-text)] font-black shrink-0">{(params.learning_rate_min ?? 0.05).toFixed(2)} – {(params.learning_rate_max ?? 0.2).toFixed(2)}</span>
                                 </div>
-                                <RangeSlider min={0} max={0.002} step={0.0001}
-                                    leftColor="var(--muted)" rightColor="var(--muted)" minValue={params.min_impurity_decrease_min ?? 0} maxValue={params.min_impurity_decrease_max ?? 0.002} hideLabels={true} compact={true} color="var(--primary)" onChange={(vals) => setParamsTab({ min_impurity_decrease_min: vals.min, min_impurity_decrease_max: vals.max })} />
+                                <RangeSlider min={0.01} max={0.5} step={0.01}
+                                    leftColor="var(--muted)" rightColor="var(--muted)" minValue={params.learning_rate_min ?? 0.05} maxValue={params.learning_rate_max ?? 0.2} hideLabels={true} compact={true} color="var(--primary)" onChange={(vals) => setParamsTab({ learning_rate_min: vals.min, learning_rate_max: vals.max })} />
+                            </div>
+
+                            {/* Row 3: Subsample | Colsample */}
+                            <div className="p-0 border-0 bg-transparent">
+                                <div className="flex justify-between items-end mb-1 px-0.5">
+                                    <span className="text-[12px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.08em] truncate mr-1">Subsample</span>
+                                    <span className="text-[14px] font-bold text-[var(--header-text)] font-black shrink-0">{(params.subsample ?? 0.8).toFixed(2)}</span>
+                                </div>
+                                <CustomSlider min={0.5} max={1.0} step={0.05}
+                                    backgroundColor="var(--bg)"
+                                    value={params.subsample ?? 0.8} onChange={(value) => setParamsTab({ subsample: value })} />
                             </div>
 
                             <div className="p-0 border-0 bg-transparent">
-                                <div className="text-[14px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em] mb-1.5 px-1">Criterion</div>
-                                <CustomSelect className='font-bold text-[var(--header-text)]' direction="up" value={params.criterion || 'gini'} onChange={(value) => setParamsTab({ criterion: value })} options={[{ value: 'gini', label: 'Gini' }, { value: 'entropy', label: 'Entropy' }, { value: 'gini,entropy', label: 'Both' }]} />
+                                <div className="flex justify-between items-end mb-1 px-0.5">
+                                    <span className="text-[12px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.08em] truncate mr-1">Colsample</span>
+                                    <span className="text-[14px] font-bold text-[var(--header-text)] font-black shrink-0">{(params.colsample_bytree ?? 0.8).toFixed(2)}</span>
+                                </div>
+                                <CustomSlider min={0.5} max={1.0} step={0.05}
+                                    backgroundColor="var(--bg)"
+                                    value={params.colsample_bytree ?? 0.8} onChange={(value) => setParamsTab({ colsample_bytree: value })} />
+                            </div>
+
+                            {/* Row 4: Gamma | Importance Type */}
+                            <div className="p-0 border-0 bg-transparent">
+                                <div className="flex justify-between items-end mb-1 px-0.5">
+                                    <span className="text-[12px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.08em] truncate mr-1">Gamma</span>
+                                    <span className="text-[14px] font-bold text-[var(--header-text)] font-black shrink-0">{(params.gamma_min ?? 0.0).toFixed(2)} – {(params.gamma_max ?? 0.3).toFixed(2)}</span>
+                                </div>
+                                <RangeSlider min={0} max={1.0} step={0.05}
+                                    leftColor="var(--muted)" rightColor="var(--muted)" minValue={params.gamma_min ?? 0.0} maxValue={params.gamma_max ?? 0.3} hideLabels={true} compact={true} color="var(--primary)" onChange={(vals) => setParamsTab({ gamma_min: vals.min, gamma_max: vals.max })} />
                             </div>
 
                             <div className="p-0 border-0 bg-transparent">
-                                <div className="text-[14px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.1em] mb-1.5 px-1">Features</div>
-                                <CustomSelect className='font-bold text-[var(--header-text)]' direction="up" value={params.max_features || 'sqrt'} onChange={(value) => setParamsTab({ max_features: value })} options={[{ value: 'sqrt', label: 'Sqrt' }, { value: 'log2', label: 'Log2' }, { value: 'None', label: 'None' }, { value: 'sqrt,log2', label: 'Both' }]} />
+                                <div className="text-[12px] font-black text-[var(--text-tertiary)] uppercase tracking-[0.08em] mb-1 px-0.5">Feat. Importance</div>
+                                <CustomSelect className='font-bold text-[var(--header-text)] text-[14px]' direction="up" value={params.importance_type || 'gain'} onChange={(value) => setParamsTab({ importance_type: value })} options={[{ value: 'gain', label: 'Gain' }, { value: 'weight', label: 'Weight' }, { value: 'cover', label: 'Cover' }]} />
                             </div>
                         </div>
                     ) : (
@@ -2054,8 +2081,8 @@ export default function MLTrainingView({ onSwitchLab }) {
 
     // Params per sensor
     const [params, setParams] = useState({
-        EMG: { n_estimators_min: 50, n_estimators_max: 200, max_depth_min: 5, max_depth_max: 15, test_ratio: 0.15, val_ratio: 0.17, train_ratio: 0.68, k_folds: 5, search_resolution: 3, min_impurity_decrease_min: 0.0, min_impurity_decrease_max: 0.002 },
-        EOG: { n_estimators_min: 50, n_estimators_max: 200, max_depth_min: 5, max_depth_max: 15, test_ratio: 0.15, val_ratio: 0.17, train_ratio: 0.68, k_folds: 5, search_resolution: 3, min_impurity_decrease_min: 0.0, min_impurity_decrease_max: 0.002 },
+        EMG: { n_estimators_min: 50, n_estimators_max: 200, max_depth_min: 4, max_depth_max: 8, test_ratio: 0.15, val_ratio: 0.17, train_ratio: 0.68, k_folds: 5, search_resolution: 3, learning_rate_min: 0.05, learning_rate_max: 0.2, gamma_min: 0.0, gamma_max: 0.3, subsample: 0.8, colsample_bytree: 0.8, importance_type: 'gain' },
+        EOG: { n_estimators_min: 50, n_estimators_max: 200, max_depth_min: 4, max_depth_max: 8, test_ratio: 0.15, val_ratio: 0.17, train_ratio: 0.68, k_folds: 5, search_resolution: 3, learning_rate_min: 0.05, learning_rate_max: 0.2, gamma_min: 0.0, gamma_max: 0.3, subsample: 0.8, colsample_bytree: 0.8, importance_type: 'gain' },
         EEG: { tol_min: 0.0001, tol_max: 0.01, solver: 'svd', shrinkage: 'auto', test_ratio: 0.15, val_ratio: 0.17, train_ratio: 0.68, k_folds: 5, search_resolution: 3 }
     });
 

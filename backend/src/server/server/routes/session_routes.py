@@ -1,4 +1,5 @@
 from flask import Blueprint, jsonify, request
+import re
 import uuid
 import numpy as np
 import time
@@ -129,6 +130,58 @@ def api_clear_session_data(sensor_type, session_name):
         if "error" in result:
             return jsonify({"error": result["error"]}), 500
         return jsonify({"status": "cleared", "session": session_name})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@session_bp.route('/api/sessions/<sensor_type>/<session_name>/rows/clear_filtered', methods=['DELETE'])
+def api_clear_filtered_rows(sensor_type, session_name):
+    """Delete only rows that match the supplied filter params (label, from, to row-ids)."""
+    try:
+        label = request.args.get('label', None)
+        from_id = request.args.get('from', None)
+        to_id   = request.args.get('to', None)
+
+        # Validate table name to prevent SQL injection
+        if not re.match(r'^[a-zA-Z0-9_]+$', session_name):
+            return jsonify({"error": "Invalid session name"}), 400
+
+        conn = db_manager.connect(sensor_type.upper())
+        cursor = conn.cursor()
+
+        conditions = []
+        params = []
+
+        if label is not None and label != 'all':
+            conditions.append("label = ?")
+            # Label stored as integer in DB; accept numeric string or keep as-is
+            try:
+                params.append(int(label))
+            except (ValueError, TypeError):
+                params.append(label)
+
+        if from_id is not None and str(from_id).strip():
+            try:
+                conditions.append("id >= ?")
+                params.append(int(from_id))
+            except (ValueError, TypeError):
+                pass
+
+        if to_id is not None and str(to_id).strip():
+            try:
+                conditions.append("id <= ?")
+                params.append(int(to_id))
+            except (ValueError, TypeError):
+                pass
+
+        where_clause = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+        sql = f"DELETE FROM {session_name} {where_clause}"
+
+        cursor.execute(sql, params)
+        deleted_count = cursor.rowcount
+        conn.commit()
+        conn.close()
+
+        return jsonify({"status": "cleared", "deleted_count": deleted_count, "session": session_name})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

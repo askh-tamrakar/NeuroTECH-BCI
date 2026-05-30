@@ -2,12 +2,20 @@
 Recording Service — dedicated LSL pull thread for server-side recording.
 
 Pulls samples directly from an LSL stream (BioSignals-Raw-uV or
-BioSignals-Processed) and writes them to the HybridRecorder's CSV.
+BioSignals-Processed) and writes them to one or more HybridRecorder instances.
+
+Multi-recorder support (Case 2 — split-sensor recording):
+    Pass recorder_groups = [(recorder_a, [ch0_idx]), (recorder_b, [ch1_idx])]
+    to start().  Each group routes its channel slice to the appropriate recorder.
+
+IMPORTANT: pylsl calls (resolve_byprop, pull_chunk) are blocking C-extension
+calls that cannot yield to the eventlet hub.  The pull thread MUST run in a
+real OS thread — never an eventlet greenlet — or the entire server freezes.
+We use eventlet.patcher.original('threading') to bypass monkey-patching.
 """
 
-import threading
 import time
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 try:
     import pylsl
@@ -21,26 +29,57 @@ PROCESSED_STREAM = "BioSignals-Processed"
 
 
 class RecordingService:
-    """Background thread that pulls from an LSL stream into a HybridRecorder."""
+    """Background thread that pulls from an LSL stream into HybridRecorder(s)."""
 
-    def __init__(self, recorder):
-        self.recorder = recorder
-        self._thread: Optional[threading.Thread] = None
+    def __init__(self, recorder=None):
+        self.recorder = recorder          # primary recorder (may be None)
+        self._thread = None
         self._running = False
         self._inlet = None
 
     # ------------------------------------------------------------------
     #  Public API
     # ------------------------------------------------------------------
-    def start(self, data_type: str = "raw", channel_indices: Optional[List[int]] = None):
-        """Spin up the pull thread.  Call *after* recorder.start()."""
+    def start(
+        self,
+        data_type: str = "raw",
+        channel_indices: Optional[List[int]] = None,
+        recorder_groups: Optional[List[Tuple]] = None,
+    ):
+        """Spin up the pull thread.  Call *after* all recorders have started.
+
+        Parameters
+        ----------
+        data_type       : "raw" or "filtered"
+        channel_indices : (single-recorder mode) indices of channels to record
+        recorder_groups : (multi-recorder mode) list of (HybridRecorder, [indices])
+                          tuples.  When provided, channel_indices is ignored.
+
+        Uses the *original* (non-monkey-patched) threading.Thread so the
+        blocking pylsl C calls run in a real OS thread and never freeze the
+        eventlet hub.
+        """
         if self._thread and self._thread.is_alive():
             return
 
+        # Build groups list from whichever form was provided
+        if recorder_groups is not None:
+            groups = list(recorder_groups)
+        else:
+            groups = [(self.recorder, channel_indices)]
+
         self._running = True
-        self._thread = threading.Thread(
+
+        try:
+            import eventlet.patcher as _ep
+            _real_Thread = _ep.original("threading").Thread
+        except Exception:
+            import threading as _t
+            _real_Thread = _t.Thread
+
+        self._thread = _real_Thread(
             target=self._pull_loop,
-            args=(data_type, channel_indices),
+            args=(data_type, groups),
             daemon=True,
         )
         self._thread.start()
@@ -49,7 +88,7 @@ class RecordingService:
         """Signal the pull thread to exit and wait for it."""
         self._running = False
         if self._thread:
-            self._thread.join(timeout=3.0)
+            self._thread.join(timeout=2.0)
             self._thread = None
         self._close_inlet()
 
@@ -68,14 +107,17 @@ class RecordingService:
     # ------------------------------------------------------------------
     #  Internal pull loop
     # ------------------------------------------------------------------
-    def _pull_loop(self, data_type: str, channel_indices: Optional[List[int]]):
+    def _pull_loop(self, data_type: str, groups: List[Tuple]):
+        """Pull chunks from LSL and route each sample subset to its recorder.
+
+        groups: list of (HybridRecorder, channel_indices_or_None)
+        """
         stream_name = RAW_STREAM if data_type == "raw" else PROCESSED_STREAM
 
         if not LSL_AVAILABLE:
             print("[RecordingService] pylsl is not installed — cannot record")
             return
 
-        # Resolve stream
         print(f"[RecordingService] Resolving stream: {stream_name} ...")
         try:
             streams = pylsl.resolve_byprop("name", stream_name, timeout=5.0)
@@ -88,40 +130,45 @@ class RecordingService:
             print(f"[RecordingService] Stream resolution error: {e}")
             return
 
-        # Tight pull loop at full sample rate
-        while self._running and self.recorder.is_recording:
+        # Read the stream's actual sample rate and propagate it to every recorder
+        # before any data is written.  The config value (e.g. 512 Hz) is often
+        # wrong when the pipeline runs at a different rate; using the inlet's
+        # nominal_srate fixes the timestamp column and the integrity expected_rows.
+        try:
+            actual_sr = int(round(self._inlet.info().nominal_srate()))
+            if actual_sr > 0:
+                for recorder, _ in groups:
+                    recorder.sample_rate = actual_sr
+                print(f"[RecordingService] Stream sample rate: {actual_sr} Hz")
+        except Exception:
+            pass
+
+        while self._running and any(rec.is_recording for rec, _ in groups):
             try:
-                # pull_chunk is more efficient than pull_sample in a loop
-                samples, _timestamps = self._inlet.pull_chunk(timeout=0.1, max_samples=64)
+                samples, _timestamps = self._inlet.pull_chunk(timeout=0.1, max_samples=512)
                 if not samples:
                     continue
 
-                # If recorder is paused, discard the samples (keeping the LSL
-                # buffer drained so it doesn't overflow when we resume).
-                if self.recorder._is_paused:
-                    continue
+                for recorder, indices in groups:
+                    if not recorder.is_recording or recorder._is_paused:
+                        # Keep LSL buffer drained but do not write
+                        continue
 
-                # Extract only the channels we are recording
-                if channel_indices:
-                    batch = []
-                    for sample in samples:
-                        row = [
-                            sample[idx]
-                            for idx in channel_indices
-                            if idx < len(sample)
+                    if indices:
+                        batch = [
+                            [sample[idx] for idx in indices if idx < len(sample)]
+                            for sample in samples
                         ]
-                        batch.append(row)
-                else:
-                    batch = [list(s) for s in samples]
+                    else:
+                        batch = [list(s) for s in samples]
 
-                self.recorder.write_batch(batch)
+                    recorder.write_batch(batch)
 
             except Exception as e:
                 if self._running:
                     print(f"[RecordingService] Pull error: {e}")
                 time.sleep(0.01)
 
-        # Cleanup
         self._close_inlet()
         print("[RecordingService] Pull thread stopped")
 

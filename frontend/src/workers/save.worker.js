@@ -44,13 +44,19 @@ self.onmessage = async (event) => {
 
                 results.push(result);
 
+                // Notify main thread immediately so the window flips
+                // from 'collected' → 'saved'/'error' in real-time.
                 self.postMessage({
                     type: 'SAVE_WINDOW_PROGRESS',
                     payload: {
                         requestId,
-                        result,
-                        completedCount: index + 1,
+                        index,
                         totalCount,
+                        id: window.id,
+                        status: result.error ? 'error' : 'saved',
+                        features: result.features,
+                        predicted_label: result.predicted_label,
+                        windows_saved: result.windows_saved ?? 1,
                     }
                 });
             }
