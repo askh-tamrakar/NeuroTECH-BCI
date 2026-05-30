@@ -34,6 +34,10 @@ broadcast.onmessage = (e) => {
 };
 // Visual State
 let windows = []; // { id, start, end, type }
+// Tracks chart's `now` the first time each window is drawn — used to synthesize
+// a smooth slide-in from the right canvas edge even when the chart first learns
+// about a window mid-flight (due to the 300ms worker throttle delay).
+const windowFirstSeenNow = new Map();
 let config = {
     timeWindow: 5000, // ms
     yMin: 0,
@@ -101,6 +105,13 @@ self.onmessage = function (e) {
             break;
         case 'UPDATE_WINDOWS':
             windows = payload;
+            // Clean up firstSeen entries for windows that are no longer tracked
+            if (windowFirstSeenNow.size > 0) {
+                const activeIds = new Set(payload.map(w => w.id));
+                for (const id of windowFirstSeenNow.keys()) {
+                    if (!activeIds.has(id)) windowFirstSeenNow.delete(id);
+                }
+            }
             requestRender();
             break;
         case 'SET_CONFIG':
@@ -397,75 +408,129 @@ function draw() {
     ctx.clip();
 
     // Draw Windows (Behind Signal)
+    // Center bar pixel — used for the yellow/blue two-part split
+    const winCenterPx = leftMargin + drawWidth / 2;
+
+    const YELLOW_FILL   = 'rgba(245,158,11,0.18)';
+    const YELLOW_STROKE = '#f59e0b';
+    const BLUE_FILL     = 'rgba(56,189,248,0.18)';
+    const BLUE_STROKE   = '#38bdf8';
+
     windows.forEach(win => {
-        // win: { startTime, endTime, status, label... }
-        // Ensure we use correct keys. CalibrationView sends: startTime, endTime.
-        // wait, message payload might differ?
-        // Let's check CalibrationView: updateWindows(markedWindows)
-        // newWindow = { startTime, endTime ... }
-
         const start = win.startTime || win.start;
-        const end = win.endTime || win.end;
-
+        const end   = win.endTime   || win.end;
         if (!start || !end) return;
 
         const ageStart = now - start;
-        const ageEnd = now - end;
-
+        const ageEnd   = now - end;
 
         const x_start_ms = centerTimeOffset - ageStart;
-        const x_end_ms = centerTimeOffset - ageEnd;
+        const x_end_ms   = centerTimeOffset - ageEnd;
 
-        const px1 = timeToPx(x_start_ms);
-        const px2 = timeToPx(x_end_ms);
+        const px1   = timeToPx(x_start_ms);
+        const px2   = timeToPx(x_end_ms);
         const wFunc = px2 - px1;
 
-        if (px2 > 0 && px1 < width) {
-            // "Collected" window = Green
-            // "Pending" = Yellow/Orange
-            // "Saved" = Red/Blue
-            // "Error" = Gray
+        // Skip windows entirely off-screen to the left
+        if (px2 < leftMargin) return;
 
-            const styleKey = (win.status === 'recording' || win.status === 'pending')
-                ? 'pending'
-                : (win.status === 'collected')
-                    ? 'collected'
-                    : (win.status === 'saved' || win.status === 'correct' || win.status === 'incorrect')
-                        ? 'saved'
-                        : 'error';
-            const windowStyle = config.windowStyles?.[styleKey] || config.windowStyles?.pending || {};
+        const isFinal = win.status === 'saved' || win.status === 'correct' || win.status === 'incorrect';
+        const isError = win.status === 'error';
 
-            const fill = windowStyle.fill || 'rgba(255, 255, 255, 0.08)';
-            const stroke = windowStyle.stroke || '#ffffff';
+        // --- Smooth slide-in from the right ---
+        // The chart first learns about a window ~300ms after it was created (worker
+        // throttle + React chain). By that time the window's left edge (px1) has
+        // already entered the canvas, causing a sudden partial appearance.
+        // Fix: record the chart's `now` when a window is first seen, then synthesize
+        // the missing entry by clamping effectivePx1 to an offset that starts at
+        // `width` and catches up to the real px1 at the same slide speed.
+        let effectivePx1 = px1;
+        if (!isFinal && !isError) {
+            if (!windowFirstSeenNow.has(win.id)) {
+                windowFirstSeenNow.set(win.id, now);
+            }
+            const firstSeenNow = windowFirstSeenNow.get(win.id);
+            const msElapsed    = Math.max(0, now - firstSeenNow);
+            // How far the right edge has moved since first seen (same px/ms as the chart scroll)
+            const catchupPx1   = width - (msElapsed / timeWindow) * drawWidth;
+            effectivePx1 = Math.max(px1, catchupPx1);
+        }
+        const effectivePx2 = effectivePx1 + wFunc;
 
-            ctx.fillStyle = fill;
+        // Still fully off-screen to the right → skip this frame
+        if (effectivePx1 >= width) return;
 
-            // Constrain windows to the grid area (looks cleaner/"smaller")
-            const yTop = padY;
-            const hRegion = availH;
+        const yTop    = padY;
+        const hRegion = availH;
 
-            ctx.fillRect(px1, yTop, wFunc, hRegion);
+        const textColor = isFinal
+            ? (config.windowStyles?.saved?.text   || '#ffffff')
+            : isError
+                ? (config.windowStyles?.error?.text   || '#ffffff')
+                : (config.windowStyles?.pending?.text || '#ffffff');
 
-            ctx.strokeStyle = stroke;
-            ctx.lineWidth = 2; // Thicker border
-            ctx.strokeRect(px1, yTop, wFunc, hRegion);
+        if (isFinal) {
+            const s = config.windowStyles?.saved || {};
+            ctx.fillStyle = s.fill || 'rgba(16,185,129,0.16)';
+            ctx.fillRect(effectivePx1, yTop, wFunc, hRegion);
+            ctx.strokeStyle = s.stroke || '#10b981';
+            ctx.lineWidth   = 2;
+            ctx.strokeRect(effectivePx1, yTop, wFunc, hRegion);
+        } else if (isError) {
+            const s = config.windowStyles?.error || {};
+            ctx.fillStyle = s.fill || 'rgba(244,63,94,0.16)';
+            ctx.fillRect(effectivePx1, yTop, wFunc, hRegion);
+            ctx.strokeStyle = s.stroke || '#f43f5e';
+            ctx.lineWidth   = 2;
+            ctx.strokeRect(effectivePx1, yTop, wFunc, hRegion);
+        } else if (effectivePx2 <= winCenterPx) {
+            // Whole window already past center → all blue
+            ctx.fillStyle = BLUE_FILL;
+            ctx.fillRect(effectivePx1, yTop, wFunc, hRegion);
+            drawSplitBorder(ctx, effectivePx1, effectivePx2, yTop, hRegion, winCenterPx, BLUE_STROKE, BLUE_STROKE);
+        } else if (effectivePx1 >= winCenterPx) {
+            // Whole window still right of center → all yellow
+            ctx.fillStyle = YELLOW_FILL;
+            ctx.fillRect(effectivePx1, yTop, wFunc, hRegion);
+            drawSplitBorder(ctx, effectivePx1, effectivePx2, yTop, hRegion, winCenterPx, YELLOW_STROKE, YELLOW_STROKE);
+        } else {
+            // Window straddles the center bar → split fill + split border
+            const leftW  = winCenterPx - effectivePx1;
+            const rightW = effectivePx2 - winCenterPx;
 
-            // Label
-            if (win.label) {
+            ctx.fillStyle = BLUE_FILL;
+            ctx.fillRect(effectivePx1, yTop, leftW, hRegion);
+            ctx.fillStyle = YELLOW_FILL;
+            ctx.fillRect(winCenterPx, yTop, rightW, hRegion);
+
+            drawSplitBorder(ctx, effectivePx1, effectivePx2, yTop, hRegion, winCenterPx, BLUE_STROKE, YELLOW_STROKE);
+
+            // Subtle divider line at the center bar
+            ctx.save();
+            ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+            ctx.lineWidth   = 1;
+            ctx.setLineDash([4, 3]);
+            ctx.beginPath();
+            ctx.moveTo(winCenterPx, yTop);
+            ctx.lineTo(winCenterPx, yTop + hRegion);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.restore();
+        }
+
+        // Label — centre within the currently visible portion
+        if (win.label) {
+            const visibleLeft  = Math.max(effectivePx1, leftMargin);
+            const visibleRight = Math.min(effectivePx2, width);
+            const visibleW     = visibleRight - visibleLeft;
+            if (visibleW > 50) {
                 ctx.save();
-                ctx.fillStyle = windowStyle.text || '#ffffff';
-                ctx.globalAlpha = 0.9;
-                ctx.textAlign = 'center';
+                ctx.fillStyle    = textColor;
+                ctx.globalAlpha  = 0.9;
+                ctx.textAlign    = 'center';
                 ctx.textBaseline = 'middle';
-
-                const centerX = px1 + wFunc / 2;
-                const centerY = yTop + hRegion / 2;
-
-                const fontSize = win.label.length > 10 ? 16 : 20;
-                ctx.font = `bold ${fontSize}px sans-serif`;
-                if (Math.abs(wFunc) > 50) {
-                    ctx.fillText(win.label, centerX, centerY);
-                }
+                ctx.font = `bold ${win.label.length > 10 ? 16 : 20}px sans-serif`;
+                ctx.fillText(win.label, visibleLeft + visibleW / 2, yTop + hRegion / 2);
                 ctx.restore();
             }
         }
@@ -632,6 +697,40 @@ function draw() {
         ctx.setLineDash([]);
         ctx.restore();
     }
+}
+
+// Draws a window border split at `splitX`: left side uses `leftColor`, right side uses `rightColor`.
+// When leftColor === rightColor the result is identical to a plain strokeRect.
+function drawSplitBorder(ctx, px1, px2, yTop, hRegion, splitX, leftColor, rightColor) {
+    const split = Math.max(px1, Math.min(px2, splitX));
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    // Top edge — left portion
+    if (split > px1) {
+        ctx.strokeStyle = leftColor;
+        ctx.beginPath(); ctx.moveTo(px1, yTop); ctx.lineTo(split, yTop); ctx.stroke();
+    }
+    // Top edge — right portion
+    if (px2 > split) {
+        ctx.strokeStyle = rightColor;
+        ctx.beginPath(); ctx.moveTo(split, yTop); ctx.lineTo(px2, yTop); ctx.stroke();
+    }
+    // Bottom edge — left portion
+    if (split > px1) {
+        ctx.strokeStyle = leftColor;
+        ctx.beginPath(); ctx.moveTo(px1, yTop + hRegion); ctx.lineTo(split, yTop + hRegion); ctx.stroke();
+    }
+    // Bottom edge — right portion
+    if (px2 > split) {
+        ctx.strokeStyle = rightColor;
+        ctx.beginPath(); ctx.moveTo(split, yTop + hRegion); ctx.lineTo(px2, yTop + hRegion); ctx.stroke();
+    }
+    // Left border (left color)
+    ctx.strokeStyle = leftColor;
+    ctx.beginPath(); ctx.moveTo(px1, yTop); ctx.lineTo(px1, yTop + hRegion); ctx.stroke();
+    // Right border (right color)
+    ctx.strokeStyle = rightColor;
+    ctx.beginPath(); ctx.moveTo(px2, yTop); ctx.lineTo(px2, yTop + hRegion); ctx.stroke();
 }
 
 function drawGrid(now, timeWindow, centerTimeOffset, leftMargin, padY, availH) {
