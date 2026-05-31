@@ -2081,7 +2081,9 @@ export default function MLTrainingView({ onSwitchLab }) {
 
     // Params per sensor
     const [params, setParams] = useState({
-        EMG: { n_estimators_min: 50, n_estimators_max: 200, max_depth_min: 4, max_depth_max: 8, test_ratio: 0.15, val_ratio: 0.17, train_ratio: 0.68, k_folds: 5, search_resolution: 3, learning_rate_min: 0.05, learning_rate_max: 0.2, gamma_min: 0.0, gamma_max: 0.3, subsample: 0.8, colsample_bytree: 0.8, importance_type: 'gain' },
+        // Tuned for ~300 samples/class (1200 total) with XGBoost on 13 EMG features.
+        // Grid: n_estimators {100,175,250} × max_depth {8,11,14} × lr {0.05,0.1} × gamma {0} = 18 candidates × 5 folds = 90 runs
+        EMG: { n_estimators_min: 100, n_estimators_max: 250, max_depth_min: 8, max_depth_max: 14, test_ratio: 0.15, val_ratio: 0.17, train_ratio: 0.68, k_folds: 5, search_resolution: 3, learning_rate_min: 0.05, learning_rate_max: 0.1, gamma_min: 0.0, gamma_max: 0.0, subsample: 0.8, colsample_bytree: 0.7, importance_type: 'gain' },
         EOG: { n_estimators_min: 50, n_estimators_max: 200, max_depth_min: 4, max_depth_max: 8, test_ratio: 0.15, val_ratio: 0.17, train_ratio: 0.68, k_folds: 5, search_resolution: 3, learning_rate_min: 0.05, learning_rate_max: 0.2, gamma_min: 0.0, gamma_max: 0.3, subsample: 0.8, colsample_bytree: 0.8, importance_type: 'gain' },
         EEG: { tol_min: 0.0001, tol_max: 0.01, solver: 'svd', shrinkage: 'auto', test_ratio: 0.15, val_ratio: 0.17, train_ratio: 0.68, k_folds: 5, search_resolution: 3 }
     });
