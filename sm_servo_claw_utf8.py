@@ -25,7 +25,7 @@ class StreamManagerApp:
         # Configuration
         self.port = 6000
         self.is_running = False
-        self.is_running = False
+        self._clients_lock = threading.Lock()
         self.server_socket_raw = None
         self.server_socket_proc = None
         self.server_socket_events = None
@@ -229,8 +229,10 @@ class StreamManagerApp:
                         # Spin off a thread for EACH client to avoid blocking
                         t = threading.Thread(target=self._handle_client, args=(conn, addr), daemon=True)
                         t.start()
-                        self.raw_clients.append((conn, addr))
-                        self.connection_var.set(f"Connected (Raw): {len(self.raw_clients)} clients")
+                        with self._clients_lock:
+                            self.raw_clients.append((conn, addr))
+                            client_count = len(self.raw_clients)
+                        self.connection_var.set(f"Connected (Raw): {client_count} clients")
                         
                     elif name == "Processed":
                         self.log(f"Processed Source connected from {addr}")
@@ -356,9 +358,10 @@ class StreamManagerApp:
             self.log(f"Client connection error ({addr}): {e}")
         finally:
             conn.close()
-            # Remove from list
-            self.raw_clients = [c for c in self.raw_clients if c[1] != addr]
-            self.root.after_idle(lambda: self.connection_var.set(f"Connected (Raw): {len(self.raw_clients)} clients"))
+            with self._clients_lock:
+                self.raw_clients = [c for c in self.raw_clients if c[1] != addr]
+                client_count = len(self.raw_clients)
+            self.root.after_idle(lambda cnt=client_count: self.connection_var.set(f"Connected (Raw): {cnt} clients"))
             self.log(f"Raw Client disconnected: {addr}")
 
     def _handle_processed_client(self, conn, addr):

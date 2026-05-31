@@ -25,6 +25,7 @@ class RPSDetector:
         self.candidates = []
         self.last_active_ts = 0.0
         self.gesture_start_time = 0.0
+        self.requires_rest = False  # Must see Rest before accepting a new gesture
         
         # Configuration for state machine
         rps_cfg = config.get("features", {}).get("RPS", {})
@@ -170,6 +171,9 @@ class RPSDetector:
         # State Machine
         if is_active:
             if not self.collecting_candidates:
+                if self.requires_rest:
+                    # Must return to rest before registering a new gesture
+                    return label, None, "waiting"
                 self.collecting_candidates = True
                 self.candidates = []
                 self.gesture_start_time = time.time()
@@ -187,11 +191,13 @@ class RPSDetector:
                     most_common = counts.most_common(1)[0][0]
                     self.collecting_candidates = False
                     self.candidates = []
+                    self.requires_rest = True  # Gesture still held — wait for Rest before next gesture
                     return label, most_common, "waiting"
 
             return label, None, detection_state # Don't emit confirmed move yet, but return instant label and state
             
         elif is_rest:
+            self.requires_rest = False  # Seen Rest — allow next gesture to be registered
             if self.collecting_candidates:
                 # End of a gesture, resolve it!
                 if self.candidates:
@@ -199,18 +205,19 @@ class RPSDetector:
                     if valid_candidates:
                         counts = Counter(valid_candidates)
                         most_common = counts.most_common(1)[0][0]
+                        self.collecting_candidates = False
+                        self.candidates = []
+                        # Return (InstantLabel, ConfirmedLabel, DetectionState)
+                        return label, most_common, "waiting"
                     else:
-                        most_common = "Rest"
-                    
-                    self.collecting_candidates = False
-                    self.candidates = []
-                    # Return (InstantLabel, ConfirmedLabel, DetectionState)
-                    return label, most_common, "waiting"
+                        self.collecting_candidates = False
+                        self.candidates = []
+                        return label, None, "waiting"
                 else:
                     self.collecting_candidates = False
-                    return label, "Rest", "waiting"
+                    return label, None, "waiting"
             else:
-                return label, "Rest", "waiting"
+                return label, None, "waiting"
                 
         return label, None, "waiting"
 

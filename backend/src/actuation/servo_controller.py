@@ -142,7 +142,13 @@ class ServoController:
         try:
             while True:
                 self._reload_config_if_needed()
-                sample, timestamp = self.inlet.pull_sample(timeout=0.1)
+                try:
+                    sample, timestamp = self.inlet.pull_sample(timeout=0.1)
+                except Exception:
+                    print("[ServoController] LSL inlet error — attempting reconnect...")
+                    if not self.connect_lsl():
+                        time.sleep(2.0)
+                    continue
                 if sample:
                     try:
                         event_data = json.loads(sample[0])

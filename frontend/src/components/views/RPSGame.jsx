@@ -184,10 +184,8 @@ const RPSGame = ({ wsEvent }) => {
         setScore({ player: 0, computer: 0 });
         setMatchWinner(null);
         setPlayerMove(null);
+        setComputerMove(null);
         setResult(null);
-        setLastDetectionMeta(null);
-        setFeedbackPending(false);
-        setShowCorrectionPicker(false);
         processingRef.current = false;
         pickComputerMove();
         setGameState('idle');
@@ -386,25 +384,21 @@ const RPSGame = ({ wsEvent }) => {
         let endMatch = false;
         if (p === c) {
             setResult('TIE');
-            soundHandler.playRPSMove(); // Play sound for tie
+            soundHandler.playRPSMove();
         } else if (WIN_CONDITIONS[p] === c) {
             setResult('WIN');
-            setScore(prev => {
-                const newScore = prev.player + 1;
-                if (newScore >= 5) setMatchWinner('player');
-                return { ...prev, player: newScore };
-            });
-            if (score.player + 1 >= 5) endMatch = true;
-            soundHandler.playRPSWin(); // Play sound for win
+            const newPlayerScore = score.player + 1;
+            endMatch = newPlayerScore >= 5;
+            setScore(prev => ({ ...prev, player: prev.player + 1 }));
+            if (endMatch) setMatchWinner('player');
+            soundHandler.playRPSWin();
         } else {
             setResult('LOSE');
-            setScore(prev => {
-                const newScore = prev.computer + 1;
-                if (newScore >= 5) setMatchWinner('computer');
-                return { ...prev, computer: newScore };
-            });
-            if (score.computer + 1 >= 5) endMatch = true;
-            soundHandler.playRPSLose(); // Play sound for lose
+            const newComputerScore = score.computer + 1;
+            endMatch = newComputerScore >= 5;
+            setScore(prev => ({ ...prev, computer: prev.computer + 1 }));
+            if (endMatch) setMatchWinner('computer');
+            soundHandler.playRPSLose();
         }
         return endMatch;
     };
@@ -456,10 +450,7 @@ const RPSGame = ({ wsEvent }) => {
         setGameState('waiting');
         pickComputerMove();
         soundHandler.playRPSStart(); // Play sound on game start
-        
-        // Ensure manual mode is disabled so sensor input works
-        setManualMode(false);
-        
+
         // Load selected model to ensure backend is fully prepared
         if (selectedModel) {
             fetch(buildApiUrl('/api/models/emg/load'), {
