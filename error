@@ -6,7 +6,7 @@ This log summarizes the technical issues identified and resolved on this PC that
 - **Problem**: The `Web Server` component consistently crashed with `ModuleNotFoundError: No module named 'xgboost'`.
 - **Cause**: The local Conda environment (`pluto`) lacked the XGBoost library required for the machine learning training routes.
 - **Impact**: Since the Web Server is a core component, its crash triggered the global orchestrator (`pipeline.py`) to shut down the entire system as a safety measure.
-- **Resolution**: Manually installed `xgboost` using the local environment's Python interpreter.
+- **Resolution**: Manually installed `xgboost`, `requests`, `flask-socketio`, and `gevent-websocket` using the local environment's Python interpreter.
 
 ## 2. Orchestrator Timing & Initialization Race (HIGH)
 - **Problem**: The `Filter Router` was frequently shut down by the orchestrator with the message "Timed out while connecting".
@@ -26,3 +26,31 @@ This log summarizes the technical issues identified and resolved on this PC that
 - **Dependencies**: All required ML libraries (xgboost, sklearn, pandas) are verified.
 - **Stability**: Components now report "Ready" instantly, preventing orchestrator timeouts.
 - **Connectivity**: Real-time processed data stream is non-blocking and resilient to configuration updates.
+
+[12:36:59] [  Web Server   ] * Debug mode: off
+[12:36:59] [ Frontend Dev  ] warn - The class `duration-[600ms]` is ambiguous and matches multiple utilities.
+[12:36:59] [ Frontend Dev  ] warn - If this is content and not a class, replace it with `duration-&lsqb;600ms&rsqb;` to silence this warning.
+[12:36:59] [ Frontend Dev  ] warn - The class `ease-[cubic-bezier(0.34,1.56,0.64,1)]` is ambiguous and matches multiple utilities.
+[12:36:59] [ Frontend Dev  ] warn - If this is content and not a class, replace it with `ease-&lsqb;cubic-bezier(0.34,1.56,0.64,1)&rsqb;` to silence this warning.
+[12:37:01]   x Filter Router stopped unexpectedly (exit code: 3228369023)
+NeuroTECH Loaded >>> [12:37:01.171] ✗ [ERROR  ] [Filter Router] event=crash  uptime=8.5s  exit=3228369023  reason=unexpected process exit
+
+[12:37:01]   ! Shutting down all components...
+[12:37:01]   ! Terminating Frontend Dev...
+NeuroTECH Loaded >>> [12:37:01.172] ⚠ [WARN   ] [Frontend Dev] event=stop  uptime=4.0s
+[12:37:01]   ! Terminating Web Server...
+NeuroTECH Loaded >>> [12:37:01.182] ⚠ [WARN   ] [Web Server] event=stop  uptime=4.1s
+[12:37:01]   ! Terminating Servo Actuator...
+NeuroTECH Loaded >>> [12:37:01.237] ⚠ [WARN   ] [Servo Actuator] event=stop  uptime=4.6s
+[12:37:01] [Stream Manager ] [12:37:01] Events Handler Error: [WinError 10054] An existing connection was forcibly closed by the remote host
+[12:37:01] [Stream Manager ] [12:37:01] Events Client disconnected: ('127.0.0.1', 58604)
+[12:37:01]   ! Terminating HID Controller...
+NeuroTECH Loaded >>> [12:37:01.246] ⚠ [WARN   ] [HID Controller] event=stop  uptime=5.1s
+[12:37:01]   ! Terminating Feature Router...
+NeuroTECH Loaded >>> [12:37:01.254] ⚠ [WARN   ] [Feature Router] event=stop  uptime=6.9s
+[12:37:01]   ! Terminating Stream Manager...
+NeuroTECH Loaded >>> [12:37:01.301] ⚠ [WARN   ] [Stream Manager] event=stop  uptime=10.3s
+[12:37:01]   + Shutdown complete.
+NeuroTECH Loaded >>> [12:37:01.340] ◈ [SYSTEM ]
+Session summary saved → D:\Neuro Science\NeuroTECH-BCI\document\logs\pipeline_12.36.50_01-06-2026\summary_12.36.50_01-06-2026.txt
+[12:37:01.341] ◈ [SYSTEM ] All logs stored in    → D:\Neuro Science\NeuroTECH-BCI\document\logs\pipeline_12.36.50_01-06-2026
