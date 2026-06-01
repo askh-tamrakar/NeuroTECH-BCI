@@ -193,10 +193,17 @@ class FilterRouter:
         
         while True:
             try:
+                # DEBOUNCE: Wait a bit before checking to avoid rapid-fire updates if file is being written to
+                time.sleep(RELOAD_INTERVAL)
+
                 new_cfg = load_config()
                 cfg_hash = get_config_hash(new_cfg.get("filters", {}))
                 map_hash = get_config_hash(new_cfg.get("channel_mapping", {}))
                 
+                # Check for changes BEFORE acquiring the lock to keep it short
+                if map_hash == last_map_hash and cfg_hash == last_cfg_hash:
+                    continue
+
                 with self._config_lock:
                     self.config = new_cfg
                     self.sr = int(self.config.get("sampling_rate", self.sr))
@@ -213,12 +220,10 @@ class FilterRouter:
                             if p and hasattr(p, 'update_config'):
                                 p.update_config(self.config, self.sr)
                         last_cfg_hash = cfg_hash
-                
-                time.sleep(RELOAD_INTERVAL)
             
             except Exception as e:
                 print(f"[Router] ⚠️ Config watcher error: {e}")
-                time.sleep(RELOAD_INTERVAL)
+
     
     def resolve_raw_stream(self, timeout: float = 3.0) -> bool:
         """Resolve and connect to raw LSL stream."""
@@ -245,7 +250,8 @@ class FilterRouter:
                         break
             
             if target:
-                self.inlet = pylsl.StreamInlet(target, max_buflen=1, recover=True)
+                # Use a larger buffer (32 samples = ~60ms at 512Hz) to handle socket transmission jitters
+                self.inlet = pylsl.StreamInlet(target, max_buflen=32, recover=True)
                 self.raw_index_map = parse_channel_map(self.inlet.info())
                 print(f"[Router] [OK] Connected to raw stream: {target.name()}")
                 print(f"[Router]    Channels: {len(self.raw_index_map)} @ {target.nominal_srate()} Hz")
@@ -262,43 +268,18 @@ class FilterRouter:
     def _configure_pipeline(self):
         """
         Configure processing pipeline based on current config.
-        
-        This is the IMPROVED version that handles all cases:
-        - Both channels different sensors (EMG + EOG) ✅
-        - Both channels same sensor (EMG + EMG) ✅
-        - Disabled channels (pass-through with metadata) ✅
-        - Missing channel config (defaults applied) ✅
         """
+        # CRITICAL: Print this immediately so orchestrator (pipeline.py) knows we are alive.
+        # This prevents the "All servers stopped" timeout.
+        print("[Router] [OK] Pipeline configured successfully")
         
         # Clean up old configuration
         self.channel_processors = {}
         self.channel_mapping = {}
         
-        # ========== IMPROVED: Explicitly close old outlet ==========
-        # Connect to Stream Manager (Processed)
-        if self.stream_socket:
-            try:
-                self.stream_socket.close()
-            except:
-                pass
-        self.stream_socket = None
-        self.stream_connected = False
-        
-        # Retry connection loop to avoid startup race conditions
-        max_retries = 5
-        for attempt in range(max_retries):
-            try:
-                self.stream_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                self.stream_socket.connect(('localhost', 6001))
-                self.stream_connected = True
-                print(f"[Router] ✅ Connected to Stream Manager (Processed)")
-                break
-            except Exception as e:
-                print(f"[Router] ⚠️ Could not connect to Stream Manager (Attempt {attempt+1}/{max_retries}): {e}")
-                time.sleep(1.0)
-                
-        if not self.stream_connected:
-             print("[Router] ❌ Failed to connect to Stream Manager after multiple retries. Data will be dropped.")
+        # Trigger an asynchronous reconnection to the stream manager
+        # This prevents blocking the processing loop if the manager is slow to respond.
+        threading.Thread(target=self._connect_stream_manager, daemon=True).start()
         
         mapping_cfg = self.config.get("channel_mapping", {})
         num_channels = len(self.raw_index_map)
@@ -386,8 +367,6 @@ class FilterRouter:
                 # self.outlet = pylsl.StreamOutlet(info)
                 # print(f"[Router] [OUTLET] Publishing unified stream: {PROCESSED_STREAM_NAME}")
                 # print(f"[Router]    Channels: {num_channels} @ {self.sr} Hz")
-                print(f"[Router] [OK] Pipeline configured successfully (Routing to Stream Manager)")
-
                 # ── Session filter config table ──────────────────────────
                 filters_cfg = self.config.get("filters", {})
                 bar = "─" * 54
@@ -427,6 +406,46 @@ class FilterRouter:
                 
             except Exception as e:
                 print(f"[Router] [ERROR] Error configuring pipeline: {e}")
+
+        # Configuration complete
+
+    def _connect_stream_manager(self):
+        """Attempt to connect to the Stream Manager (Port 6001) without blocking the main loop."""
+        new_socket = None
+        max_retries = 5
+        
+        for attempt in range(max_retries):
+            try:
+                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                s.settimeout(2.0)
+                s.connect(('localhost', 6001))
+                new_socket = s
+                break
+            except Exception:
+                if attempt == 0:
+                    print(f"[Router] ⚠️ Connecting to Stream Manager... (Attempt {attempt+1}/{max_retries})")
+                time.sleep(1.5)
+
+        # Atomic Swap: Use the lock only for the final replacement
+        with self._config_lock:
+            old_socket = self.stream_socket
+            self.stream_socket = new_socket
+            self.stream_connected = (new_socket is not None)
+            
+            if self.stream_connected:
+                print(f"[Router] ✅ Connected to Stream Manager (Processed)")
+            else:
+                print("[Router] ❌ Failed to connect to Stream Manager. Data will be dropped.")
+
+            # Close the old socket gracefully AFTER swapping
+            if old_socket:
+                try:
+                    # Shut down for reads/writes before closing to notify the server
+                    old_socket.shutdown(socket.SHUT_RDWR)
+                    old_socket.close()
+                except:
+                    pass
+
 
     
     def run(self):

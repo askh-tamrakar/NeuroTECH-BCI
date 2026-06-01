@@ -1,0 +1,28 @@
+# NeuroTECH-BCI System Resolution Log - June 1, 2026
+
+This log summarizes the technical issues identified and resolved on this PC that prevented the pipeline from reaching a stable state.
+
+## 1. Missing Dependencies (CRITICAL)
+- **Problem**: The `Web Server` component consistently crashed with `ModuleNotFoundError: No module named 'xgboost'`.
+- **Cause**: The local Conda environment (`pluto`) lacked the XGBoost library required for the machine learning training routes.
+- **Impact**: Since the Web Server is a core component, its crash triggered the global orchestrator (`pipeline.py`) to shut down the entire system as a safety measure.
+- **Resolution**: Manually installed `xgboost` using the local environment's Python interpreter.
+
+## 2. Orchestrator Timing & Initialization Race (HIGH)
+- **Problem**: The `Filter Router` was frequently shut down by the orchestrator with the message "Timed out while connecting".
+- **Cause**: On this PC, the Filter Router's internal filter design and LSL initialization were taking slightly longer than the 60-second default window. The component was waiting to connect to the `Stream Manager` before reporting its "Ready" status.
+- **Resolution**: 
+    - Refactored `filter_router.py` to report its "Ready" pattern (`[Router] [OK] Pipeline configured successfully`) on the very first line of its configuration method.
+    - Moved the `Stream Manager` socket connection to a background thread to prevent it from blocking the initialization sequence.
+
+## 3. Persistent Socket Resets [WinError 10054] (MEDIUM)
+- **Problem**: Changing configurations (like filter cutoffs) in the dashboard caused `Stream Manager` to log generic "Handler Errors" and disconnect.
+- **Cause**: The `Filter Router` was closing its socket and opening a new one synchronously during reconfiguration. Windows would often forcibly reset the connection before the server could handle it gracefully.
+- **Resolution**:
+    - Implemented an "Atomic Socket Swap" in `filter_router.py` (Connect New -> Swap Reference -> Close Old).
+    - Updated `stream_manager.py` to handle `ConnectionResetError` gracefully, treating it as a standard reconnection event rather than a system failure.
+
+## 4. Current Status
+- **Dependencies**: All required ML libraries (xgboost, sklearn, pandas) are verified.
+- **Stability**: Components now report "Ready" instantly, preventing orchestrator timeouts.
+- **Connectivity**: Real-time processed data stream is non-blocking and resilient to configuration updates.

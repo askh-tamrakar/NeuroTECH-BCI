@@ -346,40 +346,56 @@ class StreamManagerApp:
         Handles data from Filter Router (Port 6001).
         Protocol: [0xAA (Sync)] [Count (1 Byte)] [Float 1...N]
         """
+        # Set a short timeout so we can check self.is_running frequently
+        conn.settimeout(2.0)
+        
         try:
             while self.is_running:
-                # 1. Read Header (2 bytes)
-                header = conn.recv(2)
-                if not header or len(header) < 2:
-                    break
-                
-                sync, count = header[0], header[1]
-                
-                if sync != 0xAA:
-                    # Sync lost - drain a bit
-                    continue
-
-                # 2. Read Payload (Count * 4 bytes)
-                payload_size = count * 4
-                data = b""
-                while len(data) < payload_size:
-                    chunk = conn.recv(payload_size - len(data))
-                    if not chunk:
-                        return
-                    data += chunk
-                
-                # 3. Process
-                fmt = f'<{count}f'
-                samples = struct.unpack(fmt, data)
-                
-                # Push to LSL Processed Stream
-                if self.lsl_processed:
-                    self.lsl_processed.push_sample(samples)
+                try:
+                    # 1. Read Header (2 bytes)
+                    header = conn.recv(2)
+                    if not header: # Graceful disconnect
+                        break
                     
+                    if len(header) < 2:
+                        continue
+                    
+                    sync, count = header[0], header[1]
+                    
+                    if sync != 0xAA:
+                        # Sync lost - drain a bit
+                        continue
+
+                    # 2. Read Payload (Count * 4 bytes)
+                    payload_size = count * 4
+                    data = b""
+                    while len(data) < payload_size:
+                        chunk = conn.recv(min(payload_size - len(data), 1024))
+                        if not chunk:
+                            return
+                        data += chunk
+                    
+                    # 3. Process
+                    fmt = f'<{count}f'
+                    samples = struct.unpack(fmt, data)
+                    
+                    # Push to LSL Processed Stream
+                    if self.lsl_processed:
+                        self.lsl_processed.push_sample(samples)
+                
+                except socket.timeout:
+                    continue
+                    
+        except (ConnectionResetError, ConnectionAbortedError):
+            # This is expected during reconfiguration/restarts
+            self.log(f"Processed Source reset connection: {addr}")
         except Exception as e:
             self.log(f"Processed Handler Error: {e}")
         finally:
-            conn.close()
+            try:
+                conn.close()
+            except:
+                pass
             self.log(f"Processed Source disconnected: {addr}")
 
     def _handle_events_client(self, conn, addr):
