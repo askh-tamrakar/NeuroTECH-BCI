@@ -26,6 +26,7 @@ class RPSDetector:
         self.last_active_ts = 0.0
         self.gesture_start_time = 0.0
         self.requires_rest = False  # Must see Rest before accepting a new gesture
+        self._requires_rest_since = 0.0  # Watchdog: timestamp when requires_rest was set
         
         # Configuration for state machine
         rps_cfg = config.get("features", {}).get("RPS", {})
@@ -172,7 +173,18 @@ class RPSDetector:
         if is_active:
             if not self.collecting_candidates:
                 if self.requires_rest:
-                    # Must return to rest before registering a new gesture
+                    # Watchdog: auto-clear requires_rest after 1.2s to prevent permanent lock
+                    # (handles noisy baseline that never cleanly classifies as Rest)
+                    now = time.time()
+                    if self._requires_rest_since == 0.0:
+                        self._requires_rest_since = now
+                    elif now - self._requires_rest_since >= 1.2:
+                        self.requires_rest = False
+                        self._requires_rest_since = 0.0
+                        # Fall through to normal collection below
+                    else:
+                        return label, None, "waiting"
+                if self.requires_rest:
                     return label, None, "waiting"
                 self.collecting_candidates = True
                 self.candidates = []
@@ -183,7 +195,7 @@ class RPSDetector:
 
             # Auto-confirm if gesture is held for too long (prevents getting stuck)
             hold_duration = time.time() - self.gesture_start_time
-            gesture_hold_timeout = self.config.get("features", {}).get("RPS", {}).get("gesture_hold_timeout", 1.5)
+            gesture_hold_timeout = self.config.get("features", {}).get("RPS", {}).get("gesture_hold_timeout", 0.8)
             if hold_duration >= gesture_hold_timeout and len(self.candidates) >= 5:
                 valid_candidates = [c for c in self.candidates if c in ['Rock', 'Paper', 'Scissors']]
                 if valid_candidates:
@@ -192,12 +204,14 @@ class RPSDetector:
                     self.collecting_candidates = False
                     self.candidates = []
                     self.requires_rest = True  # Gesture still held — wait for Rest before next gesture
+                    self._requires_rest_since = 0.0  # Reset watchdog timer
                     return label, most_common, "waiting"
 
             return label, None, detection_state # Don't emit confirmed move yet, but return instant label and state
             
         elif is_rest:
             self.requires_rest = False  # Seen Rest — allow next gesture to be registered
+            self._requires_rest_since = 0.0  # Clear watchdog timer
             if self.collecting_candidates:
                 # End of a gesture, resolve it!
                 if self.candidates:
@@ -220,6 +234,15 @@ class RPSDetector:
                 return label, None, "waiting"
                 
         return label, None, "waiting"
+
+    def reset_state(self):
+        """Reset all stateful fields — call this when a new game starts."""
+        self.collecting_candidates = False
+        self.candidates = []
+        self.last_active_ts = 0.0
+        self.gesture_start_time = 0.0
+        self.requires_rest = False
+        self._requires_rest_since = 0.0
 
     def update_config(self, config: dict):
         self.config = config

@@ -51,6 +51,7 @@ export default function LiveView({ wsData, wsEvent, config, isPaused, wsUrl, rec
             { x: ts, label: payload.event === 'DoubleBlink' ? 'DBL-BLINK' : 'BLINK', color: '#ef4444', channel: payload.channel }
           ].slice(-20));
         }
+
       }
     };
 
@@ -118,9 +119,8 @@ export default function LiveView({ wsData, wsEvent, config, isPaused, wsUrl, rec
       let changed = false
       activeChannels.forEach((chIdx, i) => {
         if (!next[chIdx]) {
-          const defaultColor = ['#3b82f6', '#10b981', '#f59e0b', '#a855f7'][i % 4]
+          const sensorDefaults = { EMG: { min: 1, max: 300 }, EEG: { min: 1, max: 50 }, EOG: { min: 1, max: 20 }, ECG: { min: 0, max: 30 } }
           const sensorName = config?.channel_mapping?.[`ch${chIdx}`]?.sensor || 'EEG'
-          const sensorDefaults = { EMG: { min: 1, max: 300 }, EEG: { min: 1, max: 50 }, EOG: { min: 1, max: 20 } }
           
           next[chIdx] = {
             zoom: 1,
@@ -165,6 +165,8 @@ export default function LiveView({ wsData, wsEvent, config, isPaused, wsUrl, rec
   }, [])
 
   useEffect(() => {
+    CalibrationApi.togglePrediction('EMG', true).catch(() => {})
+    CalibrationApi.togglePrediction('ECG', true).catch(() => {})
     return () => {
       CalibrationApi.togglePrediction('ALL', false).catch(() => { })
     }
@@ -310,7 +312,7 @@ export default function LiveView({ wsData, wsEvent, config, isPaused, wsUrl, rec
           const currentSmoothing = channelConfig[chIdx]?.smoothing ?? true
           const graphMode = channelConfig[chIdx]?.graphMode || 'time'
           const emgDisplayMode = channelConfig[chIdx]?.emgDisplayMode || 'raw'
-          const sensorDefaults = { EMG: { min: 1, max: 300 }, EEG: { min: 1, max: 50 }, EOG: { min: 1, max: 20 } };
+          const sensorDefaults = { EMG: { min: 1, max: 300 }, EEG: { min: 1, max: 50 }, EOG: { min: 1, max: 20 }, ECG: { min: 0, max: 30 } };
           const fftFreqRange = channelConfig[chIdx]?.fftFreqRange || sensorDefaults[sensorName] || { min: 1, max: 50 }
           const isFftMode = sensorName === 'EEG' && graphMode === 'fft'
           const fftStats = fftStatsByChannel[chIdx] || { min: 0, max: 0, mean: 0 }
@@ -391,6 +393,7 @@ export default function LiveView({ wsData, wsEvent, config, isPaused, wsUrl, rec
                   activeSensor={sensorName}
                   displayMode={emgDisplayMode}
                   titleAddon={titleAddon}
+                  wsEvent={wsEvent}
                   onZoomChange={(z) => { updateChannelConfig(chIdx, 'zoom', z); updateChannelConfig(chIdx, 'manualRange', ""); }}
                   onRangeChange={(val) => updateChannelConfig(chIdx, 'manualRange', val)}
                   onTimeWindowChange={(val) => updateChannelConfig(chIdx, 'timeWindowMs', val)}

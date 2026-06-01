@@ -12,6 +12,7 @@ const DashboardLayout = lazy(() => import('./components/DashboardLayout.jsx'))
 const TerminalRoute = lazy(() => import('./routes/TerminalRoute.jsx'))
 const DinoRoute = lazy(() => import('./routes/DinoRoute.jsx'))
 const RpsRoute = lazy(() => import('./routes/RpsRoute.jsx'))
+const EMGLabRoute = lazy(() => import('./routes/EMGLabRoute.jsx'))
 const ServoClawRoute = lazy(() => import('./routes/ServoClawRoute.jsx'))
 const EEGLayout = lazy(() => import('./routes/EEGLayout.jsx'))
 const LabLayout = lazy(() => import('./routes/LabLayout.jsx'))
@@ -50,7 +51,8 @@ function AppContent() {
             <Route path="terminal" element={<TerminalRoute />} />
             <Route path="live" element={<Navigate to="/dashboard/terminal" replace />} />
             <Route path="dino" element={<DinoRoute />} />
-            <Route path="rps" element={<RpsRoute />} />
+            <Route path="rps" element={<Navigate to="/dashboard/emg_lab" replace />} />
+            <Route path="emg_lab" element={<EMGLabRoute />} />
             <Route path="servo_claw" element={<ServoClawRoute />} />
             <Route path="eeg/*" element={<EEGLayout />} />
             <Route path="eeg_dashboard" element={<Navigate to="/dashboard/eeg" replace />} />

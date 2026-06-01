@@ -85,6 +85,9 @@ const WorkerFFTChart = forwardRef(({
     const [stats, setStats] = useState({ min: 0, max: 0, mean: 0 });
     const [frequencyFrom, setFrequencyFrom] = useState(initialFreqFrom || "");
     const [frequencyTo, setFrequencyTo] = useState(initialFreqTo || "");
+    const statsRef = useRef({ min: 0, max: 0, mean: 0 });
+    const onStatsChangeRef = useRef(onStatsChange);
+    onStatsChangeRef.current = onStatsChange;
 
     useEffect(() => {
         setFrequencyFrom(initialFreqFrom ?? "");
@@ -158,8 +161,13 @@ const WorkerFFTChart = forwardRef(({
             worker.onmessage = (e) => {
                 const { type, payload, idPromise } = e.data;
                 if (type === 'STATS') {
-                    setStats(payload);
-                    if (onStatsChange) onStatsChange(payload);
+                    // Guard: only update if values actually changed to prevent render loops
+                    const prev = statsRef.current;
+                    if (prev.min !== payload.min || prev.max !== payload.max || prev.mean !== payload.mean) {
+                        statsRef.current = payload;
+                        setStats(payload);
+                        onStatsChangeRef.current?.(payload);
+                    }
                 } else if (type === 'GET_SAMPLES_RESULT' && pendingRequests.current.has(idPromise)) {
                     const resolve = pendingRequests.current.get(idPromise);
                     pendingRequests.current.delete(idPromise);
@@ -253,7 +261,9 @@ const WorkerFFTChart = forwardRef(({
                 observer.disconnect();
             }, 200);
         };
-    }, [config, channelIndex, onStatsChange]);
+    }, [channelIndex]);  // Only recreate worker when channel changes, not on every config object
+
+    const lastConfigPayloadRef = useRef('');
 
     useEffect(() => {
         // Extract theme colors from DOM since worker cannot access CSS variables
@@ -261,19 +271,26 @@ const WorkerFFTChart = forwardRef(({
         const gridColor = style.getPropertyValue('--graph-grid').trim() || 'rgba(255, 255, 255, 0.1)';
         const textColor = style.getPropertyValue('--graph-text').trim() || '#9ca3af';
 
+        const payload = {
+            ...config,
+            channelIndex,
+            color: color || '#3b82f6',
+            freqMin: parseFloat(frequencyFrom) || 0,
+            freqMax: parseFloat(frequencyTo) || 60,
+            zoom: parseFloat(currentZoom) || 1,
+            manualRange: currentManual || "",
+            themeAxisColor: textColor,
+            themeGridColor: gridColor
+        };
+
+        // Guard: skip SET_CONFIG if payload hasn't changed since last send
+        const payloadKey = JSON.stringify(payload);
+        if (payloadKey === lastConfigPayloadRef.current) return;
+        lastConfigPayloadRef.current = payloadKey;
+
         workerRef.current?.postMessage({
             type: 'SET_CONFIG',
-            payload: {
-                ...config,
-                channelIndex,
-                color: color || '#3b82f6',
-                freqMin: parseFloat(frequencyFrom) || 0,
-                freqMax: parseFloat(frequencyTo) || 60,
-                zoom: parseFloat(currentZoom) || 1,
-                manualRange: currentManual || "",
-                themeAxisColor: textColor,
-                themeGridColor: gridColor
-            }
+            payload
         });
     }, [config, channelIndex, color, frequencyFrom, frequencyTo, currentZoom, currentManual]);
 

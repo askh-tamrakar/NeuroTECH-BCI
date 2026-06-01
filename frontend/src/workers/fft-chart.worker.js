@@ -149,6 +149,7 @@ let config = {
 let lastTsHead = 0;
 let lastFFTTime = 0;
 const THROTTLE_FFT_MS = 50; // 20Hz update rate
+let needsDraw = false;        // Only redraw when data/config changes
 
 const broadcast = new BroadcastChannel('bci-data-stream');
 broadcast.onmessage = (e) => {
@@ -174,6 +175,7 @@ broadcast.onmessage = (e) => {
 
     if (newPoints.length) {
         addData(newPoints);
+        needsDraw = true;
     }
 };
 
@@ -183,6 +185,7 @@ self.onmessage = (e) => {
     switch (type) {
         case 'INIT':
             init(payload);
+            needsDraw = true;
             break;
         case 'RESIZE':
             width = payload.width;
@@ -191,6 +194,7 @@ self.onmessage = (e) => {
                 canvas.width = width;
                 canvas.height = height;
             }
+            needsDraw = true;
             break;
         case 'SET_CONFIG':
             const oldFreqMin = config.freqMin;
@@ -207,9 +211,11 @@ self.onmessage = (e) => {
             if (config.freqMin !== oldFreqMin || config.freqMax !== oldFreqMax || config.unitMode !== oldUnitMode) {
                 needsRecalculate = true;
             }
+            needsDraw = true;
             break;
         case 'ADD_DATA':
             addData(payload);
+            needsDraw = true;
             break;
         case 'GET_SAMPLES':
             handleGetSamples(payload, idPromise);
@@ -218,12 +224,15 @@ self.onmessage = (e) => {
             points = [];
             lastCalculatedSpectrum = [];
             needsRecalculate = true;
+            needsDraw = true;
             break;
         case 'POINTER_MOVE':
             hoverState = { active: true, x: payload?.x ?? 0 };
+            needsDraw = true;
             break;
         case 'POINTER_LEAVE':
             hoverState = { active: false, x: 0 };
+            needsDraw = true;
             break;
     }
 };
@@ -272,7 +281,10 @@ function handleGetSamples(payload, idPromise) {
 
 function loop() {
     try {
-        draw();
+        if (needsDraw) {
+            needsDraw = false;
+            draw();
+        }
     } catch (error) {
         console.error('FFT chart worker draw error:', error);
     }
@@ -629,9 +641,14 @@ function roundRect(x, y, w, h, radius) {
     ctx.closePath();
 }
 
+let lastStatsPayload = { min: -1, max: -1, mean: -1 };
+
 function postStats(stats) {
     const now = performance.now();
     if (now - lastStatsTime < STATS_INTERVAL) return;
+    // Skip if values unchanged since last post (prevents render feedback loops)
+    if (lastStatsPayload.min === stats.min && lastStatsPayload.max === stats.max && lastStatsPayload.mean === stats.mean) return;
     lastStatsTime = now;
+    lastStatsPayload = stats;
     self.postMessage({ type: 'STATS', payload: stats });
 }

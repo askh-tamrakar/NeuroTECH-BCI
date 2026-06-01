@@ -224,7 +224,7 @@ function stopAutoWindowing(cancelPending = false) {
         pendingCollections = [];
         markedWindows = markedWindows.map(w =>
             (w.status === 'pending' || w.status === 'recording')
-                ? { ...w, status: 'error' }
+                ? { ...w, status: 'aborted' }
                 : w
         );
     }

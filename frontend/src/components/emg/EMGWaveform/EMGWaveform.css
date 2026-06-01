@@ -1,0 +1,107 @@
+.emgw-root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.emgw-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  padding: 0.6rem 1rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.emgw-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.35rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.emgw-btn:hover { color: var(--text); border-color: var(--primary); }
+
+.emgw-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  cursor: pointer;
+}
+.emgw-toggle input { accent-color: var(--primary); cursor: pointer; }
+
+.emgw-thresh-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.emgw-slider {
+  width: 90px;
+  accent-color: #ef4444;
+}
+
+.emgw-thresh-val {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #ef4444;
+  min-width: 54px;
+  font-variant-numeric: tabular-nums;
+}
+
+.emgw-stats-row {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.emgw-val {
+  color: var(--primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.emgw-canvas-wrap {
+  flex: 1;
+  position: relative;
+  min-height: 0;
+}
+
+.emgw-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+  background: color-mix(in srgb, var(--bg) 70%, var(--surface));
+}
+
+.emgw-paused-badge {
+  position: absolute;
+  top: 12px;
+  right: 16px;
+  background: rgba(245,158,11,0.15);
+  border: 1px solid rgba(245,158,11,0.4);
+  color: #f59e0b;
+  font-size: 0.65rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  padding: 0.2rem 0.5rem;
+  border-radius: 0.25rem;
+}

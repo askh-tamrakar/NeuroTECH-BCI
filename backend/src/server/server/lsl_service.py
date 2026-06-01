@@ -9,6 +9,7 @@ from src.server.server.session_manager import SessionManager
 
 from src.feature.extractors.rps_extractor import RPSExtractor
 from src.feature.extractors.blink_extractor import BlinkExtractor
+from src.feature.extractors.muscle_strength_extractor import MuscleStrengthExtractor
 from src.server.server.routes.eeg_routes import _get_mode_manager
 
 try:
@@ -97,6 +98,14 @@ def resolve_lsl_stream() -> bool:
             state.connected = True
             print(f"[LSLService] ✅ Connected to: {target.name()}")
             print(f"[LSLService] Channels: {state.num_channels} @ {state.sr} Hz")
+            # Build one MuscleStrengthExtractor per EMG channel
+            config = state.config or load_config()
+            state.muscle_strength_extractors = {
+                i: MuscleStrengthExtractor(sr=state.sr, config=config)
+                for i, ch in state.channel_mapping.items()
+                if ch.get("type", "").upper() == "EMG"
+            }
+            print(f"[LSLService] 💪 MuscleStrength extractors: {list(state.muscle_strength_extractors.keys())}")
             return True
 
         print("[LSLService] ❌ Could not find LSL stream")
@@ -216,6 +225,15 @@ def broadcast_data(socketio):
                     "timestamp": ts,
                     "sample_count": state.sample_count
                 })
+
+                # --- Muscle Strength Hook (per-sample, EMG channels) ---
+                strength_extractors = getattr(state, 'muscle_strength_extractors', {})
+                for ch_idx, data in channels_data.items():
+                    if data['type'].upper() == 'EMG' and ch_idx in strength_extractors:
+                        result = strength_extractors[ch_idx].process(data['value'])
+                        if result is not None:
+                            socketio.emit('muscle_strength', result)
+                        break
                 
                 # --- EEG Mode Manager Hook ---
                 try:

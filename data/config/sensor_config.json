@@ -1,5 +1,6 @@
 {
   "active_models": {
+    "ECG": null,
     "EEG": "Neo",
     "EMG": "xgBoost",
     "EOG": "dino-ml"

@@ -1331,10 +1331,10 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
         () => Math.min(100, (producedCount / Math.max(1, isCalibrationMode ? calibrationTotal : autoLimit)) * 100),
         [producedCount, autoLimit, isCalibrationMode, calibrationTotal]
     );
-    const batchProgressPercent = useMemo(
-        () => Math.min(100, (completedBatchCount / Math.max(1, numBatches)) * 100),
-        [completedBatchCount, numBatches]
-    );
+    const batchProgressPercent = useMemo(() => {
+        const totalSaved = markedWindows.filter(w => w.status === 'saved' || w.status === 'correct').length;
+        return Math.min(100, (totalSaved / autoTargetCount) * 100);
+    }, [markedWindows, autoTargetCount]);
 
     const advanceAutoBatch = useCallback(async () => {
         if (batchTransitionLockRef.current) return;

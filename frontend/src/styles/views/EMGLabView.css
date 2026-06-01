@@ -1,0 +1,117 @@
+/* ─── EMG Lab — root layout ──────────────────────────────────────── */
+.emglab-root {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  background: var(--bg);
+  overflow: hidden;
+}
+
+/* ─── Tab bar ────────────────────────────────────────────────────── */
+.emglab-tabbar {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.5rem 1rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.emglab-tabbar::-webkit-scrollbar { display: none; }
+
+.emglab-tab {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 1rem;
+  border-radius: 0.5rem;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  white-space: nowrap;
+}
+.emglab-tab:hover {
+  background: color-mix(in srgb, var(--surface) 60%, var(--border));
+  color: var(--text);
+}
+.emglab-tab.active {
+  background: color-mix(in srgb, var(--tab-color, var(--primary)) 12%, transparent);
+  border-color: color-mix(in srgb, var(--tab-color, var(--primary)) 40%, transparent);
+  color: var(--tab-color, var(--primary));
+}
+.emglab-tab-arrow {
+  margin-left: auto;
+  opacity: 0.6;
+}
+
+/* ─── Panels ─────────────────────────────────────────────────────── */
+.emglab-panels {
+  flex: 1;
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* All panels occupy same space; only .visible is shown */
+.emglab-panel {
+  position: absolute;
+  inset: 0;
+  visibility: hidden;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  overflow: hidden;
+}
+.emglab-panel.visible {
+  visibility: visible;
+  pointer-events: all;
+  opacity: 1;
+}
+
+/* ─── Shared lab card ─────────────────────────────────────────────── */
+.lab-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  padding: 1.25rem;
+}
+
+/* ─── Stat badge ─────────────────────────────────────────────────── */
+.lab-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+}
+.lab-stat-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+.lab-stat-value {
+  font-size: 1.3rem;
+  font-weight: 800;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ─── Section title ───────────────────────────────────────────────── */
+.lab-section-title {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  margin-bottom: 0.5rem;
+}

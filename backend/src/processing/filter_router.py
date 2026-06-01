@@ -41,6 +41,7 @@ try:
     from .emg_processor import EMGFilterProcessor
     from .eog_processor import EOGFilterProcessor
     from .eeg_processor import EEGFilterProcessor
+    from .ecg_processor import ECGFilterProcessor
 except ImportError:
     print("[Router] Running from different context, using local imports")
     import sys
@@ -48,6 +49,7 @@ except ImportError:
     from src.processing.emg_processor import EMGFilterProcessor
     from src.processing.eog_processor import EOGFilterProcessor
     from src.processing.eeg_processor import EEGFilterProcessor
+    from src.processing.ecg_processor import ECGFilterProcessor
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 try:
@@ -345,6 +347,8 @@ class FilterRouter:
                         self.channel_processors[i] = EOGFilterProcessor(self.config, self.sr, channel_key=ch_key)
                     elif sensor_type == "EEG":
                         self.channel_processors[i] = EEGFilterProcessor(self.config, self.sr, channel_key=ch_key)
+                    elif sensor_type == "ECG":
+                        self.channel_processors[i] = ECGFilterProcessor(self.config, self.sr, channel_key=ch_key)
                     else:
                         self.channel_processors[i] = None
 
@@ -421,6 +425,11 @@ class FilterRouter:
                             elif f.get("type") == "bandpass":
                                 parts.append(f"bandpass {f.get('low','?')}–{f.get('high','?')} Hz")
                         print(f"[config]   ch{idx}  {sensor:<5} │ {('  '.join(parts)) or 'default'}")
+                    elif sensor == "ECG":
+                        bp_lo  = fc.get("bandpass_low",  0.5)
+                        bp_hi  = fc.get("bandpass_high", 20.0)
+                        notch  = "notch" if fc.get("notch_enabled", True) else ""
+                        print(f"[config]   ch{idx}  {sensor:<5} │ bandpass {bp_lo}–{bp_hi} Hz  {notch}")
                     else:
                         print(f"[config]   ch{idx}  {sensor:<5} │ pass-through")
                 print(f"[config] {bar}")

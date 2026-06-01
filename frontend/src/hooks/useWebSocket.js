@@ -246,6 +246,7 @@ export function useWebSocket(url = '') {
     socketRef.current.on('eeg_prediction', (data) => setLastEvent({ event: 'eeg_prediction', ...data }))
     socketRef.current.on('eeg_mode_result', (data) => setLastEvent({ event: 'eeg_mode_result', ...data }))
     socketRef.current.on('emg_prediction', (data) => setLastEvent({ type: 'emg_prediction', ...data }))
+    socketRef.current.on('muscle_strength', (data) => setLastEvent({ type: 'muscle_strength', ...data }))
   }
 
   const disconnect = () => {

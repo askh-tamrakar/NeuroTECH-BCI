@@ -1,9 +1,29 @@
 // SignalChart.jsx
-import React, { useEffect, useRef, useImperativeHandle, forwardRef, useState } from 'react'
-import { ChartSpline, ZoomIn, ArrowUpDown, ArrowDown, ArrowUp, Sigma, Clock, Minus, Plus, Activity, ChevronUp, ChevronDown } from 'lucide-react'
+import React, { useEffect, useRef, useImperativeHandle, forwardRef, useState, useCallback } from 'react'
+import { ChartSpline, ZoomIn, ArrowUpDown, ArrowDown, ArrowUp, Sigma, Clock, Minus, Plus, Activity, ChevronUp, ChevronDown, Heart } from 'lucide-react'
 import ElasticSlider from '../ui/inputs/ElasticSlider'
 import { useTheme } from '../../contexts/ThemeContext'
+import { useHeartbeatAudio } from '../../hooks/useHeartbeatAudio'
 import '../../styles/live/SignalChart.css'
+
+// ── ECG helpers ─────────────────────────────────────────────────────
+function ecgBpmColor(bpm) {
+  if (!bpm) return 'var(--muted)'
+  if (bpm < 60)  return '#3b82f6'
+  if (bpm < 100) return '#22c55e'
+  return '#ef4444'
+}
+function ecgZoneLabel(bpm) {
+  if (!bpm) return 'NO SIGNAL'
+  if (bpm < 60)  return 'BRADYCARDIA'
+  if (bpm < 100) return 'NORMAL SINUS'
+  return 'TACHYCARDIA'
+}
+function ecgQualityLabel(q) {
+  if (!q || q < 0.3) return { text: 'POOR',   color: '#ef4444' }
+  if (q < 0.7)       return { text: 'FAIR',   color: '#f59e0b' }
+  return                    { text: 'GOOD',   color: '#22c55e' }
+}
 
 const DEFAULT_PALETTE = [
   '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6',
@@ -77,7 +97,8 @@ const SignalChart = forwardRef(({
   channelIndex = -1,
   activeSensor,
   displayMode = 'raw',
-  titleAddon = null
+  titleAddon = null,
+  wsEvent = null
 }, ref) => {
 
   const containerRef = useRef(null)
@@ -86,6 +107,11 @@ const SignalChart = forwardRef(({
   const [stats, setStats] = useState({ min: 0, max: 0, mean: 0 })
   const [autoScaledRange, setAutoScaledRange] = useState(null)
   const { currentTheme } = useTheme() || {};
+
+  // ── ECG overlay state ──────────────────────────────────────────────
+  const [ecgStats, setEcgStats] = useState({ bpm: null, rr_ms: null, rr_sdnn: null, signal_quality: 0 })
+  const lastHeartbeatRef = useRef(null)
+  const { playBeat, prime } = useHeartbeatAudio(0.65)
 
   // Initialize Worker
   useEffect(() => {
@@ -257,19 +283,48 @@ const SignalChart = forwardRef(({
   let rangeDisplay = isNaN(yDomainRaw) ? Math.round(1500 / currentZoom).toString() : yDomainRaw.toString();
 
   // Auto-range adjusting logic based on absolute maximum of signal
+  // ECG: skip auto-expand — spikes would blow up the Y axis; user sets zoom manually
   useEffect(() => {
-    // We only want to AUTO EXPAND. We do not shrink if max < range.
+    if (activeSensor === 'ECG') return;   // ← ECG: fixed scale
     const absMax = Math.max(Math.abs(stats.min), Math.abs(stats.max));
     const currentR = parseFloat(rangeDisplay);
-
-    // ONLY auto-scale if the user hasn't explicitly zoomed in or set a manual range
     if (!isNaN(currentR) && absMax > currentR && currentZoom === 1 && !currentManual) {
       const nextRange = getNextGoodRange(absMax);
       if (nextRange > currentR) {
         setAutoScaledRange(nextRange.toString());
       }
     }
-  }, [stats.min, stats.max, rangeDisplay, currentZoom, currentManual]);
+  }, [stats.min, stats.max, rangeDisplay, currentZoom, currentManual, activeSensor]);
+
+  // ── ECG: ingest wsEvent for overlay data + heartbeat sound ──────────
+  useEffect(() => {
+    if (!wsEvent || activeSensor !== 'ECG') return
+
+    // ECG features → update overlay
+    if (wsEvent.event === 'ecg_prediction' || wsEvent.type === 'ecg_prediction') {
+      const f = wsEvent.features ?? {}
+      setEcgStats({
+        bpm:            f.bpm            ?? null,
+        rr_ms:          f.rr_ms          ?? null,
+        rr_sdnn:        f.rr_sdnn        ?? null,
+        signal_quality: f.signal_quality ?? 0,
+      })
+    }
+
+    // Heartbeat event → play the thump sound
+    if (wsEvent.event === 'Heartbeat') {
+      // Deduplicate: ignore if same event object fires twice
+      if (lastHeartbeatRef.current !== wsEvent) {
+        lastHeartbeatRef.current = wsEvent
+        playBeat()
+      }
+    }
+  }, [wsEvent, activeSensor, playBeat]);
+
+  // Prime AudioContext on first pointer-down inside this chart
+  const handlePointerDown = useCallback(() => {
+    if (activeSensor === 'ECG') prime()
+  }, [activeSensor, prime])
 
   return (
     <div className={`signal-chart-container ${disabled ? 'signal-chart-disabled' : ''}`}>
@@ -408,7 +463,7 @@ const SignalChart = forwardRef(({
         </div>
       </div>
 
-      <div className="chart-area flex-grow relative" style={{ minHeight: 0, overflow: 'hidden', margin: 0, padding: 0 }} ref={containerRef}>
+      <div className="chart-area flex-grow relative" style={{ minHeight: 0, overflow: 'hidden', margin: 0, padding: 0 }} ref={containerRef} onPointerDown={handlePointerDown}>
 
         {/* Centered Static Labels Overlay */}
         <div style={{
@@ -431,6 +486,40 @@ const SignalChart = forwardRef(({
             <Clock size={14} color={color} /> HISTORY
           </div>
         </div>
+
+        {/* ECG Info Overlay — top-right corner, only when ECG sensor is active */}
+        {activeSensor === 'ECG' && (() => {
+          const bpmColor = ecgBpmColor(ecgStats.bpm)
+          const zone     = ecgZoneLabel(ecgStats.bpm)
+          const quality  = ecgQualityLabel(ecgStats.signal_quality)
+          return (
+            <div className="ecg-overlay-box" style={{ pointerEvents: 'none' }}>
+              {/* BPM — headline number */}
+              <div className="ecg-overlay-bpm" style={{ color: bpmColor }}>
+                <Heart size={14} fill={bpmColor} strokeWidth={0} style={{ flexShrink: 0 }} />
+                <span className="ecg-bpm-value">{ecgStats.bpm != null ? Math.round(ecgStats.bpm) : '—'}</span>
+                <span className="ecg-bpm-unit">BPM</span>
+              </div>
+
+              <div className="ecg-overlay-zone" style={{ color: bpmColor }}>{zone}</div>
+
+              <div className="ecg-overlay-divider" />
+
+              <div className="ecg-overlay-row">
+                <span className="ecg-ol-label">RR</span>
+                <span className="ecg-ol-value">{ecgStats.rr_ms != null ? `${Math.round(ecgStats.rr_ms)} ms` : '—'}</span>
+              </div>
+              <div className="ecg-overlay-row">
+                <span className="ecg-ol-label">HRV</span>
+                <span className="ecg-ol-value">{ecgStats.rr_sdnn != null ? `${ecgStats.rr_sdnn.toFixed(0)} ms` : '—'}</span>
+              </div>
+              <div className="ecg-overlay-row">
+                <span className="ecg-ol-label">QUALITY</span>
+                <span className="ecg-ol-value" style={{ color: quality.color }}>{quality.text}</span>
+              </div>
+            </div>
+          )
+        })()}
       </div>
     </div>
   )

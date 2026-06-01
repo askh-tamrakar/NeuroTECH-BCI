@@ -145,7 +145,7 @@ export default function Sidebar({
                     {/* Unique Info Popup */}
                     <div className="absolute left-16 top-1/2 -translate-y-1/2 bg-surface/95 backdrop-blur-md border border-border p-3 rounded-xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.5)] opacity-0 group-hover:opacity-100 transition-all duration-200 z-50 min-w-[140px] pointer-events-none scale-95 group-hover:scale-100 flex flex-col items-start text-left">
                         <div className="text-[11px] font-black text-text uppercase tracking-widest mb-2 border-b border-border/50 pb-1 w-full flex items-center gap-1.5"><Filter size={12} /> ACTIVE FILTERS</div>
-                        {['EMG', 'EEG', 'EOG'].map(sensor => {
+                        {['EMG', 'EEG', 'EOG', 'ECG'].map(sensor => {
                             const f = config.filters?.[sensor];
                             if (!f) return null;
                             const actCh = [0, 1].filter(i => config.channel_mapping?.[`ch${i}`]?.sensor === sensor && config.channel_mapping?.[`ch${i}`]?.enabled !== false);
@@ -427,6 +427,21 @@ export default function Sidebar({
                         }
                         onSave={onSave}
                     />
+
+                    {/* ECG FILTER */}
+                    <FilterSection
+                        sensorType="ECG"
+                        config={config}
+                        filterConfig={getFilterConfig('ECG')}
+                        onFilterChange={handleSensorFilterChange}
+                        colorClass="text-red-400"
+                        accentColor="red"
+                        channelsUsingThis={
+                            (getSensorTypeForChannel('ch0') === 'ECG' ? ['ch0'] : [])
+                                .concat(getSensorTypeForChannel('ch1') === 'ECG' ? ['ch1'] : [])
+                        }
+                        onSave={onSave}
+                    />
                 </section>
             </div>
 
@@ -441,7 +456,7 @@ function SensorSelector({ value, onChange, disabled }) {
             value={value}
             onChange={onChange}
             disabled={disabled}
-            options={['EMG', 'EOG', 'EEG']}
+            options={['EMG', 'EOG', 'EEG', 'ECG']}
             placeholder="Select Sensor"
         />
     );
@@ -496,7 +511,8 @@ function FilterSection({
     const bgColors = {
         primary: 'bg-primary',
         emerald: 'bg-emerald-500',
-        orange: 'bg-orange-500'
+        orange: 'bg-orange-500',
+        red: 'bg-red-400'
     };
     const buttonBg = bgColors[accentColor] || 'bg-primary';
     const buildUpdatedConfig = (field, value) => ({
@@ -614,7 +630,8 @@ function FilterSection({
                             const ranges = {
                                 EMG: { min: 1, max: 300, step: 2 },
                                 EEG: { min: 0.5, max: 60, step: 0.5 },
-                                EOG: { min: 0.1, max: 20, step: 0.1 }
+                                EOG: { min: 0.1, max: 20, step: 0.1 },
+                                ECG: { min: 0.1, max: 40, step: 0.1 }
                             };
                             const range = ranges[sensorType] || { min: 1, max: 300, step: 1 };
 

@@ -18,7 +18,7 @@ class RPSExtractor:
         # Stride 64 samples (~125ms update rate) for responsiveness
         self.stride = 64 
         
-        self.buffer = collections.deque(maxlen=self.buffer_size)
+        self.buffer = collections.deque([0.0] * self.buffer_size, maxlen=self.buffer_size)
         self.sample_count = 0
         
     def process(self, sample_val: float):
