@@ -1,0 +1,64 @@
+{
+  "session": {
+    "name": "EOG_12.10.20_30-05-2026",
+    "sensor_type": "EOG",
+    "data_type": "raw",
+    "created": "2026-05-30T12:10:20.354887"
+  },
+  "acquisition": {
+    "sampling_rate": 512,
+    "num_channels": 1,
+    "channels": [
+      {
+        "index": 1,
+        "label": "ch1 - EOG",
+        "sensor": "EOG",
+        "unit": "µV"
+      }
+    ]
+  },
+  "hardware": {
+    "device_id": "Arduino_UNO_R4",
+    "adc_resolution": 14,
+    "gain": 1,
+    "reference_voltage": 3.3
+  },
+  "filters": {
+    "filters": {
+      "EEG": {
+        "bandpass_enabled": true,
+        "bandpass_high": 30.5,
+        "bandpass_low": 0.5,
+        "notch_enabled": true
+      },
+      "EMG": {
+        "bandpass_enabled": true,
+        "bandpass_high": 250,
+        "bandpass_low": 70,
+        "notch_enabled": true,
+        "notch_q": 30
+      },
+      "EOG": {
+        "bandpass_enabled": true,
+        "bandpass_high": 7.8,
+        "bandpass_low": 0.1,
+        "bandpass_order": 4,
+        "notch_enabled": true,
+        "notch_q": 30
+      }
+    }
+  },
+  "timing": {
+    "start_time": "2026-05-30T12:10:20.354887",
+    "start_timestamp_ms": 1780123220354,
+    "end_time": "2026-05-30T12:11:34.492788",
+    "end_timestamp_ms": 1780123294492,
+    "duration_seconds": 73.609,
+    "total_pause_seconds": 0.0
+  },
+  "integrity": {
+    "total_rows": 37688,
+    "expected_rows": 37958,
+    "status": "valid"
+  }
+}

@@ -138,7 +138,14 @@ export function getRuntimeConnection() {
 export function getSocketIoConnection() {
     const { apiUrl, wsUrl } = getRuntimeConnection();
     const pageOrigin = getLocationOrigin();
-    const endpoint = deriveApiUrlFromWs(wsUrl) || apiUrl || pageOrigin;
+
+    // __SOCKETIO_DIRECT_URL__ is injected by Vite at dev time (see vite.config.js define).
+    // In development it equals 'http://localhost:5005', bypassing the Vite WebSocket proxy
+    // which causes ECONNABORTED due to a timing issue in eventlet's WebSocketWSGI handler.
+    // In production builds it is an empty string, so the normal endpoint logic applies.
+    /* global __SOCKETIO_DIRECT_URL__ */
+    const devDirect = (typeof __SOCKETIO_DIRECT_URL__ !== 'undefined') ? __SOCKETIO_DIRECT_URL__ : '';
+    const endpoint = devDirect || deriveApiUrlFromWs(wsUrl) || apiUrl || pageOrigin;
 
     return {
         endpoint: normalizeBaseUrl(endpoint || pageOrigin),

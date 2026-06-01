@@ -58,7 +58,7 @@ const saveDetailsPlugin = () => ({
   }
 });
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   base: './',
   plugins: [
     react(),
@@ -127,6 +127,18 @@ export default defineConfig({
         target: 'http://localhost:5005',
         changeOrigin: true,
         secure: false,
+        configure: (proxy) => {
+          proxy.on('error', (err, _req, res) => {
+            // Suppress ECONNREFUSED — backend may not be up yet on startup
+            if (err.code !== 'ECONNREFUSED') {
+              console.error('[proxy /api error]', err.message);
+            }
+            if (res && !res.headersSent) {
+              res.writeHead(502);
+              res.end();
+            }
+          });
+        },
       },
       '/socket.io': {
         target: 'http://localhost:5005',
@@ -142,5 +154,11 @@ export default defineConfig({
   },
   build: {
     chunkSizeWarningLimit: 2500, // Supress >500kb size warnings for large interactive web apps
-  }
-})
+  },
+  define: {
+    // In development, connect Socket.IO directly to the backend (port 5005) to bypass
+    // the Vite WebSocket proxy, which causes ECONNABORTED with eventlet's WebSocketWSGI.
+    // In production the frontend is served by Flask itself, so this is empty.
+    __SOCKETIO_DIRECT_URL__: JSON.stringify(mode === 'development' ? 'http://localhost:5005' : ''),
+  },
+}))

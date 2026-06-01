@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import AnimatedList from '../ui/display/AnimatedList';
 import CustomSelect from '../ui/inputs/CustomSelect';
-import { Trash, ClipboardX, Trash2, FolderPlus, RefreshCw, Edit2, GitMerge, Check, X, ArchiveX, ArrowUpDown, ArrowUp, ArrowDown, ListFilter, ArrowDownToLine, ArrowUpToLine, Brain, ChevronDown } from 'lucide-react';
+import { Trash, ClipboardX, Trash2, FolderPlus, RefreshCw, Edit2, GitMerge, Check, X, ArchiveX, ArrowUpDown, ArrowUp, ArrowDown, ListFilter, ArrowDownToLine, ArrowUpToLine, Brain, ChevronDown, FilterX } from 'lucide-react';
 
 export default function SessionManagerPanel({
     activeSensor,
@@ -25,6 +25,7 @@ export default function SessionManagerPanel({
     onMergeSessions,
     onDeleteRow,
     onClearSession,
+    onClearFilteredRows,
     onCreateSession,
     isCalibrationMode = false,
     showCalibrateButton = false,
@@ -303,7 +304,7 @@ export default function SessionManagerPanel({
             {/* LEFT PANE: Selected Session Table View */}
             <div className="flex-grow flex flex-col min-w-0 bg-[var(--section-bg)] rounded-lg border border-[var(--section-border)] overflow-hidden relative">
                 {/* Table Header / Toolbar */}
-                <div className="px-3 py-2 border-b border-[var(--section-border)] bg-[var(--header-bg)] flex flex-wrap items-center gap-3">
+                <div className="px-3 py-2 border-b border-[var(--section-border)] bg-[var(--header-bg)] flex items-center gap-2">
                     {/* Session Name Label */}
                     <div className="flex items-center gap-2 px-3 bg-primary/10 rounded border border-primary shrink-0 h-9">
                         <FolderPlus size={18} className="text-primary" />
@@ -386,9 +387,9 @@ export default function SessionManagerPanel({
                     <div className="h-8 w-[1px] bg-[var(--section-border)] opacity-20 shrink-0 mx-1"></div>
 
                     {/* Filter Controls */}
-                    <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex items-center gap-1.5 shrink-0">
                         {/* Class Filter */}
-                        <div className="flex items-center gap-1.5 bg-[var(--bg)]/50 pl-2 pr-1 py-0.5 rounded border border-[var(--section-border)] h-9 shrink-0 flex-1 min-w-[140px] max-w-[180px]">
+                        <div className="flex items-center gap-1.5 bg-[var(--bg)]/50 pl-2 pr-1 py-0.5 rounded border border-[var(--section-border)] h-9 shrink-0 flex-1 min-w-[120px] max-w-[150px]">
                             <ListFilter size={16} className="text-[var(--text-secondary)] shrink-0" />
                             <CustomSelect
                                 value={filterLabel}
@@ -403,7 +404,7 @@ export default function SessionManagerPanel({
                         </div>
 
                         {/* Sort By */}
-                        <div className="flex items-center gap-1 bg-[var(--bg)]/50 pl-2 pr-1 py-0.5 rounded border border-[var(--section-border)] h-9 shrink-0 flex-1 min-w-[130px] max-w-[150px]">
+                        <div className="flex items-center gap-1 bg-[var(--bg)]/50 pl-2 pr-1 py-0.5 rounded border border-[var(--section-border)] h-9 shrink-0 flex-1 min-w-[110px] max-w-[130px]">
                             <ArrowUpDown size={16} className="text-[var(--text-secondary)] shrink-0" />
                             <CustomSelect
                                 value={sortBy}
@@ -460,8 +461,26 @@ export default function SessionManagerPanel({
 
                     <div className="h-8 w-[1px] bg-[var(--section-border)] opacity-20 shrink-0 mx-1"></div>
 
+                    {/* Clear Filtered Rows button — icon only to save toolbar space */}
+                    <button
+                        onClick={() => {
+                            if (onClearFilteredRows) {
+                                onClearFilteredRows({ filterLabel, rowFrom, rowTo });
+                            }
+                        }}
+                        disabled={filterLabel === 'all' && !rowFrom && !rowTo}
+                        title={filterLabel === 'all' && !rowFrom && !rowTo
+                            ? 'Apply a filter first to enable clear'
+                            : 'Delete only the rows matching the current filter'}
+                        className="flex items-center justify-center w-9 h-9 rounded border border-red-500/30 bg-red-500/5 text-red-400 shrink-0 hover:bg-red-500/20 hover:text-red-500 transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:pointer-events-none"
+                    >
+                        <FilterX size={15} />
+                    </button>
+
+                    <div className="h-8 w-[1px] bg-[var(--section-border)] opacity-20 shrink-0 mx-1"></div>
+
                     {/* Status & Actions */}
-                    <div className="flex items-center gap-3 ml-auto shrink-0">
+                    <div className="flex items-center gap-2 ml-auto shrink-0">
                         {/* Row Count Status */}
                         <div className="flex items-center gap-1.5 px-3 bg-[var(--bg)]/50 rounded border border-[var(--section-border)] h-9">
                             <span className="text-xs text-[var(--text-secondary)] uppercase font-bold">Showing</span>

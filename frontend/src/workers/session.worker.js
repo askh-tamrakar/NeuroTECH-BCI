@@ -39,6 +39,9 @@ self.onmessage = async function (e) {
         case 'CLEAR_SESSION':
             await handleClearSession(payload.name);
             break;
+        case 'CLEAR_FILTERED_ROWS':
+            await handleClearFilteredRows(payload);
+            break;
         case 'FETCH_DETAILS':
             await fetchSessionDetails(payload);
             break;
@@ -154,6 +157,31 @@ async function handleClearSession(name) {
         }
     } catch (err) {
         console.error("Worker: Error clearing session:", err);
+    }
+}
+
+async function handleClearFilteredRows({ name, sensor, filterLabel, rowFrom, rowTo }) {
+    if (!name) return;
+    const sensorUp = (sensor || activeSensor).toUpperCase();
+
+    try {
+        const params = new URLSearchParams();
+        if (filterLabel && filterLabel !== 'all') params.append('label', filterLabel);
+        if (rowFrom && String(rowFrom).trim()) params.append('from', rowFrom);
+        if (rowTo && String(rowTo).trim()) params.append('to', rowTo);
+
+        const query = params.toString() ? `?${params.toString()}` : '';
+        const url = buildApiUrl(`/api/sessions/${sensorUp}/${encodeURIComponent(name)}/rows/clear_filtered${query}`);
+
+        const res = await fetch(url, { method: 'DELETE' });
+        if (res.ok) {
+            const data = await res.json();
+            self.postMessage({ type: 'CLEAR_FILTERED_SUCCESS', payload: { fullName: name, deletedCount: data.deleted_count } });
+        } else {
+            console.error("Worker: Failed to clear filtered rows");
+        }
+    } catch (err) {
+        console.error("Worker: Error clearing filtered rows:", err);
     }
 }
 

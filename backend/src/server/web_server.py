@@ -19,4 +19,4 @@ if __name__ == '__main__':
     import logging
     log = logging.getLogger('werkzeug')
     log.setLevel(logging.ERROR)
-    socketio.run(app, host='0.0.0.0', port=5005, allow_unsafe_werkzeug=True)
+    socketio.run(app, host='0.0.0.0', port=5005)

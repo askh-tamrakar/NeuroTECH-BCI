@@ -47,7 +47,7 @@ class HybridRecorder:
 
         # Flush control
         self._flush_counter: int = 0
-        self._flush_interval: int = 512          # flush every ~1 s of data
+        self._flush_interval: int = 2048         # flush every ~4 s of data
 
         self._lock = threading.Lock()
 
@@ -62,7 +62,6 @@ class HybridRecorder:
         hardware_info: Optional[Dict] = None,
         filter_config: Optional[Dict] = None,
         data_type: str = "raw",
-        recording_channels: Optional[List[int]] = None,
     ) -> Dict:
         with self._lock:
             if self.is_recording:
@@ -70,7 +69,7 @@ class HybridRecorder:
 
             # — Phase 1: Directory & file initialisation ——————————————
             now = datetime.now()
-            ts_str = now.strftime("%d-%m-%Y__%H-%M-%S")
+            ts_str = now.strftime("%H.%M.%S_%d-%m-%Y")
             folder_name = f"{sensor_type}_{ts_str}"
 
             recording_dir = self.base_dir / sensor_type / "recording"
@@ -86,18 +85,13 @@ class HybridRecorder:
             self._pause_start = None
             self._total_pause_seconds = 0.0
 
-            # Filter channels to the requested subset
-            if recording_channels is not None:
-                self.channels = [
-                    ch for ch in channels if ch.get("index") in recording_channels
-                ]
-            else:
-                self.channels = list(channels)
+            # Channels passed in are already pre-filtered by the caller
+            self.channels = list(channels)
 
             channel_meta = [
                 {
                     "index": ch.get("index", 0),
-                    "label": ch.get("label", f"ch{ch.get('index', 0)}"),
+                    "label": f"ch{ch.get('index', 0)} - {ch.get('sensor', sensor_type)}",
                     "sensor": ch.get("sensor", sensor_type),
                     "unit": ch.get("unit", "\u00b5V"),
                 }
@@ -146,7 +140,8 @@ class HybridRecorder:
             self._csv_file = open(csv_path, "w", newline="", encoding="utf-8")
             self._csv_writer = csv.writer(self._csv_file)
 
-            headers = [ch.get("label", f"ch{ch.get('index', 0)}") for ch in self.channels]
+            # Header: timestamp + ch{N} column per channel
+            headers = ["timestamp"] + [f"ch{ch.get('index', 0)}" for ch in self.channels]
             self._csv_writer.writerow(headers)
             self._csv_file.flush()
 
@@ -161,7 +156,7 @@ class HybridRecorder:
                 "status": "recording",
                 "session": folder_name,
                 "path": str(self.session_dir),
-                "channels": headers,
+                "channels": headers[1:],   # exclude timestamp from summary
                 "sample_rate": sample_rate,
                 "data_type": data_type,
             }
@@ -175,7 +170,8 @@ class HybridRecorder:
             return
 
         with self._lock:
-            self._csv_writer.writerow(values)
+            ts = round(self.row_count / self.sample_rate, 6)
+            self._csv_writer.writerow([ts] + list(values))
             self.row_count += 1
             self._flush_counter += 1
 
@@ -189,8 +185,11 @@ class HybridRecorder:
             return
 
         with self._lock:
-            for values in batch:
-                self._csv_writer.writerow(values)
+            base = self.row_count
+            sr = self.sample_rate
+            for i, values in enumerate(batch):
+                ts = round((base + i) / sr, 6)
+                self._csv_writer.writerow([ts] + list(values))
             self.row_count += len(batch)
             self._flush_counter += len(batch)
 
@@ -250,16 +249,21 @@ class HybridRecorder:
             end_ms = int(now.timestamp() * 1000)
             wall_duration = (end_ms - start_ms) / 1000.0
             effective_duration = wall_duration - self._total_pause_seconds
-            expected_rows = int(self.sample_rate * effective_duration)
 
-            # Integrity check (±0.5 s tolerance)
-            tolerance = self.sample_rate * 0.5
+            # expected_rows: use actual row count to derive data duration, then compare
+            # to wall-clock duration.  Tolerate ±10 % or ±2 s worth of samples — whichever
+            # is larger — to absorb LSL buffer-fill latency and timing jitter.
+            data_duration = self.row_count / max(1, self.sample_rate)
+            expected_rows = int(self.sample_rate * effective_duration)
+            tolerance = max(self.sample_rate * 2.0, expected_rows * 0.10)
             integrity_ok = abs(self.row_count - expected_rows) <= tolerance
 
-            # Update metadata
+            # Update metadata — use data-derived duration if it's more accurate
+            actual_data_duration = self.row_count / max(1, self.sample_rate)
+            reported_duration = actual_data_duration if integrity_ok else effective_duration
             self.metadata["timing"]["end_time"] = now.isoformat()
             self.metadata["timing"]["end_timestamp_ms"] = end_ms
-            self.metadata["timing"]["duration_seconds"] = round(effective_duration, 3)
+            self.metadata["timing"]["duration_seconds"] = round(reported_duration, 3)
             self.metadata["timing"]["total_pause_seconds"] = round(self._total_pause_seconds, 3)
             self.metadata["integrity"]["total_rows"] = self.row_count
             self.metadata["integrity"]["expected_rows"] = expected_rows
@@ -277,15 +281,15 @@ class HybridRecorder:
                 "status": "stopped",
                 "session": self.metadata["session"]["name"],
                 "path": str(self.session_dir),
-                "duration_seconds": round(effective_duration, 3),
+                "duration_seconds": round(reported_duration, 3),
                 "total_rows": self.row_count,
                 "expected_rows": expected_rows,
                 "integrity": "valid" if integrity_ok else "warning",
                 "data_type": self.data_type,
             }
 
-            print(f"[HybridRecorder] \u25a0 Recording stopped: {self.session_dir}")
-            print(f"[HybridRecorder]   Duration: {effective_duration:.1f}s (paused {self._total_pause_seconds:.1f}s)")
+            print(f"[HybridRecorder] ◼ Recording stopped: {self.session_dir}")
+            print(f"[HybridRecorder]   Duration: {reported_duration:.1f}s (wall: {effective_duration:.1f}s, paused {self._total_pause_seconds:.1f}s)")
             print(f"[HybridRecorder]   Rows: {self.row_count} (expected: {expected_rows})")
             integrity_label = "\u2705 Valid" if integrity_ok else "\u26a0\ufe0f Mismatch"
             print(f"[HybridRecorder]   Integrity: {integrity_label}")
@@ -297,6 +301,18 @@ class HybridRecorder:
             self.channels = []
 
             return result
+
+    def update_actual_srate(self, rate: float) -> None:
+        """Correct sample_rate mid-recording when the LSL stream nominal rate
+        differs from the configured value.  Thread-safe."""
+        with self._lock:
+            corrected = int(round(rate))
+            if corrected != self.sample_rate and corrected > 0:
+                print(
+                    f"[HybridRecorder] ⚠ Correcting sample_rate: "
+                    f"{self.sample_rate} → {corrected} Hz"
+                )
+                self.sample_rate = corrected
 
     # ------------------------------------------------------------------
     #  Status / List / Delete

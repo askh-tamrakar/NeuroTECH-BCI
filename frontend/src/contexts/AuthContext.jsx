@@ -2,115 +2,203 @@ import React, { createContext, useState, useEffect, useContext } from 'react'
 
 const AuthContext = createContext(null)
 
-// PHP Bridge URL - Updated to the provided working host
-const API_BASE_URL = 'https://neurotech.withaspire.in/auth.php'
+// Remote PHP bridge
+const REMOTE_AUTH_URL = 'https://neurotech.withaspire.in/auth.php'
+
+// Local Flask backend — same origin as the app when served through the Python server
+const LOCAL_AUTH_BASE = `${window.location.protocol}//${window.location.hostname}:5000/api/auth`
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
+  const [isLocalAuth, setIsLocalAuth] = useState(false)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     const token = localStorage.getItem('bci_token')
     const userData = localStorage.getItem('bci_user')
+    const localFlag = localStorage.getItem('bci_auth_local') === '1'
     if (token && userData) {
       setUser(JSON.parse(userData))
+      setIsLocalAuth(localFlag)
     }
     setLoading(false)
   }, [])
 
-  const signup = async (email, password, name, username, profileImage = null) => {
-    try {
-      const payload = { email, password, name, username }
-      if (profileImage) {
-        payload.profile_image = profileImage
-      }
+  // -------------------------------------------------------------------------
+  // Helpers
+  // -------------------------------------------------------------------------
 
-      const res = await fetch(`${API_BASE_URL}?action=signup`, {
+  const _persistSession = (token, userObj, local) => {
+    localStorage.setItem('bci_token', token)
+    localStorage.setItem('bci_user', JSON.stringify(userObj))
+    if (local) {
+      localStorage.setItem('bci_auth_local', '1')
+    } else {
+      localStorage.removeItem('bci_auth_local')
+    }
+    setUser(userObj)
+    setIsLocalAuth(local)
+  }
+
+  // -------------------------------------------------------------------------
+  // signup
+  // -------------------------------------------------------------------------
+
+  const signup = async (email, password, name, username, profileImage = null) => {
+    const payload = { email, password, name, username }
+    if (profileImage) payload.profile_image = profileImage
+
+    // Try remote first
+    try {
+      const res = await fetch(`${REMOTE_AUTH_URL}?action=signup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
+      })
+      const data = await res.json()
+      if (data.status === 'success') return { success: true, email }
+      if (data.status === 'partial_success') return { success: true, email, partial: true, debug: data.debug }
+      if (data.status === 'unverified_exists') return { success: false, status: data.status, email: data.email, message: data.message }
+      return { success: false, message: data.message }
+    } catch {
+      // Network error — fall back to local
+    }
+
+    try {
+      const res = await fetch(`${LOCAL_AUTH_BASE}/signup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
       })
       const data = await res.json()
       if (data.status === 'success') {
-        return { success: true, email }
-      } else if (data.status === 'partial_success') {
-        return { success: true, email, partial: true, debug: data.debug }
-      } else if (data.status === 'unverified_exists') {
-        return { success: false, status: data.status, email: data.email, message: data.message }
-      } else {
-        return { success: false, message: data.message }
+        return { success: true, email, local: true, skipOtp: true }
       }
-    } catch (err) {
-      console.error('Signup error:', err)
-      return { success: false, message: 'Connection to auth server failed' }
+      return { success: false, message: data.message }
+    } catch {
+      return { success: false, message: 'No connection to authentication servers. Make sure the local backend is running.' }
     }
   }
 
+  // -------------------------------------------------------------------------
+  // verifyOtp / resendOtp  (remote-only — local accounts skip OTP)
+  // -------------------------------------------------------------------------
+
   const verifyOtp = async (email, otp) => {
     try {
-      const res = await fetch(`${API_BASE_URL}?action=verify-otp`, {
+      const res = await fetch(`${REMOTE_AUTH_URL}?action=verify-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, otp })
+        body: JSON.stringify({ email, otp }),
       })
       const data = await res.json()
-      if (data.status === 'success') {
-        return { success: true, message: data.message }
-      } else {
-        return { success: false, message: data.message }
-      }
+      if (data.status === 'success') return { success: true, message: data.message }
+      return { success: false, message: data.message }
     } catch (err) {
       console.error('OTP verification error:', err)
-      return { success: false, message: 'Verification failed' }
+      return { success: false, message: 'Verification failed — no connection to remote server' }
     }
   }
 
   const resendOtp = async (email) => {
     try {
-      const res = await fetch(`${API_BASE_URL}?action=resend-otp`, {
+      const res = await fetch(`${REMOTE_AUTH_URL}?action=resend-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email })
+        body: JSON.stringify({ email }),
       })
       const data = await res.json()
       return { success: data.status === 'success', message: data.message, debug: data.debug }
-    } catch (err) {
-      return { success: false, message: 'Failed to resend' }
+    } catch {
+      return { success: false, message: 'Failed to resend — no connection to remote server' }
     }
   }
 
+  // -------------------------------------------------------------------------
+  // login
+  // -------------------------------------------------------------------------
+
   const login = async (username, password) => {
+    let remoteError = null
+
+    // Try remote first
     try {
-      const res = await fetch(`${API_BASE_URL}?action=login`, {
+      const res = await fetch(`${REMOTE_AUTH_URL}?action=login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password })
+        body: JSON.stringify({ username, password }),
       })
       const data = await res.json()
       if (data.status === 'success') {
-        localStorage.setItem('bci_token', data.token)
-        localStorage.setItem('bci_user', JSON.stringify(data.user))
-        setUser(data.user)
+        _persistSession(data.token, data.user, false)
         return { success: true }
-      } else if (data.status === 'unverified_exists') {
-        return { success: false, status: data.status, email: data.email, message: data.message }
-      } else {
-        return { success: false, message: data.message }
       }
-    } catch (err) {
-      console.error('Login error:', err)
-      return { success: false, message: 'Connection to auth server failed' }
+      if (data.status === 'unverified_exists') {
+        return { success: false, status: data.status, email: data.email, message: data.message }
+      }
+      // Remote reachable but rejected — store the error, still try local
+      // (user may only exist locally, e.g. created during server downtime)
+      remoteError = data.message
+    } catch {
+      // Network error — fall through to local
+    }
+
+    // Try local (runs on remote network error OR remote "invalid credentials")
+    try {
+      const res = await fetch(`${LOCAL_AUTH_BASE}/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      })
+      const data = await res.json()
+      if (data.status === 'success') {
+        _persistSession(data.token, data.user, true)
+        return { success: true, local: true }
+      }
+      // Both failed — show remote error if remote was reachable, otherwise local error
+      return { success: false, message: remoteError || data.message }
+    } catch {
+      return { success: false, message: remoteError || 'No connection to authentication servers. Make sure the local backend is running.' }
     }
   }
+
+  // -------------------------------------------------------------------------
+  // logout
+  // -------------------------------------------------------------------------
 
   const logout = () => {
     localStorage.removeItem('bci_token')
     localStorage.removeItem('bci_user')
+    localStorage.removeItem('bci_auth_local')
     setUser(null)
+    setIsLocalAuth(false)
   }
 
+  // -------------------------------------------------------------------------
+  // Admin: sync local users to remote server
+  // -------------------------------------------------------------------------
+
+  const syncToServer = async () => {
+    const token = localStorage.getItem('bci_token')
+    try {
+      const res = await fetch(`${LOCAL_AUTH_BASE}/sync`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+      })
+      const data = await res.json()
+      return data
+    } catch (err) {
+      return { status: 'error', message: `Sync failed: ${err.message}` }
+    }
+  }
+
+  const isAdmin = Boolean(user?.is_admin)
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, signup, verifyOtp, resendOtp }}>
+    <AuthContext.Provider value={{ user, loading, isLocalAuth, isAdmin, login, logout, signup, verifyOtp, resendOtp, syncToServer }}>
       {children}
     </AuthContext.Provider>
   )
@@ -123,3 +211,4 @@ export function useAuth() {
   }
   return context
 }
+

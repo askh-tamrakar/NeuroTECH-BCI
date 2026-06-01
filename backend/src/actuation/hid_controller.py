@@ -6,6 +6,13 @@ import threading
 from pathlib import Path
 from pynput.keyboard import Controller as KeyboardController, Key
 from pynput.mouse import Button, Controller as MouseController
+
+# UTF-8 stdout so Unicode symbols don't cause UnicodeEncodeError in subprocesses
+try:
+    if hasattr(sys.stdout, 'reconfigure'):
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+except Exception:
+    pass
 try:
     import pylsl
     LSL_AVAILABLE = True
@@ -109,13 +116,13 @@ class HIDController:
                     val = val.lower()
                     
                 key = self.special_keys.get(val, val)
-                log.info(f"Keyboard Action: {val} -> mapped to {key}")
+                print(f"[ok] ◎ HID  │ Keyboard  {val!r}")
                 self.keyboard.press(key)
                 time.sleep(0.1) # Increased from 0.05 for better compatibility
                 self.keyboard.release(key)
                 
             elif type == "Mouse":
-                log.info(f"Mouse Action: {val}")
+                print(f"[ok] ◎ HID  │ Mouse     {val!r}")
                 if val == "Left Click":
                     self.mouse.click(Button.left, 1)
                 elif val == "Right Click":
@@ -144,7 +151,7 @@ class HIDController:
         else:
             # Default: SingleBlink = Space, DoubleBlink not mapped
             if event_name == "SingleBlink":
-                log.info("SingleBlink → default Space")
+                print(f"[ok] ◎ HID  │ EOG  SingleBlink → Space (default)")
                 self.keyboard.press(Key.space)
                 time.sleep(0.1)
                 self.keyboard.release(Key.space)
@@ -188,8 +195,10 @@ class HIDController:
                     try:
                         data = json.loads(sample[0])
                         event_name = data.get("event")
-                        print(f"Received Event: {event_name}")
                         if not event_name:
+                            continue
+                        # Skip real-time prediction feedback events (handled by frontend only)
+                        if event_name == "emg_prediction":
                             continue
                         # Handle SSVEP target events
                         if event_name.startswith("TARGET_") or event_name == "DETECTION":
@@ -207,7 +216,7 @@ class HIDController:
                         else:
                             log.debug(f"Unhandled event type: {event_name}")
                     except Exception as e:
-                        print(f"Event Parse Error: {e}")
+                        log.error(f"Event Parse Error: {e}")
                         
             except Exception as e:
                 log.error(f"Loop Error: {e}")

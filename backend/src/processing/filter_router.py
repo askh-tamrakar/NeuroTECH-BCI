@@ -203,14 +203,12 @@ class FilterRouter:
                     
                     # 1. Channel mapping changed? Reconfigure pipeline
                     if map_hash != last_map_hash:
-                        print("[Router] [CONFIG] Channel mapping changed - reconfiguring pipeline...")
                         self._configure_pipeline()
                         last_map_hash = map_hash
                         last_cfg_hash = cfg_hash
                     
                     # 2. Only filter params changed? Update processors
                     elif cfg_hash != last_cfg_hash:
-                        print("[Router] [CONFIG] Filter parameters updated - updating processors...")
                         for p in self.channel_processors.values():
                             if p and hasattr(p, 'update_config'):
                                 p.update_config(self.config, self.sr)
@@ -310,22 +308,20 @@ class FilterRouter:
             return
         
         self.num_channels = num_channels
-        print(f"[Router] 📍 Configuring pipeline for {num_channels} channels...")
-        
+
         # ========== IMPROVED: Handle all mapping cases ==========
         try:
             for i in range(num_channels):
                 ch_key = f"ch{i}"
-                
+
                 # CASE 1: Channel in config
                 if ch_key in mapping_cfg:
                     cinfo = mapping_cfg[ch_key]
                     enabled = cinfo.get("enabled", True)
                     sensor_type = cinfo.get("sensor", "UNKNOWN").upper()
-                    
+
                     # CASE 2: Channel disabled
                     if not enabled:
-                        print(f" [{i}] → {sensor_type} (DISABLED - Pass-through)")
                         self.channel_mapping[i] = {
                             "sensor": sensor_type,
                             "enabled": False,
@@ -334,7 +330,7 @@ class FilterRouter:
                         }
                         self.channel_processors[i] = None
                         continue
-                    
+
                     # CASE 3: Channel enabled with processor
                     self.channel_mapping[i] = {
                         "sensor": sensor_type,
@@ -342,28 +338,18 @@ class FilterRouter:
                         "label": f"{sensor_type}_{i}",
                         "processor": sensor_type
                     }
-                    
-                    # Create processor instance for this channel
+
                     if sensor_type == "EMG":
                         self.channel_processors[i] = EMGFilterProcessor(self.config, self.sr, channel_key=ch_key)
-                        print(f" [{i}] → EMG (EMG Processor) | Key: {ch_key}")
-                    
                     elif sensor_type == "EOG":
                         self.channel_processors[i] = EOGFilterProcessor(self.config, self.sr, channel_key=ch_key)
-                        print(f" [{i}] → EOG (EOG Processor) | Key: {ch_key}")
-                    
                     elif sensor_type == "EEG":
                         self.channel_processors[i] = EEGFilterProcessor(self.config, self.sr, channel_key=ch_key)
-                        print(f" [{i}] → EEG (EEG Processor) | Key: {ch_key}")
-                    
                     else:
-                        # Unknown type - pass-through
                         self.channel_processors[i] = None
-                        print(f" [{i}] → {sensor_type} (Unknown - Pass-through)")
-                
+
                 # CASE 4: Channel NOT in config - Apply default
                 else:
-                    print(f" [{i}] → UNMAPPED (applying default: pass-through)")
                     self.channel_mapping[i] = {
                         "sensor": "UNMAPPED",
                         "enabled": True,
@@ -401,6 +387,43 @@ class FilterRouter:
                 # print(f"[Router] [OUTLET] Publishing unified stream: {PROCESSED_STREAM_NAME}")
                 # print(f"[Router]    Channels: {num_channels} @ {self.sr} Hz")
                 print(f"[Router] [OK] Pipeline configured successfully (Routing to Stream Manager)")
+
+                # ── Session filter config table ──────────────────────────
+                filters_cfg = self.config.get("filters", {})
+                bar = "─" * 54
+                print(f"[config] {bar}")
+                print(f"[config]   Filter Session  │  {self.sr} Hz  │  {num_channels} ch")
+                print(f"[config] {bar}")
+                for idx in range(num_channels):
+                    ch_info   = self.channel_mapping.get(idx, {})
+                    sensor    = ch_info.get("sensor", "UNMAPPED")
+                    enabled   = ch_info.get("enabled", True)
+                    label     = ch_info.get("label", f"ch{idx}")
+                    if not enabled:
+                        print(f"[config]   ch{idx}  {sensor:<5} │ DISABLED (pass-through)")
+                        continue
+                    fc = filters_cfg.get(sensor, {})
+                    if sensor == "EMG":
+                        lp  = fc.get("cutoff", "?")
+                        ord_ = fc.get("order", "?")
+                        env = fc.get("envelope_cutoff", None)
+                        env_str = f"  envelope {env} Hz" if env else ""
+                        print(f"[config]   ch{idx}  {sensor:<5} │ lowpass {lp} Hz  ord={ord_}{env_str}")
+                    elif sensor == "EOG":
+                        lp  = fc.get("cutoff", "?")
+                        ord_ = fc.get("order", "?")
+                        print(f"[config]   ch{idx}  {sensor:<5} │ lowpass {lp} Hz  ord={ord_}")
+                    elif sensor == "EEG":
+                        parts = []
+                        for f in fc.get("filters", []):
+                            if f.get("type") == "notch":
+                                parts.append(f"notch {f.get('freq','?')} Hz")
+                            elif f.get("type") == "bandpass":
+                                parts.append(f"bandpass {f.get('low','?')}–{f.get('high','?')} Hz")
+                        print(f"[config]   ch{idx}  {sensor:<5} │ {('  '.join(parts)) or 'default'}")
+                    else:
+                        print(f"[config]   ch{idx}  {sensor:<5} │ pass-through")
+                print(f"[config] {bar}")
                 
             except Exception as e:
                 print(f"[Router] [ERROR] Error configuring pipeline: {e}")
@@ -417,9 +440,7 @@ class FilterRouter:
 
         
         self.running = True
-        print("[Router] [START] Starting processing loop...")
-        print("[Router] Press Ctrl+C to stop\n")
-        
+
         sample_count = 0
         error_count = 0
         
@@ -475,11 +496,6 @@ class FilterRouter:
                                         self.stream_socket = None
 
                             sample_count += 1
-                            
-                            # Log progress every 512 samples (1 second at 512 Hz)
-                            # Log progress every 5 seconds (approx 2560 samples at 512 Hz)
-                            if sample_count % 2560 == 0:
-                                print(f"[Router] ✅ {sample_count} samples processed")
                     
                     except Exception as e:
                         error_count += 1
@@ -516,12 +532,6 @@ class FilterRouter:
 
 def main():
     """Main entry point."""
-    print("=" * 60)
-    print("  🧬 BioSignals Filter Router")
-    print("  Processing multi-channel biosignals with independent filtering")
-    print("=" * 60)
-    print()
-    
     router = FilterRouter()
     
     if router.resolve_raw_stream(timeout=3.0):

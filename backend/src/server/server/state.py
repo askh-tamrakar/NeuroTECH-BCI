@@ -20,7 +20,8 @@ class WebServerState:
         self.session = SessionManager()
 
         # Hybrid recording (server-side CSV + metadata.json)
-        self.hybrid_recorder = None      # HybridRecorder instance
+        self.hybrid_recorder = None      # HybridRecorder instance (primary)
+        self.extra_recorders: list = []  # additional HybridRecorder instances (Case 2 split)
         self.recording_service = None    # RecordingService instance
 
 # Global instance

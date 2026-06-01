@@ -7,9 +7,9 @@ from pathlib import Path
 import joblib
 import numpy as np
 import pandas as pd
-from sklearn.ensemble import RandomForestClassifier
+import xgboost as xgb
 from sklearn.metrics import accuracy_score, confusion_matrix
-from sklearn.model_selection import train_test_split, GroupShuffleSplit, GroupKFold
+from sklearn.model_selection import train_test_split, GroupShuffleSplit, GroupKFold, StratifiedShuffleSplit
 from sklearn.preprocessing import StandardScaler
 
 from src.database.db_manager import db_manager
@@ -184,10 +184,45 @@ def _prepare_dataframe(sensor: str, table_name: str):
 def _split_train_and_test(df: pd.DataFrame, test_ratio: float):
     indices = np.arange(len(df))
     if 'batch_id' in df.columns and df['batch_id'].notna().any():
-        gss = GroupShuffleSplit(n_splits=1, test_size=test_ratio, random_state=42)
-        # Handle cases where batch_id might be missing for some rows by filling them
-        groups = df['batch_id'].fillna('unknown_batch')
-        train_idx, test_idx = next(gss.split(df, groups=groups))
+        # Build a group->label mapping using each batch's most common label.
+        # Then use StratifiedShuffleSplit on the *groups* so that every class is
+        # proportionally represented in the test set (fixes the imbalance caused
+        # by plain GroupShuffleSplit which splits groups at random).
+        filled = df['batch_id'].fillna('unknown_batch')
+        group_labels = (
+            df.assign(_group=filled)
+            .groupby('_group')['label']
+            .agg(lambda x: x.mode()[0])
+        )
+        group_ids = group_labels.index.to_numpy()
+        group_label_values = group_labels.values
+
+        n_classes = len(np.unique(group_label_values))
+        min_per_class = int(np.min(np.bincount(
+            np.searchsorted(np.unique(group_label_values), group_label_values)
+        )))
+        # StratifiedShuffleSplit needs at least 2 members per class in both
+        # train and test splits; fall back to plain GroupShuffleSplit when the
+        # data is too sparse.
+        n_test_groups = max(1, int(round(test_ratio * len(group_ids))))
+        n_train_groups = len(group_ids) - n_test_groups
+        can_stratify = (n_classes > 1
+                        and min_per_class >= 2
+                        and n_test_groups >= n_classes
+                        and n_train_groups >= n_classes)
+        if can_stratify:
+            sss = StratifiedShuffleSplit(n_splits=1, test_size=test_ratio, random_state=42)
+            g_train_idx, g_test_idx = next(sss.split(group_ids, group_label_values))
+            train_groups = set(group_ids[g_train_idx])
+            test_groups = set(group_ids[g_test_idx])
+        else:
+            gss = GroupShuffleSplit(n_splits=1, test_size=test_ratio, random_state=42)
+            train_idx, test_idx = next(gss.split(df, groups=filled))
+            return df.iloc[train_idx].copy(), df.iloc[test_idx].copy()
+
+        train_mask = filled.isin(train_groups)
+        test_mask = filled.isin(test_groups)
+        return df[train_mask].copy(), df[test_mask].copy()
     else:
         stratify = df['label'] if df['label'].nunique() > 1 else None
         train_idx, test_idx = train_test_split(
@@ -283,7 +318,7 @@ def _candidate_values(min_value, max_value, resolution: int, value_type: str):
     return values
 
 
-def _rf_candidate_grid(params: dict):
+def _xgb_candidate_grid(params: dict):
     resolution = _resolution_count(params)
     n_estimators_values = _candidate_values(
         _coalesce_param(params, "n_estimators_min", "n_estimators", default=100),
@@ -292,23 +327,34 @@ def _rf_candidate_grid(params: dict):
         "int",
     )
     max_depth_values = _candidate_values(
-        _coalesce_param(params, "max_depth_min", "max_depth", default=10),
-        _coalesce_param(params, "max_depth_max", "max_depth", default=10),
+        _coalesce_param(params, "max_depth_min", "max_depth", default=6),
+        _coalesce_param(params, "max_depth_max", "max_depth", default=6),
         resolution,
-        "optional_int",
+        "int",
     )
-    impurity_values = _candidate_values(
-        _coalesce_param(params, "min_impurity_decrease_min", "min_impurity_decrease", default=0.0),
-        _coalesce_param(params, "min_impurity_decrease_max", "min_impurity_decrease", default=0.0),
+    learning_rate_values = _candidate_values(
+        _coalesce_param(params, "learning_rate_min", "learning_rate", default=0.1),
+        _coalesce_param(params, "learning_rate_max", "learning_rate", default=0.1),
+        resolution,
+        "float",
+    )
+    gamma_values = _candidate_values(
+        _coalesce_param(params, "gamma_min", "gamma", default=0.0),
+        _coalesce_param(params, "gamma_max", "gamma", default=0.0),
         resolution,
         "float",
     )
     candidates = []
-    for n_estimators, max_depth, min_impurity_decrease in product(n_estimators_values, max_depth_values, impurity_values):
+    subsample = float(_coalesce_param(params, "subsample", default=0.8))
+    colsample_bytree = float(_coalesce_param(params, "colsample_bytree", default=0.8))
+    for n_estimators, max_depth, learning_rate, gamma in product(n_estimators_values, max_depth_values, learning_rate_values, gamma_values):
         candidates.append({
             "n_estimators": int(n_estimators),
-            "max_depth": max_depth,
-            "min_impurity_decrease": float(min_impurity_decrease),
+            "max_depth": int(max_depth),
+            "learning_rate": float(learning_rate),
+            "gamma": float(gamma),
+            "subsample": subsample,
+            "colsample_bytree": colsample_bytree,
             "search_resolution": resolution,
         })
     return candidates
@@ -394,10 +440,22 @@ def _build_result_payload(sensor: str, model_name: str, metadata: dict, evaluati
     return payload
 
 
-def _fit_random_forest(sensor: str, train_df: pd.DataFrame, test_df: pd.DataFrame, feature_cols: list[str], params: dict, table_name: str, model_name: str, progress_callback=None):
+def _fit_xgboost(sensor: str, train_df: pd.DataFrame, test_df: pd.DataFrame, feature_cols: list[str], params: dict, table_name: str, model_name: str, progress_callback=None):
+    # XGBoost requires contiguous 0-based class labels ([0,1,2], not [0,1,3]).
+    # Remap if the actual labels in the data are non-contiguous (e.g. a class was
+    # deleted from the DB after recording, leaving a gap).
+    _all_y = np.concatenate([train_df['label'].astype(int).values, test_df['label'].astype(int).values])
+    _unique = sorted(set(_all_y))
+    if _unique != list(range(len(_unique))):
+        _remap = {orig: enc for enc, orig in enumerate(_unique)}
+        train_df = train_df.copy()
+        test_df = test_df.copy()
+        train_df['label'] = train_df['label'].astype(int).map(_remap)
+        test_df['label'] = test_df['label'].astype(int).map(_remap)
+
     split_cfg = _resolve_split_configuration(params.get('train_split', 0.7), params.get('val_split', 0.15), params.get('test_split', 0.15), params.get('n_folds', 2))
     resolved_split = split_cfg["resolved"]
-    candidates = _rf_candidate_grid(params)
+    candidates = _xgb_candidate_grid(params)
     folds = _build_folds(train_df, resolved_split["k_folds"])
     history = []
     best = None
@@ -417,25 +475,41 @@ def _fit_random_forest(sensor: str, train_df: pd.DataFrame, test_df: pd.DataFram
             "history": [],
         })
 
+    # Pre-compute scaled fold data ONCE per fold, shared across all candidates.
+    # This eliminates (n_candidates - 1) * n_folds redundant StandardScaler fits.
+    _has_batch = 'batch_id' in train_df.columns and train_df['batch_id'].notna().any()
+    fold_cache = []
+    for _fn, (train_idx, val_idx) in enumerate(folds, start=1):
+        _fold_train = train_df.iloc[train_idx]
+        _scaler = StandardScaler()
+        _x_train = _scaler.fit_transform(_fold_train[feature_cols].fillna(0.0))
+        _y_train = _fold_train['label'].astype(int).values
+        if len(val_idx) > 0:
+            _fold_val = train_df.iloc[val_idx]
+            _x_val = _scaler.transform(_fold_val[feature_cols].fillna(0.0))
+            _y_val = _fold_val['label'].astype(int).values
+            _n_val = int(_fold_val['batch_id'].nunique()) if _has_batch else len(_fold_val)
+        else:
+            _x_val, _y_val = _x_train, _y_train
+            _n_val = 0
+        _n_train = int(_fold_train['batch_id'].nunique()) if _has_batch else len(_fold_train)
+        fold_cache.append((_fn, _scaler, _x_train, _y_train, _x_val, _y_val, _n_train, _n_val))
+
     for candidate_index, candidate_params in enumerate(candidates):
         hyperparameters = _hyperparameters_for_response(sensor, candidate_params, resolved_split)
-        for fold_number, (train_idx, val_idx) in enumerate(folds, start=1):
-            fold_train = train_df.iloc[train_idx].copy()
-            fold_val = train_df.iloc[val_idx].copy()
-            scaler = StandardScaler()
-            x_train = scaler.fit_transform(fold_train[feature_cols].fillna(0.0))
-            y_train = fold_train['label'].astype(int)
-            if len(fold_val) == 0:
-                x_val = x_train
-                y_val = y_train
-            else:
-                x_val = scaler.transform(fold_val[feature_cols].fillna(0.0))
-                y_val = fold_val['label'].astype(int)
-
-            model = RandomForestClassifier(
+        for fold_number, scaler, x_train, y_train, x_val, y_val, n_train_batches, n_val_batches in fold_cache:
+            model = xgb.XGBClassifier(
                 n_estimators=int(candidate_params.get("n_estimators", 100)),
-                max_depth=candidate_params.get("max_depth"),
-                min_impurity_decrease=float(candidate_params.get("min_impurity_decrease", 0.0)),
+                max_depth=int(candidate_params.get("max_depth", 6)),
+                learning_rate=float(candidate_params.get("learning_rate", 0.1)),
+                gamma=float(candidate_params.get("gamma", 0.0)),
+                subsample=float(candidate_params.get("subsample", 0.8)),
+                colsample_bytree=float(candidate_params.get("colsample_bytree", 0.8)),
+                objective='multi:softprob',
+                tree_method='hist',
+                eval_metric='mlogloss',
+                importance_type=str(params.get('importance_type', 'gain')),
+                n_jobs=-1,
                 random_state=42,
             )
             model.fit(x_train, y_train)
@@ -444,8 +518,9 @@ def _fit_random_forest(sensor: str, train_df: pd.DataFrame, test_df: pd.DataFram
             val_accuracy = accuracy_score(y_val, model.predict(x_val))
             fold_model_id = generate_model_id(candidate_index, fold_number)
             rejected_paths = get_rejected_model_paths(sensor, fold_model_id)
-            joblib.dump(model, rejected_paths["model"])
-            joblib.dump(scaler, rejected_paths["scaler"])
+            # compress=1: ~60% smaller files, measurably faster for large grids.
+            joblib.dump(model, rejected_paths["model"], compress=1)
+            joblib.dump(scaler, rejected_paths["scaler"], compress=1)
             history_item = _training_history_item(
                 candidate_index,
                 fold_number,
@@ -454,8 +529,8 @@ def _fit_random_forest(sensor: str, train_df: pd.DataFrame, test_df: pd.DataFram
                 hyperparameters["selected_hyperparameters"],
                 float(train_accuracy),
                 float(val_accuracy),
-                int(fold_train['batch_id'].nunique()) if 'batch_id' in fold_train.columns and fold_train['batch_id'].notna().any() else int(len(fold_train)),
-                int(fold_val['batch_id'].nunique()) if 'batch_id' in fold_val.columns and fold_val['batch_id'].notna().any() else int(len(fold_val)),
+                n_train_batches,
+                n_val_batches,
             )
             _save_json(rejected_paths["meta"], {
                 **history_item,
@@ -493,8 +568,13 @@ def _fit_random_forest(sensor: str, train_df: pd.DataFrame, test_df: pd.DataFram
     y_test = test_df['label'].astype(int)
     y_pred = best["model"].predict(x_test)
     test_accuracy = float(accuracy_score(y_test, y_pred))
-    std_labels = LABELS_MAP[sensor]
-    confusion = confusion_matrix(y_test, y_pred, labels=std_labels).tolist()
+    # Use the encoded 0-based label range that _unique was remapped to.
+    # Using LABELS_MAP[sensor] here would incorrectly map remapped indices back
+    # to their original slot names (e.g. Scissors remapped to index 2 would
+    # appear as "Paper" in the matrix).  _unique holds the original values in
+    # the order they were encoded so display names resolve correctly.
+    _enc_labels = list(range(len(_unique)))
+    confusion = confusion_matrix(y_test, y_pred, labels=_enc_labels).tolist()
     feature_importances = dict(zip(feature_cols, best["model"].feature_importances_.tolist()))
 
     all_df = pd.concat([train_df, test_df], axis=0)
@@ -510,7 +590,7 @@ def _fit_random_forest(sensor: str, train_df: pd.DataFrame, test_df: pd.DataFram
         "best_fold_id": best["history_item"]["model_id"],
         "candidate_index": best["history_item"]["candidate_index"],
         "fold_index": best["history_item"]["fold_index"],
-        "classifier": "Random Forest",
+        "classifier": "XGBoost",
         "session_name": _extract_session_names(all_df, table_name)[0] if _extract_session_names(all_df, table_name) else table_name,
         "session_names": _extract_session_names(all_df, table_name),
         "n_samples": n_samples_total,
@@ -536,10 +616,10 @@ def _fit_random_forest(sensor: str, train_df: pd.DataFrame, test_df: pd.DataFram
         "hyperparameters": best["hyperparameters"],
         "group_counts": {},
         "confusion_matrix": confusion,
-        "labels": [DISPLAY_LABELS[sensor].get(label, str(label)) for label in std_labels],
+        "labels": [DISPLAY_LABELS[sensor].get(orig, str(orig)) for orig in _unique],
         "feature_importances": feature_importances,
         "feature_order": feature_cols,
-        "tree_structure": tree_to_json(best["model"].estimators_[0], feature_cols),
+        "tree_structure": tree_to_json(best["model"], feature_cols, 0),
         "artifact_path": _artifact_path_for_ui(final_paths["model"]),
         "created_at": datetime.now().isoformat(),
         "table_name": table_name,
@@ -562,7 +642,7 @@ def _fit_random_forest(sensor: str, train_df: pd.DataFrame, test_df: pd.DataFram
     return _build_result_payload(sensor, model_name, metadata)
 
 
-def train_model(sensor, n_estimators=100, max_depth=None, min_impurity_decrease=0.0, train_split=0.7, val_split=0.15, test_split=0.15, n_folds=2, table_name=None, model_name=None, progress_callback=None, **search_params):
+def train_model(sensor, n_estimators=100, max_depth=6, learning_rate=0.1, gamma=0.0, subsample=0.8, colsample_bytree=0.8, train_split=0.7, val_split=0.15, test_split=0.15, n_folds=2, table_name=None, model_name=None, progress_callback=None, **search_params):
     sensor = sensor.upper()
     table_name = table_name or f"{sensor.lower()}_windows"
     model_name = model_name or generate_model_id(0, 0)
@@ -575,10 +655,13 @@ def train_model(sensor, n_estimators=100, max_depth=None, min_impurity_decrease=
     if train_df.empty or test_df.empty:
         return {"error": "Unable to produce non-empty train/test partitions."}
 
-    return _fit_random_forest(sensor, train_df, test_df, feature_cols, {
+    return _fit_xgboost(sensor, train_df, test_df, feature_cols, {
         "n_estimators": n_estimators,
         "max_depth": max_depth,
-        "min_impurity_decrease": min_impurity_decrease,
+        "learning_rate": learning_rate,
+        "gamma": gamma,
+        "subsample": subsample,
+        "colsample_bytree": colsample_bytree,
         "train_split": train_split,
         "val_split": val_split,
         "test_split": test_split,
@@ -688,14 +771,20 @@ def evaluate_saved_model(sensor='EMG', table_name=None, model_name=None):
     feature_cols = metadata.get("feature_order") or get_feature_cols(sensor)
     x_eval = scaler.transform(df[feature_cols].fillna(0.0))
     y_eval = df['label'].astype(int)
+    # Apply the same remap used during training so the model's 0-based encoded
+    # predictions align with the eval labels.
+    _eval_unique = sorted(set(y_eval.values))
+    if _eval_unique != list(range(len(_eval_unique))):
+        _eval_remap = {orig: enc for enc, orig in enumerate(_eval_unique)}
+        y_eval = y_eval.map(_eval_remap)
+    _eval_enc_labels = list(range(len(_eval_unique)))
     y_pred = model.predict(x_eval)
     accuracy = float(accuracy_score(y_eval, y_pred))
-    std_labels = LABELS_MAP[sensor]
     live_metrics = {
         "accuracy": accuracy,
         "test_accuracy": accuracy,
-        "confusion_matrix": confusion_matrix(y_eval, y_pred, labels=std_labels).tolist(),
-        "labels": [DISPLAY_LABELS[sensor].get(label, str(label)) for label in std_labels],
+        "confusion_matrix": confusion_matrix(y_eval, y_pred, labels=_eval_enc_labels).tolist(),
+        "labels": [DISPLAY_LABELS[sensor].get(orig, str(orig)) for orig in _eval_unique],
         "n_samples": int(len(df)),
     }
     return _build_result_payload(sensor, model_name, metadata, evaluation_table=table_name, live_metrics=live_metrics)
@@ -711,12 +800,18 @@ def get_model_tree_structure(sensor='EMG', model_name=None, tree_index=0):
         return {"error": f"Model {name} not found"}
     model = joblib.load(paths["model"])
     feature_cols = _read_metadata(sensor, name).get("feature_order") or get_feature_cols(sensor)
-    if not hasattr(model, "estimators_"):
+    has_xgb = hasattr(model, 'get_booster')
+    has_rf = hasattr(model, 'estimators_')
+    if not has_xgb and not has_rf:
         return {"error": "Tree structure is not available for this model type"}
-    tree_index = max(0, min(int(tree_index), len(model.estimators_) - 1))
+    if has_xgb:
+        total_trees = len(model.get_booster().get_dump())
+    else:
+        total_trees = len(model.estimators_)
+    tree_index = max(0, min(int(tree_index), total_trees - 1))
     return {
         "status": "success",
         "tree_index": tree_index,
-        "total_trees": len(model.estimators_),
-        "tree_structure": tree_to_json(model.estimators_[tree_index], feature_cols)
+        "total_trees": total_trees,
+        "tree_structure": tree_to_json(model, feature_cols, tree_index)
     }

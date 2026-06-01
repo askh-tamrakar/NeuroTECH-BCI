@@ -148,7 +148,7 @@ def broadcast_events(socketio):
 
         try:
             # Pull sample (blocking for short time)
-            sample, ts = state.event_inlet.pull_sample(timeout=0.1)
+            sample, ts = state.event_inlet.pull_sample(timeout=0.0)
             
             if sample:
                 raw_event = sample[0]
@@ -264,14 +264,18 @@ def broadcast_data(socketio):
                 }
                 
                 socketio.emit('bio_data_batch', batch_payload)
-                
+                # Yield to the eventlet hub so ping/pong and WebSocket I/O
+                # green threads can run between emits.  Without this, the
+                # tight sample-drain loop starves other connections.
+                socketio.sleep(0)
+
                 batch_buffer = []
                 last_batch_time = now
 
                 if state.sample_count % 2560 == 0:
                      print(f"[LSLService] ✅ {state.sample_count} samples broadcast")
 
-            # Only yield when no samples were available (buffer empty)
+            # Yield when no samples were available (buffer empty)
             if samples_this_cycle == 0:
                 socketio.sleep(0.001)
 

@@ -1,7 +1,6 @@
 import os
 import sys
 import json
-import shutil
 from pathlib import Path
 
 # Try to find the project root dynamically, or fallback to the current file's ancestor
@@ -61,25 +60,10 @@ def get_runtime_state_dir() -> Path:
     return path
 
 
-def _json_copy_if_exists(candidates: list[Path], destination: Path) -> bool:
-    for candidate in candidates:
-        try:
-            if candidate.exists() and candidate.is_file():
-                destination.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(candidate, destination)
-                return True
-        except Exception:
-            continue
-    return False
-
 
 def ensure_runtime_config_files(default_payloads: dict[str, object] | None = None) -> Path:
-    """Ensure all config files exist in data/config/, migrating from legacy dirs if needed."""
+    """Ensure all config files exist in data/config/, writing defaults if missing."""
     config_dir = get_config_dir()
-    legacy_dirs = [
-        PROJECT_ROOT / "config",
-        PROJECT_ROOT / "backend" / "config",
-    ]
 
     if default_payloads is None:
         default_payloads = _DEFAULT_CONFIG_PAYLOADS
@@ -87,10 +71,6 @@ def ensure_runtime_config_files(default_payloads: dict[str, object] | None = Non
     for filename, payload in default_payloads.items():
         destination = config_dir / filename
         if destination.exists():
-            continue
-
-        candidates = [legacy_dir / filename for legacy_dir in legacy_dirs]
-        if _json_copy_if_exists(candidates, destination):
             continue
 
         destination.parent.mkdir(parents=True, exist_ok=True)

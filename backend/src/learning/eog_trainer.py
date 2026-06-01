@@ -3,7 +3,7 @@ import numpy as np
 import joblib
 import json
 from pathlib import Path
-from sklearn.ensemble import RandomForestClassifier
+import xgboost as xgb
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, confusion_matrix
@@ -103,12 +103,18 @@ def train_eog_model(n_estimators=100, max_depth=None, min_impurity_decrease=0.0,
     X_train_scaled = scaler.fit_transform(X_train)
     X_test_scaled = scaler.transform(X_test)
 
-    # Train Random Forest
-    rf = RandomForestClassifier(
-        n_estimators=n_estimators, 
-        max_depth=max_depth, 
-        min_impurity_decrease=min_impurity_decrease,
-        random_state=42
+    # Train XGBoost
+    rf = xgb.XGBClassifier(
+        n_estimators=n_estimators,
+        max_depth=max_depth if max_depth is not None else 6,
+        learning_rate=0.1,
+        gamma=0.0,
+        subsample=0.8,
+        colsample_bytree=0.8,
+        objective='multi:softprob',
+        tree_method='hist',
+        eval_metric='mlogloss',
+        random_state=42,
     )
     rf.fit(X_train_scaled, y_train)
 
@@ -144,7 +150,7 @@ def train_eog_model(n_estimators=100, max_depth=None, min_impurity_decrease=0.0,
     load_model(model_name)
 
     # Tree Visualization (First Estimator)
-    tree_struct = tree_to_json(rf.estimators_[0], EOG_FEATURES)
+    tree_struct = tree_to_json(rf, EOG_FEATURES, 0)
 
     return {
         "status": "success",
@@ -208,7 +214,7 @@ def evaluate_saved_eog_model(table_name="eog_windows", model_name=None):
         "model_path": str(paths["model"]),
         "model_name": model_name or ACTIVE_MODEL_NAME or "eog_rf",
         "feature_importances": dict(zip(EOG_FEATURES, display_model.feature_importances_.tolist())),
-        "tree_structure": tree_to_json(display_model.estimators_[0], EOG_FEATURES),
+        "tree_structure": tree_to_json(display_model, EOG_FEATURES, 0),
         "hyperparameters": hyperparameters
     }
 

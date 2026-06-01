@@ -6,7 +6,31 @@ import argparse
 from typing import Optional
 from pylsl import StreamInlet, resolve_byprop
 
+# UTF-8 stdout so Unicode symbols don't cause UnicodeEncodeError in subprocesses
+try:
+    if hasattr(sys.stdout, 'reconfigure'):
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+except Exception:
+    pass
+
 from src.utils.config import config_manager
+
+
+# ─── Servo Move Logger ───────────────────────────────────────────────────────
+def _log_servo_move(event_name: str, prev: int, new: int, min_a: int, max_a: int):
+    """Pretty-print a servo position change (passes pipeline.py ALLOWLIST via [ok] tag)."""
+    delta = abs(new - prev)
+    direction = "+" if new > prev else "-"
+    rng = max(max_a - min_a, 1)
+    pct = round((new - min_a) / rng * 100)
+    if new >= max_a:
+        state = "CLOSED"
+    elif new <= min_a:
+        state = "OPEN"
+    else:
+        state = f"{pct:>3}% closed"
+    print(f"[ok] ◉ Servo │ {event_name:<14} {prev:>3}° → {new:>3}°  {direction}{delta:>2}°  [{state}]", flush=True)
+
 
 class ServoController:
     def __init__(self, target_ip="127.0.0.1", target_port=6002):
@@ -104,7 +128,6 @@ class ServoController:
         try:
             command = f"DEG {angle}\n"
             self.sock.sendall(command.encode())
-            print(f"Sent: {command.strip()}")
         except Exception as e:
             print(f"Send Error: {e}")
             self.sock = None # Trigger reconnect logic on next call
@@ -113,20 +136,19 @@ class ServoController:
         if not self.connect_lsl() or not self.connect_tcp():
             return
 
-        print("\n=== Servo Controller Running ===")
-        print(f"Initial Angle: {self.current_angle}")
-        print("Controls:")
-        print("  - SingleBlink: Increment (Closing)")
-        print("  - DoubleBlink: Decrement (Opening)")
-        print(f"  - Rock (EMG): Snap to {self.MAX_ANGLE} (Closed)")
-        print(f"  - Paper (EMG): Snap to {self.MIN_ANGLE} (Open)")
-        print(f"  - Scissors (EMG): Snap to {self.MIDDLE_ANGLE} (Middle)")
-        print("===============================\n")
+        print(f"[ok] ◉ Servo │ Connected  LSL=BioSignals-Events  TCP={self.target_ip}:{self.target_port}")
+        print(f"[ok] ◉ Servo │ Initial angle {self.current_angle}°  range [{self.MIN_ANGLE}–{self.MAX_ANGLE}]")
 
         try:
             while True:
                 self._reload_config_if_needed()
-                sample, timestamp = self.inlet.pull_sample(timeout=0.1)
+                try:
+                    sample, timestamp = self.inlet.pull_sample(timeout=0.1)
+                except Exception:
+                    print("[ServoController] LSL inlet error — attempting reconnect...")
+                    if not self.connect_lsl():
+                        time.sleep(2.0)
+                    continue
                 if sample:
                     try:
                         event_data = json.loads(sample[0])
@@ -148,37 +170,31 @@ class ServoController:
                             self.last_blink_time = current_time
 
                         new_angle = self.current_angle
-                        
+                        prev_angle = self.current_angle
+
                         if event_name == "SingleBlink":
-                            # Increase (+ve) / Closing
                             new_angle = min(self.MAX_ANGLE, self.current_angle + 5)
-                            print(f"Event: {event_name} -> Closing (+5°)")
-                        
+
                         elif event_name == "DoubleBlink":
-                            # Decrease (-ve) / Opening
                             new_angle = max(self.MIN_ANGLE, self.current_angle - 5)
-                            print(f"Event: {event_name} -> Opening (-5°)")
-                        
+
                         elif event_name == "Rock":
                             new_angle = self.MAX_ANGLE
-                            print(f"Event: {event_name} -> Snap CLOSED")
-                        
+
                         elif event_name == "Paper":
                             new_angle = self.MIN_ANGLE
-                            print(f"Event: {event_name} -> Snap OPEN")
-                        
+
                         elif event_name == "Scissors":
                             new_angle = self.MIDDLE_ANGLE
-                            print(f"Event: {event_name} -> Snap MIDDLE")
-                        
+
                         elif event_name.startswith("TARGET_"):
                             mapped_angle = self._get_eeg_target_angle(event_name)
                             if mapped_angle is not None:
                                 new_angle = mapped_angle
-                                print(f"Event: {event_name} -> Target preset {mapped_angle}")
 
                         # Only send if changed
                         if new_angle != self.current_angle:
+                            _log_servo_move(event_name, prev_angle, new_angle, self.MIN_ANGLE, self.MAX_ANGLE)
                             self.current_angle = new_angle
                             self.send_degree(self.current_angle)
 

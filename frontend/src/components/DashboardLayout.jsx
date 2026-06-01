@@ -12,6 +12,7 @@ import { ConnectionButton } from './ui/display/ConnectionButton'
 import Brain3D from './ui/display/Brain3D'
 import MobileNav from './ui/navigation/MobileNav'
 import { deriveApiUrlFromWs, getRuntimeConnection } from '../utils/runtimeConnection'
+import SyncButton from './admin/SyncButton'
 
 function getTopLevelPage(pathname) {
   if (pathname.startsWith('/dashboard/dino')) return 'dino'
@@ -34,7 +35,7 @@ const LEGACY_HASH_REDIRECTS = {
 }
 
 export default function DashboardLayout() {
-  const { user } = useAuth()
+  const { user, isLocalAuth } = useAuth()
   const { themes, currentTheme, currentThemeId, setTheme } = useTheme()
   const { settings, updateDeepSettings } = useSettings()
   const location = useLocation()
@@ -233,7 +234,18 @@ export default function DashboardLayout() {
         <span className="flex items-center gap-1">NeuroTECH - A BCI Project </span>  •  {' '}
         <span className="muted flex items-center gap-1">
           {user?.username || 'Operator'}
+          {isLocalAuth && (
+            <span
+              title="Authenticated via local backup"
+              className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider"
+              style={{ background: 'rgba(251,191,36,0.15)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.3)' }}
+            >
+              LOCAL
+            </span>
+          )}
         </span>
+        {' '} • {' '}
+        <SyncButton />
         {' '} • {' '}
         <a
           className="muted flex items-center gap-1"

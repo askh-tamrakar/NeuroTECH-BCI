@@ -18,6 +18,7 @@ from src.server.server.routes.training_routes import training_bp
 from src.server.server.routes.prediction_routes import prediction_bp
 from src.server.server.routes.eeg_routes import eeg_bp
 from src.server.server.routes.calibration_routes import calibration_bp
+from src.server.server.routes.auth_routes import auth_bp
 
 # Define Project Root for template folder
 # src/web/server/__init__.py -> ../../../ = root or ../../../../ depending on structure
@@ -69,6 +70,7 @@ def create_app():
         from src.data.hybrid_recorder import HybridRecorder
         from src.data.recording_service import RecordingService
         state.hybrid_recorder = HybridRecorder()
+        state.extra_recorders = []
         state.recording_service = RecordingService(state.hybrid_recorder)
         print("[App] Hybrid recorder initialized")
     except Exception as e:
@@ -90,6 +92,7 @@ def create_app():
     app.register_blueprint(prediction_bp)
     app.register_blueprint(eeg_bp)
     app.register_blueprint(calibration_bp)
+    app.register_blueprint(auth_bp)
     
     # Index Route
     @app.route('/')

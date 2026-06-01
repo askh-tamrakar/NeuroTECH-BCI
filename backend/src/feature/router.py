@@ -12,7 +12,7 @@ import os
 # UTF-8 encoding for standard output to avoid UnicodeEncodeError in some terminals
 try:
     if hasattr(sys.stdout, 'reconfigure'):
-        sys.stdout.reconfigure(encoding='utf-8')
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 except Exception:
     pass
 
@@ -56,6 +56,26 @@ def load_config():
     # Use the facade to get merged config (Sensor + Features)
     # This ensures Detectors find their 'features' key
     return config_manager.get_all_configs()
+
+
+# ─── Detection Event Logger ──────────────────────────────────────────────────
+_EVENT_ICONS = {
+    "Rock": "✊", "Paper": "✋", "Scissors": "✌",
+    "SingleBlink": "◉", "DoubleBlink": "◉◉",
+}
+
+def _log_detection_event(event_name: str, ch_idx: int, sensor_type: str):
+    """Pretty-print a confirmed detection event (passes pipeline.py ALLOWLIST via [event] tag)."""
+    label = event_name
+    if event_name.startswith("TARGET_"):
+        try:
+            hz = event_name.replace("TARGET_", "").replace("HZ", "").replace("_", ".")
+            label = f"{float(hz):.2f} Hz"
+        except Exception:
+            pass
+    icon = _EVENT_ICONS.get(event_name, "◆")
+    print(f"[event] {icon}  {sensor_type:<4} │ {label:<16} │ ch{ch_idx}", flush=True)
+
 
 class FeatureRouter:
     def __init__(self):
@@ -123,44 +143,51 @@ class FeatureRouter:
         """
         self.extractors = {}
         mapping = self.config.get("channel_mapping", {})
-        
-        print(f"[FeatureRouter] [CONFIG] Configuring features for {self.num_channels} channels...")
-        
+
         for i in range(self.num_channels):
             ch_key = f"ch{i}"
             if ch_key in mapping:
                 info = mapping[ch_key]
                 if not info.get("enabled", True):
                     continue
-                    
-                sensor = info.get("sensor", "UNKNOWN")
-                
+
+                sensor   = info.get("sensor", "UNKNOWN")
+                ch_label = info.get("label", ch_key)
+
                 if sensor == "EOG":
                     eog_method = self.config.get("features", {}).get("EOG", {}).get("detection_method", "Threshold")
-                    print(f" [{i}] -> EOG Blink Pipeline (Extractor + {eog_method} Detector)")
-                    extractor = BlinkExtractor(i, self.config, self.sr)
-                    
+                    extractor  = BlinkExtractor(i, self.config, self.sr)
                     if eog_method == "ML":
+                        try:
+                            model_name = config_manager.get_active_model("EOG") or "eog_rf"
+                        except Exception:
+                            model_name = "eog_rf"
                         detector = EOGMLDetector(self.config)
+                        detail   = f"model={model_name}.joblib"
                     else:
+                        thresh   = self.config.get("features", {}).get("EOG", {}).get("threshold", "auto")
                         detector = BlinkDetector(self.config)
-                        
+                        detail   = f"threshold={thresh}"
+                    print(f"[config] ch{i} ({ch_label:<8}) EOG  │ {eog_method:<9} Detector  {detail}")
                     self.pipeline[i] = (extractor, detector, "EOG")
+
                 elif sensor == "EMG":
-                    print(f" [{i}] -> EMG RPS Pipeline (Extractor + Detector)")
-                    extractor = RPSExtractor(i, self.config, self.sr)
-                    detector = RPSDetector(self.config)
+                    extractor   = RPSExtractor(i, self.config, self.sr)
+                    detector    = RPSDetector(self.config)
+                    emg_classes = list(self.config.get("features", {}).get("EMG", {}).get("classes", ["Rock", "Paper", "Scissors"]))
+                    print(f"[config] ch{i} ({ch_label:<8}) EMG  │ RPS Detector    classes={', '.join(emg_classes)}")
                     self.pipeline[i] = (extractor, detector, "EMG")
+
                 elif sensor == "EEG":
-                    print(f" [{i}] -> EEG Pipeline (FBCCA SSVEP)")
                     extractor = EEGExtractor(i, self.config, self.sr)
-                    detector = EEGFrequencyDetector(self.config)
+                    detector  = EEGFrequencyDetector(self.config)
+                    freqs     = [str(t.get("freq", "?")) for t in self.config.get("features", {}).get("EEG", {}).get("targets", [])]
+                    freq_str  = "  ".join(freqs) + " Hz" if freqs else "no targets"
+                    print(f"[config] ch{i} ({ch_label:<8}) EEG  │ FBCCA SSVEP     targets={freq_str}")
                     self.pipeline[i] = (extractor, detector, "EEG")
 
     def run(self):
         self.running = True
-        print("[FeatureRouter] [START] Loop started")
-        
         last_check_time = time.time()
         
         while self.running:
@@ -170,7 +197,7 @@ class FeatureRouter:
                 if time.time() - last_check_time > 0.5:
                     current_vhash = config_manager.get_config_version_hash()
                     if current_vhash != self.last_config_vhash:
-                        print(f"\n{'*'*60}\n[FeatureRouter] 📁 Config changed — reloading pipeline...\n{'*'*60}\n", flush=True)
+                        print(f"[config] Feature Router reloading pipeline (config changed)", flush=True)
                         self.config = load_config()
                         self.configure_pipeline()
                         self.last_config_vhash = current_vhash
@@ -277,8 +304,8 @@ class FeatureRouter:
             event_data.update(extra_data)
             
         formatted_event = json.dumps(event_data)
-        if event_name != "emg_prediction":
-            print(f"[Feature Router] [EVENT] {event_name}")
+        if event_name not in ("emg_prediction", "Rest"):
+            _log_detection_event(event_name, ch_idx, sensor_type)
         self.outlet.push_sample([formatted_event])
 
 if __name__ == "__main__":

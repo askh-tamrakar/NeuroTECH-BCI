@@ -34,6 +34,10 @@ broadcast.onmessage = (e) => {
 };
 // Visual State
 let windows = []; // { id, start, end, type }
+// Tracks chart's `now` the first time each window is drawn — used to synthesize
+// a smooth slide-in from the right canvas edge even when the chart first learns
+// about a window mid-flight (due to the 300ms worker throttle delay).
+const windowFirstSeenNow = new Map();
 let config = {
     timeWindow: 5000, // ms
     yMin: 0,
@@ -52,7 +56,14 @@ let config = {
         collected: { fill: 'rgba(56, 189, 248, 0.18)', stroke: '#38bdf8', text: '#f8fafc' },
         saved: { fill: 'rgba(16, 185, 129, 0.16)', stroke: '#10b981', text: '#f8fafc' },
         error: { fill: 'rgba(244, 63, 94, 0.16)', stroke: '#f43f5e', text: '#f8fafc' }
-    }
+    },
+    // Recorded-mode fields
+    recordedMode: false,
+    recordingStartMs: 0,   // absolute ms of recording start (for x-axis labels)
+    sampleRate: 512,       // used for px-per-sample calculation
+    manualRenderTime: null, // when set, getRenderNow() returns this instead of live clock
+    previewPixelX: null,   // draw-mode hover preview pixel position (null = hidden)
+    previewWindowMs: 900,  // draw-mode preview window duration (ms)
 };
 
 // Scanner State
@@ -94,6 +105,13 @@ self.onmessage = function (e) {
             break;
         case 'UPDATE_WINDOWS':
             windows = payload;
+            // Clean up firstSeen entries for windows that are no longer tracked
+            if (windowFirstSeenNow.size > 0) {
+                const activeIds = new Set(payload.map(w => w.id));
+                for (const id of windowFirstSeenNow.keys()) {
+                    if (!activeIds.has(id)) windowFirstSeenNow.delete(id);
+                }
+            }
             requestRender();
             break;
         case 'SET_CONFIG':
@@ -118,6 +136,53 @@ self.onmessage = function (e) {
         case 'CLEAR_DATA':
             points = [];
             envelopeState = 0;
+            config.manualRenderTime = null;
+            requestRender();
+            break;
+        // --- Recorded-mode controls ---
+        case 'SET_RENDER_TIME':
+            // Jump the viewport to a specific absolute timestamp (ms)
+            config.manualRenderTime = payload.ms;
+            requestRender();
+            break;
+        case 'PAN_VIEW': {
+            // Pan left/right by deltaPx pixels (positive = pan right = reveal earlier data)
+            const { deltaPx } = payload;
+            const leftMargin = 45;
+            const drawWidth = width - leftMargin;
+            const msPerPx = config.timeWindow / drawWidth;
+            const deltaMs = deltaPx * msPerPx;
+            if (config.manualRenderTime == null) {
+                config.manualRenderTime = getRenderNow();
+            }
+            config.manualRenderTime += deltaMs;
+            requestRender();
+            break;
+        }
+        case 'ZOOM_Y': {
+            // Zoom in/out on Y axis; factor > 1 = zoom in (shrink range)
+            const { factor: yFactor } = payload;
+            const midY = (config.yMin + config.yMax) / 2;
+            const halfRange = (config.yMax - config.yMin) / 2;
+            const newHalf = halfRange / yFactor;
+            config.yMin = midY - newHalf;
+            config.yMax = midY + newHalf;
+            requestRender();
+            break;
+        }
+        case 'ZOOM_X': {
+            // Zoom in/out on X axis; factor > 1 = zoom in (shrink timeWindow)
+            // Clamped: 3 s minimum, 20 s maximum
+            const { factor: xFactor } = payload;
+            const newTw = Math.min(20000, Math.max(3000, config.timeWindow / xFactor));
+            config.timeWindow = newTw;
+            requestRender();
+            break;
+        }
+        case 'DRAW_PREVIEW':
+            // Show/hide annotation preview rectangle at mouse position
+            config.previewPixelX = payload.pixelX ?? null;
+            if (payload.windowDurationMs != null) config.previewWindowMs = payload.windowDurationMs;
             requestRender();
             break;
     }
@@ -153,6 +218,9 @@ function handleCalcSelection(payload) {
 }
 
 function getRenderNow() {
+    if (config.recordedMode && config.manualRenderTime != null) {
+        return config.manualRenderTime;
+    }
     if (lastTsHead > 0) {
         return lastTsHead;
     }
@@ -218,28 +286,25 @@ function addData(newPoints) {
 
     points.push(...normalizedPoints);
     
-    // Time-based eviction: keep 3x the visible time window.
-    // This must be generous enough that signal-time-based window collection
-    // (which fires when signal time passes window.endTime + 200ms) can still
-    // read sample data for the full window duration.
-    // With timeWindow=5s, windows span ~1.5s and are collected ~4.2s after creation,
-    // meaning the oldest needed data is ~4.2s old — well within 3*5=15s.
-    const maxAge = (config.timeWindow || 5000) * 3;
-    const cutoffTime = lastTsHead - maxAge;
-    let cutIdx = 0;
-    for (let i = 0; i < points.length; i++) {
-        if (points[i].time >= cutoffTime) {
-            cutIdx = i;
-            break;
+    if (!config.recordedMode) {
+        // Time-based eviction: keep 3x the visible time window (live mode only).
+        // Recorded mode keeps all loaded points for panning.
+        const maxAge = (config.timeWindow || 5000) * 3;
+        const cutoffTime = lastTsHead - maxAge;
+        let cutIdx = 0;
+        for (let i = 0; i < points.length; i++) {
+            if (points[i].time >= cutoffTime) {
+                cutIdx = i;
+                break;
+            }
         }
-    }
-    if (cutIdx > 0) {
-        points = points.slice(cutIdx);
-    }
-    
-    // Hard cap as safety net
-    if (points.length > MAX_POINTS) {
-        points = points.slice(points.length - MAX_POINTS);
+        if (cutIdx > 0) {
+            points = points.slice(cutIdx);
+        }
+        // Hard cap as safety net
+        if (points.length > MAX_POINTS) {
+            points = points.slice(points.length - MAX_POINTS);
+        }
     }
 }
 
@@ -305,8 +370,12 @@ function draw() {
     // We let the CSS background from SignalChart.css handle it or the global CSS.
 
     if (points.length === 0) {
-        // Draw placeholder grid
-        drawGrid(Date.now(), config.timeWindow, config.timeWindow / 2, 45);
+        // In recorded mode use a fixed anchor (recordingStartMs + half-window) so the
+        // empty grid does not auto-scroll with the wall clock.
+        const emptyNow = config.recordedMode
+            ? (config.recordingStartMs || 0) + config.timeWindow / 2
+            : Date.now();
+        drawGrid(emptyNow, config.timeWindow, config.timeWindow / 2, 45);
         return;
     }
 
@@ -339,75 +408,129 @@ function draw() {
     ctx.clip();
 
     // Draw Windows (Behind Signal)
+    // Center bar pixel — used for the yellow/blue two-part split
+    const winCenterPx = leftMargin + drawWidth / 2;
+
+    const YELLOW_FILL   = 'rgba(245,158,11,0.18)';
+    const YELLOW_STROKE = '#f59e0b';
+    const BLUE_FILL     = 'rgba(56,189,248,0.18)';
+    const BLUE_STROKE   = '#38bdf8';
+
     windows.forEach(win => {
-        // win: { startTime, endTime, status, label... }
-        // Ensure we use correct keys. CalibrationView sends: startTime, endTime.
-        // wait, message payload might differ?
-        // Let's check CalibrationView: updateWindows(markedWindows)
-        // newWindow = { startTime, endTime ... }
-
         const start = win.startTime || win.start;
-        const end = win.endTime || win.end;
-
+        const end   = win.endTime   || win.end;
         if (!start || !end) return;
 
         const ageStart = now - start;
-        const ageEnd = now - end;
-
+        const ageEnd   = now - end;
 
         const x_start_ms = centerTimeOffset - ageStart;
-        const x_end_ms = centerTimeOffset - ageEnd;
+        const x_end_ms   = centerTimeOffset - ageEnd;
 
-        const px1 = timeToPx(x_start_ms);
-        const px2 = timeToPx(x_end_ms);
+        const px1   = timeToPx(x_start_ms);
+        const px2   = timeToPx(x_end_ms);
         const wFunc = px2 - px1;
 
-        if (px2 > 0 && px1 < width) {
-            // "Collected" window = Green
-            // "Pending" = Yellow/Orange
-            // "Saved" = Red/Blue
-            // "Error" = Gray
+        // Skip windows entirely off-screen to the left
+        if (px2 < leftMargin) return;
 
-            const styleKey = (win.status === 'recording' || win.status === 'pending')
-                ? 'pending'
-                : (win.status === 'collected')
-                    ? 'collected'
-                    : (win.status === 'saved' || win.status === 'correct' || win.status === 'incorrect')
-                        ? 'saved'
-                        : 'error';
-            const windowStyle = config.windowStyles?.[styleKey] || config.windowStyles?.pending || {};
+        const isFinal = win.status === 'saved' || win.status === 'correct' || win.status === 'incorrect';
+        const isError = win.status === 'error';
 
-            const fill = windowStyle.fill || 'rgba(255, 255, 255, 0.08)';
-            const stroke = windowStyle.stroke || '#ffffff';
+        // --- Smooth slide-in from the right ---
+        // The chart first learns about a window ~300ms after it was created (worker
+        // throttle + React chain). By that time the window's left edge (px1) has
+        // already entered the canvas, causing a sudden partial appearance.
+        // Fix: record the chart's `now` when a window is first seen, then synthesize
+        // the missing entry by clamping effectivePx1 to an offset that starts at
+        // `width` and catches up to the real px1 at the same slide speed.
+        let effectivePx1 = px1;
+        if (!isFinal && !isError) {
+            if (!windowFirstSeenNow.has(win.id)) {
+                windowFirstSeenNow.set(win.id, now);
+            }
+            const firstSeenNow = windowFirstSeenNow.get(win.id);
+            const msElapsed    = Math.max(0, now - firstSeenNow);
+            // How far the right edge has moved since first seen (same px/ms as the chart scroll)
+            const catchupPx1   = width - (msElapsed / timeWindow) * drawWidth;
+            effectivePx1 = Math.max(px1, catchupPx1);
+        }
+        const effectivePx2 = effectivePx1 + wFunc;
 
-            ctx.fillStyle = fill;
+        // Still fully off-screen to the right → skip this frame
+        if (effectivePx1 >= width) return;
 
-            // Constrain windows to the grid area (looks cleaner/"smaller")
-            const yTop = padY;
-            const hRegion = availH;
+        const yTop    = padY;
+        const hRegion = availH;
 
-            ctx.fillRect(px1, yTop, wFunc, hRegion);
+        const textColor = isFinal
+            ? (config.windowStyles?.saved?.text   || '#ffffff')
+            : isError
+                ? (config.windowStyles?.error?.text   || '#ffffff')
+                : (config.windowStyles?.pending?.text || '#ffffff');
 
-            ctx.strokeStyle = stroke;
-            ctx.lineWidth = 2; // Thicker border
-            ctx.strokeRect(px1, yTop, wFunc, hRegion);
+        if (isFinal) {
+            const s = config.windowStyles?.saved || {};
+            ctx.fillStyle = s.fill || 'rgba(16,185,129,0.16)';
+            ctx.fillRect(effectivePx1, yTop, wFunc, hRegion);
+            ctx.strokeStyle = s.stroke || '#10b981';
+            ctx.lineWidth   = 2;
+            ctx.strokeRect(effectivePx1, yTop, wFunc, hRegion);
+        } else if (isError) {
+            const s = config.windowStyles?.error || {};
+            ctx.fillStyle = s.fill || 'rgba(244,63,94,0.16)';
+            ctx.fillRect(effectivePx1, yTop, wFunc, hRegion);
+            ctx.strokeStyle = s.stroke || '#f43f5e';
+            ctx.lineWidth   = 2;
+            ctx.strokeRect(effectivePx1, yTop, wFunc, hRegion);
+        } else if (effectivePx2 <= winCenterPx) {
+            // Whole window already past center → all blue
+            ctx.fillStyle = BLUE_FILL;
+            ctx.fillRect(effectivePx1, yTop, wFunc, hRegion);
+            drawSplitBorder(ctx, effectivePx1, effectivePx2, yTop, hRegion, winCenterPx, BLUE_STROKE, BLUE_STROKE);
+        } else if (effectivePx1 >= winCenterPx) {
+            // Whole window still right of center → all yellow
+            ctx.fillStyle = YELLOW_FILL;
+            ctx.fillRect(effectivePx1, yTop, wFunc, hRegion);
+            drawSplitBorder(ctx, effectivePx1, effectivePx2, yTop, hRegion, winCenterPx, YELLOW_STROKE, YELLOW_STROKE);
+        } else {
+            // Window straddles the center bar → split fill + split border
+            const leftW  = winCenterPx - effectivePx1;
+            const rightW = effectivePx2 - winCenterPx;
 
-            // Label
-            if (win.label) {
+            ctx.fillStyle = BLUE_FILL;
+            ctx.fillRect(effectivePx1, yTop, leftW, hRegion);
+            ctx.fillStyle = YELLOW_FILL;
+            ctx.fillRect(winCenterPx, yTop, rightW, hRegion);
+
+            drawSplitBorder(ctx, effectivePx1, effectivePx2, yTop, hRegion, winCenterPx, BLUE_STROKE, YELLOW_STROKE);
+
+            // Subtle divider line at the center bar
+            ctx.save();
+            ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+            ctx.lineWidth   = 1;
+            ctx.setLineDash([4, 3]);
+            ctx.beginPath();
+            ctx.moveTo(winCenterPx, yTop);
+            ctx.lineTo(winCenterPx, yTop + hRegion);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.restore();
+        }
+
+        // Label — centre within the currently visible portion
+        if (win.label) {
+            const visibleLeft  = Math.max(effectivePx1, leftMargin);
+            const visibleRight = Math.min(effectivePx2, width);
+            const visibleW     = visibleRight - visibleLeft;
+            if (visibleW > 50) {
                 ctx.save();
-                ctx.fillStyle = windowStyle.text || '#ffffff';
-                ctx.globalAlpha = 0.9;
-                ctx.textAlign = 'center';
+                ctx.fillStyle    = textColor;
+                ctx.globalAlpha  = 0.9;
+                ctx.textAlign    = 'center';
                 ctx.textBaseline = 'middle';
-
-                const centerX = px1 + wFunc / 2;
-                const centerY = yTop + hRegion / 2;
-
-                const fontSize = win.label.length > 10 ? 16 : 20;
-                ctx.font = `bold ${fontSize}px sans-serif`;
-                if (Math.abs(wFunc) > 50) {
-                    ctx.fillText(win.label, centerX, centerY);
-                }
+                ctx.font = `bold ${win.label.length > 10 ? 16 : 20}px sans-serif`;
+                ctx.fillText(win.label, visibleLeft + visibleW / 2, yTop + hRegion / 2);
                 ctx.restore();
             }
         }
@@ -423,6 +546,11 @@ function draw() {
     // Neon Glow - Stronger
     ctx.shadowBlur = 8;
     ctx.shadowColor = config.lineColor;
+
+    // Compute whether to show individual point markers (plus+circle)
+    // Only when pixel-per-sample > 5 to avoid canvas overload at high density
+    const pxPerSample = (drawWidth / config.timeWindow) * (1000 / Math.max(1, config.sampleRate || 512));
+    const showPointMarkers = config.recordedMode && pxPerSample > 5;
 
     ctx.beginPath();
 
@@ -462,7 +590,9 @@ function draw() {
                 cursorValue = getPointValue(points[i]);
             }
 
-            ctx.moveTo(startX, startY);
+            if (!showPointMarkers) {
+                ctx.moveTo(startX, startY);
+            }
 
             // Draw line backwards, detecting large gaps to avoid straight-line artifacts
             let prevTime = (i < points.length - 1) ? now : points[i].time;
@@ -473,56 +603,134 @@ function draw() {
 
                 if (x_ms < -200) break; // Optimization
 
-                // Gap detection: only break the path on genuine data loss (>200ms gap)
-                // Small gaps from batch boundaries or jitter should still draw continuous lines
-                const timeDelta = prevTime - p.time;
-                if (timeDelta > 200 && j < i) {
-                    // Start a new sub-path after the gap
-                    const x = timeToPx(x_ms);
-                    const y = valToPy(getPointValue(p));
-                    ctx.moveTo(x, y);
+                const x = timeToPx(x_ms);
+                const y = valToPy(getPointValue(p));
+
+                if (showPointMarkers) {
+                    // Plus+circle marker: circle with arms extending slightly beyond its edge
+                    const r = 4;
+                    const arm = r + 2;
+                    ctx.save();
+                    ctx.fillStyle = config.lineColor;
+                    ctx.strokeStyle = config.lineColor;
+                    ctx.lineWidth = 1.5;
+                    ctx.shadowBlur = 6;
+                    ctx.shadowColor = config.lineColor;
+                    // Circle
+                    ctx.beginPath();
+                    ctx.arc(x, y, r, 0, Math.PI * 2);
+                    ctx.stroke();
+                    // Horizontal arm
+                    ctx.beginPath();
+                    ctx.moveTo(x - arm, y);
+                    ctx.lineTo(x + arm, y);
+                    ctx.stroke();
+                    // Vertical arm
+                    ctx.beginPath();
+                    ctx.moveTo(x, y - arm);
+                    ctx.lineTo(x, y + arm);
+                    ctx.stroke();
+                    ctx.restore();
                 } else {
-                    const x = timeToPx(x_ms);
-                    const y = valToPy(getPointValue(p));
-                    ctx.lineTo(x, y);
+                    // Gap detection: only break the path on genuine data loss (>200ms gap)
+                    const timeDelta = prevTime - p.time;
+                    if (timeDelta > 200 && j < i) {
+                        ctx.moveTo(x, y);
+                    } else {
+                        ctx.lineTo(x, y);
+                    }
                 }
                 prevTime = p.time;
             }
         }
     }
-    ctx.stroke();
+    if (!showPointMarkers) ctx.stroke();
 
     // Reset shadow for other elements
     ctx.shadowBlur = 0;
 
-    // Draw Cursor (Center)
+    // Draw Cursor (Center) — live mode only, not in recorded mode
     const centerPx = timeToPx(centerTimeOffset);
 
-    // 1. Vertical Line (0 x-axis line bold dash)
-    ctx.strokeStyle = 'var(--text-secondary, #ffffff)';
-    ctx.lineWidth = 2; // Bold
-    ctx.setLineDash([8, 8]); // Dash
-    ctx.beginPath();
-    ctx.moveTo(centerPx, 0);
-    ctx.lineTo(centerPx, height);
-    ctx.stroke();
-    ctx.setLineDash([]); // Reset line dash
-
-    // 2. Current Value Dot
-    if (points.length > 0) {
-        const y_px = valToPy(cursorValue ?? getPointValue(points[points.length - 1]));
-
-        ctx.fillStyle = config.lineColor;
-        ctx.shadowBlur = 10; // Neon glow
-        ctx.shadowColor = config.lineColor;
+    if (!config.recordedMode) {
+        // 1. Vertical Line
+        ctx.strokeStyle = 'var(--text-secondary, #ffffff)';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([8, 8]);
         ctx.beginPath();
-        ctx.arc(centerPx, y_px, 4, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.shadowBlur = 0; // Reset
+        ctx.moveTo(centerPx, 0);
+        ctx.lineTo(centerPx, height);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // 2. Current Value Dot
+        if (points.length > 0) {
+            const y_px = valToPy(cursorValue ?? getPointValue(points[points.length - 1]));
+            ctx.fillStyle = config.lineColor;
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = config.lineColor;
+            ctx.beginPath();
+            ctx.arc(centerPx, y_px, 4, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+        }
     }
 
     ctx.restore(); // Restore clip
 
+    // Draw annotation preview window (draw mode hover) — outside clip so it spans full height
+    if (config.recordedMode && config.previewPixelX != null) {
+        const leftM = 45;
+        const dw = width - leftM;
+        const halfPx = (config.previewWindowMs / 2 / config.timeWindow) * dw;
+        const px1 = Math.max(leftM, config.previewPixelX - halfPx);
+        const px2 = Math.min(width, config.previewPixelX + halfPx);
+        const pY = height * 0.1;
+        const aH = height - 2 * pY;
+        ctx.save();
+        ctx.fillStyle = 'rgba(245, 158, 11, 0.18)';
+        ctx.strokeStyle = '#f59e0b';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([5, 4]);
+        ctx.fillRect(px1, pY, px2 - px1, aH);
+        ctx.strokeRect(px1, pY, px2 - px1, aH);
+        ctx.setLineDash([]);
+        ctx.restore();
+    }
+}
+
+// Draws a window border split at `splitX`: left side uses `leftColor`, right side uses `rightColor`.
+// When leftColor === rightColor the result is identical to a plain strokeRect.
+function drawSplitBorder(ctx, px1, px2, yTop, hRegion, splitX, leftColor, rightColor) {
+    const split = Math.max(px1, Math.min(px2, splitX));
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    // Top edge — left portion
+    if (split > px1) {
+        ctx.strokeStyle = leftColor;
+        ctx.beginPath(); ctx.moveTo(px1, yTop); ctx.lineTo(split, yTop); ctx.stroke();
+    }
+    // Top edge — right portion
+    if (px2 > split) {
+        ctx.strokeStyle = rightColor;
+        ctx.beginPath(); ctx.moveTo(split, yTop); ctx.lineTo(px2, yTop); ctx.stroke();
+    }
+    // Bottom edge — left portion
+    if (split > px1) {
+        ctx.strokeStyle = leftColor;
+        ctx.beginPath(); ctx.moveTo(px1, yTop + hRegion); ctx.lineTo(split, yTop + hRegion); ctx.stroke();
+    }
+    // Bottom edge — right portion
+    if (px2 > split) {
+        ctx.strokeStyle = rightColor;
+        ctx.beginPath(); ctx.moveTo(split, yTop + hRegion); ctx.lineTo(px2, yTop + hRegion); ctx.stroke();
+    }
+    // Left border (left color)
+    ctx.strokeStyle = leftColor;
+    ctx.beginPath(); ctx.moveTo(px1, yTop); ctx.lineTo(px1, yTop + hRegion); ctx.stroke();
+    // Right border (right color)
+    ctx.strokeStyle = rightColor;
+    ctx.beginPath(); ctx.moveTo(px2, yTop); ctx.lineTo(px2, yTop + hRegion); ctx.stroke();
 }
 
 function drawGrid(now, timeWindow, centerTimeOffset, leftMargin, padY, availH) {
@@ -608,8 +816,20 @@ function drawGrid(now, timeWindow, centerTimeOffset, leftMargin, padY, availH) {
         if (x_px < leftMargin) continue;
 
         // Draw Label Only
-        const diff = (t_abs - now) / 1000;
-        const label = diff > 0 ? `+${diff.toFixed(2)}s` : `${diff.toFixed(2)}s`;
+        let label;
+        if (config.recordedMode && config.recordingStartMs) {
+            // Show HH:MM:SS offset from recording start
+            const offsetSec = Math.max(0, (t_abs - config.recordingStartMs) / 1000);
+            const hh = Math.floor(offsetSec / 3600);
+            const mm = Math.floor((offsetSec % 3600) / 60);
+            const ss = Math.floor(offsetSec % 60);
+            label = hh > 0
+                ? `${hh}:${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`
+                : `${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
+        } else {
+            const diff = (t_abs - now) / 1000;
+            label = diff > 0 ? `+${diff.toFixed(2)}s` : `${diff.toFixed(2)}s`;
+        }
 
         ctx.globalAlpha = 0.8;
         ctx.fillText(label, x_px, height - 12);
