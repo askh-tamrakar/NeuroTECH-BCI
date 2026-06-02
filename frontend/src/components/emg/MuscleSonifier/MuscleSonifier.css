@@ -1,0 +1,142 @@
+.ms-root {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  height: 100%;
+  padding: 1rem;
+  background: var(--bg);
+  overflow-y: auto;
+}
+
+.ms-scope-wrap {
+  position: relative;
+  width: 100%;
+  flex: 1;
+  min-height: 120px;
+  max-height: 260px;
+  border-radius: 0.75rem;
+  overflow: hidden;
+  background: #0a0a0a;
+  border: 1px solid var(--border);
+}
+
+.ms-scope {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.ms-scope-placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.ms-display {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  padding: 0.85rem 1.5rem;
+  width: 100%;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.ms-divider {
+  width: 1px;
+  height: 48px;
+  background: var(--border);
+  flex-shrink: 0;
+}
+
+.ms-waveform-row {
+  display: flex;
+  gap: 0.35rem;
+  margin-top: 0.2rem;
+}
+
+.ms-wave-btn {
+  padding: 0.25rem 0.6rem;
+  border-radius: 0.35rem;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: capitalize;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.ms-wave-btn:hover { color: var(--text); }
+.ms-wave-btn.active {
+  background: color-mix(in srgb, #22c55e 18%, transparent);
+  border-color: #22c55e;
+  color: #22c55e;
+}
+
+.ms-volume-slider {
+  width: 110px;
+  accent-color: #22c55e;
+  margin-top: 0.25rem;
+}
+
+.ms-controls {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.ms-start-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.6rem 1.6rem;
+  border-radius: 0.6rem;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  cursor: pointer;
+  transition: all 0.18s;
+}
+.ms-start-btn:hover {
+  color: #22c55e;
+  border-color: #22c55e;
+}
+.ms-start-btn.active {
+  background: color-mix(in srgb, #ef4444 12%, transparent);
+  border-color: rgba(239,68,68,0.45);
+  color: #ef4444;
+}
+
+.ms-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 1.1rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: all 0.18s;
+}
+.ms-btn:hover { color: var(--text); border-color: var(--primary); }

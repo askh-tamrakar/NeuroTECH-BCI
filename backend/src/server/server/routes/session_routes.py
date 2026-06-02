@@ -1,5 +1,4 @@
 from flask import Blueprint, jsonify, request
-import re
 import uuid
 import numpy as np
 import time
@@ -15,27 +14,15 @@ session_bp = Blueprint('session', __name__)
 
 @session_bp.route('/api/sessions/<sensor_type>', methods=['GET'])
 def api_list_sessions(sensor_type):
-    """List available session tables with per-class batch counts."""
+    """List available session tables."""
     tables = db_manager.get_session_tables(sensor_type)
-    sensor_up = sensor_type.upper()
-
-    sessions = []
-    for table in tables:
-        entry = {"table": table}
-        try:
-            conn = db_manager.connect(sensor_up)
-            cursor = conn.cursor()
-            cursor.execute(
-                f"SELECT label, COUNT(DISTINCT batch_id) FROM {table} GROUP BY label"
-            )
-            rows = cursor.fetchall()
-            conn.close()
-            entry["class_batch_counts"] = {str(r[0]): r[1] for r in rows}
-        except Exception:
-            entry["class_batch_counts"] = {}
-        sessions.append(entry)
-
-    return jsonify({"tables": tables, "sessions": sessions})
+    
+    # FIX: Frontend expects {"tables": ["table1", "table2", ...]}
+    # Previously it returned just list of objects or strings, but frontend checked data.tables
+    
+    # We return the full table names as strings, as frontend parser handles `_session_` split.
+    # We return the full table names as strings, as frontend parser handles `_session_` split.
+    return jsonify({"tables": tables})
 
 
 @session_bp.route('/api/sessions/<sensor_type>/<session_name>', methods=['GET'])
@@ -130,58 +117,6 @@ def api_clear_session_data(sensor_type, session_name):
         if "error" in result:
             return jsonify({"error": result["error"]}), 500
         return jsonify({"status": "cleared", "session": session_name})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@session_bp.route('/api/sessions/<sensor_type>/<session_name>/rows/clear_filtered', methods=['DELETE'])
-def api_clear_filtered_rows(sensor_type, session_name):
-    """Delete only rows that match the supplied filter params (label, from, to row-ids)."""
-    try:
-        label = request.args.get('label', None)
-        from_id = request.args.get('from', None)
-        to_id   = request.args.get('to', None)
-
-        # Validate table name to prevent SQL injection
-        if not re.match(r'^[a-zA-Z0-9_]+$', session_name):
-            return jsonify({"error": "Invalid session name"}), 400
-
-        conn = db_manager.connect(sensor_type.upper())
-        cursor = conn.cursor()
-
-        conditions = []
-        params = []
-
-        if label is not None and label != 'all':
-            conditions.append("label = ?")
-            # Label stored as integer in DB; accept numeric string or keep as-is
-            try:
-                params.append(int(label))
-            except (ValueError, TypeError):
-                params.append(label)
-
-        if from_id is not None and str(from_id).strip():
-            try:
-                conditions.append("id >= ?")
-                params.append(int(from_id))
-            except (ValueError, TypeError):
-                pass
-
-        if to_id is not None and str(to_id).strip():
-            try:
-                conditions.append("id <= ?")
-                params.append(int(to_id))
-            except (ValueError, TypeError):
-                pass
-
-        where_clause = ("WHERE " + " AND ".join(conditions)) if conditions else ""
-        sql = f"DELETE FROM {session_name} {where_clause}"
-
-        cursor.execute(sql, params)
-        deleted_count = cursor.rowcount
-        conn.commit()
-        conn.close()
-
-        return jsonify({"status": "cleared", "deleted_count": deleted_count, "session": session_name})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -378,7 +313,7 @@ def update_detection_active_file(sensor_type, is_active):
         # Check if other sensors are still active
         other_active = False
         for k, v in current.items():
-            if k in ["EMG", "EOG", "EEG"] and k != sensor_type:
+            if k in ["EMG", "EOG", "EEG", "ECG"] and k != sensor_type:
                 if v:
                     other_active = True
         if not other_active:
@@ -473,6 +408,15 @@ def api_eog_predict_toggle(action):
     update_detection_active_file('EOG', is_active)
     return jsonify({"status": "ok", "predicting": state.session.prediction_active['EOG']})
 
+@session_bp.route('/api/ecg/predict/<action>', methods=['POST'])
+def api_ecg_predict_toggle(action):
+    is_active = (action == 'start')
+    if 'ECG' not in state.session.prediction_active:
+        state.session.prediction_active['ECG'] = False
+    state.session.prediction_active['ECG'] = is_active
+    update_detection_active_file('ECG', is_active)
+    return jsonify({"status": "ok", "predicting": state.session.prediction_active['ECG']})
+
 @session_bp.route('/api/eeg/predict/<action>', methods=['POST'])
 def api_eeg_predict_toggle(action):
     is_active = (action == 'start')
@@ -491,11 +435,15 @@ def api_detectors_predict_toggle(action):
     if 'EEG' not in state.session.prediction_active:
         state.session.prediction_active['EEG'] = False
     state.session.prediction_active['EEG'] = is_active
+    if 'ECG' not in state.session.prediction_active:
+        state.session.prediction_active['ECG'] = False
+    state.session.prediction_active['ECG'] = is_active
     set_detection_state_map({
         "active": is_active,
         "EMG": is_active,
         "EOG": is_active,
-        "EEG": is_active
+        "EEG": is_active,
+        "ECG": is_active
     })
     return jsonify({"status": "ok", "predicting": is_active})
 

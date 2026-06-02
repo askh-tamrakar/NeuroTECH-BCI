@@ -33,6 +33,8 @@ from .extractors.rps_extractor import RPSExtractor
 from .detectors.rps_detector import RPSDetector
 from .extractors.trigger_extractor import EEGExtractor
 from .detectors.eeg_frequency_detector import EEGFrequencyDetector
+from .extractors.ecg_extractor import ECGExtractor
+from .detectors.ecg_detector import ECGDetector
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 try:
@@ -96,6 +98,15 @@ class FeatureRouter:
         self.last_event_state = {} # Key: ch_idx_type -> event_name
         self.last_event_time = {} # Key: ch_idx_type -> timestamp
         self.last_config_vhash = config_manager.get_config_version_hash()
+        self._prev_emg_active = False  # Tracks EMG activation edge for detector reset
+
+        # ── Raw EMG prediction log (pure model output, no majority voting) ──
+        self._pred_log_path = PROJECT_ROOT / "logs" / "emg_raw_predictions.csv"
+        self._pred_log_path.parent.mkdir(parents=True, exist_ok=True)
+        self._pred_log_file = open(self._pred_log_path, 'a', encoding='utf-8', buffering=1)
+        if self._pred_log_path.stat().st_size == 0:
+            self._pred_log_file.write("iso_time,channel,label,confidence,detection_state\n")
+            self._pred_log_file.flush()
 
 
     def resolve_stream(self):
@@ -186,6 +197,12 @@ class FeatureRouter:
                     print(f"[config] ch{i} ({ch_label:<8}) EEG  │ FBCCA SSVEP     targets={freq_str}")
                     self.pipeline[i] = (extractor, detector, "EEG")
 
+                elif sensor == "ECG":
+                    extractor = ECGExtractor(i, self.config, self.sr)
+                    detector  = ECGDetector(self.config)
+                    print(f"[config] ch{i} ({ch_label:<8}) ECG  │ Pan-Tompkins R-peak  BPM tracking")
+                    self.pipeline[i] = (extractor, detector, "ECG")
+
     def run(self):
         self.running = True
         last_check_time = time.time()
@@ -203,6 +220,17 @@ class FeatureRouter:
                         self.last_config_vhash = current_vhash
                     
                     self.detection_active = config_manager.get_detection_state()
+                    
+                    # Reset EMG detector state on False→True activation edge
+                    # (ensures clean state each new game, no stale requires_rest)
+                    curr_emg = self.detection_active.get("EMG", False) if isinstance(self.detection_active, dict) else bool(self.detection_active)
+                    if not self._prev_emg_active and curr_emg:
+                        for ch_idx, (ext, det, stype) in self.pipeline.items():
+                            if stype == "EMG" and hasattr(det, 'reset_state'):
+                                det.reset_state()
+                        print("[FeatureRouter] EMG activated — detector state reset", flush=True)
+                    self._prev_emg_active = curr_emg
+
                     last_check_time = time.time()
 
                 # 2. Pull data from inlet
@@ -250,7 +278,17 @@ class FeatureRouter:
                                     
                                     # 1. Emit Real-time Prediction (Instant Feedback)
                                     # We emit this every frame for the UI
-                                    self._emit_event("emg_prediction", ch_idx, sensor_type, features, ts, extra_data={"label": instant_label, "detection_state": detection_state})
+                                    confidence = float(getattr(detector, 'last_confidence', 0.0))
+                                    self._emit_event("emg_prediction", ch_idx, sensor_type, features, ts, extra_data={
+                                        "label": instant_label,
+                                        "detection_state": detection_state,
+                                        "confidence": round(confidence, 4)
+                                    })
+                                    # Raw prediction log (pure model output, no majority voting)
+                                    self._pred_log_file.write(
+                                        f"{time.strftime('%Y-%m-%dT%H:%M:%S.')}{int(time.time()*1000)%1000:03d},"
+                                        f"ch{ch_idx},{instant_label},{confidence:.4f},{detection_state}\n"
+                                    )
                                     
                                     # 2. Emit Confirmed Gesture (Game Move)
                                     if confirmed_label:
@@ -262,6 +300,20 @@ class FeatureRouter:
                                 elif sensor_type == "EEG":
                                     if detection_result:
                                         self._emit_event(detection_result, ch_idx, sensor_type, features, ts)
+
+                                elif sensor_type == "ECG":
+                                    if detection_result and len(detection_result) == 3:
+                                        instant_label, confirmed_label, detection_state = detection_result
+                                    else:
+                                        instant_label, confirmed_label, detection_state = "ecg_live", None, "acquiring"
+
+                                    # Continuous BPM / waveform data for the UI
+                                    self._emit_event("ecg_prediction", ch_idx, sensor_type, features, ts,
+                                                     extra_data={"detection_state": detection_state})
+
+                                    # Confirmed R-peak → Heartbeat marker
+                                    if confirmed_label:
+                                        self._emit_event(confirmed_label, ch_idx, sensor_type, features, ts)
 
             except Exception as e:
                 print(f"[FeatureRouter] [WARNING] Error: {e}")
@@ -284,7 +336,14 @@ class FeatureRouter:
                     return
             if event_name == "emg_prediction":
                 pass
+            # Dedup confirmed gesture events (prevents double-emits from multi-channel)
+            if event_name in ("Rock", "Paper", "Scissors") and event_name == last_event:
+                if current_time - last_ts < 0.3:
+                    return
         elif sensor_type == "EOG":
+            pass
+        elif sensor_type == "ECG":
+            # Always emit ecg_prediction (continuous BPM stream) and Heartbeat
             pass
         else:
             if event_name == last_event:
@@ -304,7 +363,7 @@ class FeatureRouter:
             event_data.update(extra_data)
             
         formatted_event = json.dumps(event_data)
-        if event_name not in ("emg_prediction", "Rest"):
+        if event_name not in ("emg_prediction", "ecg_prediction", "Rest"):
             _log_detection_event(event_name, ch_idx, sensor_type)
         self.outlet.push_sample([formatted_event])
 

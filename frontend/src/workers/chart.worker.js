@@ -431,11 +431,9 @@ function draw() {
         const px2   = timeToPx(x_end_ms);
         const wFunc = px2 - px1;
 
-        // Skip windows entirely off-screen to the left
-        if (px2 < leftMargin) return;
-
-        const isFinal = win.status === 'saved' || win.status === 'correct' || win.status === 'incorrect';
-        const isError = win.status === 'error';
+        const isFinal   = win.status === 'saved' || win.status === 'correct' || win.status === 'incorrect';
+        const isError   = win.status === 'error';
+        const isAborted = win.status === 'aborted';
 
         // --- Smooth slide-in from the right ---
         // The chart first learns about a window ~300ms after it was created (worker
@@ -445,7 +443,7 @@ function draw() {
         // the missing entry by clamping effectivePx1 to an offset that starts at
         // `width` and catches up to the real px1 at the same slide speed.
         let effectivePx1 = px1;
-        if (!isFinal && !isError) {
+        if (!isFinal && !isError && !isAborted) {
             if (!windowFirstSeenNow.has(win.id)) {
                 windowFirstSeenNow.set(win.id, now);
             }
@@ -457,6 +455,8 @@ function draw() {
         }
         const effectivePx2 = effectivePx1 + wFunc;
 
+        // Skip windows entirely off-screen to the left (checked AFTER catchup)
+        if (effectivePx2 < leftMargin) return;
         // Still fully off-screen to the right → skip this frame
         if (effectivePx1 >= width) return;
 
@@ -467,7 +467,9 @@ function draw() {
             ? (config.windowStyles?.saved?.text   || '#ffffff')
             : isError
                 ? (config.windowStyles?.error?.text   || '#ffffff')
-                : (config.windowStyles?.pending?.text || '#ffffff');
+                : isAborted
+                    ? '#71717a'
+                    : (config.windowStyles?.pending?.text || '#ffffff');
 
         if (isFinal) {
             const s = config.windowStyles?.saved || {};
@@ -482,6 +484,12 @@ function draw() {
             ctx.fillRect(effectivePx1, yTop, wFunc, hRegion);
             ctx.strokeStyle = s.stroke || '#f43f5e';
             ctx.lineWidth   = 2;
+            ctx.strokeRect(effectivePx1, yTop, wFunc, hRegion);
+        } else if (isAborted) {
+            ctx.fillStyle = 'rgba(80,80,80,0.15)';
+            ctx.fillRect(effectivePx1, yTop, wFunc, hRegion);
+            ctx.strokeStyle = '#555';
+            ctx.lineWidth   = 1.5;
             ctx.strokeRect(effectivePx1, yTop, wFunc, hRegion);
         } else if (effectivePx2 <= winCenterPx) {
             // Whole window already past center → all blue
@@ -520,17 +528,19 @@ function draw() {
 
         // Label — centre within the currently visible portion
         if (win.label) {
+            const GESTURE_EMOJIS = { Rock: '\u270A', Paper: '\u270B', Scissors: '\u270C\uFE0F', Rest: '\uD83D\uDE0C' };
+            const displayLabel   = GESTURE_EMOJIS[win.label] || win.label;
             const visibleLeft  = Math.max(effectivePx1, leftMargin);
             const visibleRight = Math.min(effectivePx2, width);
             const visibleW     = visibleRight - visibleLeft;
-            if (visibleW > 50) {
+            if (visibleW > 28) {
                 ctx.save();
                 ctx.fillStyle    = textColor;
                 ctx.globalAlpha  = 0.9;
                 ctx.textAlign    = 'center';
                 ctx.textBaseline = 'middle';
-                ctx.font = `bold ${win.label.length > 10 ? 16 : 20}px sans-serif`;
-                ctx.fillText(win.label, visibleLeft + visibleW / 2, yTop + hRegion / 2);
+                ctx.font         = '60px sans-serif';
+                ctx.fillText(displayLabel, visibleLeft + visibleW / 2, yTop + hRegion / 2);
                 ctx.restore();
             }
         }

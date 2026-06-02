@@ -1,8 +1,8 @@
 {
   "active_models": {
     "EEG": "Neo",
-    "EMG": "xgBoost",
-    "EOG": "dino-ml"
+    "EMG": "xgBoot",
+    "EOG": "dino ml"
   },
   "adc_settings": {
     "resolution_bits": 14,

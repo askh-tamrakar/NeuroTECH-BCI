@@ -95,8 +95,8 @@ class RPSExtractor:
         # 12. SSC (Slope Sign Changes)
         ssc = np.sum(((diff[:-1] * diff[1:]) < 0))
 
-        # 13. WAMP (Willison Amplitude)
-        wamp_threshold = 0.0001
+        # 13. WAMP (Willison Amplitude) — count diffs exceeding 5× noise floor
+        wamp_threshold = 5.0 * np.std(data)
         wamp = np.sum(np.abs(diff) > wamp_threshold)
         
         # GLOBAL ROBUSTNESS: 

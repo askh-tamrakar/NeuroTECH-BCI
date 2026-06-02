@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { BrainCircuit, Activity, ImageIcon, Menu, ChevronLeft, Gamepad2, Settings, History, ScrollText, Zap, Trophy, Keyboard, Radio, HandFist, Hand, Scissors } from 'lucide-react';
+import { BrainCircuit, Activity, ImageIcon, Menu, ChevronLeft, ChevronDown, Gamepad2, Settings, History, ScrollText, Zap, Trophy, Keyboard, Radio, HandFist, Hand, Scissors, Palette } from 'lucide-react';
+import { useTheme } from '../../contexts/ThemeContext';
 import { soundHandler } from '../../handlers/SoundHandler';
 import CustomSelect from '../ui/inputs/CustomSelect';
 import { buildApiUrl } from '../../utils/runtimeConnection';
@@ -103,6 +104,7 @@ const RPSGame = ({ wsEvent }) => {
     const [assetType, setAssetType] = useState('set1'); // 'set1', 'set2', 'emoji'
     const [globalFallbackMode, setGlobalFallbackMode] = useState(false);
     const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+    const { themes, currentThemeId, setTheme } = useTheme();
 
     // Difficulty for computer move randomness: 'low' (repeats sometimes), 'moderate' (avoid repeats), 'high' (fully random)
     const [difficulty, setDifficulty] = useState('moderate');
@@ -495,8 +497,10 @@ const RPSGame = ({ wsEvent }) => {
                         {gameState === 'waiting' && !manualMode && (
                             <span className="pulse text-lg md:text-xl font-bold">
                                 {backendDetectionState === 'recording'
-                                    ? "Recording..."
-                                    : "Waiting for Gesture..."}
+                                    ? `Recording... (${currentPrediction})`
+                                    : (currentPrediction && currentPrediction !== 'REST'
+                                        ? <span>Relax muscle <span className="text-primary">[{currentPrediction}]</span></span>
+                                        : "Waiting for Gesture...")}
                             </span>
                         )}
                         {gameState === 'waiting' && manualMode && (
@@ -716,6 +720,25 @@ const RPSGame = ({ wsEvent }) => {
                                 </span>
                                 <ImageIcon size={16} className="text-primary" />
                             </button>
+                        </div>
+                    </div>
+
+                    {/* Theme */}
+                    <div className="flex flex-col gap-2 shrink-0 bg-bg/30 p-3 rounded-xl border border-border/50">
+                        <label className="text-sm font-bold text-muted uppercase tracking-widest flex items-center gap-2">
+                            <Palette size={16} className="text-primary" /> Theme
+                        </label>
+                        <div className="relative flex items-center">
+                            <select
+                                className="w-full px-4 py-2 pr-8 rounded-full border border-border bg-surface text-text text-sm font-bold cursor-pointer appearance-none outline-none hover:border-primary transition-colors"
+                                value={currentThemeId}
+                                onChange={e => setTheme(e.target.value)}
+                            >
+                                {themes.filter(t => t.visible !== false).map(t => (
+                                    <option key={t.id} value={t.id}>{t.name}</option>
+                                ))}
+                            </select>
+                            <ChevronDown size={14} className="absolute right-3 text-muted pointer-events-none" />
                         </div>
                     </div>
 

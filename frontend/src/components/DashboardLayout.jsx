@@ -17,7 +17,8 @@ import SyncButton from './admin/SyncButton'
 function getTopLevelPage(pathname) {
   if (pathname.startsWith('/dashboard/dino')) return 'dino'
   if (pathname.startsWith('/dashboard/eeg')) return 'eeg'
-  if (pathname.startsWith('/dashboard/rps')) return 'rps'
+  if (pathname.startsWith('/dashboard/rps')) return 'emg_lab'
+  if (pathname.startsWith('/dashboard/emg_lab')) return 'emg_lab'
   if (pathname.startsWith('/dashboard/lab')) return 'lab'
   if (pathname.startsWith('/dashboard/servo_claw')) return 'servo_claw'
   if (pathname.startsWith('/dashboard/settings')) return 'settings'
@@ -103,8 +104,8 @@ export default function DashboardLayout() {
     { label: 'TERMINAL', href: '/dashboard/terminal' },
     { label: 'Dino', href: '/dashboard/dino' },
     { label: 'EEG Suite', href: '/dashboard/eeg' },
-    { label: 'RPS', href: '/dashboard/rps' },
-    { label: 'Lab', href: '/dashboard/lab/data_collection' },
+    { label: 'Muscle Lab', href: '/dashboard/emg_lab' },
+    { label: 'Data Lab', href: '/dashboard/lab/data_collection' },
     { label: 'Servo Claw', href: '/dashboard/servo_claw' },
     { label: 'Settings', href: '/dashboard/settings/auth' },
     ...(isMobile ? [] : [{
