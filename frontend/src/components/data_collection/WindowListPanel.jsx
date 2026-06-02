@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Trash2, Activity, ListX, Ban } from 'lucide-react';
+import { Trash2, Activity, ListX, Ban, SlidersHorizontal } from 'lucide-react';
 import CustomNumberInput from '../ui/inputs/CustomNumberInput'
 
 // --- Helper Functions ---
@@ -150,6 +150,8 @@ function WindowListPanel({
     onAutoCalibrateChange,
     onClearSaved,
     onDeleteAll,
+    onRunCalibration,
+    runInProgress = false,
     progressMode = 'captures',
     progressCurrent = 0,
     progressTotal = 1,
@@ -174,6 +176,8 @@ function WindowListPanel({
         }
         return { recordingCount: rec, processedCount: proc, savedCount: sav, batchProcessed: bProc, batchSaved: bSav };
     }, [windows, currentBatchIndex]);
+
+    const hasCalibratable = !autoCalibrate && !isCalibrationMode && windows.some(w => w.features && (w.status === 'saved' || w.status === 'correct'));
 
     const targetCount = Math.max(1,
         isCalibrationMode && perClassLimit !== null
@@ -304,6 +308,20 @@ function WindowListPanel({
                     >
                         {isCalibrationMode ? 'Append Captures' : 'Save Captures'}
                     </button>
+
+                    {hasCalibratable && (
+                        <button
+                            onClick={onRunCalibration}
+                            disabled={runInProgress}
+                            className={`shrink-0 py-1 px-3 rounded-lg font-bold text-[16px] uppercase tracking-wider transition-all flex items-center justify-center gap-1 ${
+                                runInProgress
+                                    ? 'bg-bg text-muted border border-border cursor-not-allowed opacity-50'
+                                    : 'bg-amber-500 text-white hover:opacity-90 shadow-glow'
+                            }`}
+                        >
+                            <SlidersHorizontal size={16} /> Calibrate
+                        </button>
+                    )}
 
                     {autoCalibrate ? (
                         <>

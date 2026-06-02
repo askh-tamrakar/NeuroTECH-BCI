@@ -100,6 +100,14 @@ class FeatureRouter:
         self.last_config_vhash = config_manager.get_config_version_hash()
         self._prev_emg_active = False  # Tracks EMG activation edge for detector reset
 
+        # ── Raw EMG prediction log (pure model output, no majority voting) ──
+        self._pred_log_path = PROJECT_ROOT / "logs" / "emg_raw_predictions.csv"
+        self._pred_log_path.parent.mkdir(parents=True, exist_ok=True)
+        self._pred_log_file = open(self._pred_log_path, 'a', encoding='utf-8', buffering=1)
+        if self._pred_log_path.stat().st_size == 0:
+            self._pred_log_file.write("iso_time,channel,label,confidence,detection_state\n")
+            self._pred_log_file.flush()
+
 
     def resolve_stream(self):
         if not LSL_AVAILABLE:
@@ -270,7 +278,17 @@ class FeatureRouter:
                                     
                                     # 1. Emit Real-time Prediction (Instant Feedback)
                                     # We emit this every frame for the UI
-                                    self._emit_event("emg_prediction", ch_idx, sensor_type, features, ts, extra_data={"label": instant_label, "detection_state": detection_state})
+                                    confidence = float(getattr(detector, 'last_confidence', 0.0))
+                                    self._emit_event("emg_prediction", ch_idx, sensor_type, features, ts, extra_data={
+                                        "label": instant_label,
+                                        "detection_state": detection_state,
+                                        "confidence": round(confidence, 4)
+                                    })
+                                    # Raw prediction log (pure model output, no majority voting)
+                                    self._pred_log_file.write(
+                                        f"{time.strftime('%Y-%m-%dT%H:%M:%S.')}{int(time.time()*1000)%1000:03d},"
+                                        f"ch{ch_idx},{instant_label},{confidence:.4f},{detection_state}\n"
+                                    )
                                     
                                     # 2. Emit Confirmed Gesture (Game Move)
                                     if confirmed_label:
@@ -318,6 +336,10 @@ class FeatureRouter:
                     return
             if event_name == "emg_prediction":
                 pass
+            # Dedup confirmed gesture events (prevents double-emits from multi-channel)
+            if event_name in ("Rock", "Paper", "Scissors") and event_name == last_event:
+                if current_time - last_ts < 0.3:
+                    return
         elif sensor_type == "EOG":
             pass
         elif sensor_type == "ECG":

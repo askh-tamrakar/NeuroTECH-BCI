@@ -1,0 +1,78 @@
+/* ══════════════════════════════════════════════════════════
+   MuscleLabNav — Pill navigation for Muscle Lab tabs
+   ══════════════════════════════════════════════════════════ */
+
+.mlab-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  width: 100%;
+}
+
+/* ── Pill row ── */
+.mlab-nav-pills {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  background: var(--surface);
+  border-radius: 9999px;
+  border: 1px solid var(--border);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.mlab-nav-pills::-webkit-scrollbar {
+  display: none;
+}
+
+.mlab-nav-pill {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 14px;
+  border-radius: 9999px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  white-space: nowrap;
+}
+
+.mlab-nav-pill:hover {
+  border-color: var(--tab-color, var(--primary));
+  color: var(--tab-color, var(--primary));
+  background: color-mix(in srgb, var(--tab-color, var(--primary)) 8%, transparent);
+}
+
+.mlab-nav-pill.active {
+  background: color-mix(in srgb, var(--tab-color, var(--primary)) 18%, transparent);
+  border-color: color-mix(in srgb, var(--tab-color, var(--primary)) 40%, transparent);
+  color: var(--tab-color, var(--primary));
+}
+
+/* ── Active indicator bar ── */
+.mlab-nav-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 14px;
+  border-radius: 9999px;
+  margin-top: 6px;
+  width: fit-content;
+}
+
+.mlab-nav-indicator-inner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}

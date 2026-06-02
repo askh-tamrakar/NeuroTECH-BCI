@@ -17,7 +17,7 @@ const TABS = [
 ]
 
 export default function EMGLabView({ wsEvent, wsMessage }) {
-  const [activeTab, setActiveTab] = useState('meter')
+  const [activeTab, setActiveTab] = useState('rps')
 
   // Shared RMS ring-buffer — updated from emg_prediction events
   const rmsHistoryRef = useRef(new Float32Array(512).fill(0))
@@ -68,8 +68,8 @@ export default function EMGLabView({ wsEvent, wsMessage }) {
 
   return (
     <div className="emglab-root">
-      {/* ── Tab bar (hidden when Muscle Meter owns the sidebar nav) ── */}
-      {activeTab !== 'meter' && <div className="emglab-tabbar">
+      {/* Tab bar — always visible for navigation */}
+      <div className="emglab-tabbar">
         {TABS.map(tab => {
           const Icon = tab.icon
           const active = activeTab === tab.id
@@ -86,9 +86,9 @@ export default function EMGLabView({ wsEvent, wsMessage }) {
             </button>
           )
         })}
-      </div>}
+      </div>
 
-      {/* ── Panels — all kept mounted so state / canvas live on ──── */}
+      {/* Panels — all kept mounted so state / canvas live on */}
       <div className="emglab-panels">
         <div className={`emglab-panel ${activeTab === 'rps'    ? 'visible' : ''}`}>
           <RPSGame wsEvent={wsEvent} />

@@ -27,10 +27,15 @@ class RPSDetector:
         self.gesture_start_time = 0.0
         self.requires_rest = False  # Must see Rest before accepting a new gesture
         self._requires_rest_since = 0.0  # Watchdog: timestamp when requires_rest was set
+        self.last_confidence = 0.0  # Latest raw model confidence (for logging)
+        self.rest_streak = 0  # Consecutive Rest frames — gates new gesture collection
         
         # Configuration for state machine
         rps_cfg = config.get("features", {}).get("RPS", {})
         self.confidence_threshold = rps_cfg.get("confidence_threshold", 0.6)
+        self.min_rest_streak = rps_cfg.get("min_rest_streak", 3)
+        self.min_candidates_for_resolution = rps_cfg.get("min_candidates_for_resolution", 3)
+        self.skip_calibration_norm = rps_cfg.get("skip_calibration_norm", False)
         
         self.load_model()
         
@@ -96,11 +101,10 @@ class RPSDetector:
             old_shifts = getattr(self, 'metadata', {}).get('calibration_shifts', {}) if hasattr(self, 'metadata') else {}
             for col in feature_cols:
                 val = features.get(col, 0.0)
-                # handle potential missing 'range' vs 'rng' if any
                 if col == 'range' and 'range' not in features and 'rng' in features:
                    val = features['rng']
 
-                if rest_mean and col in rest_mean:
+                if not self.skip_calibration_norm and rest_mean and col in rest_mean:
                     # Stage 1: REST Z-Score normalization
                     val = (val - rest_mean[col]) / max(rest_std.get(col, 1e-6), 1e-6)
                     # Stage 2: MVC scaling
@@ -154,74 +158,72 @@ class RPSDetector:
 
     def detect(self, features: dict) -> tuple[str, str | None, str]:
         """
-        Stateful detection logic:
-        - If Rest -> Resolve any pending candidates.
-        - If Gesture -> Add to candidates.
+        Stateful detection: Rest → gesture → Rest → resolve by majority.
+        No auto-confirm on hold duration (was cutting gestures off too early).
+        5s max-gesture watchdog as safety net only.
         Returns: (InstantLabel, ConfirmedLabel or None, DetectionState)
         """
         label, confidence = self.predict_instant(features)
+        self.last_confidence = confidence  # expose raw confidence for logging
         
-        # Determine if this instant frame is "Active" (valid gesture) or "Rest"
-        # Ignoring confidence threshold as per user request to rely purely on predicted label
         is_active = label in ['Rock', 'Paper', 'Scissors']
         is_rest = label == 'Rest' or label == 'Unknown'
-        
-        # Default state
         detection_state = "waiting"
         
-        # State Machine
+        max_gesture_duration = self.config.get("features", {}).get("RPS", {}).get("gesture_max_duration", 5.0)
+        
         if is_active:
             if not self.collecting_candidates:
                 if self.requires_rest:
                     # Watchdog: auto-clear requires_rest after 1.2s to prevent permanent lock
-                    # (handles noisy baseline that never cleanly classifies as Rest)
                     now = time.time()
                     if self._requires_rest_since == 0.0:
                         self._requires_rest_since = now
                     elif now - self._requires_rest_since >= 1.2:
                         self.requires_rest = False
                         self._requires_rest_since = 0.0
-                        # Fall through to normal collection below
                     else:
                         return label, None, "waiting"
                 if self.requires_rest:
+                    return label, None, "waiting"
+                # Layer 1: must have sustained Rest before new gesture
+                if self.rest_streak < self.min_rest_streak:
                     return label, None, "waiting"
                 self.collecting_candidates = True
                 self.candidates = []
                 self.gesture_start_time = time.time()
             
+            self.rest_streak = 0
             self.candidates.append(label)
             detection_state = "recording"
-
-            # Auto-confirm if gesture is held for too long (prevents getting stuck)
+            
+            # Safety watchdog: force-resolve if gesture held absurdly long
             hold_duration = time.time() - self.gesture_start_time
-            gesture_hold_timeout = self.config.get("features", {}).get("RPS", {}).get("gesture_hold_timeout", 0.8)
-            if hold_duration >= gesture_hold_timeout and len(self.candidates) >= 5:
+            if hold_duration >= max_gesture_duration and len(self.candidates) >= 3:
                 valid_candidates = [c for c in self.candidates if c in ['Rock', 'Paper', 'Scissors']]
                 if valid_candidates:
                     counts = Counter(valid_candidates)
                     most_common = counts.most_common(1)[0][0]
                     self.collecting_candidates = False
                     self.candidates = []
-                    self.requires_rest = True  # Gesture still held — wait for Rest before next gesture
-                    self._requires_rest_since = 0.0  # Reset watchdog timer
+                    self.requires_rest = True
+                    self._requires_rest_since = 0.0
                     return label, most_common, "waiting"
-
-            return label, None, detection_state # Don't emit confirmed move yet, but return instant label and state
+            
+            return label, None, detection_state
             
         elif is_rest:
-            self.requires_rest = False  # Seen Rest — allow next gesture to be registered
-            self._requires_rest_since = 0.0  # Clear watchdog timer
+            self.rest_streak += 1
+            self.requires_rest = False
+            self._requires_rest_since = 0.0
             if self.collecting_candidates:
-                # End of a gesture, resolve it!
                 if self.candidates:
                     valid_candidates = [c for c in self.candidates if c in ['Rock', 'Paper', 'Scissors']]
-                    if valid_candidates:
+                    if valid_candidates and len(valid_candidates) >= self.min_candidates_for_resolution:
                         counts = Counter(valid_candidates)
                         most_common = counts.most_common(1)[0][0]
                         self.collecting_candidates = False
                         self.candidates = []
-                        # Return (InstantLabel, ConfirmedLabel, DetectionState)
                         return label, most_common, "waiting"
                     else:
                         self.collecting_candidates = False
@@ -243,6 +245,8 @@ class RPSDetector:
         self.gesture_start_time = 0.0
         self.requires_rest = False
         self._requires_rest_since = 0.0
+        self.last_confidence = 0.0
+        self.rest_streak = 0
 
     def update_config(self, config: dict):
         self.config = config

@@ -282,20 +282,6 @@ const SignalChart = forwardRef(({
   const yDomainRaw = parseFloat(effectiveRangeStr);
   let rangeDisplay = isNaN(yDomainRaw) ? Math.round(1500 / currentZoom).toString() : yDomainRaw.toString();
 
-  // Auto-range adjusting logic based on absolute maximum of signal
-  // ECG: skip auto-expand — spikes would blow up the Y axis; user sets zoom manually
-  useEffect(() => {
-    if (activeSensor === 'ECG') return;   // ← ECG: fixed scale
-    const absMax = Math.max(Math.abs(stats.min), Math.abs(stats.max));
-    const currentR = parseFloat(rangeDisplay);
-    if (!isNaN(currentR) && absMax > currentR && currentZoom === 1 && !currentManual) {
-      const nextRange = getNextGoodRange(absMax);
-      if (nextRange > currentR) {
-        setAutoScaledRange(nextRange.toString());
-      }
-    }
-  }, [stats.min, stats.max, rangeDisplay, currentZoom, currentManual, activeSensor]);
-
   // ── ECG: ingest wsEvent for overlay data + heartbeat sound ──────────
   useEffect(() => {
     if (!wsEvent || activeSensor !== 'ECG') return

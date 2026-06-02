@@ -18,7 +18,7 @@ class RPSExtractor:
         # Stride 64 samples (~125ms update rate) for responsiveness
         self.stride = 64 
         
-        self.buffer = collections.deque([0.0] * self.buffer_size, maxlen=self.buffer_size)
+        self.buffer = collections.deque(maxlen=self.buffer_size)
         self.sample_count = 0
         
     def process(self, sample_val: float):
@@ -95,8 +95,8 @@ class RPSExtractor:
         # 12. SSC (Slope Sign Changes)
         ssc = np.sum(((diff[:-1] * diff[1:]) < 0))
 
-        # 13. WAMP (Willison Amplitude)
-        wamp_threshold = 0.0001
+        # 13. WAMP (Willison Amplitude) — count diffs exceeding 5× noise floor
+        wamp_threshold = 5.0 * np.std(data)
         wamp = np.sum(np.abs(diff) > wamp_threshold)
         
         # GLOBAL ROBUSTNESS: 

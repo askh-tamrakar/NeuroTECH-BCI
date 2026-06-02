@@ -3,6 +3,19 @@ from src.server.server.state import state
 from src.server.server.config_manager import load_config, save_config
 from src.server.server.extensions import socketio
 
+
+def _hot_reload_muscle_extractors(config: dict):
+    """Hot-reload MuscleStrengthExtractor instances if features.EMG.muscle_strength changed."""
+    extractors = getattr(state, 'muscle_strength_extractors', {})
+    if not extractors:
+        return
+    sr = getattr(state, 'sr', 512)
+    for extractor in extractors.values():
+        try:
+            extractor.reload_config(config, sr=sr)
+        except Exception as e:
+            print(f"[Config] Warning: extractor reload failed: {e}")
+
 config_bp = Blueprint('config', __name__)
 
 @config_bp.route('/api/config', methods=['GET'])
@@ -43,7 +56,11 @@ def api_save_config():
 
         # Save to disk
         success = save_config(config)
-        
+
+        # Hot-reload live extractors if features changed
+        if 'features' in config:
+            _hot_reload_muscle_extractors(config)
+
         # Broadcast to all connected clients
         socketio.emit('config_updated', {
             "status": "saved",

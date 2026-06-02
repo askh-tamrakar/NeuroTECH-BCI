@@ -269,19 +269,22 @@ function draw() {
             if (v < minInView) minInView = v;
         }
         if (maxInView > yMax || minInView < yMin) {
-            const maxAbs = Math.max(Math.abs(maxInView), Math.abs(minInView));
-            const getNiceBound = (val) => {
-                if (val <= 0) return 1;
-                if (val < 1e-10) return 1e-10;
-                const mag = Math.pow(10, Math.floor(Math.log10(val)));
-                const norm = val / mag;
-                if (norm <= 1) return 1 * mag;
-                if (norm <= 2) return 2 * mag;
-                if (norm <= 5) return 5 * mag;
-                return 10 * mag;
-            };
-            const niceBound = getNiceBound(maxAbs);
-            yMax = niceBound; yMin = -niceBound;
+            // ECG: fixed scale — skip worker-side auto-expand (spikes would blow up Y axis)
+            if (config.activeSensor !== 'ECG') {
+                const maxAbs = Math.max(Math.abs(maxInView), Math.abs(minInView));
+                const getNiceBound = (val) => {
+                    if (val <= 0) return 1;
+                    if (val < 1e-10) return 1e-10;
+                    const mag = Math.pow(10, Math.floor(Math.log10(val)));
+                    const norm = val / mag;
+                    if (norm <= 1) return 1 * mag;
+                    if (norm <= 2) return 2 * mag;
+                    if (norm <= 5) return 5 * mag;
+                    return 10 * mag;
+                };
+                const niceBound = getNiceBound(maxAbs);
+                yMax = niceBound; yMin = -niceBound;
+            }
         }
     }
 

@@ -1247,7 +1247,10 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
         const toAppend = markedWindows
             .filter(w => w.status === 'collected' && (!explicitIdSet || explicitIdSet.has(w.id)))
             .slice(0, appendCountLimit);
-        if (!toAppend || toAppend.length === 0) return;
+        if (!toAppend || toAppend.length === 0) {
+            console.warn('[DataCollectionView] No collected windows to save');
+            return;
+        }
 
         const pendingIds = toAppend.map((window) => window.id);
 
@@ -1632,6 +1635,7 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
             refreshSessionData(true, { fullName: 'emg_calibration' });
         } catch (err) {
             console.error("Runtime calibration error:", err);
+            alert(`Runtime calibration failed: ${err.message}`);
         } finally {
             setRunInProgress(false);
         }
@@ -2724,6 +2728,8 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
                                             onAutoCalibrateChange={setAutoCalibrate}
                                             onClearSaved={handleAppendSamples}
                                             onDeleteAll={handleClearAllWindows}
+                                            onRunCalibration={runCalibration}
+                                            runInProgress={runInProgress}
                                             progressMode={autoCalibrate ? 'batches' : 'captures'}
                                             progressCurrent={autoCalibrate ? completedBatchCount : producedCount}
                                             progressTotal={autoCalibrate ? numBatches : (isCalibrationMode ? calibrationTotal : autoLimit)}
@@ -2750,6 +2756,8 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
                             onAutoCalibrateChange={setAutoCalibrate}
                             onClearSaved={handleAppendSamples}
                             onDeleteAll={handleClearAllWindows}
+                            onRunCalibration={runCalibration}
+                            runInProgress={runInProgress}
                             progressMode={autoCalibrate ? 'batches' : 'captures'}
                             progressCurrent={autoCalibrate ? completedBatchCount : producedCount}
                             progressTotal={autoCalibrate ? numBatches : (isCalibrationMode ? calibrationTotal : autoLimit)}
