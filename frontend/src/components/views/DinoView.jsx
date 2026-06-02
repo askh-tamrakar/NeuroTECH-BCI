@@ -6,7 +6,7 @@ import Counter from '../ui/display/Counter'
 import {
     ScanEye, SlidersHorizontal, ArrowUp, Pause, Play, Trash2, Wifi, WifiOff, Save, Skull, Trophy, Keyboard, Eye, Gamepad2, Globe, Sparkles, Atom, Ruler, Settings, RotateCcw, ScrollText, Timer, Weight, MoveVertical,
     MoveHorizontal, Maximize, ArrowDownToLine, Grid, Sun, Moon, Cloud, Star, TreePine, Leaf, Hand,
-    Layers, Zap, Clock, ChevronDown, Activity, Target, Radio, Signal, Circle, Camera, Menu, BrainCircuit, Check, X, ChevronRight, ChevronLeft
+    Layers, Zap, Clock, ChevronDown, Activity, Target, Radio, Signal, Circle, Camera, Menu, BrainCircuit, Check, X, ChevronRight, ChevronLeft, ChevronUp, Music2, Swords, Dumbbell, Heart, Volume2
 } from 'lucide-react'
 import { soundHandler } from '../../handlers/SoundHandler'
 import { buildApiUrl } from '../../utils/runtimeConnection'
@@ -552,24 +552,59 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
                 }
 
                 if (currentMode === 'snake') {
-                    // Snake mode: simple init, no bush sprites needed
-                    const width = containerRef.current ? containerRef.current.clientWidth : 800;
-                    const height = containerRef.current ? containerRef.current.clientHeight : 376;
+                    // Snake mode: load 4 apple sprites (red, green, yellow, blue) + optional purple
+                    const appleNames = ['red apple.png', 'green apple.png', 'yellow apple.png', 'blue apple.png'];
+                    // Try adding purple apple if it exists
+                    const loadApple = (name) => new Promise((resolve) => {
+                        const img = new Image();
+                        img.src = `/Resources/snake/${name}`;
+                        img.onload = () => createImageBitmap(img).then(resolve).catch(() => resolve(null));
+                        img.onerror = () => resolve(null); // silently skip missing files
+                    });
 
-                    worker.postMessage({
-                        type: 'INIT',
-                        payload: {
-                            canvas: offscreen,
-                            settings: {
-                                ...snakeSettingsRef.current,
-                                CANVAS_WIDTH: width,
-                                CANVAS_HEIGHT: height
-                            },
-                            highScore: highScore,
-                            bestFoodEaten: snakeBestFoodRef.current,
-                            theme: theme
-                        }
-                    }, [offscreen]);
+                    Promise.all([...appleNames, 'purple apple.png'].map(loadApple))
+                        .then(results => {
+                            const appleSprites = results.filter(Boolean); // remove nulls (failed loads)
+                            const width = containerRef.current ? containerRef.current.clientWidth : 800;
+                            const height = containerRef.current ? containerRef.current.clientHeight : 376;
+
+                            worker.postMessage({
+                                type: 'INIT',
+                                payload: {
+                                    canvas: offscreen,
+                                    settings: {
+                                        ...snakeSettingsRef.current,
+                                        CANVAS_WIDTH: width,
+                                        CANVAS_HEIGHT: height
+                                    },
+                                    highScore: highScore,
+                                    bestFoodEaten: snakeBestFoodRef.current,
+                                    theme: theme,
+                                    appleSprites: appleSprites
+                                }
+                            }, [offscreen, ...appleSprites]);
+                        })
+                        .catch(err => {
+                            console.warn("Failed to load apple sprites", err);
+                            const width = containerRef.current ? containerRef.current.clientWidth : 800;
+                            const height = containerRef.current ? containerRef.current.clientHeight : 376;
+
+                            worker.postMessage({
+                                type: 'INIT',
+                                payload: {
+                                    canvas: offscreen,
+                                    settings: {
+                                        ...snakeSettingsRef.current,
+                                        CANVAS_WIDTH: width,
+                                        CANVAS_HEIGHT: height
+                                    },
+                                    highScore: highScore,
+                                    bestFoodEaten: snakeBestFoodRef.current,
+                                    theme: theme,
+                                    appleSprites: []
+                                }
+                            }, [offscreen]);
+                        });
                 } else {
                     // Dino mode: existing logic with bush sprites
                     const extendedTheme = {

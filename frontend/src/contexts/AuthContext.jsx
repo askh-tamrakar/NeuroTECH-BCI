@@ -195,10 +195,25 @@ export function AuthProvider({ children }) {
     }
   }
 
+  // -------------------------------------------------------------------------
+  // Dev bypass — skip auth in dev mode
+  // -------------------------------------------------------------------------
+
+  const devBypass = () => {
+    const devUser = {
+      id: 'dev-bypass-user',
+      username: 'dev_admin',
+      name: 'Dev Admin',
+      email: 'dev@neuro.tech',
+      is_admin: true,
+    }
+    _persistSession('dev-bypass-token', devUser, true)
+  }
+
   const isAdmin = Boolean(user?.is_admin)
 
   return (
-    <AuthContext.Provider value={{ user, loading, isLocalAuth, isAdmin, login, logout, signup, verifyOtp, resendOtp, syncToServer }}>
+    <AuthContext.Provider value={{ user, loading, isLocalAuth, isAdmin, login, logout, signup, verifyOtp, resendOtp, syncToServer, devBypass }}>
       {children}
     </AuthContext.Provider>
   )

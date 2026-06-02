@@ -60,7 +60,7 @@ const InputField = ({ icon: Icon, type, placeholder, value, onChange, error, lab
 }
 
 export default function LoginPage() {
-  const { login, signup, verifyOtp, resendOtp } = useAuth()
+  const { login, signup, verifyOtp, resendOtp, devBypass } = useAuth()
 
   const [isSignup, setIsSignup] = useState(false)
   const [showOtp, setShowOtp] = useState(false)
@@ -436,6 +436,29 @@ export default function LoginPage() {
             </form>
 
             <div className="flex-grow min-h-[10px]"></div>
+
+            {/* ── Dev Mode Bypass ─────────────────────────────── */}
+            {import.meta.env.DEV && (
+              <div className="mt-4 text-center">
+                <button
+                  type="button"
+                  onClick={devBypass}
+                  className="group relative px-6 py-3 rounded-xl border-2 border-dashed border-yellow-500/40
+                             text-yellow-400 font-bold text-xs uppercase tracking-[0.2em]
+                             hover:border-yellow-400 hover:bg-yellow-500/10
+                             transition-all duration-300 w-full"
+                >
+                  <span className="flex items-center justify-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
+                    DEV MODE — BYPASS AUTH
+                    <span className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
+                  </span>
+                  <span className="block text-[9px] opacity-50 font-normal tracking-normal mt-0.5 normal-case">
+                    Skip sign in — log in as admin (dev only)
+                  </span>
+                </button>
+              </div>
+            )}
 
             {/* Footer Form Toggle */}
             <div className="mt-6 text-center pt-4 border-t border-white/5">

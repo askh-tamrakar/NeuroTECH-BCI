@@ -35,6 +35,8 @@ let food = null;
 let tickAccumulator = 0;
 let tickInterval = 200;
 let lastSentScore = 0;
+let appleSprites = []; // Array of 5 ImageBitmaps (red, green, yellow, blue, purple)
+let appleThemeIndex = 0; // Which apple to use based on theme
 
 // --- Theme Colors ---
 let COLORS = {
@@ -52,7 +54,6 @@ let COLORS = {
     overlay: 'rgba(0,0,0,0.3)',
 };
 
-// Dynamic colors based on theme
 let CURRENT_COLORS = { ...COLORS };
 let isNight = false;
 
@@ -63,20 +64,18 @@ function initGame() {
     gridRows = SETTINGS.GRID_ROWS;
     tickInterval = SETTINGS.TICK_INTERVAL;
 
-    // Calculate cell size to fill entire canvas
-    const maxCellW = Math.floor(SETTINGS.CANVAS_WIDTH / gridCols);
-    const maxCellH = Math.floor(SETTINGS.CANVAS_HEIGHT / gridRows);
-    cellSize = Math.min(maxCellW, maxCellH);
-
-    // Full canvas: start from top-left, fill width, stretch rows
-    const totalGridW = gridCols * cellSize;
-    const totalGridH = gridRows * cellSize;
+    // Cell size from height, then extend columns to fill full width (use ceil to cover gaps)
+    cellSize = Math.ceil(SETTINGS.CANVAS_HEIGHT / SETTINGS.GRID_ROWS);
+    gridCols = Math.ceil(SETTINGS.CANVAS_WIDTH / cellSize);
+    gridRows = SETTINGS.GRID_ROWS;
     gridOffsetX = 0;
-    // Keep the grid starting from top, fill width entirely
-    // If the grid is taller than canvas, reduce cell size
-    if (totalGridH > SETTINGS.CANVAS_HEIGHT) {
-        cellSize = Math.floor(SETTINGS.CANVAS_HEIGHT / gridRows);
-        gridOffsetX = 0;
+    gridOffsetY = 0;
+
+    // Pick the right apple based on theme primary color hue
+    appleThemeIndex = getAppleIndexForTheme(COLORS.primary);
+    // Clamp to available sprites (in case purple apple is missing)
+    if (appleSprites.length > 0) {
+        appleThemeIndex = Math.min(appleThemeIndex, appleSprites.length - 1);
     }
 
     // Initialize snake
@@ -97,8 +96,6 @@ function initGame() {
     spawnFood();
 }
 
-let foodColorIndex = 0;
-
 function spawnFood() {
     const occupied = new Set(snake.map(s => `${s.x},${s.y}`));
     let pos;
@@ -111,8 +108,6 @@ function spawnFood() {
         attempts++;
     } while (occupied.has(`${pos.x},${pos.y}`) && attempts < 1000);
     food = pos;
-    // Cycle through 4 food colors
-    foodColorIndex = (foodColorIndex + 1) % 4;
 }
 
 function resetGame() {
@@ -294,42 +289,16 @@ function drawGrid() {
 }
 
 function drawFood() {
-    if (!food) return;
+    if (!food || !appleSprites.length) return;
     const fx = gridOffsetX + food.x * cellSize;
     const fy = gridOffsetY + food.y * cellSize;
-    const pad = Math.max(1, Math.floor(cellSize * 0.15));
 
-    // Get the 4 food colors cycling
-    const foodColors = COLORS.foodColors || ['#ef4444', '#22c55e', '#eab308', '#3b82f6'];
-    const foodGlowColors = COLORS.foodGlowColors || ['#fca5a5', '#86efac', '#fde68a', '#93c5fd'];
-    const colorIdx = foodColorIndex % 4;
+    // Use the theme-selected apple sprite
+    const sprite = appleSprites[appleThemeIndex];
+    if (!sprite) return;
 
-    // Food glow
-    ctx.fillStyle = foodGlowColors[colorIdx];
-    ctx.globalAlpha = 0.3;
-    ctx.fillRect(fx - pad, fy - pad, cellSize + pad * 2, cellSize + pad * 2);
-    ctx.globalAlpha = 1.0;
-
-    // Food block (diamond/apple shape using 4 triangles)
-    ctx.fillStyle = foodColors[colorIdx];
-    const cx = fx + cellSize / 2;
-    const cy = fy + cellSize / 2;
-    const r = cellSize / 2 - pad;
-    ctx.beginPath();
-    ctx.moveTo(cx, cy - r);           // top
-    ctx.lineTo(cx + r, cy);           // right
-    ctx.lineTo(cx, cy + r);           // bottom
-    ctx.lineTo(cx - r, cy);           // left
-    ctx.closePath();
-    ctx.fill();
-
-    // Stem (small line on top)
-    ctx.strokeStyle = foodColors[colorIdx];
-    ctx.lineWidth = Math.max(1, Math.floor(cellSize * 0.08));
-    ctx.beginPath();
-    ctx.moveTo(cx, cy - r);
-    ctx.lineTo(cx, cy - r - pad * 1.5);
-    ctx.stroke();
+    // Draw apple sprite to fill the cell
+    ctx.drawImage(sprite, fx, fy, cellSize, cellSize);
 }
 
 function drawSnake() {
@@ -435,6 +404,58 @@ function darkenColor(color, amount) {
     const g = Math.round(color.g * (1 - amount));
     const b = Math.round(color.b * (1 - amount));
     return `rgb(${r},${g},${b})`;
+}
+
+function getAppleIndexForTheme(primaryColor) {
+    // Determine which apple (0=red, 1=green, 2=yellow, 3=blue, 4=purple) matches the primary color best
+    if (!primaryColor || primaryColor === '#3b82f6') return 3; // default blue
+    let hex = primaryColor.trim();
+    if (hex.startsWith('#')) hex = hex.slice(1);
+    if (hex.length === 3) hex = hex.split('').map(c => c + c).join('');
+    const rgb = parseInt(hex, 16);
+    if (isNaN(rgb)) return 3;
+    const r = (rgb >> 16) & 0xff;
+    const g = (rgb >> 8) & 0xff;
+    const b = rgb & 0xff;
+
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    const range = max - min;
+    const isGray = range < 40;
+
+    if (isGray) {
+        return isNight ? 2 : 3; // yellow for dark, blue for light
+    }
+
+    // Calculate approximate hue to pick the closest apple color
+    // Normalize rgb to 0-1
+    const rn = r / 255, gn = g / 255, bn = b / 255;
+
+    // Check each apple color and compute distance
+    // Target colors: red(1,0,0), green(0,1,0), yellow(1,1,0), blue(0,0,1), purple(0.6,0.2,0.8)
+    const targets = [
+        { idx: 0, cr: 1, cg: 0, cb: 0 },     // Red
+        { idx: 1, cr: 0, cg: 1, cb: 0 },     // Green
+        { idx: 2, cr: 1, cg: 1, cb: 0 },     // Yellow
+        { idx: 3, cr: 0, cg: 0, cb: 1 },     // Blue
+        { idx: 4, cr: 0.6, cg: 0.2, cb: 0.8 } // Purple
+    ];
+
+    let bestIdx = 3; // default blue
+    let bestDist = Infinity;
+
+    for (const t of targets) {
+        const dr = rn - t.cr;
+        const dg = gn - t.cg;
+        const db = bn - t.cb;
+        const dist = dr * dr + dg * dg + db * db;
+        if (dist < bestDist) {
+            bestDist = dist;
+            bestIdx = t.idx;
+        }
+    }
+
+    return bestIdx;
 }
 
 function drawOverlay() {
@@ -548,6 +569,11 @@ self.onmessage = (e) => {
             highScore = payload.highScore || 0;
             bestFoodEaten = payload.bestFoodEaten || 0;
 
+            // Load apple sprites if provided (red, green, yellow, blue)
+            if (payload.appleSprites && payload.appleSprites.length >= 4) {
+                appleSprites = payload.appleSprites;
+            }
+
             // Detect night theme
             if (payload.theme && payload.theme.bg) {
                 isNight = isDarkColor(payload.theme.bg);
@@ -564,6 +590,8 @@ self.onmessage = (e) => {
                 if (payload.bg) {
                     isNight = isDarkColor(payload.bg);
                 }
+                // Re-evaluate apple for new theme
+                appleThemeIndex = getAppleIndexForTheme(COLORS.primary);
             }
             break;
 
