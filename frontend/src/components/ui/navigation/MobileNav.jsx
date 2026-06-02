@@ -5,7 +5,7 @@ import { Terminal, Gamepad2, Brain, HandMetal, FlaskConical, Settings2, Bot } fr
 export default function MobileNav({ currentPage, mobileMainView, setMobileMainView }) {
     const navItems = [
         { id: 'terminal', icon: Terminal, label: 'Terminal', href: '/dashboard/terminal' },
-        { id: 'dino', icon: Gamepad2, label: 'Dino', href: '/dashboard/dino' },
+        { id: 'dino', icon: Gamepad2, label: 'Eye Arcade', href: '/dashboard/dino' },
         { id: 'eeg', icon: Brain, label: 'EEG', href: '/dashboard/eeg' },
         { id: 'rps', icon: HandMetal, label: 'RPS', href: '/dashboard/rps' },
         { id: 'lab', icon: FlaskConical, label: 'Lab', href: '/dashboard/lab/data_collection' },

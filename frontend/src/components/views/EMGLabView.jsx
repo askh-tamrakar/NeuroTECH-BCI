@@ -1,19 +1,21 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { Activity, Heart, Volume2, Swords, Dumbbell, ChevronRight } from 'lucide-react'
+import { Activity, Heart, Volume2, Swords, Dumbbell, ChevronRight, Music2 } from 'lucide-react'
 import RPSGame from './RPSGame'
 import MuscleMeter from '../emg/MuscleMeter/MuscleMeter'
 import EMGWaveform from '../emg/EMGWaveform/EMGWaveform'
 import MuscleSonifier from '../emg/MuscleSonifier/MuscleSonifier'
 import ECGWaveform from '../emg/ECGWaveform/ECGWaveform'
+import MuscleMelody from '../emg/MuscleMelody/MuscleMelody'
 import { CalibrationApi } from '../../services/calibrationApi'
 import '../../styles/views/EMGLabView.css'
 
 const TABS = [
-  { id: 'rps',      label: 'RPS Game',     icon: Swords,   color: '#ef4444' },
-  { id: 'meter',    label: 'Muscle Meter', icon: Dumbbell, color: '#a855f7' },
-  { id: 'waves',    label: 'EMG Waves',    icon: Activity, color: '#3b82f6' },
-  { id: 'sound',    label: 'Muscle Sound', icon: Volume2,  color: '#22c55e' },
-  { id: 'ecg',      label: 'ECG / Heart',  icon: Heart,    color: '#ef4444' },
+  { id: 'rps',      label: 'RPS Game',      icon: Swords,   color: '#ef4444' },
+  { id: 'meter',    label: 'Muscle Meter',  icon: Dumbbell, color: '#a855f7' },
+  { id: 'waves',    label: 'EMG Waves',     icon: Activity, color: '#3b82f6' },
+  { id: 'sound',    label: 'Muscle Sound',  icon: Volume2,  color: '#22c55e' },
+  { id: 'melody',   label: 'Muscle Melody', icon: Music2,   color: '#f59e0b' },
+  { id: 'ecg',      label: 'ECG / Heart',   icon: Heart,    color: '#ef4444' },
 ]
 
 export default function EMGLabView({ wsEvent, wsMessage }) {
@@ -118,6 +120,12 @@ export default function EMGLabView({ wsEvent, wsMessage }) {
           <MuscleSonifier
             latestRmsRef={latestRmsRef}
             wsEvent={wsEvent}
+          />
+        </div>
+        <div className={`emglab-panel ${activeTab === 'melody' ? 'visible' : ''}`}>
+          <MuscleMelody
+            wsEvent={wsEvent}
+            activeTab={activeTab}
           />
         </div>
         <div className={`emglab-panel ${activeTab === 'ecg'    ? 'visible' : ''}`}>
