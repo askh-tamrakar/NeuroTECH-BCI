@@ -16,9 +16,17 @@ class EEGFilterProcessor:
         self.channel_key = channel_key
         
         self._load_params()
-        self._design_filters()
-        
-        # Initialize state
+        try:
+            self._design_filters()
+            self._init_filter_states()
+        except Exception as e:
+            print(f"[EEG] 🔴 CRITICAL: Filter design crashed!")
+            print(f"[EEG]    scipy={__import__('scipy').__version__}, numpy={__import__('numpy').__version__}")
+            print(f"[EEG]    Error: {e}")
+            raise
+
+    def _init_filter_states(self):
+        """Initialize filter state vectors (separated to catch scipy crashes)."""
         self.zi_hp = sosfilt_zi(self.sos_hp) * 0.0 if getattr(self, 'sos_hp', None) is not None else None
         self.zi_notch = lfilter_zi(self.b_notch, self.a_notch) * 0.0 if (self.notch_enabled and getattr(self, 'a_notch', None) is not None) else None
         self.zi_bp = sosfilt_zi(self.sos_bp) * 0.0 if (self.bp_enabled and getattr(self, 'sos_bp', None) is not None) else None
@@ -90,11 +98,8 @@ class EEGFilterProcessor:
             print(f"[EEG] Config changed ({self.channel_key}) -> HP:{self.hp_cutoff} Notch:{self.notch_enabled}({self.notch_freq}Hz) BP:{self.bp_enabled}({self.bp_low}-{self.bp_high}Hz)")
             self._design_filters()
             
-            # Reset states
             try:
-                self.zi_hp = sosfilt_zi(self.sos_hp) * 0.0 if getattr(self, 'sos_hp', None) is not None else None
-                self.zi_notch = lfilter_zi(self.b_notch, self.a_notch) * 0.0 if (self.notch_enabled and getattr(self, 'a_notch', None) is not None) else None
-                self.zi_bp = sosfilt_zi(self.sos_bp) * 0.0 if (self.bp_enabled and getattr(self, 'sos_bp', None) is not None) else None
+                self._init_filter_states()
             except Exception as e:
                 print(f"[EEG] ⚠️ Filter state reset error: {e}")
                 self.zi_hp = None

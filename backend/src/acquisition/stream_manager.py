@@ -82,6 +82,9 @@ class StreamManagerApp:
         else:
             self.log("❌ LSL library not found (pylsl).")
             
+        # Start health monitor
+        self._start_heartbeat()
+        
         # Automatically trigger Start Server shortly after app boots up
         self.root.after(500, self.start_server)
 
@@ -155,13 +158,27 @@ class StreamManagerApp:
         
         # Thread-safe UI update
         def _update_ui():
-            self.log_text.config(state="normal")
-            self.log_text.insert("end", f"[{timestamp}] {message}\n")
-            self.log_text.see("end")
-            self.log_text.config(state="disabled")
+            try:
+                self.log_text.config(state="normal")
+                self.log_text.insert("end", f"[{timestamp}] {message}\n")
+                self.log_text.see("end")
+                self.log_text.config(state="disabled")
+            except:
+                pass
         
         self.root.after_idle(_update_ui)
-        print(f"[{timestamp}] {message}") # Mirror to stdout for system integration
+        print(f"[{timestamp}] [Stream Manager] {message}") 
+
+    def _start_heartbeat(self):
+        """Send periodic heartbeat to orchestrator to prevent timeouts."""
+        def _heartbeat_loop():
+            while True:
+                if self.is_running:
+                    print(f"[{time.strftime('%H:%M:%S')}] [Stream Manager] [HEARTBEAT] System Healthy | Packet Count: {self.packet_count}")
+                time.sleep(10)
+        
+        t = threading.Thread(target=_heartbeat_loop, daemon=True)
+        t.start()
 
     def start_server(self):
         if self.is_running:
@@ -320,7 +337,13 @@ class StreamManagerApp:
                             
                             # Push to LSL
                             if self.lsl_stream:
-                                self.lsl_stream.push_sample([ch0_uv, ch1_uv])
+                                try:
+                                    self.lsl_stream.push_sample([ch0_uv, ch1_uv])
+                                except Exception as e:
+                                    # Silently handle push errors - LSL will try to auto-recover
+                                    if self.packet_count % 512 == 0:
+                                        self.log(f"LSL Push Warning: {e}")
+                            
                             # Optional: Log occasionally?
                             if self.packet_count % 2560 == 0:
                                 self.log(f"P: {counter} | {ch0_uv:.2f} uV") 
@@ -433,18 +456,27 @@ class StreamManagerApp:
             self.log(f"Events Client disconnected: {addr}")
 
 def main():
-    root = tk.Tk()
-    app = StreamManagerApp(root)
-    
-    # Handle window close
-    def on_closing():
-        app.is_running = False
-        app.stop_server()
-        root.destroy()
-        sys.exit(0)
+    try:
+        root = tk.Tk()
+        app = StreamManagerApp(root)
         
-    root.protocol("WM_DELETE_WINDOW", on_closing)
-    root.mainloop()
+        # Handle window close
+        def on_closing():
+            print(f"[{time.strftime('%H:%M:%S')}] [Stream Manager] [TERMINATE] Received window close request. Shutting down...")
+            app.is_running = False
+            app.stop_server()
+            # Give threads a moment to catch the is_running=False flag
+            root.after(100, root.destroy)
+            
+        root.protocol("WM_DELETE_WINDOW", on_closing)
+        
+        # Prevent the app from exiting on its own if a thread crashes
+        root.mainloop()
+    except Exception as e:
+        print(f"[Stream Manager] Native Exception in Main Loop: {e}")
+        # Keep process alive for 5 seconds so user can see error
+        time.sleep(5)
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()

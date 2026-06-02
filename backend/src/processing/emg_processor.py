@@ -15,9 +15,18 @@ class EMGFilterProcessor:
         self.channel_key = channel_key
         
         self._load_params()
-        self._design_filters()
-        
-        # Initialize state
+        try:
+            self._design_filters()
+            self._init_filter_states()
+        except Exception as e:
+            # This identifies invisible binary crashes on different PCs
+            print(f"[EMG] 🔴 CRITICAL: Filter design crashed!")
+            print(f"[EMG]    scipy={__import__('scipy').__version__}, numpy={__import__('numpy').__version__}")
+            print(f"[EMG]    Error: {e}")
+            raise
+
+    def _init_filter_states(self):
+        """Initialize filter state vectors (separated to catch scipy crashes)."""
         self.zi_hp = sosfilt_zi(self.sos_hp) * 0.0 if getattr(self, 'sos_hp', None) is not None else None
         self.zi_notch = lfilter_zi(self.b_notch, self.a_notch) * 0.0 if (self.notch_enabled and getattr(self, 'a_notch', None) is not None) else None
         self.zi_bp = sosfilt_zi(self.sos_bp) * 0.0 if (self.bp_enabled and getattr(self, 'sos_bp', None) is not None) else None
@@ -102,12 +111,8 @@ class EMGFilterProcessor:
             print(f"[EMG] Config changed ({self.channel_key}) -> HP:{self.hp_cutoff} Notch:{self.notch_enabled}({self.notch_freq}Hz) Env:{self.envelope_enabled} ({self.envelope_cutoff}Hz)")
             self._design_filters()
             
-            # Reset states
             try:
-                self.zi_hp = sosfilt_zi(self.sos_hp) * 0.0 if getattr(self, 'sos_hp', None) is not None else None
-                self.zi_notch = lfilter_zi(self.b_notch, self.a_notch) * 0.0 if (self.notch_enabled and getattr(self, 'a_notch', None) is not None) else None
-                self.zi_bp = sosfilt_zi(self.sos_bp) * 0.0 if (self.bp_enabled and getattr(self, 'sos_bp', None) is not None) else None
-                self.zi_env = sosfilt_zi(self.sos_env) * 0.0 if self.envelope_enabled and getattr(self, 'sos_env', None) is not None else None
+                self._init_filter_states()
             except Exception as e:
                 print(f"[EMG] ⚠️ Filter state reset error: {e}")
                 self.zi_hp = None

@@ -15,11 +15,20 @@ class EOGFilterProcessor:
         self.channel_key = channel_key
         
         self._load_params()
-        self._design_filters()
-        
+        try:
+            self._design_filters()
+            self._init_filter_states()
+        except Exception as e:
+            print(f"[EOG] 🔴 CRITICAL: Filter design crashed!")
+            print(f"[EOG]    scipy={__import__('scipy').__version__}, numpy={__import__('numpy').__version__}")
+            print(f"[EOG]    Error: {e}")
+            raise
+
+    def _init_filter_states(self):
+        """Initialize filter state vectors (separated to catch scipy crashes)."""
         self.zi_hp = sosfilt_zi(self.sos_hp) * 0.0 if getattr(self, 'sos_hp', None) is not None else None
         self.zi_lp = sosfilt_zi(self.sos_lp) * 0.0 if getattr(self, 'sos_lp', None) is not None else None
-        self.zi_notch = lfilter_zi(self.b_notch, self.a_notch) * 0.0 if self.notch_enabled else None
+        self.zi_notch = lfilter_zi(self.b_notch, self.a_notch) * 0.0 if self.notch_enabled and getattr(self, 'a_notch', None) is not None else None
         self.zi_bp = sosfilt_zi(self.sos_bp) * 0.0 if self.bp_enabled and getattr(self, 'sos_bp', None) is not None else None
 
     def _load_params(self):
@@ -94,11 +103,14 @@ class EOGFilterProcessor:
         if old_state != new_state:
             print(f"[EOG] Config changed -> Redesign filters")
             self._design_filters()
-            # Reset ALL filter states
-            self.zi_hp = sosfilt_zi(self.sos_hp) * 0.0 if getattr(self, 'sos_hp', None) is not None else None
-            self.zi_lp = sosfilt_zi(self.sos_lp) * 0.0 if getattr(self, 'sos_lp', None) is not None else None
-            self.zi_notch = lfilter_zi(self.b_notch, self.a_notch) * 0.0 if self.notch_enabled else None
-            self.zi_bp = sosfilt_zi(self.sos_bp) * 0.0 if self.bp_enabled and getattr(self, 'sos_bp', None) is not None else None
+            try:
+                self._init_filter_states()
+            except Exception as e:
+                print(f"[EOG] ⚠️ Filter state reset error: {e}")
+                self.zi_hp = None
+                self.zi_lp = None
+                self.zi_notch = None
+                self.zi_bp = None
 
     def process_sample(self, val: float) -> float:
         """Process a single sample value."""
