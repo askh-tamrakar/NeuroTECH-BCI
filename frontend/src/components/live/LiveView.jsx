@@ -14,6 +14,7 @@ export default function LiveView({ wsData, wsEvent, config, isPaused, wsUrl, rec
   const showGrid = config?.display?.showGrid ?? true
   const channelMapping = config?.channel_mapping || {}
   const numChannels = 2
+  const defaultColor = '#3b82f6'
 
   // Channel Configuration State (Zoom & Range)
   const [channelConfig, setChannelConfig] = useState(() => {
