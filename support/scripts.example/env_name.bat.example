@@ -1,0 +1,17 @@
+@echo off
+cls
+echo [Neurotech] Activating Conda Environment...
+pushd "<path-to-your-backend>"
+
+:: Activate your conda environment
+call conda activate <your-env-name>
+if errorlevel 1 (
+    echo [ERROR] Failed to activate conda environment '<your-env-name>'.
+    echo [ERROR] Current Path: %%PATH%%
+    pause
+    exit /b 1
+)
+popd
+
+echo [Neuro TECH] Active Environment: %CONDA_DEFAULT_ENV%
+echo [Neuro TECH] Working Directory: %CD%

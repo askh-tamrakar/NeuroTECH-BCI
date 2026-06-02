@@ -1,7 +1,7 @@
-@echo off 
+@echo off
 cls
 echo [Dashboard] Starting Frontend Development Server...
-pushd "<path to your repo on local machine>"
+pushd "<path-to-your-repo-root>"
 echo [Dashboard] Directory: %CD%
 npm run dev
 popd

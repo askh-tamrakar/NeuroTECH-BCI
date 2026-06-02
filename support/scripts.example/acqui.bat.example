@@ -1,27 +1,7 @@
 @echo off
 cls
 echo [Acquisition] Starting Signal Acquisition App...
-pushd "<path to your repo on local machine>"
+pushd "<path-to-your-repo-root>"
 echo [Acquisition] Running: python -m src.acquisition.acquisition_app
 python -m src.acquisition.acquisition_app
 popd
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

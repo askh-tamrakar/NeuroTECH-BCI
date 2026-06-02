@@ -1,0 +1,18 @@
+@echo off
+cls
+pushd "<path-to-your-repo-root>\backend\"
+
+:: Explicitly target the environment interpreter to resolve path handling issues
+set "ENV_PYTHON=<path-to-your-conda-env>\envs\<your-env-name>\python.exe"
+
+if exist "%ENV_PYTHON%" (
+    "%ENV_PYTHON%" pipeline.py %*
+) else (
+    echo [NeuroTECH] WARNING: Environment not found at %ENV_PYTHON%.
+    echo [NeuroTECH] Attempting to use system 'python'...
+    python pipeline.py %*
+)
+
+popd
+echo [NeuroTECH] Pipeline session ended.
+if errorlevel 1 pause
