@@ -10,6 +10,7 @@ from src.server.server.session_manager import SessionManager
 from src.feature.extractors.rps_extractor import RPSExtractor
 from src.feature.extractors.blink_extractor import BlinkExtractor
 from src.feature.extractors.muscle_strength_extractor import MuscleStrengthExtractor
+from src.feature.extractors.muscle_melody_extractor import MuscleMelodyExtractor
 from src.server.server.routes.eeg_routes import _get_mode_manager
 
 try:
@@ -106,6 +107,19 @@ def resolve_lsl_stream() -> bool:
                 if ch.get("type", "").upper() == "EMG"
             }
             print(f"[LSLService] 💪 MuscleStrength extractors: {list(state.muscle_strength_extractors.keys())}")
+
+            # --- Muscle Melody extractor (all EMG channels, multi-channel envelope) ---
+            emg_indices = [
+                i for i, ch in state.channel_mapping.items()
+                if ch.get("type", "").upper() == "EMG"
+            ]
+            emg_labels = {i: state.channel_mapping[i].get("label", f"ch{i}") for i in emg_indices}
+            state.muscle_melody_extractor = MuscleMelodyExtractor(
+                sr=state.sr,
+                config=config,
+                emg_channel_indices=emg_indices,
+                channel_labels=emg_labels,
+            )
             return True
 
         print("[LSLService] ❌ Could not find LSL stream")
@@ -234,6 +248,16 @@ def broadcast_data(socketio):
                         if result is not None:
                             socketio.emit('muscle_strength', result)
                         break
+
+                # --- Muscle Melody Hook (all EMG channels) ---
+                melody_extractor = getattr(state, 'muscle_melody_extractor', None)
+                if melody_extractor:
+                    for ch_idx, data in channels_data.items():
+                        if data['type'].upper() == 'EMG':
+                            melody_extractor.process_sample(ch_idx, data['value'])
+                    melody_result = melody_extractor.get_update()
+                    if melody_result:
+                        socketio.emit('muscle_melody', melody_result)
                 
                 # --- EEG Mode Manager Hook ---
                 try:

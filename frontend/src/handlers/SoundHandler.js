@@ -163,6 +163,47 @@ class SoundHandler {
         this.playTone(330, 'sine', 0.1, 0.2, 0.05);
     }
 
+    // --- SNAKE GAME ---
+    playSnakeEat() {
+        // Quick chomp sound
+        if (!this.enabled || !this.initialized) { this.init(); if (!this.initialized || !this.ctx) return; }
+        this.resume();
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(600, now);
+        osc.frequency.exponentialRampToValueAtTime(900, now + 0.05);
+        osc.frequency.exponentialRampToValueAtTime(400, now + 0.1);
+        gain.gain.setValueAtTime(0.08, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+        osc.connect(gain);
+        gain.connect(this.masterGain);
+        osc.start(now);
+        osc.stop(now + 0.15);
+    }
+
+    playSnakeDead() {
+        // Descending hiss
+        if (!this.enabled || !this.initialized) { this.init(); if (!this.initialized || !this.ctx) return; }
+        this.resume();
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(400, now);
+        osc.frequency.exponentialRampToValueAtTime(80, now + 0.5);
+        gain.gain.setValueAtTime(0.08, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
+        osc.connect(gain);
+        gain.connect(this.masterGain);
+        osc.start(now);
+        osc.stop(now + 0.5);
+
+        // Final thud
+        this.playTone(60, 'sine', 0.15, 0.3, 0.45);
+    }
+
     // --- RPS GAME ---
     playRPSStart() {
         // Trumpet-like flourish

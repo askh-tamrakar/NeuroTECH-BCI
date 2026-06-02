@@ -102,7 +102,7 @@ export default function DashboardLayout() {
 
   const navItems = useMemo(() => [
     { label: 'TERMINAL', href: '/dashboard/terminal' },
-    { label: 'Dino', href: '/dashboard/dino' },
+    { label: 'Eye Arcade', href: '/dashboard/dino' },
     { label: 'EEG Suite', href: '/dashboard/eeg' },
     { label: 'Muscle Lab', href: '/dashboard/emg_lab' },
     { label: 'Data Lab', href: '/dashboard/lab/data_collection' },

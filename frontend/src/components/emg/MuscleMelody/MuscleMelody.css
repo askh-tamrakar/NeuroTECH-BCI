@@ -1,0 +1,230 @@
+/* ── Muscle Melody component styles ─────────────────────────────────────── */
+
+.mm-root {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  gap: 0;
+}
+
+/* Canvas area takes all available space */
+.mm-canvas-wrap {
+  position: relative;
+  flex: 1 1 0%;
+  min-height: 0;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.mm-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* Controls bar fixed at bottom */
+.mm-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 10px 16px 8px;
+  flex-shrink: 0;
+}
+
+/* Instrument group buttons */
+.mm-instrument-group {
+  display: flex;
+  gap: 4px;
+  border: 1px solid hsl(var(--border, 214 32% 91%));
+  border-radius: 10px;
+  padding: 3px;
+  background: hsl(var(--muted, 210 40% 96%));
+}
+
+.mm-instr-btn {
+  padding: 4px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  color: hsl(var(--muted-foreground, 215 16% 47%));
+  transition: background 0.15s, color 0.15s;
+  line-height: 1.5;
+}
+
+.mm-instr-btn.active {
+  background: hsl(var(--background, 0 0% 100%));
+  color: #f59e0b;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.12);
+}
+
+.dark .mm-instrument-group {
+  background: hsl(217 33% 12%);
+  border-color: rgba(255,255,255,0.08);
+}
+
+.dark .mm-instr-btn {
+  color: hsl(215 20% 55%);
+}
+
+.dark .mm-instr-btn.active {
+  background: hsl(222 47% 17%);
+  color: #f59e0b;
+}
+
+/* Settings button + popover */
+.mm-settings-wrap {
+  position: relative;
+}
+
+.mm-settings-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 2px solid #cbd5e1;
+  background: #ffffff;
+  color: #475569;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.mm-settings-btn:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+.dark .mm-settings-btn {
+  background: #334155;
+  border-color: #64748b;
+  color: #cbd5e1;
+}
+
+.dark .mm-settings-btn:hover {
+  background: #475569;
+  color: #f1f5f9;
+}
+
+.mm-popover {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  right: 0;
+  min-width: 240px;
+  background: #ffffff;
+  border: 2px solid #d1d5db;
+  border-radius: 12px;
+  padding: 14px 16px;
+  box-shadow: 0 12px 32px rgba(0,0,0,0.25);
+  z-index: 100;
+}
+
+.dark .mm-popover {
+  background: #1e293b;
+  border-color: #64748b;
+  box-shadow: 0 12px 32px rgba(0,0,0,0.6);
+}
+
+.mm-popover-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin: 0 0 12px;
+}
+
+.dark .mm-popover-title {
+  color: #94a3b8;
+}
+
+.mm-popover-empty {
+  font-size: 12px;
+  color: #64748b;
+  margin: 0;
+}
+
+.dark .mm-popover-empty {
+  color: #94a3b8;
+}
+
+.mm-thr-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.mm-thr-row:last-child {
+  margin-bottom: 0;
+}
+
+.mm-thr-label {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 500;
+  color: #1e293b;
+}
+
+.dark .mm-thr-label {
+  color: #f1f5f9;
+}
+
+.mm-thr-val {
+  width: 38px;
+  text-align: center;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: #1e293b;
+}
+
+.dark .mm-thr-val {
+  color: #f1f5f9;
+}
+
+.mm-thr-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #1e293b;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  transition: background 0.12s;
+}
+
+.mm-thr-btn:hover {
+  background: #e2e8f0;
+}
+
+.dark .mm-thr-btn {
+  background: #334155;
+  border-color: #64748b;
+  color: #f1f5f9;
+}
+
+.dark .mm-thr-btn:hover {
+  background: #475569;
+}
+
+.mm-thr-btn.at-min {
+  background: #b91c1c;
+  color: #fff;
+  border-color: #b91c1c;
+}
+
+.mm-thr-btn.at-max {
+  background: #15803d;
+  color: #fff;
+  border-color: #15803d;
+}

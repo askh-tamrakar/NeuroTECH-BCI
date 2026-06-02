@@ -6,7 +6,7 @@ import Counter from '../ui/display/Counter'
 import {
     ScanEye, SlidersHorizontal, ArrowUp, Pause, Play, Trash2, Wifi, WifiOff, Save, Skull, Trophy, Keyboard, Eye, Gamepad2, Globe, Sparkles, Atom, Ruler, Settings, RotateCcw, ScrollText, Timer, Weight, MoveVertical,
     MoveHorizontal, Maximize, ArrowDownToLine, Grid, Sun, Moon, Cloud, Star, TreePine, Leaf, Hand,
-    Layers, Zap, Clock, ChevronDown, Activity, Target, Radio, Signal, Circle, Camera, Menu, BrainCircuit, Check, X, ChevronRight, ChevronLeft
+    Layers, Zap, Clock, ChevronDown, Activity, Target, Radio, Signal, Circle, Camera, Menu, BrainCircuit, Check, X, ChevronRight, ChevronLeft, ChevronUp, Music2, Swords, Dumbbell, Heart, Volume2
 } from 'lucide-react'
 import { soundHandler } from '../../handlers/SoundHandler'
 import { buildApiUrl } from '../../utils/runtimeConnection'
@@ -142,6 +142,38 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
     })
     const [savedMessage, setSavedMessage] = useState('')
 
+    // Game mode: 'dino' | 'snake'
+    const [gameMode, setGameMode] = useState(() => {
+        return localStorage.getItem('eog_arcade_mode') || 'dino'
+    })
+
+    // Snake specific state
+    const [snakeFoodEaten, setSnakeFoodEaten] = useState(0)
+    const [snakeBestFood, setSnakeBestFood] = useState(
+        parseInt(localStorage.getItem('snake_best_food')) || 0
+    )
+    const [isNewFoodRecord, setIsNewFoodRecord] = useState(false)
+
+    // Snake Default Settings
+    const SNAKE_DEFAULT_SETTINGS = {
+        GRID_COLS: 20,
+        GRID_ROWS: 20,
+        TICK_INTERVAL: 200,
+        INITIAL_LENGTH: 3,
+        ENABLE_GRID_LINES: true,
+    }
+
+    const [snakeSettings, setSnakeSettings] = useState(() => {
+        const saved = localStorage.getItem('snake_settings_v1')
+        if (saved) {
+            try {
+                return { ...SNAKE_DEFAULT_SETTINGS, ...JSON.parse(saved) }
+            } catch (e) {
+                console.error("Failed to parse snake settings", e)
+            }
+        }
+        return SNAKE_DEFAULT_SETTINGS
+    })
 
     // --- Event Logging System ---
     const [eventLogs, setEventLogs] = useState([])
@@ -175,6 +207,9 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
     const settingsRef = useRef(settings)
     const highScoreRef = useRef(highScore)
     const bestCactusJumpRef = useRef(bestCactusJump)
+    const snakeSettingsRef = useRef(snakeSettings)
+    const gameModeRef = useRef(gameMode)
+    const snakeBestFoodRef = useRef(snakeBestFood)
 
     useEffect(() => {
         settingsRef.current = settings
@@ -187,6 +222,18 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
     useEffect(() => {
         bestCactusJumpRef.current = bestCactusJump
     }, [bestCactusJump])
+
+    useEffect(() => {
+        snakeSettingsRef.current = snakeSettings
+    }, [snakeSettings])
+
+    useEffect(() => {
+        gameModeRef.current = gameMode
+    }, [gameMode])
+
+    useEffect(() => {
+        snakeBestFoodRef.current = snakeBestFood
+    }, [snakeBestFood])
 
     // Visuals Refs
     const gameTimeRef = useRef(0) // 0 to 1 (0=dawn, 0.25=noon, 0.5=dusk, 0.75=midnight)
@@ -271,6 +318,15 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
         }
 
     }, [settings, models, normalizeModelName])
+
+    // Load correct high score based on saved game mode
+    useEffect(() => {
+        const savedMode = gameModeRef.current || 'dino';
+        if (savedMode === 'snake') {
+            const savedHigh = parseInt(localStorage.getItem('snake_highscore')) || 0;
+            setHighScore(savedHigh);
+        }
+    }, []);
 
     // Load available EOG models
     useEffect(() => {
@@ -469,11 +525,15 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
         }
 
         let worker = workerRef.current
+        const currentMode = gameModeRef.current || 'dino'
 
         if (!worker) {
             try {
-                // Create worker
-                worker = new Worker(new URL('../../workers/game.worker.js', import.meta.url), { type: 'module' })
+                // Create worker based on game mode
+                const workerUrl = currentMode === 'snake'
+                    ? new URL('../../workers/snake.worker.js', import.meta.url)
+                    : new URL('../../workers/game.worker.js', import.meta.url)
+                worker = new Worker(workerUrl, { type: 'module' })
                 workerRef.current = worker
 
                 // Get OffscreenCanvas
@@ -489,79 +549,138 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
                     border: resolveColorVar(styles, '--border'),
                     muted: resolveColorVar(styles, '--muted'),
                     accent: resolveColorVar(styles, '--accent'),
-                    day: resolveColorVar(styles, '--day'),
-                    night: resolveColorVar(styles, '--night'),
-                    treeDay: resolveColorVar(styles, '--tree-day'),
-                    treeNight: resolveColorVar(styles, '--tree-night'),
-                    cloudDay: resolveColorVar(styles, '--cloud-day'),
-                    cloudNight: resolveColorVar(styles, '--cloud-night'),
-                    sunDay: resolveColorVar(styles, '--sun-day'),
-                    sunNight: resolveColorVar(styles, '--sun-night'),
-                    moonDay: resolveColorVar(styles, '--moon-day'),
-                    moonNight: resolveColorVar(styles, '--moon-night'),
-                    dinoDay: resolveColorVar(styles, '--dino-day', '--dino', '--primary'),
-                    dinoNight: resolveColorVar(styles, '--dino-night', '--dino', '--primary'),
-                    obstacleDay: resolveColorVar(styles, '--obstacle-day', '--obstacle', '--primary'),
-                    obstacleNight: resolveColorVar(styles, '--obstacle-night', '--obstacle', '--primary'),
-                    obstacleBorder: resolveColorVar(styles, '--obstacle-border', '--text'),
-                    groundDay: resolveColorVar(styles, '--ground-day', '--ground', '--surface'),
-                    groundNight: resolveColorVar(styles, '--ground-night', '--ground', '--surface'),
-                    groundLineDay: resolveColorVar(styles, '--ground-line-day', '--ground-line', '--accent'),
-                    groundLineNight: resolveColorVar(styles, '--ground-line-night', '--ground-line', '--accent'),
-                    skyDay: resolveColorVar(styles, '--sky-day'),
-                    skyNight: resolveColorVar(styles, '--sky-night')
                 }
 
-                // Load 8 Bush Variants
-                const loadBush = (i) => new Promise((resolve, reject) => {
-                    const img = new Image();
-                    img.src = `/Resources/Dino/bush_${i}.png`;
-                    img.onload = () => createImageBitmap(img).then(resolve).catch(reject);
-                    img.onerror = reject;
-                });
-
-                Promise.all(Array.from({ length: 8 }, (_, i) => loadBush(i + 1)))
-                    .then(bushSprites => {
-                        // Init Worker with Sprites
-                        const width = containerRef.current ? containerRef.current.clientWidth : settingsRef.current.CANVAS_WIDTH;
-                        const height = containerRef.current ? containerRef.current.clientHeight : settingsRef.current.CANVAS_HEIGHT;
-
-                        worker.postMessage({
-                            type: 'INIT',
-                            payload: {
-                                canvas: offscreen,
-                                settings: {
-                                    ...settingsRef.current,
-                                    CANVAS_WIDTH: width,
-                                    CANVAS_HEIGHT: height
-                                },
-                                highScore: highScore,
-                                theme: theme,
-                                bushSprites: bushSprites
-                            }
-                        }, [offscreen, ...bushSprites]);
-                    })
-                    .catch(err => {
-                        console.warn("Failed to load bush sprites", err);
-                        const width = containerRef.current ? containerRef.current.clientWidth : settingsRef.current.CANVAS_WIDTH;
-                        const height = containerRef.current ? containerRef.current.clientHeight : settingsRef.current.CANVAS_HEIGHT;
-
-                        // Init without sprites
-                        worker.postMessage({
-                            type: 'INIT',
-                            payload: {
-                                canvas: offscreen,
-                                settings: {
-                                    ...settingsRef.current,
-                                    CANVAS_WIDTH: width,
-                                    CANVAS_HEIGHT: height
-                                },
-                                highScore: highScore,
-                                theme: theme,
-                                bushSprites: []
-                            }
-                        }, [offscreen]);
+                if (currentMode === 'snake') {
+                    // Snake mode: load 4 apple sprites (red, green, yellow, blue) + optional purple
+                    const appleNames = ['red apple.png', 'green apple.png', 'yellow apple.png', 'blue apple.png'];
+                    // Try adding purple apple if it exists
+                    const loadApple = (name) => new Promise((resolve) => {
+                        const img = new Image();
+                        img.src = `/Resources/snake/${name}`;
+                        img.onload = () => createImageBitmap(img).then(resolve).catch(() => resolve(null));
+                        img.onerror = () => resolve(null); // silently skip missing files
                     });
+
+                    Promise.all([...appleNames, 'purple apple.png'].map(loadApple))
+                        .then(results => {
+                            const appleSprites = results.filter(Boolean); // remove nulls (failed loads)
+                            const width = containerRef.current ? containerRef.current.clientWidth : 800;
+                            const height = containerRef.current ? containerRef.current.clientHeight : 376;
+
+                            worker.postMessage({
+                                type: 'INIT',
+                                payload: {
+                                    canvas: offscreen,
+                                    settings: {
+                                        ...snakeSettingsRef.current,
+                                        CANVAS_WIDTH: width,
+                                        CANVAS_HEIGHT: height
+                                    },
+                                    highScore: highScore,
+                                    bestFoodEaten: snakeBestFoodRef.current,
+                                    theme: theme,
+                                    appleSprites: appleSprites
+                                }
+                            }, [offscreen, ...appleSprites]);
+                        })
+                        .catch(err => {
+                            console.warn("Failed to load apple sprites", err);
+                            const width = containerRef.current ? containerRef.current.clientWidth : 800;
+                            const height = containerRef.current ? containerRef.current.clientHeight : 376;
+
+                            worker.postMessage({
+                                type: 'INIT',
+                                payload: {
+                                    canvas: offscreen,
+                                    settings: {
+                                        ...snakeSettingsRef.current,
+                                        CANVAS_WIDTH: width,
+                                        CANVAS_HEIGHT: height
+                                    },
+                                    highScore: highScore,
+                                    bestFoodEaten: snakeBestFoodRef.current,
+                                    theme: theme,
+                                    appleSprites: []
+                                }
+                            }, [offscreen]);
+                        });
+                } else {
+                    // Dino mode: existing logic with bush sprites
+                    const extendedTheme = {
+                        ...theme,
+                        day: resolveColorVar(styles, '--day'),
+                        night: resolveColorVar(styles, '--night'),
+                        treeDay: resolveColorVar(styles, '--tree-day'),
+                        treeNight: resolveColorVar(styles, '--tree-night'),
+                        cloudDay: resolveColorVar(styles, '--cloud-day'),
+                        cloudNight: resolveColorVar(styles, '--cloud-night'),
+                        sunDay: resolveColorVar(styles, '--sun-day'),
+                        sunNight: resolveColorVar(styles, '--sun-night'),
+                        moonDay: resolveColorVar(styles, '--moon-day'),
+                        moonNight: resolveColorVar(styles, '--moon-night'),
+                        dinoDay: resolveColorVar(styles, '--dino-day', '--dino', '--primary'),
+                        dinoNight: resolveColorVar(styles, '--dino-night', '--dino', '--primary'),
+                        obstacleDay: resolveColorVar(styles, '--obstacle-day', '--obstacle', '--primary'),
+                        obstacleNight: resolveColorVar(styles, '--obstacle-night', '--obstacle', '--primary'),
+                        obstacleBorder: resolveColorVar(styles, '--obstacle-border', '--text'),
+                        groundDay: resolveColorVar(styles, '--ground-day', '--ground', '--surface'),
+                        groundNight: resolveColorVar(styles, '--ground-night', '--ground', '--surface'),
+                        groundLineDay: resolveColorVar(styles, '--ground-line-day', '--ground-line', '--accent'),
+                        groundLineNight: resolveColorVar(styles, '--ground-line-night', '--ground-line', '--accent'),
+                        skyDay: resolveColorVar(styles, '--sky-day'),
+                        skyNight: resolveColorVar(styles, '--sky-night')
+                    }
+
+                    // Load 8 Bush Variants
+                    const loadBush = (i) => new Promise((resolve, reject) => {
+                        const img = new Image();
+                        img.src = `/Resources/Dino/bush_${i}.png`;
+                        img.onload = () => createImageBitmap(img).then(resolve).catch(reject);
+                        img.onerror = reject;
+                    });
+
+                    Promise.all(Array.from({ length: 8 }, (_, i) => loadBush(i + 1)))
+                        .then(bushSprites => {
+                            const width = containerRef.current ? containerRef.current.clientWidth : settingsRef.current.CANVAS_WIDTH;
+                            const height = containerRef.current ? containerRef.current.clientHeight : settingsRef.current.CANVAS_HEIGHT;
+
+                            worker.postMessage({
+                                type: 'INIT',
+                                payload: {
+                                    canvas: offscreen,
+                                    settings: {
+                                        ...settingsRef.current,
+                                        CANVAS_WIDTH: width,
+                                        CANVAS_HEIGHT: height
+                                    },
+                                    highScore: highScore,
+                                    theme: extendedTheme,
+                                    bushSprites: bushSprites
+                                }
+                            }, [offscreen, ...bushSprites]);
+                        })
+                        .catch(err => {
+                            console.warn("Failed to load bush sprites", err);
+                            const width = containerRef.current ? containerRef.current.clientWidth : settingsRef.current.CANVAS_WIDTH;
+                            const height = containerRef.current ? containerRef.current.clientHeight : settingsRef.current.CANVAS_HEIGHT;
+
+                            worker.postMessage({
+                                type: 'INIT',
+                                payload: {
+                                    canvas: offscreen,
+                                    settings: {
+                                        ...settingsRef.current,
+                                        CANVAS_WIDTH: width,
+                                        CANVAS_HEIGHT: height
+                                    },
+                                    highScore: highScore,
+                                    theme: extendedTheme,
+                                    bushSprites: []
+                                }
+                            }, [offscreen]);
+                        });
+                }
 
                 // --- Setup Resize Observer ---
                 if (containerRef.current) {
@@ -587,44 +706,70 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
         if (worker) {
             worker.onmessage = (e) => {
                 const { type, score, highScore: newHigh } = e.data
+                const currentMode = gameModeRef.current || 'dino'
+
                 if (type === 'GAME_OVER') {
                     setGameState('gameOver')
-                    soundHandler.playDinoDead();
+                    if (currentMode === 'snake') {
+                        soundHandler.playSnakeDead();
+                    } else {
+                        soundHandler.playDinoDead();
+                    }
                     setIsNewScoreRecord(false);
                     setIsNewJumpRecord(false);
+                    setIsNewFoodRecord(false);
                     if (score !== undefined) {
                         scoreRef.current = score
-                        setScore(score) // Explicitly set score state to show final result
-                        logEvent(`Game Over! Score: ${Math.floor(score / 10)}`, 'gameover')
+                        setScore(score)
+                        const displayScore = currentMode === 'snake' ? score : Math.floor(score / 10)
+                        logEvent(`Game Over! Score: ${displayScore}`, 'gameover')
                     }
                 } else if (type === 'HIGHSCORE_UPDATE') {
                     setHighScore(newHigh)
-                    localStorage.setItem('dino_highscore', newHigh.toString())
-                    logEvent(`New Highscore: ${Math.floor(newHigh / 10)}!`, 'highscore')
+                    const storageKey = currentMode === 'snake' ? 'snake_highscore' : 'dino_highscore'
+                    localStorage.setItem(storageKey, newHigh.toString())
+                    const displayScore = currentMode === 'snake' ? newHigh : Math.floor(newHigh / 10)
+                    logEvent(`New Highscore: ${displayScore}!`, 'highscore')
                 } else if (type === 'SCORE_UPDATE') {
                     setScore(score)
-                    // Use ref to avoid stale closure comparison
                     if (score > highScoreRef.current) {
                         setHighScore(score)
                     }
                     setIsNewScoreRecord(score > 0 && score > highScoreRef.current)
                 } else if (type === 'OBSTACLE_CLEARED') {
                     const obstaclesPassedVal = e.data.obstaclesPassed;
-                    // Reset or increment based on worker message
-                    setCactusJump(prev => {
-                        const next = (obstaclesPassedVal !== undefined && obstaclesPassedVal === 0) ? 0 : prev + 1;
 
-                        // Only update best if we are actually progressing
-                        if (next > 0 && next > bestCactusJumpRef.current) {
-                            localStorage.setItem('dino_best_cactus', next.toString())
-                            setIsNewJumpRecord(true)
-                            setBestCactusJump(next)
+                    if (currentMode === 'snake') {
+                        // Snake mode: track food eaten
+                        setSnakeFoodEaten(prev => {
+                            const next = (obstaclesPassedVal !== undefined && obstaclesPassedVal === 0) ? 0 : obstaclesPassedVal || prev + 1;
+                            if (next > 0 && next > snakeBestFoodRef.current) {
+                                localStorage.setItem('snake_best_food', next.toString())
+                                setIsNewFoodRecord(true)
+                                setSnakeBestFood(next)
+                            }
+                            return next
+                        })
+                        if (obstaclesPassedVal !== 0) {
+                            soundHandler.playSnakeEat();
+                            logEvent('Snake ate food! +1', 'jump')
                         }
-                        return next
-                    })
-                    if (obstaclesPassedVal !== 0) {
-                        logEvent('Obstacle cleared! +1', 'jump')
+                    } else {
+                        // Dino mode: track cactus jumps
+                        setCactusJump(prev => {
+                            const next = (obstaclesPassedVal !== undefined && obstaclesPassedVal === 0) ? 0 : prev + 1;
+                            if (next > 0 && next > bestCactusJumpRef.current) {
+                                localStorage.setItem('dino_best_cactus', next.toString())
+                                setIsNewJumpRecord(true)
+                                setBestCactusJump(next)
+                            }
+                            return next
+                        })
+                        if (obstaclesPassedVal !== 0) {
+                            logEvent('Obstacle cleared! +1', 'jump')
+                        }
                     }
+
                     const pending = pendingActionFeedbackRef.current
                     if (pending?.trigger === 'jump' && Date.now() - pending.timestamp <= 3000 && pending.features) {
                         setFeedbackPrompt({
@@ -751,19 +896,27 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
         }
     }, [canvasResetKey])
 
-    // Update settings in worker
+    // Update settings in worker (mode-aware)
     useEffect(() => {
         if (workerRef.current) {
-            // Exclude canvas dimensions so we don't overwrite the resize observer's values
-            // with potentially stale default settings
-            const { CANVAS_WIDTH, CANVAS_HEIGHT, ...safeSettings } = settings;
-            console.log("[Dino] Syncing settings to worker:", safeSettings);
-            workerRef.current.postMessage({
-                type: 'SETTINGS',
-                payload: safeSettings
-            })
+            const currentMode = gameModeRef.current || 'dino';
+            if (currentMode === 'snake') {
+                const { CANVAS_WIDTH, CANVAS_HEIGHT, ...safeSettings } = snakeSettings;
+                console.log("[Arcade] Syncing snake settings to worker:", safeSettings);
+                workerRef.current.postMessage({
+                    type: 'SETTINGS',
+                    payload: safeSettings
+                });
+            } else {
+                const { CANVAS_WIDTH, CANVAS_HEIGHT, ...safeSettings } = settings;
+                console.log("[Arcade] Syncing dino settings to worker:", safeSettings);
+                workerRef.current.postMessage({
+                    type: 'SETTINGS',
+                    payload: safeSettings
+                });
+            }
         }
-    }, [settings])
+    }, [settings, snakeSettings, gameMode])
 
 
     // Sync Highscore reset
@@ -801,67 +954,136 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
         pendingActionFeedbackRef.current = null;
     }, []);
 
+    const handleToggleGameMode = useCallback(() => {
+        const newMode = gameModeRef.current === 'dino' ? 'snake' : 'dino';
+        // Terminate current worker
+        if (workerRef.current) {
+            workerRef.current.terminate();
+            workerRef.current = null;
+        }
+        // Save mode preference
+        localStorage.setItem('eog_arcade_mode', newMode);
+        // Load correct high score
+        const savedHigh = parseInt(localStorage.getItem(newMode === 'snake' ? 'snake_highscore' : 'dino_highscore')) || 0;
+        const savedBestFood = parseInt(localStorage.getItem('snake_best_food')) || 0;
+        // Reset game state
+        setGameMode(newMode);
+        setHighScore(savedHigh);
+        setScore(0);
+        setCactusJump(0);
+        setSnakeFoodEaten(0);
+        setSnakeBestFood(savedBestFood);
+        setGameState('ready');
+        setIsNewScoreRecord(false);
+        setIsNewJumpRecord(false);
+        setIsNewFoodRecord(false);
+        setFeedbackPrompt(null);
+        pendingActionFeedbackRef.current = null;
+        // Increment canvas reset key to re-init worker
+        setCanvasResetKey(prev => prev + 1);
+        logEvent(`Switched to ${newMode === 'snake' ? 'Snake' : 'Dino'} mode`, 'settings');
+    }, [logEvent]);
+
     const handleSinglePress = useCallback((source = 'blink') => {
         const currentState = gameStateRef.current;
+        const currentMode = gameModeRef.current || 'dino';
         if (source !== 'blink') {
             pendingActionFeedbackRef.current = null;
         }
+        const actionLabel = currentMode === 'snake' ? 'Turn Right' : 'Jump';
         const text =
             source === 'keyboard'
-                ? "Spacebar (Jump)"
+                ? `Spacebar (${actionLabel})`
                 : (currentState === 'ready' || currentState === 'gameOver')
                     ? "Blink Detected (Start)"
-                    : "Blink Detected (Jump)"
+                    : `Blink Detected (${actionLabel})`
         logEvent(text, source === 'keyboard' ? 'keyboard' : 'blink')
         triggerSingleBlink()
 
         if (currentState === 'ready' || currentState === 'gameOver' || currentState === 'playing') {
-            soundHandler.playDinoJump();
+            if (currentMode === 'snake') {
+                soundHandler.playSnakeEat();
+            } else {
+                soundHandler.playDinoJump();
+            }
             jump();
         }
     }, [jump, logEvent]);
 
     const handleDoublePress = useCallback((source = 'blink') => {
         const currentState = gameStateRef.current;
+        const currentMode = gameModeRef.current || 'dino';
         if (currentState === 'gameOver') return;
         if (source !== 'blink') {
             pendingActionFeedbackRef.current = null;
         }
 
-        const text = source === 'keyboard' ? "Spacebar x2 (Pause)" : "Double Blink (Pause)"
+        const actionLabel = currentMode === 'snake'
+            ? (currentState === 'playing' ? 'Turn Left' : 'Resume')
+            : (currentState === 'playing' ? 'Pause' : 'Resume');
+        const text = source === 'keyboard' ? `Spacebar x2 (${actionLabel})` : `Double Blink (${actionLabel})`
         logEvent(text, 'toggle')
         triggerDoubleBlink()
 
-        if (currentState === 'playing') {
-            soundHandler.playDinoPause();
+        if (currentMode === 'snake') {
+            // Snake mode: Double blink = Turn Left while playing, Resume while paused
             if (workerRef.current) {
                 workerRef.current.postMessage({ type: 'INPUT', payload: { action: 'pause' } });
             }
-            setGameState('paused');
-        } else if (currentState === 'paused') {
-            soundHandler.playDinoPause();
-            if (workerRef.current) {
-                workerRef.current.postMessage({ type: 'INPUT', payload: { action: 'pause' } });
+            if (currentState === 'paused') {
+                setGameState('playing');
             }
-            setGameState('playing');
+        } else {
+            // Dino mode: Double blink = Pause/Resume
+            if (currentState === 'playing') {
+                soundHandler.playDinoPause();
+                if (workerRef.current) {
+                    workerRef.current.postMessage({ type: 'INPUT', payload: { action: 'pause' } });
+                }
+                setGameState('paused');
+            } else if (currentState === 'paused') {
+                soundHandler.playDinoPause();
+                if (workerRef.current) {
+                    workerRef.current.postMessage({ type: 'INPUT', payload: { action: 'pause' } });
+                }
+                setGameState('playing');
+            }
         }
     }, [logEvent]);
 
     // Manual Keyboard Controls
     useEffect(() => {
         const handleKeyDown = (e) => {
+            const currentMode = gameModeRef.current || 'dino';
+
+            if (currentMode === 'snake' && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
+                e.preventDefault();
+                if (!settingsRef.current.ENABLE_MANUAL_CONTROLS) return;
+
+                // Snake mode: arrow keys for absolute direction
+                if (workerRef.current) {
+                    // Map arrow keys to direction actions
+                    // We send direction as a new action type
+                    workerRef.current.postMessage({ type: 'INPUT', payload: { action: 'setDirection', direction: e.code.replace('Arrow', '').toLowerCase() } });
+                    logEvent(`Arrow ${e.code.replace('Arrow', '')} (Direction)`, 'keyboard');
+                }
+                return;
+            }
+
             if (e.code === 'Space') {
                 e.preventDefault()
-                // Check if manual controls enabled
-                console.log("[DinoView] Spacebar pressed. Manual controls:", settings.ENABLE_MANUAL_CONTROLS)
+                if (currentMode === 'snake') {
+                    // Snake mode: spacebar disabled, use arrow keys instead
+                    return;
+                }
                 if (settings.ENABLE_MANUAL_CONTROLS) {
-                    handleSinglePress('keyboard') // Use the same unified logic for consistency
+                    handleSinglePress('keyboard')
                 }
             }
         }
         window.addEventListener('keydown', handleKeyDown)
         return () => window.removeEventListener('keydown', handleKeyDown)
-    }, [settings, handleSinglePress])
+    }, [settings, handleSinglePress, logEvent])
 
     // Blink Visuals (Optional - kept for side panel feedback)
     const triggerSingleBlink = () => {
@@ -893,6 +1115,13 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
                 ...prev,
                 [key]: newValue
             };
+        });
+    }
+
+    const handleSnakeSettingChange = (key, value) => {
+        setSnakeSettings(prev => {
+            const newValue = typeof value === 'string' ? value : (typeof value === 'boolean' ? value : parseFloat(value));
+            return { ...prev, [key]: newValue };
         });
     }
 
@@ -976,10 +1205,23 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
                                 >
                                     <SlidersHorizontal /> Tuner
                                 </button>
+                                {/* Game Mode Toggle */}
+                                <button
+                                    onClick={() => handleToggleGameMode()}
+                                    className={`tuner-button ${!isSidebarCollapsed ? '' : 'opacity-50 cursor-not-allowed pointer-events-none'}`}
+                                    disabled={isSidebarCollapsed}
+                                    title={`Switch to ${gameMode === 'dino' ? 'Snake' : 'Dino'} mode`}
+                                >
+                                    <Gamepad2 size={16} />
+                                    <span className="hidden sm:inline">{gameMode === 'dino' ? 'Snake' : 'Dino'}</span>
+                                </button>
                             </div>
                             <h2 className="game-title">
                                 <span className={`status-eye ${isConnected ? 'connected' : 'disconnected'}`}><ScanEye size={32} /></span>
-                                EOG Dino Game
+                                EOG Arcade
+                                <span className={`text-sm font-mono px-2 py-0.5 rounded-full ${gameMode === 'dino' ? 'bg-amber-500/20 text-amber-500' : 'bg-green-500/20 text-green-500'}`}>
+                                    {gameMode === 'dino' ? 'DINO' : 'SNAKE'}
+                                </span>
                             </h2>
                         </div>
 
@@ -1039,16 +1281,30 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
                                         </div>
                                     </div>
 
-                                    {/* Left Center: Cactus Jump & Best Cactus Jump */}
+                                    {/* Left Center: Jump/Food Counter */}
                                     <div className="stat-group-center">
                                         <div className="stat-row-centered">
-                                            <span className='stat-row-centered stat-info'>JUMP  <ChevronRight /></span>
-                                            <Counter value={cactusJump} fontSize="1.6rem" places={[100, 10, 1]} className="stat-counter-primary-light" style={{ lineHeight: 1 }} />
-                                            <TreePine size={34} className="text-primary/40 mx-2" />
-                                            <span className={isNewJumpRecord ? 'record-glow' : ''}>
-                                                <Counter value={bestCactusJump} fontSize="1.6rem" places={[100, 10, 1]} className="stat-counter-primary-light" style={{ lineHeight: 1 }} />
-                                            </span>
-                                            <span className='stat-row-centered stat-info'> <ChevronLeft />  BEST</span>
+                                            {gameMode === 'snake' ? (
+                                                <>
+                                                    <span className='stat-row-centered stat-info'>FOOD  <ChevronRight /></span>
+                                                    <Counter value={snakeFoodEaten} fontSize="1.6rem" places={[100, 10, 1]} className="stat-counter-primary-light" style={{ lineHeight: 1 }} />
+                                                    <span className="text-xl text-primary/40 mx-2">🍎</span>
+                                                    <span className={isNewFoodRecord ? 'record-glow' : ''}>
+                                                        <Counter value={snakeBestFood} fontSize="1.6rem" places={[100, 10, 1]} className="stat-counter-primary-light" style={{ lineHeight: 1 }} />
+                                                    </span>
+                                                    <span className='stat-row-centered stat-info'> <ChevronLeft />  BEST</span>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <span className='stat-row-centered stat-info'>JUMP  <ChevronRight /></span>
+                                                    <Counter value={cactusJump} fontSize="1.6rem" places={[100, 10, 1]} className="stat-counter-primary-light" style={{ lineHeight: 1 }} />
+                                                    <TreePine size={34} className="text-primary/40 mx-2" />
+                                                    <span className={isNewJumpRecord ? 'record-glow' : ''}>
+                                                        <Counter value={bestCactusJump} fontSize="1.6rem" places={[100, 10, 1]} className="stat-counter-primary-light" style={{ lineHeight: 1 }} />
+                                                    </span>
+                                                    <span className='stat-row-centered stat-info'> <ChevronLeft />  BEST</span>
+                                                </>
+                                            )}
                                         </div>
                                     </div>
                                 </div>
@@ -1062,10 +1318,14 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
                                         <div className="stat-row-centered">
                                             <span className='stat-row-centered stat-info'>BEST <ChevronRight /></span>
                                             <span className={isNewScoreRecord ? 'record-glow' : ''}>
-                                                <Counter value={Math.floor(highScore / 10)} fontSize="1.6rem" places={[10000, 1000, 100, 10, 1]} className="stat-counter-primary-light" style={{ lineHeight: 1 }} />
+                                                <Counter value={gameMode === 'snake' ? highScore : Math.floor(highScore / 10)} fontSize="1.6rem" places={[10000, 1000, 100, 10, 1]} className="stat-counter-primary-light" style={{ lineHeight: 1 }} />
                                             </span>
-                                            <Target size={34} className="text-primary/40 mx-2" />
-                                            <Counter value={Math.floor(score / 10)} fontSize="1.6rem" places={[10000, 1000, 100, 10, 1]} className="stat-counter-primary-light" style={{ lineHeight: 1 }} />
+                                            {gameMode === 'snake' ? (
+                                                <span className="text-2xl text-primary/40 mx-2">🐍</span>
+                                            ) : (
+                                                <Target size={34} className="text-primary/40 mx-2" />
+                                            )}
+                                            <Counter value={gameMode === 'snake' ? score : Math.floor(score / 10)} fontSize="1.6rem" places={[10000, 1000, 100, 10, 1]} className="stat-counter-primary-light" style={{ lineHeight: 1 }} />
                                             <span className='stat-row-centered stat-info'> <ChevronLeft />  SCORE</span>
                                         </div>
                                     </div>
@@ -1114,9 +1374,9 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
 
                             <hr className="w-16 border-border" />
 
-                            <button onClick={() => setIsSidebarCollapsed(false)} className="mt-4 hover:text-primary transition-colors group relative" title="Camera">
-                                <Gamepad2 size={28} className="text-primary animate-pulse" title="Dino Game Setup" />
-                                <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">Controls & Method</div>
+                            <button onClick={() => setIsSidebarCollapsed(false)} className="mt-4 hover:text-primary transition-colors group relative" title="Controls">
+                                <Gamepad2 size={28} className="text-primary animate-pulse" title={gameMode === 'snake' ? 'Snake Controls' : 'Game Setup'} />
+                                <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">{gameMode === 'snake' ? 'Snake Controls' : 'Controls & Method'}</div>
                             </button>
 
                             <button onClick={() => setIsSidebarCollapsed(false)} className="mt-4 hover:text-primary transition-colors group relative" title="Camera">
@@ -1142,17 +1402,17 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
                             <div className="flex flex-col gap-3 mt-4 items-center group relative cursor-default">
                                 <div className="flex flex-col items-center">
                                     <Eye size={22} className={`transition-colors duration-200 ${eyeState === 'blink' ? 'text-primary' : 'text-muted/40'}`} />
-                                    <span className="text-[8px] font-bold text-muted/60 uppercase tracking-widest mt-1">Jump</span>
+                                    <span className="text-[8px] font-bold text-muted/60 uppercase tracking-widest mt-1">{gameMode === 'snake' ? 'Right' : 'Jump'}</span>
                                 </div>
                                 <div className="flex flex-col items-center mt-2">
                                     <div className="flex flex-col -space-y-1.5">
                                         <Eye size={22} className={`transition-colors duration-200 ${eyeState === 'double-blink' ? 'text-primary' : 'text-muted/40'}`} />
                                         <Eye size={22} className={`transition-colors duration-200 ${eyeState === 'double-blink' ? 'text-primary' : 'text-muted/40'}`} />
                                     </div>
-                                    <span className="text-[8px] font-bold text-muted/60 uppercase tracking-widest mt-1">Pause</span>
+                                    <span className="text-[8px] font-bold text-muted/60 uppercase tracking-widest mt-1">{gameMode === 'snake' ? 'Left' : 'Pause'}</span>
                                 </div>
                                 <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-surface border border-border px-3 py-1.5 rounded-lg text-xs font-bold text-text whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-[60]">
-                                    Blink Status
+                                    {gameMode === 'snake' ? 'Blink=Turn, Arrow=Dir' : 'Blink Status'}
                                 </div>
                             </div>
 
@@ -1176,16 +1436,35 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
 
                         {/* Eye Controls Panel */}
                         <div className="card bg-surface border border-border rounded-2xl p-4 " style={{ flexShrink: 0 }}>
-                            <h3 className="text-sm font-bold text-text uppercase tracking-wider mb-3 flex items-center gap-2"><Gamepad2 size={16} /> Controls</h3>
+                            <h3 className="text-sm font-bold text-text uppercase tracking-wider mb-3 flex items-center gap-2"><Gamepad2 size={16} /> {gameMode === 'snake' ? 'Snake Controls' : 'Controls'}</h3>
                             <div className="space-y-2 text-sm text-text">
-                                <div className="flex justify-between items-center">
-                                    <span className="text-muted flex items-center gap-1.5"><Eye size={14} className="text-secondary/70" /> Blink ONCE</span>
-                                    <span className="font-bold text-primary flex items-center gap-1"><ArrowUp size={12} /> Jump</span>
-                                </div>
-                                <div className="flex justify-between items-center">
-                                    <span className="text-muted flex items-center gap-1.5"><Eye size={14} className="text-secondary/70" /><Eye size={14} className="text-secondary/70 -ml-2" /> Blink TWICE</span>
-                                    <span className="font-bold text-primary flex items-center gap-1"><Pause size={12} /> Pause/Resume</span>
-                                </div>
+                                {gameMode === 'snake' ? (
+                                    <>
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-muted flex items-center gap-1.5"><Eye size={14} className="text-secondary/70" /> Blink ONCE</span>
+                                            <span className="font-bold text-primary flex items-center gap-1"><ChevronRight size={12} /> Turn Right</span>
+                                        </div>
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-muted flex items-center gap-1.5"><Eye size={14} className="text-secondary/70" /><Eye size={14} className="text-secondary/70 -ml-2" /> Blink TWICE</span>
+                                            <span className="font-bold text-primary flex items-center gap-1"><ChevronLeft size={12} /> Turn Left</span>
+                                        </div>
+                                        <div className="flex justify-between items-center border-t border-border pt-2 mt-2">
+                                            <span className="text-muted flex items-center gap-1.5"><ChevronRight size={14} /><ChevronLeft size={14} /><ChevronUp size={14} /><ChevronDown size={14} /> Arrow Keys</span>
+                                            <span className="font-bold text-primary">Direction</span>
+                                        </div>
+                                    </>
+                                ) : (
+                                    <>
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-muted flex items-center gap-1.5"><Eye size={14} className="text-secondary/70" /> Blink ONCE</span>
+                                            <span className="font-bold text-primary flex items-center gap-1"><ArrowUp size={12} /> Jump</span>
+                                        </div>
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-muted flex items-center gap-1.5"><Eye size={14} className="text-secondary/70" /><Eye size={14} className="text-secondary/70 -ml-2" /> Blink TWICE</span>
+                                            <span className="font-bold text-primary flex items-center gap-1"><Pause size={12} /> Pause/Resume</span>
+                                        </div>
+                                    </>
+                                )}
                             </div>
 
                             <div className="mt-4 pt-3 border-t border-border space-y-3">
@@ -1291,29 +1570,60 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
                                     <div className="space-y-2">
                                         <SettingsSection title="Gameplay" icon={Gamepad2} defaultOpen={true}>
                                             <div className="space-y-3 pt-2">
-                                                <SettingToggle label="Manual Controls (Space)" value={settings.ENABLE_MANUAL_CONTROLS} onChange={(v) => handleSettingChange('ENABLE_MANUAL_CONTROLS', v)} icon={Hand} />
-                                                <SettingInput label="Obstacle Bonus" value={settings.OBSTACLE_BONUS_FACTOR} onChange={(v) => handleSettingChange('OBSTACLE_BONUS_FACTOR', v)} min="0" max="0.5" step="0.005" icon={Zap} />
-                                                <div className="flex flex-row justify-between items-center text-xs pt-1 border-t border-border">
-                                                    <div>
-                                                        <span className="text-muted flex items-center gap-1"><Trophy size={10} /> HighScore: {Math.floor(highScore / 10)} </span>
-                                                        <span className='text-muted flex items-center gap-1'><TreePine size={10} />BestJump: {Math.floor(bestCactusJump)}</span>
+                                                <SettingToggle
+                                                    label={gameMode === 'snake' ? "Arrow Keys" : "Manual Controls (Space)"}
+                                                    value={settings.ENABLE_MANUAL_CONTROLS}
+                                                    onChange={(v) => handleSettingChange('ENABLE_MANUAL_CONTROLS', v)}
+                                                    icon={Hand}
+                                                />
+                                                {gameMode === 'snake' ? (
+                                                    <div className="flex flex-row justify-between items-center text-xs pt-1 border-t border-border">
+                                                        <div>
+                                                            <span className="text-muted flex items-center gap-1"><Trophy size={10} /> Best Score: {highScore} </span>
+                                                            <span className='text-muted flex items-center gap-1'><span className="text-sm">🍎</span> Best Food: {snakeBestFood}</span>
+                                                        </div>
+                                                        <button
+                                                            onClick={() => {
+                                                                localStorage.setItem('snake_highscore', '0')
+                                                                localStorage.setItem('snake_best_food', '0')
+                                                                setHighScore(0)
+                                                                setScore(0)
+                                                                setSnakeFoodEaten(0)
+                                                                setSnakeBestFood(0)
+                                                                setSavedMessage('Score Reset!')
+                                                                setTimeout(() => setSavedMessage(''), 2000)
+                                                            }}
+                                                            className="text-red-400 hover:text-red-300 font-bold uppercase tracking-wide text-[10px] border border-red-900/50 px-2 py-0.5 rounded bg-red-900/10 flex items-center gap-1"
+                                                        >
+                                                            <Trash2 size={10} /> Reset
+                                                        </button>
                                                     </div>
-                                                    <button
-                                                        onClick={() => {
-                                                            localStorage.setItem('dino_highscore', '0')
-                                                            localStorage.setItem('dino_best_cactus', '0')
-                                                            setHighScore(0)
-                                                            setScore(0)
-                                                            setCactusJump(0)
-                                                            setBestCactusJump(0)
-                                                            setSavedMessage('Score Reset!')
-                                                            setTimeout(() => setSavedMessage(''), 2000)
-                                                        }}
-                                                        className="text-red-400 hover:text-red-300 font-bold uppercase tracking-wide text-[10px] border border-red-900/50 px-2 py-0.5 rounded bg-red-900/10 flex items-center gap-1"
-                                                    >
-                                                        <Trash2 size={10} /> Reset
-                                                    </button>
-                                                </div>
+                                                ) : (
+                                                    <>
+                                                        <SettingInput label="Obstacle Bonus" value={settings.OBSTACLE_BONUS_FACTOR} onChange={(v) => handleSettingChange('OBSTACLE_BONUS_FACTOR', v)} min="0" max="0.5" step="0.005" icon={Zap} />
+                                                        <div className="flex flex-row justify-between items-center text-xs pt-1 border-t border-border">
+                                                        <div>
+                                                            <span className="text-muted flex items-center gap-1"><Trophy size={10} /> HighScore: {Math.floor(highScore / 10)} </span>
+                                                            <span className='text-muted flex items-center gap-1'><TreePine size={10} />BestJump: {Math.floor(bestCactusJump)}</span>
+                                                        </div>
+                                                        <button
+                                                            onClick={() => {
+                                                                localStorage.setItem('dino_highscore', '0')
+                                                                localStorage.setItem('dino_best_cactus', '0')
+                                                                setHighScore(0)
+                                                                setScore(0)
+                                                                setCactusJump(0)
+                                                                setBestCactusJump(0)
+                                                                setSavedMessage('Score Reset!')
+                                                                setTimeout(() => setSavedMessage(''), 2000)
+                                                            }}
+                                                            className="text-red-400 hover:text-red-300 font-bold uppercase tracking-wide text-[10px] border border-red-900/50 px-2 py-0.5 rounded bg-red-900/10 flex items-center gap-1"
+                                                        >
+                                                            <Trash2 size={10} /> Reset
+                                                        </button>
+                                                    </div>
+                                                    </>
+                                                )}
                                             </div>
                                         </SettingsSection>
 
@@ -1403,6 +1713,43 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
                                                 <SettingInput label="Obs Max H" value={settings.OBSTACLE_MAX_HEIGHT} onChange={(v) => handleSettingChange('OBSTACLE_MAX_HEIGHT', v)} min="30" max="100" step="5" icon={Maximize} />
                                             </div>
                                         </SettingsSection>
+
+                                        {/* Snake Settings (visible only in snake mode) */}
+                                        {gameMode === 'snake' && (
+                                            <SettingsSection title="Snake Config" icon={Gamepad2} defaultOpen={true}>
+                                                <div className="space-y-3 pt-2">
+                                                    <SettingInput label="Grid Columns" value={snakeSettings.GRID_COLS} onChange={(v) => handleSnakeSettingChange('GRID_COLS', v)} min="10" max="40" step="1" icon={Grid} />
+                                                    <SettingInput label="Grid Rows" value={snakeSettings.GRID_ROWS} onChange={(v) => handleSnakeSettingChange('GRID_ROWS', v)} min="10" max="40" step="1" icon={Grid} />
+                                                    <SettingInput label="Tick Speed (ms)" value={snakeSettings.TICK_INTERVAL} onChange={(v) => handleSnakeSettingChange('TICK_INTERVAL', v)} min="50" max="500" step="10" icon={Timer} />
+                                                    <SettingInput label="Initial Length" value={snakeSettings.INITIAL_LENGTH} onChange={(v) => handleSnakeSettingChange('INITIAL_LENGTH', v)} min="1" max="10" step="1" icon={Ruler} />
+                                                    <SettingToggle label="Grid Lines" value={snakeSettings.ENABLE_GRID_LINES} onChange={(v) => handleSnakeSettingChange('ENABLE_GRID_LINES', v)} icon={Grid} />
+                                                    <div className="pt-2 flex gap-2">
+                                                        <button
+                                                            onClick={() => {
+                                                                localStorage.setItem('snake_settings_v1', JSON.stringify(snakeSettings));
+                                                                setSavedMessage('Snake Saved!');
+                                                                setTimeout(() => setSavedMessage(''), 2000);
+                                                            }}
+                                                            className="text-sm bg-primary text-bg px-2 py-1 rounded font-bold hover:opacity-90 flex items-center gap-1"
+                                                        >
+                                                            <Save size={18} /> Save
+                                                        </button>
+                                                        <button
+                                                            onClick={() => {
+                                                                setSnakeSettings(SNAKE_DEFAULT_SETTINGS);
+                                                                localStorage.setItem('snake_settings_v1', JSON.stringify(SNAKE_DEFAULT_SETTINGS));
+                                                                setSavedMessage('Snake Reset!');
+                                                                setTimeout(() => setSavedMessage(''), 2000);
+                                                            }}
+                                                            className="text-sm text-red-400 hover:text-red-300 flex items-center gap-1"
+                                                        >
+                                                            <RotateCcw size={18} /> Reset
+                                                        </button>
+                                                        {savedMessage && <span className="text-xs text-green-500 font-bold animate-fade-in">{savedMessage}</span>}
+                                                    </div>
+                                                </div>
+                                            </SettingsSection>
+                                        )}
                                     </div>
                                 </div>
 

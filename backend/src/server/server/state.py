@@ -23,6 +23,7 @@ class WebServerState:
         self.hybrid_recorder = None      # HybridRecorder instance
         self.recording_service = None    # RecordingService instance
         self.muscle_strength_extractors = {}   # ch_idx -> MuscleStrengthExtractor
+        self.muscle_melody_extractor = None    # MuscleMelodyExtractor (all EMG channels)
 
 # Global instance
 state = WebServerState()

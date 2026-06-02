@@ -116,7 +116,7 @@ export default function Dashboard() {
 
   const navItems = React.useMemo(() => [
     { label: 'TERMINAL', onClick: () => setCurrentPage('live'), href: '#live' },
-    { label: 'Dino', onClick: () => setCurrentPage('dino'), href: '#dino' },
+    { label: 'Eye Arcade', onClick: () => setCurrentPage('dino'), href: '#dino' },
     { label: 'EEG Suite', onClick: () => setCurrentPage('eeg_dashboard'), href: '#eeg_dashboard' },
     { label: 'RPS', onClick: () => setCurrentPage('rps'), href: '#rps' },
     { label: 'Lab', onClick: () => setCurrentPage('lab'), href: '#lab' },
