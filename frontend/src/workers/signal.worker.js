@@ -61,6 +61,10 @@ let animationFrameId = null;
 let envelopeState = 0;
 const ENVELOPE_ALPHA = 0.05;
 
+// EMA smoothing for EOG/EEG noise reduction
+let emaState = null; // { chIdx: smoothedValue }
+const EMA_ALPHA = 0.15; // lower = smoother
+
 // Monotonicity Head to prevent "jitter" overlaps
 let lastTsHead = 0;
 
@@ -89,8 +93,9 @@ self.onmessage = function (e) {
         case 'SET_CONFIG':
             config = { ...config, ...payload };
             if (payload.channelIndex !== undefined) channelIndex = payload.channelIndex;
-            if (payload.displayMode !== undefined || payload.activeSensor !== undefined) {
+            if (payload.displayMode !== undefined || payload.activeSensor !== undefined || payload.channelIndex !== undefined) {
                 envelopeState = 0;
+                emaState = null;  // Reset smoothing on sensor/mode switch
             }
             if (payload.color && !payload.historyColor) {
                 config.historyColor = payload.color + '4D';
@@ -108,6 +113,7 @@ self.onmessage = function (e) {
         case 'CLEAR_DATA':
             points = [];
             envelopeState = 0;
+            emaState = null;
             requestRender();
             break;
     }
@@ -159,9 +165,13 @@ function addData(newPoints) {
 
     const normalizedPoints = filteredPoints.map((point) => {
         const rawValue = typeof point?.value === 'number' ? point.value : 0;
+        // EMA smoothing for noise reduction
+        if (emaState === null) emaState = rawValue;
+        emaState = EMA_ALPHA * rawValue + (1 - EMA_ALPHA) * emaState;
         return {
             ...point,
             value: rawValue,
+            smooth: emaState,
             envelope: updateEnvelope(rawValue)
         };
     });
@@ -200,6 +210,10 @@ function updateEnvelope(rawValue) {
 function getPointValue(point) {
     if (config.activeSensor === 'EMG' && config.displayMode === 'envelope') {
         return point.envelope ?? Math.abs(point.value ?? 0);
+    }
+    // Use EMA-smoothed value when smoothing is enabled (reduces noise for EOG/EEG)
+    if (config.smoothing && point.smooth !== undefined) {
+        return point.smooth;
     }
     return point.value ?? 0;
 }
@@ -395,7 +409,8 @@ function draw() {
         annotations.forEach(ann => {
             if (latestTs - ann.x < timeWindow * 1.5) {
                 const px = pL + ((ann.x % timeWindow) / timeWindow) * plW;
-                const py = valToPy(ann.y !== undefined ? ann.y : getPointValue(points[points.length - 1]));
+                // Blink dots: use fixed Y position (80% from top) if ann.y not set, instead of wiggling signal value
+                const py = ann.y !== undefined ? valToPy(ann.y) : valToPy(yMax * 0.8);
                 ctx.fillStyle = ann.color || "red";
                 ctx.beginPath(); ctx.arc(px, py, 6, 0, Math.PI * 2); ctx.fill();
             }

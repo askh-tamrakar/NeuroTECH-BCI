@@ -175,7 +175,6 @@ broadcast.onmessage = (e) => {
 
     if (newPoints.length) {
         addData(newPoints);
-        needsDraw = true;
     }
 };
 
@@ -262,10 +261,11 @@ function addData(newPoints) {
         points = points.slice(points.length - MAX_POINTS);
     }
     
-    // Trigger recalculate only if enough time has passed (Throttling)
+    // Trigger recalculate + redraw only if enough time has passed (Throttling)
     const now = performance.now();
     if (now - lastFFTTime > THROTTLE_FFT_MS) {
         needsRecalculate = true;
+        needsDraw = true;
     }
 }
 

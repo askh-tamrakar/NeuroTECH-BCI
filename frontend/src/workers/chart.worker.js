@@ -528,7 +528,7 @@ function draw() {
 
         // Label — centre within the currently visible portion
         if (win.label) {
-            const GESTURE_EMOJIS = { Rock: '\u270A', Paper: '\u270B', Scissors: '\u270C\uFE0F', Rest: '\uD83D\uDE0C' };
+            const GESTURE_EMOJIS = { Rock: '\u270A', Paper: '\u270B', Scissors: '\u270C\uFE0F', Rest: '\uD83D\uDE0C', SingleBlink: '\uD83D\uDC41\uFE0F', DoubleBlink: '\uD83D\uDC40' };
             const displayLabel   = GESTURE_EMOJIS[win.label] || win.label;
             const visibleLeft  = Math.max(effectivePx1, leftMargin);
             const visibleRight = Math.min(effectivePx2, width);

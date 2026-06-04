@@ -204,6 +204,27 @@ class SoundHandler {
         this.playTone(60, 'sine', 0.15, 0.3, 0.45);
     }
 
+    playSnakeStart() {
+        // Rising rattle start
+        if (!this.enabled || !this.initialized) { this.init(); if (!this.initialized || !this.ctx) return; }
+        this.resume();
+        const now = this.ctx.currentTime;
+        // Short rattle burst
+        for (let i = 0; i < 3; i++) {
+            const t = now + i * 0.08;
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(200 + i * 100, t);
+            gain.gain.setValueAtTime(0.06, t);
+            gain.gain.exponentialRampToValueAtTime(0.01, t + 0.06);
+            osc.connect(gain);
+            gain.connect(this.masterGain);
+            osc.start(t);
+            osc.stop(t + 0.06);
+        }
+    }
+
     // --- RPS GAME ---
     playRPSStart() {
         // Trumpet-like flourish

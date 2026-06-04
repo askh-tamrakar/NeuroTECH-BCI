@@ -376,6 +376,7 @@ function toWindowSummary(window) {
     return {
         ...rest,
         samples: Array.isArray(previewSamples) ? previewSamples.slice() : downsampleSamples(samples || []),
+        timestamps: Array.isArray(timestamps) ? downsampleTimestamps(timestamps) : [],
     };
 }
 
@@ -405,5 +406,19 @@ function downsampleSamples(samples, maxPoints = PREVIEW_POINTS) {
     return Array.from({ length: maxPoints }, (_, index) => {
         const sourceIndex = Math.round((index / (maxPoints - 1)) * lastIndex);
         return Number(samples[sourceIndex] || 0);
+    });
+}
+
+// Mirrors downsampleSamples — uses identical source indices so timestamps[i]
+// always corresponds to the same sample point as previewSamples[i].
+function downsampleTimestamps(timestamps, maxPoints = PREVIEW_POINTS) {
+    if (!Array.isArray(timestamps) || timestamps.length === 0) return [];
+    if (timestamps.length <= maxPoints) return timestamps.slice();
+    if (maxPoints <= 1) return [timestamps[0]];
+
+    const lastIndex = timestamps.length - 1;
+    return Array.from({ length: maxPoints }, (_, index) => {
+        const sourceIndex = Math.round((index / (maxPoints - 1)) * lastIndex);
+        return timestamps[sourceIndex];
     });
 }

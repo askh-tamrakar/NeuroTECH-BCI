@@ -37,10 +37,9 @@ class BlinkDetector:
         # 1. Amplitude must be significant
         # 2. Duration must be physiological
         
-        is_valid_amp = amp >= (self.threshold_amp * 0.8) # Allow slightly lower if extractor caught it
+        is_valid_amp = amp >= (self.threshold_amp * 0.8)
         is_valid_duration = self.min_duration <= dur <= self.max_duration
         
-        print("detecting by thresholds...")
         if is_valid_amp and is_valid_duration:
             self.last_detection_ts = ts
             # Determine event type based on peak count

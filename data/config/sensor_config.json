@@ -17,7 +17,7 @@
     "ch1": {
       "enabled": true,
       "label": "UNUSED",
-      "sensor": "EEG"
+      "sensor": "EOG"
     }
   },
   "display": {

@@ -21,6 +21,7 @@ from PySide6 import QtCore, QtWidgets, QtGui
 import pyqtgraph as pg
 import numpy as np
 import socket
+import select
 import brainflow
 from brainflow.board_shim import BoardShim, BrainFlowInputParams, BoardIds
 from src.utils.paths import get_config_dir
@@ -395,7 +396,7 @@ class SerialWriter(threading.Thread):
 # TCP writer thread
 # -------------------------
 class TCPWriter(threading.Thread):
-    def __init__(self, ip, port, sample_rate, data_queue, quiet=False):
+    def __init__(self, ip, port, sample_rate, data_queue, quiet=False, relay_queue=None):
         super().__init__(daemon=True)
         self.ip = ip
         self.port = port
@@ -406,6 +407,9 @@ class TCPWriter(threading.Thread):
         self.counter = 0
         self.sock = None
         self.is_connected = False
+        # Optional: relay_queue receives text lines sent back by the stream manager
+        # (e.g. servo commands like "DEG 90" relayed from sm_servo_claw port 6002)
+        self.relay_queue = relay_queue
 
     def connect(self):
         try:
@@ -422,8 +426,38 @@ class TCPWriter(threading.Thread):
     def stop(self):
         self._stop_event.set()
 
+    def _relay_reader_loop(self):
+        """Reads data sent back FROM the stream manager (servo relay commands, etc.)
+        and puts decoded text lines into self.relay_queue.
+        Uses select() so it never blocks the sendall() in the main thread."""
+        buf = b""
+        while not self._stop_event.is_set() and self.is_connected:
+            try:
+                r, _, _ = select.select([self.sock], [], [], 0.1)
+                if not r:
+                    continue
+                data = self.sock.recv(256)
+                if not data:
+                    break
+                buf += data
+                while b'\n' in buf:
+                    idx = buf.find(b'\n')
+                    line = buf[:idx].decode('ascii', errors='ignore').strip()
+                    buf = buf[idx + 1:]
+                    if line:
+                        try:
+                            self.relay_queue.put_nowait(line)
+                        except queue.Full:
+                            pass
+            except Exception:
+                break
+
     def run(self):
         connected = self.connect()
+        # Start relay reader if a relay_queue is configured
+        if connected and self.relay_queue is not None:
+            relay_thread = threading.Thread(target=self._relay_reader_loop, daemon=True)
+            relay_thread.start()
         while not self._stop_event.is_set():
             try:
                 adc0, adc1, ts = self.data_queue.get(timeout=0.1)
@@ -455,6 +489,152 @@ class TCPWriter(threading.Thread):
                 pass
 
 # -------------------------
+# Serial reader thread (Real Uno bridge mode)
+# -------------------------
+class UnoSerialReader(threading.Thread):
+    """Reads raw 8-byte ADS packets from an Arduino Uno R4 Minima via USB serial,
+    converts them for live plotting, and forwards them to sample_queue
+    for TCPWriter to retransmit over WiFi to the Stream Manager (port 6000).
+
+    Packet layout (8 bytes):
+        [SYNC1=0xC7][SYNC2=0x7C][counter][ch0_hi][ch0_lo][ch1_hi][ch1_lo][END=0x01]
+    """
+
+    PACKET_LEN = 8
+
+    def __init__(self, port_name, baud, sample_rate, sample_queue, plot_queue, quiet=False):
+        super().__init__(daemon=True)
+        self.port_name = port_name
+        self.baud = baud
+        self.sample_rate = sample_rate
+        self.sample_queue = sample_queue  # (adc0, adc1, ts) -> TCPWriter
+        self.plot_queue = plot_queue      # (f0, f1) -> _on_timer display
+        self._stop_event = threading.Event()
+        self.quiet = quiet
+        self._buf = bytearray()
+        # Commands to relay TO the Uno (e.g. servo commands received from stream manager)
+        self.cmd_queue: queue.Queue = queue.Queue(maxsize=64)
+
+    def stop(self):
+        self._stop_event.set()
+
+    @staticmethod
+    def _adc_to_float(raw):
+        """Convert 14-bit unsigned ADC value to the [-DEFAULT_RANGE, DEFAULT_RANGE]
+        float range used by ChannelGenerator, so plot scaling is identical."""
+        return (raw / ADC_MAX) * (2.0 * DEFAULT_RANGE) - DEFAULT_RANGE
+
+    def _parse_packets(self):
+        """Extract all complete valid packets from self._buf.
+        Returns list of (adc0, adc1) tuples."""
+        results = []
+        buf = self._buf
+        while len(buf) >= self.PACKET_LEN:
+            # Locate sync pattern
+            idx = -1
+            for i in range(len(buf) - 1):
+                if buf[i] == SYNC1 and buf[i + 1] == SYNC2:
+                    idx = i
+                    break
+            if idx == -1:
+                # No sync found — keep last byte in case it's start of a sync pair
+                self._buf = bytearray(buf[-1:])
+                return results
+            if idx > 0:
+                buf = buf[idx:]
+            if len(buf) < self.PACKET_LEN:
+                break
+            # Validate end byte
+            if buf[self.PACKET_LEN - 1] != END_BYTE:
+                buf = buf[1:]
+                continue
+            # Parse: bytes 2=counter, 3-4=ch0, 5-6=ch1
+            adc0 = (buf[3] << 8) | buf[4]
+            adc1 = (buf[5] << 8) | buf[6]
+            results.append((adc0, adc1))
+            buf = buf[self.PACKET_LEN:]
+        self._buf = bytearray(buf)
+        return results
+
+    def _send(self, ser, cmd: str):
+        """Send a newline-terminated command string to the Uno."""
+        try:
+            ser.write(f"{cmd}\n".encode())
+            ser.flush()
+        except Exception as e:
+            print(f"[UnoSerialReader] Send '{cmd}' failed: {e}")
+
+    def run(self):
+        if serial is None:
+            print("[UnoSerialReader] pyserial not installed — cannot open port.")
+            return
+        try:
+            ser = serial.Serial(
+                self.port_name, baudrate=self.baud, timeout=0.1,
+                bytesize=serial.EIGHTBITS, stopbits=serial.STOPBITS_ONE,
+                parity=serial.PARITY_NONE
+            )
+        except Exception as e:
+            print(f"[UnoSerialReader] Failed to open {self.port_name}: {e}")
+            return
+
+        print(f"[UnoSerialReader] Opened {self.port_name} @ {self.baud} baud — waiting for Arduino R4 reset...")
+        # Arduino R4 Minima resets when the host opens the serial port; wait for boot
+        time.sleep(3.0)
+        try:
+            ser.reset_input_buffer()
+            ser.reset_output_buffer()
+        except Exception:
+            pass
+
+        # Handshake — triggers connected state on firmware (matches acquisition_app.py)
+        self._send(ser, "WHORU")
+        time.sleep(0.1)
+
+        # Start acquisition — firmware begins emitting 8-byte binary packets
+        self._send(ser, "START")
+        print(f"[UnoSerialReader] START sent — reading packets...")
+
+        try:
+            while not self._stop_event.is_set():
+                # Drain any commands queued for the Uno (e.g. servo relay commands)
+                while True:
+                    try:
+                        cmd = self.cmd_queue.get_nowait()
+                        self._send(ser, cmd)
+                        print(f"[UnoSerialReader] Relayed to Uno: {cmd}")
+                    except queue.Empty:
+                        break
+
+                chunk = ser.read(256)
+                if not chunk:
+                    continue
+                self._buf.extend(chunk)
+                for adc0, adc1 in self._parse_packets():
+                    ts = time.time()
+                    # Forward raw ADC values to TCP writer -> Stream Manager port 6000
+                    try:
+                        self.sample_queue.put_nowait((adc0, adc1, ts))
+                    except queue.Full:
+                        pass
+                    # Convert to float for live plot
+                    f0 = self._adc_to_float(adc0)
+                    f1 = self._adc_to_float(adc1)
+                    try:
+                        self.plot_queue.put_nowait((f0, f1))
+                    except queue.Full:
+                        pass
+        finally:
+            # Tell the Uno to stop before closing the port
+            self._send(ser, "STOP")
+            time.sleep(0.05)
+            try:
+                ser.close()
+            except Exception:
+                pass
+            print(f"[UnoSerialReader] Port {self.port_name} closed.")
+
+# -------------------------
 # GUI Application
 # -------------------------
 class MainWindow(QtWidgets.QMainWindow):
@@ -475,6 +655,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.target_port = self.config.get("target_port", 6000)
         self.streaming = False
         self.binary = self.config.get("binary", True)
+        self.data_source = self.config.get("data_source", "Synthetic")
+        self.uno_reader = None
         self._emg_keymap = {
             int(QtCore.Qt.Key.Key_A): "light",
             int(QtCore.Qt.Key.Key_S): "medium",
@@ -539,6 +721,7 @@ class MainWindow(QtWidgets.QMainWindow):
             "target_ip": "10.235.2.237",
             "target_port": 6000,
             "binary": True,
+            "data_source": "Synthetic",
             "channel_mapping": {
                 "ch0": {"sensor": "EOG"},
                 "ch1": {"sensor": "EMG"}
@@ -560,6 +743,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.config["target_ip"] = self.ip_input.text().strip()
             self.config["target_port"] = int(self.port_input.text().strip())
             self.config["binary"] = self.binary
+            self.config["data_source"] = self.source_combo.currentText()
             # channel mapping read from UI
             self.config["channel_mapping"] = {
                 "ch0": {"sensor": self.ch0_map.currentText()},
@@ -580,6 +764,15 @@ class MainWindow(QtWidgets.QMainWindow):
         left_layout = QtWidgets.QVBoxLayout(left_content)
         left_layout.setContentsMargins(10, 10, 10, 10)
         left_layout.setSpacing(8)
+
+        # Signal source selector
+        left_layout.addWidget(QtWidgets.QLabel("<b>Signal Source</b>"))
+        self.source_combo = QtWidgets.QComboBox()
+        self.source_combo.addItems(["Synthetic", "Real Uno"])
+        self.source_combo.setCurrentText(self.data_source)
+        self.source_combo.currentTextChanged.connect(self._on_source_change)
+        left_layout.addWidget(self.source_combo)
+        left_layout.addSpacing(6)
 
         # mapping
         left_layout.addWidget(QtWidgets.QLabel("<b>Channel Mapping</b>"))
@@ -648,9 +841,11 @@ class MainWindow(QtWidgets.QMainWindow):
         serial_form = QtWidgets.QFormLayout(self.serial_group)
         serial_form.setContentsMargins(0,0,0,0)
         self.port_combo = QtWidgets.QComboBox()
-        serial_form.addRow("COM Port", self.port_combo)
+        self._port_row_label = QtWidgets.QLabel("COM Port")
+        self._baud_row_label = QtWidgets.QLabel("Baud")
+        serial_form.addRow(self._port_row_label, self.port_combo)
         self.baud_input = QtWidgets.QLineEdit(str(self.baud))
-        serial_form.addRow("Baud", self.baud_input)
+        serial_form.addRow(self._baud_row_label, self.baud_input)
         form.addRow(self.serial_group)
 
         # WiFi settings group
@@ -744,6 +939,9 @@ class MainWindow(QtWidgets.QMainWindow):
         # Add both panes to main layout. Right pane gets stretch weight so it expands more.
         layout.addWidget(left_scroll, 0)
         layout.addWidget(right, 1)
+
+        # Apply initial source state after all widgets exist
+        self._on_source_change(self.data_source)
 
     def _build_channel_controls(self, ch_index):
         widget = QtWidgets.QWidget()
@@ -959,6 +1157,29 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.log(f"SSVEP ch{ch} OFF")
                 self.ch_gens[ch].toggle_ssvep(None, enabled=False)
 
+    def _on_source_change(self, mode):
+        is_real = (mode == "Real Uno")
+        if is_real:
+            # Force WiFi output; serial port is the INPUT (reading from Uno)
+            self.mode_combo.setCurrentText("WiFi")
+            self.mode_combo.setEnabled(False)
+            self._on_mode_change("WiFi")
+            # Keep serial_group visible — used to select the Uno's COM port for reading
+            self.serial_group.setVisible(True)
+            self.btn_refresh.setEnabled(True)
+            # Relabel so it's clear this is input, not output
+            self._port_row_label.setText("Input Port (Uno)")
+            self._baud_row_label.setText("Baud (Read)")
+        else:
+            self.mode_combo.setEnabled(True)
+            self._on_mode_change(self.mode_combo.currentText())
+            self._port_row_label.setText("COM Port")
+            self._baud_row_label.setText("Baud")
+        # Disable synthetic signal controls when reading from real hardware
+        for ctrl in (self.controls_ch0, self.controls_ch1):
+            ctrl.setEnabled(not is_real)
+        self.data_source = mode
+
     def _on_mode_change(self, mode):
         is_serial = (mode == "Serial")
         self.serial_group.setVisible(is_serial)
@@ -1061,23 +1282,46 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # prepare writer
         self.sample_queue = queue.Queue(maxsize=8192)
-        mode = self.mode_combo.currentText()
-        if mode == "Serial":
-            self.stream_writer = SerialWriter(self.port, self.baud, self.sample_rate, channels=2,
-                                              data_queue=self.sample_queue, binary=self.binary, quiet=False)
-            target_str = self.port if self.port else 'LOOPBACK'
-        else:
+
+        if self.data_source == "Real Uno":
+            # Real Uno mode: read from Uno via serial, forward raw packets over WiFi
+            if not self.port:
+                QtWidgets.QMessageBox.warning(self, "No Port",
+                    "Select the Uno's COM port before starting.")
+                return
             ip = self.ip_input.text().strip()
             port = int(self.port_input.text().strip())
-            self.stream_writer = TCPWriter(ip, port, self.sample_rate, self.sample_queue)
-            target_str = f"WiFi ({ip}:{port})"
-            
-        params = BrainFlowInputParams()
-        self.board = BoardShim(BoardIds.SYNTHETIC_BOARD, params)
-        self.board.prepare_session()
-        self.board.start_stream()
+            # Create reader first so we can pass its cmd_queue to TCPWriter for servo relay
+            self.uno_reader = UnoSerialReader(
+                self.port, self.baud, self.sample_rate,
+                self.sample_queue, self.plot_queue
+            )
+            # relay_queue: commands received back from stream manager are forwarded to Uno
+            self.stream_writer = TCPWriter(
+                ip, port, self.sample_rate, self.sample_queue,
+                relay_queue=self.uno_reader.cmd_queue
+            )
+            target_str = f"Real Uno ({self.port}) → WiFi ({ip}:{port})"
+            self.stream_writer.start()
+            self.uno_reader.start()
+        else:
+            # Synthetic mode: generate signal, write to serial or WiFi
+            mode = self.mode_combo.currentText()
+            if mode == "Serial":
+                self.stream_writer = SerialWriter(self.port, self.baud, self.sample_rate, channels=2,
+                                                  data_queue=self.sample_queue, binary=self.binary, quiet=False)
+                target_str = self.port if self.port else 'LOOPBACK'
+            else:
+                ip = self.ip_input.text().strip()
+                port = int(self.port_input.text().strip())
+                self.stream_writer = TCPWriter(ip, port, self.sample_rate, self.sample_queue)
+                target_str = f"WiFi ({ip}:{port})"
+            params = BrainFlowInputParams()
+            self.board = BoardShim(BoardIds.SYNTHETIC_BOARD, params)
+            self.board.prepare_session()
+            self.board.start_stream()
+            self.stream_writer.start()
 
-        self.stream_writer.start()
         self.streaming = True
         self.btn_start.setEnabled(False)
         self.btn_stop.setEnabled(True)
@@ -1100,7 +1344,13 @@ class MainWindow(QtWidgets.QMainWindow):
             # Join with timeout to avoid freezing UI if writer is stuck
             self.stream_writer.join(timeout=0.5)
             self.stream_writer = None
-            
+
+        # 3. Stop Uno reader (Real Uno mode)
+        if self.uno_reader:
+            self.uno_reader.stop()
+            self.uno_reader.join(timeout=1.0)
+            self.uno_reader = None
+
         if self.board:
             try:
                 self.board.stop_stream()
@@ -1122,6 +1372,11 @@ class MainWindow(QtWidgets.QMainWindow):
         while True:
             if self._gen_stop.is_set():
                 break
+
+            # Idle when Real Uno is the source; UnoSerialReader handles data production
+            if self.data_source == "Real Uno":
+                time.sleep(0.05)
+                continue
 
             # Poll for background noise from BrainFlow if active
             if self.streaming and self.board:
@@ -1213,6 +1468,9 @@ class MainWindow(QtWidgets.QMainWindow):
         if self.stream_writer:
             self.stream_writer.stop()
             self.stream_writer.join(timeout=0.5)
+        if self.uno_reader:
+            self.uno_reader.stop()
+            self.uno_reader.join(timeout=0.5)
         event.accept()
 
 # -------------------------

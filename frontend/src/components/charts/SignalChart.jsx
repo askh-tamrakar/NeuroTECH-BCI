@@ -97,6 +97,7 @@ const SignalChart = forwardRef(({
   channelIndex = -1,
   activeSensor,
   displayMode = 'raw',
+  smoothing = true,
   titleAddon = null,
   wsEvent = null
 }, ref) => {
@@ -156,7 +157,8 @@ const SignalChart = forwardRef(({
               channelIndex,
               disabled,
               activeSensor,
-              displayMode
+              displayMode,
+              smoothing
             }
           }
         }, [offscreen]);
@@ -225,11 +227,12 @@ const SignalChart = forwardRef(({
           channelIndex,
           disabled,
           activeSensor,
-          displayMode
+          displayMode,
+          smoothing
         }
       });
     }
-  }, [timeWindowMs, color, currentZoom, currentManual, autoScaledRange, showGrid, currentTheme, disabled, activeSensor, displayMode]);
+  }, [timeWindowMs, color, currentZoom, currentManual, autoScaledRange, showGrid, currentTheme, disabled, activeSensor, displayMode, smoothing]);
 
   // Sync Annotations
   useEffect(() => {

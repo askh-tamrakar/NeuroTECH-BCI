@@ -24,8 +24,8 @@
     },
     "EOG": {
       "bandpass_enabled": true,
-      "bandpass_high": 7.8,
-      "bandpass_low": 0.1,
+      "bandpass_high": 8,
+      "bandpass_low": 0.4,
       "bandpass_order": 4,
       "notch_enabled": true,
       "notch_q": 30
