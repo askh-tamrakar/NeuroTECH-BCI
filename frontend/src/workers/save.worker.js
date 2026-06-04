@@ -20,14 +20,15 @@ self.onmessage = async (event) => {
 
             for (let index = 0; index < totalCount; index += 1) {
                 const window = windows[index];
+                const _saveStart = Date.now();
                 const response = await fetch(`${apiBaseUrl}/api/window`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
+                    body: JSON.stringify({   
                         sensor,
                         mode,
                         session_name: session_name || sessionName,
-                        ...window,
+                        ...window,       
                     })
                 });
 
@@ -44,13 +45,22 @@ self.onmessage = async (event) => {
 
                 results.push(result);
 
+                // eslint-disable-next-line no-console
+                console.log(`[save.worker] ${sensor} window ${index + 1}/${totalCount} saved in ${Date.now() - _saveStart}ms | samples: ${window.samples?.length ?? 0}`);
+
+                // Notify main thread immediately so the window flips
+                // from 'collected' → 'saved'/'error' in real-time.
                 self.postMessage({
                     type: 'SAVE_WINDOW_PROGRESS',
                     payload: {
                         requestId,
-                        result,
-                        completedCount: index + 1,
+                        index,
                         totalCount,
+                        id: window.id,
+                        status: result.error ? 'error' : 'saved',
+                        features: result.features,
+                        predicted_label: result.predicted_label,
+                        windows_saved: result.windows_saved ?? 1,
                     }
                 });
             }

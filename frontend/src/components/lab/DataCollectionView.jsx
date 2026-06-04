@@ -778,7 +778,10 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
             setAutoLimit(prev => Math.max(prev, 24));
         } else if (sensor === 'EMG') {
             setWindowDuration(prev => [900, 1200, 1500, 1800].includes(prev) ? prev : 900);
-        } else if (sensor !== 'EEG' && mode === 'recorded') {
+        } else if (sensor === 'EOG') {
+            setWindowDuration(prev => [500, 1000, 1500, 2000].includes(prev) ? prev : 1000);
+        }
+        if (sensor !== 'EEG' && mode === 'recorded') {
             setMode('collection');
         }
         sessionWorkerRef.current?.postMessage({ type: 'SET_SENSOR', payload: sensor });

@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Trash2, Activity, ListX } from 'lucide-react';
+import { Trash2, Activity, ListX, Ban, SlidersHorizontal } from 'lucide-react';
 import CustomNumberInput from '../ui/inputs/CustomNumberInput'
 
 // --- Helper Functions ---
@@ -28,6 +28,13 @@ const getWindowTone = (status) => {
                 text: 'text-[var(--window-saved-line)]',
                 line: 'var(--window-saved-line)'
             };
+        case 'aborted':
+            return {
+                card: 'bg-zinc-900/30 border-zinc-700 hover:border-zinc-600',
+                dot: 'bg-zinc-500',
+                text: 'text-zinc-400',
+                line: '#71717a'
+            };
         default:
             return {
                 card: 'bg-[var(--window-error-bg)] border-[var(--window-error-border)] hover:border-[var(--window-error-border-strong)]',
@@ -38,14 +45,22 @@ const getWindowTone = (status) => {
     }
 };
 
+const GESTURE_EMOJIS = { Rock: '\u270A', Paper: '\u270B', Scissors: '\u270C\uFE0F', Rest: '\uD83D\uDE0C', SingleBlink: '\uD83D\uDC41\uFE0F', DoubleBlink: '\uD83D\uDC40' };
+
 // --- Sub-components (Memoized) ---
-const Sparkline = React.memo(({ data, color = '#10b981' }) => {
+// timestamps + startTime/endTime allow time-accurate x-positioning to match the chart overlay.
+// Without them the sparkline uses equal index spacing, which drifts for variable-rate sensors (EOG).
+const Sparkline = React.memo(({ data, timestamps, startTime, endTime, color = '#10b981' }) => {
     if (!data || data.length < 2) return null;
     const width = 100;
     const height = 30;
     const min = Math.min(...data);
     const calculatedMax = Math.max(...data);
     const range = calculatedMax - min || 1;
+
+    const useTime = Array.isArray(timestamps) && timestamps.length === data.length
+        && startTime != null && endTime != null && endTime > startTime;
+    const tSpan = useTime ? (endTime - startTime) : 0;
 
     // Use a fixed step for downsampling to guarantee performance
     const maxPoints = 50;
@@ -54,7 +69,9 @@ const Sparkline = React.memo(({ data, color = '#10b981' }) => {
     let pathPoints = "";
     for (let i = 0; i < data.length; i += step) {
         const v = data[i];
-        const x = (i / (data.length - 1)) * width;
+        const x = useTime
+            ? Math.min(width, Math.max(0, ((timestamps[i] - startTime) / tSpan) * width))
+            : (i / (data.length - 1)) * width;
         const y = height - ((v - min) / range) * height;
         pathPoints += `${x},${y} `;
     }
@@ -66,50 +83,69 @@ const Sparkline = React.memo(({ data, color = '#10b981' }) => {
     );
 });
 
-const WindowRow = React.memo(({ win, onDelete }) => {
+const WindowRow = React.memo(({ win, onDelete, activeSensor }) => {
     const tone = useMemo(() => getWindowTone(win.status), [win.status]);
     const duration = useMemo(() => (win.endTime - win.startTime).toFixed(0), [win.startTime, win.endTime]);
     const canDelete = !['saved', 'correct'].includes(win.status);
+    const emoji = GESTURE_EMOJIS[win.label] || '?';
+    const isEOG = activeSensor === 'EOG';
+
+    const statusLabel =
+        (win.status === 'recording' || win.status === 'pending') ? 'Rec' :
+        win.status === 'collected' ? 'Ready' :
+        win.status === 'saved' ? `Saved${win.windows_saved > 1 ? ` \u00d7${win.windows_saved}` : ''}` :
+        win.status === 'correct' ? `Correct${win.windows_saved > 1 ? ` \u00d7${win.windows_saved}` : ''}` :
+        win.status === 'incorrect' ? 'Incorrect' :
+        win.status === 'aborted' ? 'Aborted' : 'Error';
 
     return (
-        <div className={`py-1 px-2 flex flex-col gap-0 rounded-lg border transition-all group hover:translate-x-1 animate-in slide-in-from-right-4 fade-in duration-300 ${tone.card}`}>
-            <div className="flex justify-between items-center">
-                <div className="flex flex-col gap-2">
-                    <span className="font-bold text-sm text-text uppercase">{win.label}</span>
+        <div className={`py-1 px-2 rounded-lg border transition-all hover:translate-x-1 animate-in slide-in-from-right-4 fade-in duration-300 ${tone.card}`}>
+            <div className="flex items-center gap-2">
+                {/* Emoji + label (label hidden for EOG — shown on right instead) */}
+                <div className="flex flex-col items-center w-10 shrink-0">
+                    <span className="text-3xl leading-none">{emoji}</span>
+                    {!isEOG && <span className="text-[12px] font-bold uppercase text-muted leading-none mt-1">{win.label}</span>}
+                </div>
+
+                {/* Status + duration */}
+                <div className="flex flex-col gap-0.5 min-w-[62px]">
                     <div className="flex items-center gap-1">
-                        <span className={`w-1.5 h-1.5 rounded-full ${tone.dot}`}></span>
-                        <span className={`text-xs uppercase ${tone.text}`}>
-                            {(win.status === 'recording' || win.status === 'pending') ? 'Recording' :
-                                (win.status === 'collected') ? 'Ready' :
-                                    (win.status === 'saved' || win.status === 'correct') ? (
-                                        <span>
-                                            {win.status === 'saved' ? 'Saved' : 'Correct'}
-                                            {win.windows_saved > 1 && ` (x${win.windows_saved})`}
-                                        </span>
-                                    ) :
-                                        (win.status === 'incorrect') ? 'Incorrect' :
-                                            'Error'}
-                        </span>
+                        {win.status === 'aborted'
+                            ? <Ban size={14} className={tone.text} />
+                            : <span className={`w-2 h-2 rounded-full shrink-0 ${tone.dot}`} />
+                        }
+                        <span className={`text-sm uppercase font-bold leading-none ${tone.text}`}>{statusLabel}</span>
                     </div>
+                    <span className="text-sm text-muted font-mono">{duration}ms</span>
                 </div>
 
-                <div className="flex flex-col gap-2 content-center">
-                    <div className="w-24 h-8 flex items-center">
-                        <Sparkline data={win.samples} color={tone.line} />
-                    </div>
-                    <span className="text-xs text-[var(--text-secondary)] font-mono">
-                        {duration}ms
+                {/* Sparkline */}
+                <div className="flex-1 h-10 flex items-center justify-center overflow-hidden">
+                    <Sparkline
+                        data={win.samples}
+                        timestamps={win.timestamps}
+                        startTime={win.startTime}
+                        endTime={win.endTime}
+                        color={tone.line}
+                    />
+                </div>
+
+                {/* EOG class name — right side */}
+                {isEOG && (
+                    <span className="text-[11px] font-bold uppercase text-muted leading-none shrink-0 text-right max-w-[56px]">
+                        {win.label}
                     </span>
-                </div>
+                )}
 
-                <div className="flex gap-1 opacity-100">
+                {/* Delete button */}
+                <div className="shrink-0">
                     {canDelete && (
                         <button
                             onClick={(e) => { e.stopPropagation(); onDelete?.(win.id); }}
                             className="p-1 hover:bg-red-500/10 rounded text-red-400 text-xs transition-colors"
                             title="Delete window"
                         >
-                            <Trash2 size={16} />
+                            <Trash2 size={22} />
                         </button>
                     )}
                 </div>
@@ -136,6 +172,8 @@ function WindowListPanel({
     onAutoCalibrateChange,
     onClearSaved,
     onDeleteAll,
+    onRunCalibration,
+    runInProgress = false,
     progressMode = 'captures',
     progressCurrent = 0,
     progressTotal = 1,
@@ -147,15 +185,21 @@ function WindowListPanel({
     onPerClassLimitChange,
 }) {
     // Stats calculated in a single pass for efficiency
-    const { recordingCount, processedCount, savedCount } = useMemo(() => {
-        let rec = 0, proc = 0, sav = 0;
+    const { recordingCount, processedCount, savedCount, batchProcessed, batchSaved } = useMemo(() => {
+        let rec = 0, proc = 0, sav = 0, bProc = 0, bSav = 0;
         for (const w of windows) {
             if (w.status === 'recording' || w.status === 'pending') rec++;
             else if (w.status === 'collected') proc++;
             else if (w.status === 'saved' || w.status === 'correct') sav++;
+            if (Number(w.batchIndex || 0) === currentBatchIndex) {
+                if (w.status === 'collected' || w.status === 'saved' || w.status === 'correct') bProc++;
+                if (w.status === 'saved' || w.status === 'correct') bSav++;
+            }
         }
-        return { recordingCount: rec, processedCount: proc, savedCount: sav };
-    }, [windows]);
+        return { recordingCount: rec, processedCount: proc, savedCount: sav, batchProcessed: bProc, batchSaved: bSav };
+    }, [windows, currentBatchIndex]);
+
+    const hasCalibratable = !autoCalibrate && !isCalibrationMode && windows.some(w => w.features && (w.status === 'saved' || w.status === 'correct'));
 
     const targetCount = Math.max(1,
         isCalibrationMode && perClassLimit !== null
@@ -219,7 +263,7 @@ function WindowListPanel({
                     </div>
                     <div className="flex items-center gap-2">
                         <div className="text-[14px] font-bold uppercase tracking-wider text-muted">
-                            {progress.toFixed(0)}%
+                            {progress.toFixed(2)}%
                         </div>
                         <button
                             onClick={onDeleteAll}
@@ -231,12 +275,34 @@ function WindowListPanel({
                     </div>
                 </div>
 
-                <div className="h-1.5 w-full pt-1 bg-bg rounded-full overflow-hidden">
-                    <div
-                        className="h-full bg-primary transition-all duration-500 ease-out"
-                        style={{ width: `${progress}%` }}
-                    />
-                </div>
+                {autoCalibrate ? (
+                    /* Auto mode: two stacked progress rows (top=current batch, bottom=overall) */
+                    <div className="flex flex-col w-full mt-1 rounded overflow-hidden">
+                        <div className="relative h-1.5 w-full bg-bg">
+                            <div className="absolute top-0 left-0 h-full bg-sky-500 transition-all duration-500 ease-out"
+                                style={{ width: `${Math.min(100, (batchProcessed / Math.max(1, batchSize)) * 100)}%` }} />
+                            <div className="absolute top-0 left-0 h-full bg-emerald-700 transition-all duration-500 ease-out"
+                                style={{ width: `${Math.min(100, (batchSaved / Math.max(1, batchSize)) * 100)}%` }} />
+                        </div>
+                        <div className="w-full" style={{ height: '1px', backgroundColor: 'rgba(0,0,0,0.7)' }} />
+                        <div className="relative h-1.5 w-full bg-bg">
+                            <div className="absolute top-0 left-0 h-full transition-all duration-500 ease-out"
+                                style={{ width: `${Math.min(100, (statsTotal / targetCount) * 100)}%`, backgroundColor: 'var(--primary)' }} />
+                            <div className="absolute top-0 left-0 h-full bg-emerald-700 transition-all duration-500 ease-out"
+                                style={{ width: `${Math.min(100, (savedCount / targetCount) * 100)}%` }} />
+                        </div>
+                    </div>
+                ) : (
+                    /* Manual mode: single bar with 3 layered solid colors, all relative to targetCount */
+                    <div className="relative mt-1 h-2 w-full bg-bg rounded-full overflow-hidden">
+                        <div className="absolute top-0 left-0 h-full transition-all duration-500 ease-out"
+                            style={{ width: `${Math.min(100, (statsTotal / targetCount) * 100)}%`, backgroundColor: 'var(--primary)' }} />
+                        <div className="absolute top-0 left-0 h-full bg-sky-400 transition-all duration-500 ease-out"
+                            style={{ width: `${Math.min(100, (processedCount / targetCount) * 100)}%` }} />
+                        <div className="absolute top-0 left-0 h-full bg-emerald-700 transition-all duration-500 ease-out"
+                            style={{ width: `${Math.min(100, (savedCount / targetCount) * 100)}%` }} />
+                    </div>
+                )}
             </div>
 
             <div className="flex-grow min-h-0 flex flex-col overflow-y-auto relative pt-2 no-scrollbar px-2 space-y-2 pb-4">
@@ -247,7 +313,7 @@ function WindowListPanel({
                     </div>
                 ) : (
                     reversedWindows.map((win) => (
-                        <WindowRow key={win.id} win={win} onDelete={onDelete} />
+                        <WindowRow key={win.id} win={win} onDelete={onDelete} activeSensor={activeSensor} />
                     ))
                 )}
             </div>
@@ -264,6 +330,20 @@ function WindowListPanel({
                     >
                         {isCalibrationMode ? 'Append Captures' : 'Save Captures'}
                     </button>
+
+                    {hasCalibratable && (
+                        <button
+                            onClick={onRunCalibration}
+                            disabled={runInProgress}
+                            className={`shrink-0 py-1 px-3 rounded-lg font-bold text-[16px] uppercase tracking-wider transition-all flex items-center justify-center gap-1 ${
+                                runInProgress
+                                    ? 'bg-bg text-muted border border-border cursor-not-allowed opacity-50'
+                                    : 'bg-amber-500 text-white hover:opacity-90 shadow-glow'
+                            }`}
+                        >
+                            <SlidersHorizontal size={16} /> Calibrate
+                        </button>
+                    )}
 
                     {autoCalibrate ? (
                         <>

@@ -24,6 +24,8 @@ export default function LiveView({ wsData, wsEvent, config, isPaused, wsUrl, rec
 
   // Refs for direct worker communication
   const chartRefs = useRef({});
+  const channelMappingRef = useRef(channelMapping);
+  channelMappingRef.current = channelMapping;  // keep fresh for blink handler closure
 
   const [annotations, setAnnotations] = useState([])
   const [fftStatsByChannel, setFftStatsByChannel] = useState({})
@@ -47,9 +49,17 @@ export default function LiveView({ wsData, wsEvent, config, isPaused, wsUrl, rec
       if (type === 'EVENT') {
         if (payload.event === 'SingleBlink' || payload.event === 'DoubleBlink') {
           const ts = Date.now();
+          // Find EOG channel to restrict blink dots to EOG graph only
+          let eogChannel = payload.channel;
+          if (!eogChannel) {
+            const mapping = channelMappingRef.current || {};
+            for (const [chKey, chCfg] of Object.entries(mapping)) {
+              if (chCfg?.sensor === 'EOG') { eogChannel = chKey; break; }
+            }
+          }
           setAnnotations(prev => [
             ...prev,
-            { x: ts, label: payload.event === 'DoubleBlink' ? 'DBL-BLINK' : 'BLINK', color: '#ef4444', channel: payload.channel }
+            { x: ts, label: payload.event === 'DoubleBlink' ? 'DBL-BLINK' : 'BLINK', color: '#ef4444', channel: eogChannel || 'ch0' }
           ].slice(-20));
         }
       }

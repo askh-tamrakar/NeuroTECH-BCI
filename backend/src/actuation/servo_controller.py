@@ -137,7 +137,7 @@ class ServoController:
 
                         # Logic Mapping
                         
-                        servo_enabled = self.config.get("features", {}).get("Servo", {}).get("enabled", False)
+                        servo_enabled = self.config.get("features", {}).get("Servo", {}).get("enabled", True)
                         if not servo_enabled:
                             continue
 
