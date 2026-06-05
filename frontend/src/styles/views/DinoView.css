@@ -491,64 +491,6 @@
     flex-shrink: 0;
 }
 
-/* Game Mode Badge */
-.game-mode-badge {
-    font-size: 0.75rem;
-    font-family: monospace;
-    padding: 0.125rem 0.5rem;
-    border-radius: 9999px;
-    font-weight: 700;
-    letter-spacing: 0.05em;
-}
-
-.game-mode-badge.dino {
-    background-color: rgba(245, 158, 11, 0.2);
-    color: #f59e0b;
-}
-
-.game-mode-badge.snake {
-    background-color: rgba(34, 197, 94, 0.2);
-    color: #22c55e;
-}
-
-/* Game Mode Switch Button */
-.game-mode-btn {
-    display: flex;
-    align-items: center;
-    gap: 0.25rem;
-    padding: 0.5rem 1rem;
-    border-radius: 0.5rem;
-    font-size: 0.875rem;
-    font-weight: 700;
-    transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1);
-    border: 1px solid var(--border);
-    background-color: var(--bg);
-    color: var(--muted);
-    cursor: pointer;
-}
-
-.game-mode-btn:hover {
-    color: var(--text);
-    border-color: var(--primary);
-}
-
-.game-mode-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-    pointer-events: none;
-}
-
-/* Snake Canvas Specific */
-.snake-grid-bg {
-    background-color: var(--surface);
-}
-
-@keyframes snake-eat {
-    0% { transform: scale(1); }
-    50% { transform: scale(1.3); }
-    100% { transform: scale(1); }
-}
-
 /* =============================================
    Record-Breaking Heartbeat Glow Animation
    Applied to the "best" counter when the player
@@ -569,4 +511,4 @@
     animation: record-heartbeat 0.9s ease-in-out infinite;
     color: var(--primary);
     will-change: transform, filter;
-}
+}

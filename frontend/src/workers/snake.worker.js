@@ -35,8 +35,13 @@ let food = null;
 let tickAccumulator = 0;
 let tickInterval = 200;
 let lastSentScore = 0;
-let appleSprites = []; // Array of 5 ImageBitmaps (red, green, yellow, blue, purple)
-let appleThemeIndex = 0; // Which apple to use based on theme
+let appleSprites = []; // Array of 5 ImageBitmaps
+let appleThemeIndex = 0;
+
+// Tail rattle burst state
+let tailRattleActive = false;
+let tailRattleStart = 0;
+let nextRattleTime = 3000;
 
 // --- Theme Colors ---
 let COLORS = {
@@ -64,12 +69,13 @@ function initGame() {
     gridRows = SETTINGS.GRID_ROWS;
     tickInterval = SETTINGS.TICK_INTERVAL;
 
-    // Cell size from height, then extend columns to fill full width (use ceil to cover gaps)
-    cellSize = Math.ceil(SETTINGS.CANVAS_HEIGHT / SETTINGS.GRID_ROWS);
-    gridCols = Math.ceil(SETTINGS.CANVAS_WIDTH / cellSize);
+    // Cell size from height (floor to fit within canvas), extend columns for slight overflow
+    const EDGE_EXTRA = 2;
+    cellSize = Math.floor(SETTINGS.CANVAS_HEIGHT / SETTINGS.GRID_ROWS);
+    gridCols = Math.floor((SETTINGS.CANVAS_WIDTH + EDGE_EXTRA * 2) / cellSize);
     gridRows = SETTINGS.GRID_ROWS;
-    gridOffsetX = 0;
-    gridOffsetY = 0;
+    gridOffsetX = -EDGE_EXTRA;
+    gridOffsetY = 2;
 
     // Pick the right apple based on theme primary color hue
     appleThemeIndex = getAppleIndexForTheme(COLORS.primary);
@@ -94,6 +100,11 @@ function initGame() {
 
     // Spawn first food
     spawnFood();
+
+    // Reset rattle state
+    tailRattleActive = false;
+    tailRattleStart = 0;
+    nextRattleTime = Date.now() + 2000 + Math.random() * 3000;
 }
 
 function spawnFood() {
@@ -130,23 +141,22 @@ function handleInput(action, payload) {
     }
 
     if (action === 'jump') {
-        // Single blink → Turn RIGHT (clockwise)
+        // Single blink: LEFT→UP, RIGHT→UP, UP→RIGHT, DOWN→RIGHT
         if (gameState === 'ready' || gameState === 'gameOver') {
             resetGame();
             return;
         }
         if (gameState === 'playing') {
-            const dirMap = { 'up': 'right', 'right': 'down', 'down': 'left', 'left': 'up' };
+            const dirMap = { 'left': 'up', 'right': 'up', 'up': 'right', 'down': 'right' };
             const newDir = dirMap[direction];
-            // Prevent 180° reversal
             if (newDir !== getOppositeDirection(direction)) {
                 nextDirection = newDir;
             }
         }
     } else if (action === 'pause') {
-        // Double blink → Turn LEFT (counter-clockwise)
+        // Double blink: LEFT→DOWN, RIGHT→DOWN, UP→LEFT, DOWN→LEFT
         if (gameState === 'playing') {
-            const dirMap = { 'up': 'left', 'left': 'down', 'down': 'right', 'right': 'up' };
+            const dirMap = { 'left': 'down', 'right': 'down', 'up': 'left', 'down': 'left' };
             const newDir = dirMap[direction];
             if (newDir !== getOppositeDirection(direction)) {
                 nextDirection = newDir;
@@ -202,11 +212,11 @@ function moveSnake() {
         case 'right': newHead.x += 1; break;
     }
 
-    // Check wall collision
-    if (newHead.x < 0 || newHead.x >= gridCols || newHead.y < 0 || newHead.y >= gridRows) {
-        gameOver();
-        return;
-    }
+    // Wall wrap: snake comes from the opposite side instead of dying
+    if (newHead.x < 0) newHead.x = gridCols - 1;
+    else if (newHead.x >= gridCols) newHead.x = 0;
+    if (newHead.y < 0) newHead.y = gridRows - 1;
+    else if (newHead.y >= gridRows) newHead.y = 0;
 
     // Check self collision (skip tail since it will move if no food eaten)
     const willEat = food && newHead.x === food.x && newHead.y === food.y;
@@ -304,79 +314,122 @@ function drawFood() {
 function drawSnake() {
     if (!snake.length) return;
 
-    // Use theme primary color for snake
-    const headColor = COLORS.primary;
-    const bodyColor = COLORS.primary;
+    const primary = COLORS.primary;
+    const dark = darkenColor(primary, 0.35);
+    const faceColor = lightenColor(primary, 0.35);
 
-    // Draw body (tail to head-1)
+    const tailLevel = foodEaten >= 16 ? 3 : foodEaten >= 10 ? 2 : foodEaten >= 4 ? 1 : 0;
+    let tailLen = Math.min(6, snake.length - 1);
+    if (snake.length <= 4) tailLen = 2;
+    const taperSteps = [0.25, 0.35, 0.50, 0.65, 0.80, 0.95];
+
+    const now = Date.now();
+    if (snake.length > 8 && !tailRattleActive && now > nextRattleTime) {
+        tailRattleActive = true; tailRattleStart = now;
+        nextRattleTime = now + 2000 + Math.random() * 3000;
+    }
+    if (tailRattleActive && now - tailRattleStart > 450) { tailRattleActive = false; }
+
     for (let i = snake.length - 1; i > 0; i--) {
         const seg = snake[i];
-        const sx = gridOffsetX + seg.x * cellSize;
-        const sy = gridOffsetY + seg.y * cellSize;
-        const pad = Math.max(1, Math.floor(cellSize * 0.1));
+        const idxFromTail = snake.length - 1 - i;
+        const isTail = idxFromTail < tailLen;
+        let swayX = 0, swayY = 0;
+        if (isTail && snake.length > 8 && tailRattleActive) {
+            const elapsed = now - tailRattleStart;
+            const fade = 1 - elapsed / 450;
+            const rapid = Math.sin(now / 8 + idxFromTail * 2.2) * fade;
+            const strength = (1 - idxFromTail / tailLen) * (cellSize * 0.55);
+            if (direction === 'left' || direction === 'right') { swayY = rapid * strength; }
+            else { swayX = rapid * strength; }
+        }
+        const sx = gridOffsetX + seg.x * cellSize + swayX;
+        const sy = gridOffsetY + seg.y * cellSize + swayY;
 
-        // Body gradient: darker towards tail
-        const t = i / snake.length;
-        ctx.fillStyle = lerpColor(bodyColor, headColor, 1 - t * 0.3);
-        ctx.fillRect(sx + pad, sy + pad, cellSize - pad * 2, cellSize - pad * 2);
-
-        // Subtle border
-        ctx.strokeStyle = darkenColor(COLORS.primary, 0.4);
-        ctx.lineWidth = 0.5;
-        ctx.strokeRect(sx + pad, sy + pad, cellSize - pad * 2, cellSize - pad * 2);
+        if (isTail) {
+            const stepIdx = Math.min(idxFromTail, taperSteps.length - 1);
+            const taperRatio = taperSteps[stepIdx];
+            const margin = (cellSize * (1 - taperRatio)) / 2;
+            const segPad = margin + 1;
+            if (tailLevel >= 1) {
+                drawTailSegment(sx, sy, idxFromTail, tailLevel, tailLen, dark, faceColor, primary, taperRatio, margin);
+            } else {
+                ctx.fillStyle = primary;
+                ctx.fillRect(sx + segPad, sy + segPad, cellSize - segPad * 2, cellSize - segPad * 2);
+                ctx.strokeStyle = dark; ctx.lineWidth = 0.5;
+                ctx.strokeRect(sx + segPad, sy + segPad, cellSize - segPad * 2, cellSize - segPad * 2);
+            }
+        } else {
+            const bodyPad = Math.max(2, Math.floor(cellSize * 0.08));
+            ctx.fillStyle = primary;
+            ctx.fillRect(sx + bodyPad, sy + bodyPad, cellSize - bodyPad * 2, cellSize - bodyPad * 2);
+            ctx.fillStyle = lightenColor(primary, 0.1);
+            ctx.fillRect(sx + bodyPad, sy + bodyPad, cellSize - bodyPad * 2, Math.max(1, Math.floor(cellSize * 0.1)));
+            ctx.strokeStyle = dark; ctx.lineWidth = 0.5;
+            ctx.strokeRect(sx + bodyPad, sy + bodyPad, cellSize - bodyPad * 2, cellSize - bodyPad * 2);
+        }
     }
 
-    // Draw head
     const head = snake[0];
     const hx = gridOffsetX + head.x * cellSize;
     const hy = gridOffsetY + head.y * cellSize;
-    const pad = Math.max(1, Math.floor(cellSize * 0.08));
+    const headPad = Math.max(1, Math.floor(cellSize * 0.06));
+    ctx.fillStyle = faceColor;
+    ctx.fillRect(hx + headPad, hy + headPad, cellSize - headPad * 2, cellSize - headPad * 2);
+    ctx.strokeStyle = dark; ctx.lineWidth = 1.5;
+    ctx.strokeRect(hx + headPad, hy + headPad, cellSize - headPad * 2, cellSize - headPad * 2);
+    ctx.fillStyle = lightenColor(primary, 0.5);
+    ctx.fillRect(hx + headPad + 1, hy + headPad + 1, cellSize - headPad * 2 - 2, Math.max(1, Math.floor(cellSize * 0.1)));
 
-    ctx.fillStyle = headColor;
-    ctx.fillRect(hx + pad, hy + pad, cellSize - pad * 2, cellSize - pad * 2);
-
-    // Head border
-    ctx.strokeStyle = COLORS.bg;
-    ctx.lineWidth = 1.5;
-    ctx.strokeRect(hx + pad, hy + pad, cellSize - pad * 2, cellSize - pad * 2);
-
-    // Eyes (based on direction)
     const eyeSize = Math.max(2, Math.floor(cellSize * 0.15));
     const eyeOff = Math.floor(cellSize * 0.3);
-    const eyeColor = COLORS.bg;
-
-    ctx.fillStyle = eyeColor;
-    let eye1x, eye1y, eye2x, eye2y;
-    const cx = hx + cellSize / 2;
-    const cy = hy + cellSize / 2;
-
+    const cx = hx + cellSize / 2, cy = hy + cellSize / 2;
+    ctx.fillStyle = COLORS.bg;
+    let e1x, e1y, e2x, e2y;
     switch (direction) {
-        case 'right':
-            eye1x = cx + eyeOff; eye1y = cy - eyeOff;
-            eye2x = cx + eyeOff; eye2y = cy + eyeOff;
-            break;
-        case 'left':
-            eye1x = cx - eyeOff; eye1y = cy - eyeOff;
-            eye2x = cx - eyeOff; eye2y = cy + eyeOff;
-            break;
-        case 'up':
-            eye1x = cx - eyeOff; eye1y = cy - eyeOff;
-            eye2x = cx + eyeOff; eye2y = cy - eyeOff;
-            break;
-        case 'down':
-            eye1x = cx - eyeOff; eye1y = cy + eyeOff;
-            eye2x = cx + eyeOff; eye2y = cy + eyeOff;
-            break;
+        case 'right': e1x = cx + eyeOff; e1y = cy - eyeOff; e2x = cx + eyeOff; e2y = cy + eyeOff; break;
+        case 'left':  e1x = cx - eyeOff; e1y = cy - eyeOff; e2x = cx - eyeOff; e2y = cy + eyeOff; break;
+        case 'up':    e1x = cx - eyeOff; e1y = cy - eyeOff; e2x = cx + eyeOff; e2y = cy - eyeOff; break;
+        case 'down':  e1x = cx - eyeOff; e1y = cy + eyeOff; e2x = cx + eyeOff; e2y = cy + eyeOff; break;
     }
-
-    ctx.fillRect(eye1x - eyeSize / 2, eye1y - eyeSize / 2, eyeSize, eyeSize);
-    ctx.fillRect(eye2x - eyeSize / 2, eye2y - eyeSize / 2, eyeSize, eyeSize);
-
-    // Pupils
+    ctx.fillRect(e1x - eyeSize / 2, e1y - eyeSize / 2, eyeSize, eyeSize);
+    ctx.fillRect(e2x - eyeSize / 2, e2y - eyeSize / 2, eyeSize, eyeSize);
     const pupilSize = Math.max(1, Math.floor(eyeSize * 0.5));
-    ctx.fillStyle = darkenColor(COLORS.primary, 0.3);
-    ctx.fillRect(eye1x - pupilSize / 2, eye1y - pupilSize / 2, pupilSize, pupilSize);
-    ctx.fillRect(eye2x - pupilSize / 2, eye2y - pupilSize / 2, pupilSize, pupilSize);
+    ctx.fillStyle = dark;
+    ctx.fillRect(e1x - pupilSize / 2, e1y - pupilSize / 2, pupilSize, pupilSize);
+    ctx.fillRect(e2x - pupilSize / 2, e2y - pupilSize / 2, pupilSize, pupilSize);
+}
+
+function drawTailSegment(sx, sy, idxFromTail, tailLevel, tailLen, dark, light, bodyColor, taperRatio, margin) {
+    const segPad = margin + 1;
+    const segSize = cellSize - segPad * 2;
+    const mid = cellSize / 2;
+    ctx.fillStyle = bodyColor;
+    ctx.fillRect(sx + segPad, sy + segPad, segSize, segSize);
+    if (tailLevel === 1) {
+        ctx.strokeStyle = dark; ctx.lineWidth = Math.max(1, Math.floor(cellSize * 0.04));
+        ctx.strokeRect(sx + segPad + 1, sy + segPad + 1, segSize - 2, segSize - 2);
+    } else if (tailLevel === 2) {
+        const stripeColor = idxFromTail % 2 === 0 ? light : dark;
+        ctx.fillStyle = stripeColor;
+        ctx.fillRect(sx + segPad + 1, sy + segPad + 1, segSize - 2, segSize - 2);
+        if (idxFromTail === 0) {
+            ctx.strokeStyle = light; ctx.lineWidth = Math.max(1, Math.floor(cellSize * 0.06));
+            ctx.strokeRect(sx + segPad + 2, sy + segPad + 2, segSize - 4, segSize - 4);
+        }
+    } else if (tailLevel === 3) {
+        const spikeColor = idxFromTail % 2 === 0 ? light : dark;
+        ctx.fillStyle = spikeColor;
+        ctx.fillRect(sx + segPad + 1, sy + segPad + 1, segSize - 2, segSize - 2);
+        const spike = Math.max(2, Math.floor(cellSize * 0.1));
+        ctx.fillStyle = dark;
+        ctx.fillRect(sx + mid - spike / 2, sy, spike, spike);
+        ctx.fillRect(sx + mid - spike / 2, sy + cellSize - spike, spike, spike);
+        if (idxFromTail === 0) {
+            ctx.fillRect(sx, sy + mid - spike / 2, spike, spike);
+            ctx.fillRect(sx + cellSize - spike, sy + mid - spike / 2, spike, spike);
+        }
+    }
 }
 
 function lerpColor(c1, c2, t) {
@@ -403,6 +456,14 @@ function darkenColor(color, amount) {
     const r = Math.round(color.r * (1 - amount));
     const g = Math.round(color.g * (1 - amount));
     const b = Math.round(color.b * (1 - amount));
+    return `rgb(${r},${g},${b})`;
+}
+
+function lightenColor(color, amount) {
+    if (color.startsWith('#')) color = hexToRgb(color);
+    const r = Math.min(255, Math.round(color.r + (255 - color.r) * amount));
+    const g = Math.min(255, Math.round(color.g + (255 - color.g) * amount));
+    const b = Math.min(255, Math.round(color.b + (255 - color.b) * amount));
     return `rgb(${r},${g},${b})`;
 }
 

@@ -45,16 +45,23 @@ const getWindowTone = (status) => {
     }
 };
 
-const GESTURE_EMOJIS = { Rock: '\u270A', Paper: '\u270B', Scissors: '\u270C\uFE0F', Rest: '\uD83D\uDE0C' };
+const GESTURE_EMOJIS = { Rock: '\u270A', Paper: '\u270B', Scissors: '\u270C\uFE0F', Rest: '\uD83D\uDE0C', SingleBlink: '\uD83D\uDC41\uFE0F', DoubleBlink: '\uD83D\uDC40' };
 
 // --- Sub-components (Memoized) ---
-const Sparkline = React.memo(({ data, color = '#10b981' }) => {
+// timestamps + startTime/endTime allow time-accurate x-positioning to match the chart overlay.
+// Without them the sparkline uses equal index spacing, which drifts for variable-rate sensors (EOG).
+const Sparkline = React.memo(({ data, timestamps, startTime, endTime, color = '#10b981', yMin: propYMin, yMax: propYMax }) => {
     if (!data || data.length < 2) return null;
     const width = 100;
     const height = 30;
-    const min = Math.min(...data);
-    const calculatedMax = Math.max(...data);
+    const hasFixedRange = propYMin != null && propYMax != null && propYMax > propYMin;
+    const min = hasFixedRange ? propYMin : Math.min(...data);
+    const calculatedMax = hasFixedRange ? propYMax : Math.max(...data);
     const range = calculatedMax - min || 1;
+
+    const useTime = Array.isArray(timestamps) && timestamps.length === data.length
+        && startTime != null && endTime != null && endTime > startTime;
+    const tSpan = useTime ? (endTime - startTime) : 0;
 
     // Use a fixed step for downsampling to guarantee performance
     const maxPoints = 50;
@@ -63,7 +70,9 @@ const Sparkline = React.memo(({ data, color = '#10b981' }) => {
     let pathPoints = "";
     for (let i = 0; i < data.length; i += step) {
         const v = data[i];
-        const x = (i / (data.length - 1)) * width;
+        const x = useTime
+            ? Math.min(width, Math.max(0, ((timestamps[i] - startTime) / tSpan) * width))
+            : (i / (data.length - 1)) * width;
         const y = height - ((v - min) / range) * height;
         pathPoints += `${x},${y} `;
     }
@@ -75,11 +84,12 @@ const Sparkline = React.memo(({ data, color = '#10b981' }) => {
     );
 });
 
-const WindowRow = React.memo(({ win, onDelete }) => {
+const WindowRow = React.memo(({ win, onDelete, activeSensor, yMin, yMax }) => {
     const tone = useMemo(() => getWindowTone(win.status), [win.status]);
     const duration = useMemo(() => (win.endTime - win.startTime).toFixed(0), [win.startTime, win.endTime]);
     const canDelete = !['saved', 'correct'].includes(win.status);
     const emoji = GESTURE_EMOJIS[win.label] || '?';
+    const isEOG = activeSensor === 'EOG';
 
     const statusLabel =
         (win.status === 'recording' || win.status === 'pending') ? 'Rec' :
@@ -92,10 +102,11 @@ const WindowRow = React.memo(({ win, onDelete }) => {
     return (
         <div className={`py-1 px-2 rounded-lg border transition-all hover:translate-x-1 animate-in slide-in-from-right-4 fade-in duration-300 ${tone.card}`}>
             <div className="flex items-center gap-2">
-                {/* Emoji + label */}
+                {/* Emoji + label (label hidden for EOG — shown on right instead) */}
+                {/* Emoji + label (label hidden for EOG — shown on right instead) */}
                 <div className="flex flex-col items-center w-10 shrink-0">
                     <span className="text-3xl leading-none">{emoji}</span>
-                    <span className="text-[12px] font-bold uppercase text-muted leading-none mt-1">{win.label}</span>
+                    {!isEOG && <span className="text-[12px] font-bold uppercase text-muted leading-none mt-1">{win.label}</span>}
                 </div>
 
                 {/* Status + duration */}
@@ -112,8 +123,23 @@ const WindowRow = React.memo(({ win, onDelete }) => {
 
                 {/* Sparkline */}
                 <div className="flex-1 h-10 flex items-center justify-center overflow-hidden">
-                    <Sparkline data={win.samples} color={tone.line} />
+                    <Sparkline
+                        data={win.samples}
+                        timestamps={win.timestamps}
+                        startTime={win.startTime}
+                        endTime={win.endTime}
+                        color={tone.line}
+                        yMin={yMin}
+                        yMax={yMax}
+                    />
                 </div>
+
+                {/* EOG class name — right side */}
+                {isEOG && (
+                    <span className="text-[11px] font-bold uppercase text-muted leading-none shrink-0 text-right max-w-[56px]">
+                        {win.label}
+                    </span>
+                )}
 
                 {/* Delete button */}
                 <div className="shrink-0">
@@ -161,6 +187,8 @@ function WindowListPanel({
     perClassLimit = null,
     numClasses = 4,
     onPerClassLimitChange,
+    yMin,
+    yMax,
 }) {
     // Stats calculated in a single pass for efficiency
     const { recordingCount, processedCount, savedCount, batchProcessed, batchSaved } = useMemo(() => {
@@ -291,7 +319,7 @@ function WindowListPanel({
                     </div>
                 ) : (
                     reversedWindows.map((win) => (
-                        <WindowRow key={win.id} win={win} onDelete={onDelete} />
+                        <WindowRow key={win.id} win={win} onDelete={onDelete} activeSensor={activeSensor} yMin={yMin} yMax={yMax} />
                     ))
                 )}
             </div>

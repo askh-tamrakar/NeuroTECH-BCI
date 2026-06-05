@@ -14,6 +14,11 @@ const MAX_POINTS = 60000;
 let channelIndex = -1; // To be set via INIT or SET_CONFIG
 
 const broadcast = new BroadcastChannel('bci-data-stream');
+// Collision channel: tells window worker when a box edge crosses the center line.
+// Left edge at center → capture starts.  Right edge at center → capture stops.
+const collisionChannel = new BroadcastChannel('window-collisions');
+const leftEdgeTriggered = new Set();
+const rightEdgeTriggered = new Set();
 broadcast.onmessage = (e) => {
     if (e.data.type === 'DATA_BATCH' && channelIndex !== -1) {
         const samples = e.data.samples;
@@ -38,6 +43,7 @@ let windows = []; // { id, start, end, type }
 // a smooth slide-in from the right canvas edge even when the chart first learns
 // about a window mid-flight (due to the 300ms worker throttle delay).
 const windowFirstSeenNow = new Map();
+
 let config = {
     timeWindow: 5000, // ms
     yMin: 0,
@@ -105,12 +111,19 @@ self.onmessage = function (e) {
             break;
         case 'UPDATE_WINDOWS':
             windows = payload;
+            const activeIds = new Set(payload.map(w => w.id));
             // Clean up firstSeen entries for windows that are no longer tracked
             if (windowFirstSeenNow.size > 0) {
-                const activeIds = new Set(payload.map(w => w.id));
                 for (const id of windowFirstSeenNow.keys()) {
                     if (!activeIds.has(id)) windowFirstSeenNow.delete(id);
                 }
+            }
+            // Clean up collision tracking for removed windows
+            for (const id of leftEdgeTriggered) {
+                if (!activeIds.has(id)) leftEdgeTriggered.delete(id);
+            }
+            for (const id of rightEdgeTriggered) {
+                if (!activeIds.has(id)) rightEdgeTriggered.delete(id);
             }
             requestRender();
             break;
@@ -435,13 +448,9 @@ function draw() {
         const isError   = win.status === 'error';
         const isAborted = win.status === 'aborted';
 
-        // --- Smooth slide-in from the right ---
-        // The chart first learns about a window ~300ms after it was created (worker
-        // throttle + React chain). By that time the window's left edge (px1) has
-        // already entered the canvas, causing a sudden partial appearance.
-        // Fix: record the chart's `now` when a window is first seen, then synthesize
-        // the missing entry by clamping effectivePx1 to an offset that starts at
-        // `width` and catches up to the real px1 at the same slide speed.
+        // Smooth slide-in from the right edge.
+        // The visual window uses startTime = now + timeWindow/2, so px1 starts
+        // at the right edge and slides left at chart scroll speed.
         let effectivePx1 = px1;
         if (!isFinal && !isError && !isAborted) {
             if (!windowFirstSeenNow.has(win.id)) {
@@ -449,15 +458,36 @@ function draw() {
             }
             const firstSeenNow = windowFirstSeenNow.get(win.id);
             const msElapsed    = Math.max(0, now - firstSeenNow);
-            // How far the right edge has moved since first seen (same px/ms as the chart scroll)
             const catchupPx1   = width - (msElapsed / timeWindow) * drawWidth;
             effectivePx1 = Math.max(px1, catchupPx1);
         }
         const effectivePx2 = effectivePx1 + wFunc;
 
-        // Skip windows entirely off-screen to the left (checked AFTER catchup)
+        // ── Collision detection ──
+        // One-shot per edge per window: fires on the first frame where
+        // the edge crosses the center line.  No timestamps, no wall-clock —
+        // purely pixel position against the center bar.
+        if (!isFinal && !isError && !isAborted) {
+            if (!leftEdgeTriggered.has(win.id) && effectivePx1 <= winCenterPx) {
+                leftEdgeTriggered.add(win.id);
+                collisionChannel.postMessage({
+                    type: 'WINDOW_LEFT_AT_CENTER',
+                    id: win.id,
+                    signalTime: getRenderNow()
+                });
+            }
+            if (!rightEdgeTriggered.has(win.id) && effectivePx2 <= winCenterPx) {
+                rightEdgeTriggered.add(win.id);
+                collisionChannel.postMessage({
+                    type: 'WINDOW_RIGHT_AT_CENTER',
+                    id: win.id,
+                    signalTime: getRenderNow()
+                });
+            }
+        }
+
+        // Skip windows entirely off-screen
         if (effectivePx2 < leftMargin) return;
-        // Still fully off-screen to the right → skip this frame
         if (effectivePx1 >= width) return;
 
         const yTop    = padY;
@@ -528,7 +558,7 @@ function draw() {
 
         // Label — centre within the currently visible portion
         if (win.label) {
-            const GESTURE_EMOJIS = { Rock: '\u270A', Paper: '\u270B', Scissors: '\u270C\uFE0F', Rest: '\uD83D\uDE0C' };
+            const GESTURE_EMOJIS = { Rock: '\u270A', Paper: '\u270B', Scissors: '\u270C\uFE0F', Rest: '\uD83D\uDE0C', SingleBlink: '\uD83D\uDC41\uFE0F', DoubleBlink: '\uD83D\uDC40' };
             const displayLabel   = GESTURE_EMOJIS[win.label] || win.label;
             const visibleLeft  = Math.max(effectivePx1, leftMargin);
             const visibleRight = Math.min(effectivePx2, width);

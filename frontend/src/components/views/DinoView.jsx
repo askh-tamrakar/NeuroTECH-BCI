@@ -305,12 +305,12 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
 
         // When method changes to ML, ensure a model is selected
         if (settings.DETECTION_METHOD === 'ML' && models.length > 0) {
-            // Priority: dino-ml > currently selected > active on backend > first available
-            const preferred = models.find(m => normalizeModelName(m.name) === 'dinoml');
+            // Priority: current selection > preferred dino-ml > active on backend > first available
             const current = models.find(m => m.name === settings.ACTIVE_MODEL);
+            const preferred = models.find(m => normalizeModelName(m.name) === 'dinoml');
             const activeOnBackend = models.find(m => m.active);
 
-            const targetModel = preferred || current || activeOnBackend || models[0];
+            const targetModel = current || preferred || activeOnBackend || models[0];
 
             if (settings.ACTIVE_MODEL !== targetModel.name) {
                 handleSettingChange('ACTIVE_MODEL', targetModel.name);
@@ -1002,7 +1002,11 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
 
         if (currentState === 'ready' || currentState === 'gameOver' || currentState === 'playing') {
             if (currentMode === 'snake') {
-                soundHandler.playSnakeEat();
+                 if (currentState === 'ready' || currentState === 'gameOver') {
+                    soundHandler.playSnakeStart();
+                } else {
+                    soundHandler.playSnakeEat();
+                }
             } else {
                 soundHandler.playDinoJump();
             }
@@ -1447,10 +1451,6 @@ export default function DinoView({ isConnected, wsEvent, isPaused }) {
                                         <div className="flex justify-between items-center">
                                             <span className="text-muted flex items-center gap-1.5"><Eye size={14} className="text-secondary/70" /><Eye size={14} className="text-secondary/70 -ml-2" /> Blink TWICE</span>
                                             <span className="font-bold text-primary flex items-center gap-1"><ChevronLeft size={12} /> Turn Left</span>
-                                        </div>
-                                        <div className="flex justify-between items-center border-t border-border pt-2 mt-2">
-                                            <span className="text-muted flex items-center gap-1.5"><ChevronRight size={14} /><ChevronLeft size={14} /><ChevronUp size={14} /><ChevronDown size={14} /> Arrow Keys</span>
-                                            <span className="font-bold text-primary">Direction</span>
                                         </div>
                                     </>
                                 ) : (

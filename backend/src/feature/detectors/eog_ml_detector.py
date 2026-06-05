@@ -26,7 +26,7 @@ class EOGMLDetector:
             # If no model name provided, check config for current active model
             if model_name is None:
                 try:
-                    from src.utils.config import config_manager
+                    from data.backend.src.utils.config import config_manager
                     model_name = config_manager.get_active_model('EOG')
                 except ImportError:
                     model_name = None
@@ -35,7 +35,7 @@ class EOGMLDetector:
                 model_name = "eog_rf"
 
             # Locate model paths via centralized data directory
-            from src.utils.paths import get_models_dir
+            from data.backend.src.utils.paths import get_models_dir
             models_dir = get_models_dir('EOG')
             
             clean_name = "".join([c for c in model_name if c.isalnum() or c in ('_', '-')])
@@ -98,8 +98,6 @@ class EOGMLDetector:
             
             pred_label = label_map.get(int(self.model.classes_[pred_idx]), 'Unknown')
             
-            print(f"[EOGMLDetector] Probs: {probs} (Classes: {self.model.classes_}) -> Prediction: {pred_label} ({confidence:.2f})")
-            
             if pred_label == 'Rest' or pred_label == 'Unknown':
                 return None
                 
@@ -118,7 +116,6 @@ class EOGMLDetector:
 
         # The Extractor only emits when a potential blink is detected.
         # So we just classify it.
-        print("detecting by ML ")
         return self.predict_class(features)
 
     def update_config(self, config: dict):

@@ -18,7 +18,6 @@ class BlinkExtractor:
         
         # Load thresholds from config
         eog_cfg = config.get("features", {}).get("EOG", {})
-        # User collected data shows ~1000uV blinks, so 300 threshold is reasonable
         self.amp_threshold = eog_cfg.get("amp_threshold", 300.0) 
         self.min_duration_ms = eog_cfg.get("min_duration_ms", 50.0)
         self.max_duration_ms = eog_cfg.get("max_duration_ms", 900.0) 
@@ -31,9 +30,12 @@ class BlinkExtractor:
         self.buffer_size = sr 
         self.buffer = collections.deque(maxlen=self.buffer_size)
         
-        # Baseline estimation (rolling mean)
+        # Adaptive baseline + noise floor
         self.baseline = 0.0
-        self.alpha = 0.001 # Reduced from 0.01 to prevent baseline "following" the blink
+        self.alpha = 0.001  # Slow baseline tracking
+        self.noise_floor = 50.0  # Running noise floor estimate (µV)
+        self.noise_alpha = 0.01  # Faster noise floor adaptation
+        self._adaptive_samples = 0
         
         # State tracking
         self.is_collecting = False
@@ -58,21 +60,27 @@ class BlinkExtractor:
         zero_centered = sample_val - self.baseline
         self.buffer.append(zero_centered)
         
+        # Adaptive noise floor: track RMS of quiet signal (below threshold)
+        abs_val = abs(zero_centered)
+        if abs_val < self.amp_threshold * 0.5 and self._adaptive_samples > self.sr:
+            self.noise_floor = self.noise_alpha * abs_val + (1 - self.noise_alpha) * self.noise_floor
+        self._adaptive_samples += 1
+        
+        # Dynamic threshold: never below 150µV, adapts to 3× noise floor
+        dyn_threshold = max(150.0, self.noise_floor * 3.0)
+        
         # Detection logic:
-        # Start collecting when value exceeds threshold (relative to baseline)
+        # Start collecting when value exceeds dynamic threshold (relative to baseline)
         if not self.is_collecting:
-            if abs(zero_centered) > self.amp_threshold:
+            if abs(zero_centered) > dyn_threshold:
                 self.is_collecting = True
                 self.candidate_window = [zero_centered]
                 self.start_idx = self.current_idx
-                
-                print(f"[Extractor] Candidate start at {self.current_idx} (Val: {zero_centered:.2f})")
         else:
             self.candidate_window.append(zero_centered)
             
-            # Transition to closing:
-            # Instead of closing immediately when below threshold, wait for grace period
-            if abs(zero_centered) < self.amp_threshold / 4:
+            # Transition to closing when signal drops below 1/4 of dynamic threshold
+            if abs(zero_centered) < dyn_threshold / 4:
                 self.silence_samples_count += 1
             else:
                 self.silence_samples_count = 0 # Reset if signal spikes again
@@ -99,8 +107,6 @@ class BlinkExtractor:
                 self.candidate_window = []
                 self.silence_samples_count = 0
                 
-                status = "timed out" if is_timeout else "finished"
-                print(f"[Extractor] Window {status}: {win_len} samples. Peaks: {features.get('peak_count')}")
                 return features
                 
         return None
@@ -171,6 +177,10 @@ class BlinkExtractor:
         self.amp_threshold = eog_cfg.get("amp_threshold", self.amp_threshold)
         self.min_duration_ms = eog_cfg.get("min_duration_ms", self.min_duration_ms)
         self.max_duration_ms = eog_cfg.get("max_duration_ms", self.max_duration_ms)
+
+    def get_noise_floor(self) -> float:
+        """Return the current adaptive noise floor estimate (µV)."""
+        return self.noise_floor
 
     @staticmethod
     def extract_features_smart(data: list | np.ndarray, sr: int) -> dict:

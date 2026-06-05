@@ -29,6 +29,7 @@ except ImportError:
 from .extractors.blink_extractor import BlinkExtractor
 from .detectors.blink_detector import BlinkDetector
 from .detectors.eog_ml_detector import EOGMLDetector
+from .detectors.hybrid_eog_detector import HybridEOGDetector
 from .extractors.rps_extractor import RPSExtractor
 from .detectors.rps_detector import RPSDetector
 from .extractors.trigger_extractor import EEGExtractor
@@ -38,7 +39,7 @@ from .detectors.ecg_detector import ECGDetector
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 try:
-    from src.utils.paths import get_config_dir
+    from data.backend.src.utils.paths import get_config_dir
     _CONFIG_DIR = get_config_dir()
 except ImportError:
     _CONFIG_DIR = PROJECT_ROOT / "config"
@@ -52,7 +53,7 @@ try:
 except ImportError:
     # Try relative path if running as script
     sys.path.append(str(PROJECT_ROOT / "src"))
-    from utils.config import config_manager
+    from data.backend.src.utils.config import config_manager
 
 def load_config():
     # Use the facade to get merged config (Sensor + Features)
@@ -107,6 +108,21 @@ class FeatureRouter:
         if self._pred_log_path.stat().st_size == 0:
             self._pred_log_file.write("iso_time,channel,label,confidence,detection_state\n")
             self._pred_log_file.flush()
+
+        # ── Raw EOG detection log ──
+        self._eog_log_path = PROJECT_ROOT / "logs" / "eog_raw_detections.csv"
+        self._eog_log_file = open(self._eog_log_path, 'a', encoding='utf-8', buffering=1)
+        if self._eog_log_path.stat().st_size == 0:
+            self._eog_log_file.write("iso_time,channel,label,confidence,amplitude_uv,duration_ms,peak_count,verdict\n")
+            self._eog_log_file.flush()
+
+        # ── Console Watcher (CSV-based) + Runtime Commands ──
+        self._watch_sensor = None
+        self._watch_active = True
+        self._watch_lock = threading.Lock()
+        self._cmd_thread = threading.Thread(target=self._console_cmd_loop, daemon=True)
+        self._cmd_thread.start()
+        print("\n[cmds]  watch <emg|eog>  │  watch off  │  sensor <EMG|EOG> on|off  │  stats\n")
 
 
     def resolve_stream(self):
@@ -166,9 +182,12 @@ class FeatureRouter:
                 ch_label = info.get("label", ch_key)
 
                 if sensor == "EOG":
-                    eog_method = self.config.get("features", {}).get("EOG", {}).get("detection_method", "Threshold")
+                    eog_method = self.config.get("features", {}).get("EOG", {}).get("detection_method", "Hybrid")
                     extractor  = BlinkExtractor(i, self.config, self.sr)
-                    if eog_method == "ML":
+                    if eog_method == "Hybrid":
+                        detector = HybridEOGDetector(self.config)
+                        detail   = "Hybrid (ML+Rules+Gate)"
+                    elif eog_method == "ML":
                         try:
                             model_name = config_manager.get_active_model("EOG") or "eog_rf"
                         except Exception:
@@ -295,8 +314,20 @@ class FeatureRouter:
                                         self._emit_event(confirmed_label, ch_idx, sensor_type, features, ts)
                                         
                                 elif sensor_type == "EOG":
+                                    # Feed adaptive noise floor to hybrid detector
+                                    if isinstance(detector, HybridEOGDetector):
+                                        detector.set_noise_floor(extractor.get_noise_floor())
                                     if isinstance(detection_result, str) and detection_result:
                                         self._emit_event(detection_result, ch_idx, sensor_type, features, ts)
+                                        # ── Raw EOG log ──
+                                        eog_conf = getattr(detector, 'last_confidence', 0.0)
+                                        verdict = getattr(detector, '_last_verdict', 'accepted')
+                                        self._eog_log_file.write(
+                                            f"{time.strftime('%Y-%m-%dT%H:%M:%S.')}{int(time.time()*1000)%1000:03d},"
+                                            f"ch{ch_idx},{detection_result},{eog_conf:.4f},"
+                                            f"{features.get('amplitude',0):.1f},{features.get('duration_ms',0):.1f},"
+                                            f"{features.get('peak_count',1)},{verdict}\n"
+                                        )
                                 elif sensor_type == "EEG":
                                     if detection_result:
                                         self._emit_event(detection_result, ch_idx, sensor_type, features, ts)
@@ -319,9 +350,127 @@ class FeatureRouter:
                 print(f"[FeatureRouter] [WARNING] Error: {e}")
                 time.sleep(0.1)
 
-    def _emit_event(self, event_name: str, ch_idx: int, sensor_type: str, features: dict, ts: float, extra_data: dict = None):
-        """Helper to validate, de-duplicate, and emit events."""
-        if not event_name or not isinstance(event_name, str) or not event_name.strip():
+    # ── Console Watcher (CSV-based, reads log files for real-time display) ──
+
+    def _start_watcher(self, sensor_type: str):
+        """Start the CSV watcher thread for a sensor type."""
+        sensor = sensor_type.upper()
+        if sensor == "EMG":
+            path = self._pred_log_path
+        elif sensor == "EOG":
+            path = self._eog_log_path
+        else:
+            print(f"[cmds] No CSV log for sensor: {sensor}")
+            return
+
+        if not path.exists():
+            print(f"[cmds] Log file not found: {path}")
+            return
+
+        self._watch_sensor = sensor
+        t = threading.Thread(target=self._csv_watch_loop, args=(path, sensor), daemon=True)
+        t.start()
+        print(f"\n[cmds] Watching {sensor} — reading {path.name}")
+
+    def _csv_watch_loop(self, path, sensor):
+        """Background thread: tail the CSV file and ANSI-refresh the display."""
+        last_pos = path.stat().st_size  # start from current end
+        last_lines = []
+        max_lines = 5
+
+        # Print header once
+        sys.stdout.write(f"\n═══ {sensor} Detections (live) ═══\n")
+        sys.stdout.flush()
+
+        while self._watch_active and self._watch_sensor == sensor:
+            try:
+                current_size = path.stat().st_size
+                if current_size > last_pos:
+                    with open(path, 'r', encoding='utf-8') as f:
+                        f.seek(last_pos)
+                        new_data = f.read(current_size - last_pos)
+                        last_pos = current_size
+                        for line in new_data.strip().split('\n'):
+                            line = line.strip()
+                            if line and not line.startswith('iso_time'):
+                                # Shorten timestamp for display
+                                parts = line.split(',')
+                                if len(parts) >= 3:
+                                    ts = parts[0].split('T')[1][:12] if 'T' in parts[0] else parts[0][:12]
+                                    label = parts[2]
+                                    conf = parts[3] if len(parts) > 3 else ''
+                                    extra = ' | '.join(parts[4:7]) if len(parts) > 6 else ' | '.join(parts[4:])
+                                    last_lines.append(f"  {ts}  {label:<12}  conf={conf}  {extra}")
+                                    if len(last_lines) > max_lines:
+                                        last_lines = last_lines[-max_lines:]
+
+                    # ANSI refresh: clear previous, reprint
+                    self._render_watch(sensor, last_lines)
+                time.sleep(0.3)
+            except Exception:
+                time.sleep(0.5)
+
+    def _render_watch(self, sensor, lines):
+        """ANSI-refresh the last N lines."""
+        with self._watch_lock:
+            out = [f"\r\033[K═══ {sensor} Detections (last {len(lines)}) ═══"]
+            for l in lines:
+                out.append(f"\r\033[K{l}")
+            out.append(f"\r\033[K{'─' * 50}")
+            sys.stdout.write("\n".join(out) + "\n")
+            sys.stdout.flush()
+
+    def _console_cmd_loop(self):
+        """Background thread: read stdin for runtime commands."""
+        import select
+        print("[cmds] Ready for commands...")
+        while self._watch_active:
+            try:
+                if select.select([sys.stdin], [], [], 0.5)[0]:
+                    cmd = sys.stdin.readline().strip().lower()
+                    if not cmd:
+                        continue
+
+                    if cmd.startswith("watch "):
+                        target = cmd.split()[1]
+                        if target == "off":
+                            self._watch_sensor = None
+                            print("\n[cmds] Watching stopped.")
+                        elif target in ("emg", "eog"):
+                            self._start_watcher(target)
+                        else:
+                            print(f"\n[cmds] Unknown sensor: {target}. Try: emg, eog")
+
+                    elif cmd.startswith("sensor "):
+                        parts = cmd.split()
+                        if len(parts) >= 3:
+                            stype = parts[1].upper()
+                            action = parts[2]
+                            if stype in ("EMG", "EOG", "EEG", "ECG") and action in ("on", "off"):
+                                is_on = (action == "on")
+                                try:
+                                    state = config_manager.get_detection_state()
+                                    state[stype] = is_on
+                                    from data.backend.src.server.server.config_manager import set_detection_state_map
+                                    set_detection_state_map(state)
+                                    print(f"\n[cmds] {stype} → {'ON' if is_on else 'OFF'}")
+                                except Exception as e:
+                                    print(f"\n[cmds] Error: {e}")
+
+                    elif cmd == "stats":
+                        state = config_manager.get_detection_state()
+                        print(f"\n[cmds] Detection state: {state}")
+
+                    elif cmd in ("q", "quit", "exit", "help"):
+                        print("\n[cmds]  watch <emg|eog>  |  watch off  |  sensor <EMG|EOG> on|off  |  stats")
+
+                    elif cmd:
+                        print(f"\n[cmds] Unknown: {cmd}  (try 'help')")
+
+            except Exception:
+                pass
+
+    # ── Event Emission ──────────────────────────────────────────────────
             return
 
         state_key = f"{ch_idx}_{sensor_type}"

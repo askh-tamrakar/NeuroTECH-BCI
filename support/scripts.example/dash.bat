@@ -1,7 +1,7 @@
 @echo off 
 cls
 echo [Dashboard] Starting Frontend Development Server...
-pushd "D:\Neuro Science\NeuroTECH-BCI\frontend"
+pushd "<path to your repo on local machine>"
 echo [Dashboard] Directory: %CD%
 npm run dev
 popd

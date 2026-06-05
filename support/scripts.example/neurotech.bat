@@ -1,14 +1,14 @@
 @echo off
 cls 
-pushd "D:\Neuro Science\NeuroTECH-BCI\backend\"
+pushd "<path to your repo on local machine>\backend\"
 
 :: Explicitly target the venus environment interpreter to resolve path handling issues
-set "pluto_PYTHON=E:\miniforge3\envs\neurotech\python.exe"
+set "your_conda_env_name_PYTHON=<path to your conda environment>\envs\neurotech\python.exe"
 
-if exist "%pluto_PYTHON%" (
-    "%pluto_PYTHON%" pipeline.py %*
+if exist "%your_conda_env_name_PYTHON%" (
+    "%your_conda_env_name_PYTHON%" pipeline.py %*
 ) else (
-    echo [NeuroTECH] WARNING: Venus environment not found at %pluto_PYTHON%.
+    echo [NeuroTECH] WARNING: Venus environment not found at %your_conda_env_name_PYTHON%.
     echo [NeuroTECH] Attempting to use system 'python'...
     python pipeline.py %*
 )

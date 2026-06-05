@@ -1,12 +1,18 @@
 @echo off
 cls
 echo [NeuroBench] Starting Benchmarking Utility...
-echo [NeuroBench] Running: python "D:\Neuro Science\NeuroTECH-BCI\backend\src\utils\neurobench.py"
+pushd "<path to your repo on local machine>\backend\"
 
-python "D:\Neuro Science\NeuroTECH-BCI\backend\src\utils\neurobench.py"
+:: Explicitly target the venus environment interpreter to resolve path handling issues
+set "your_conda_env_name_PYTHON= <path to your conda environment>\envs\neurotech\python.exe"
 
-echo [NeuroBench] Working Directory: %CD%
-echo [NeuroBench] RUNNING:python -m src.utils.neurobench
+if exist "%set "your_conda_env_name_PYTHON%" (
+    "your_conda_env_name_PYTHON%" -m src.utils.neurobench
+) else (
+    echo [NeuroBench] WARNING: Venus environment not found at %your_conda_env_name_PYTHON%.
+    echo [NeuroBench] Attempting to use system 'python'... python -m src.utils.neurobench %*
+)
 
-python -m src.utils.neurobench
-
+popd
+echo [NeuroTECH] NeuroBench session ended.
+if errorlevel 1 pause

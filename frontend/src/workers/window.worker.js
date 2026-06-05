@@ -25,8 +25,27 @@ let prevSignalTime = 0; // Track previous signal time for jump detection
 const MAX_WINDOWS = 2000;
 const PREVIEW_POINTS = 72;
 
-// Pending collection queue: windows waiting for signal time to pass their endTime
-let pendingCollections = [];
+// Collision-based capture: chart worker broadcasts when a window's edges
+// cross the center line.  No timestamps, no wall-clock — pure pixel physics.
+const collisionChannel = new BroadcastChannel('window-collisions');
+const captureStarts = {};  // id → signalTime (left edge at center)
+
+collisionChannel.onmessage = (e) => {
+    const { type, id, signalTime } = e.data;
+    if (deletedWindowIds.has(id)) return;
+    if (type === 'WINDOW_LEFT_AT_CENTER') {
+        captureStarts[id] = signalTime;
+    } else if (type === 'WINDOW_RIGHT_AT_CENTER') {
+        const start = captureStarts[id];
+        if (start != null && !deletedWindowIds.has(id)) {
+            self.postMessage({
+                type: 'REQUEST_SAMPLES',
+                payload: { id, start, end: signalTime, delay: 0 }
+            });
+        }
+        delete captureStarts[id];
+    }
+};
 
 // --- Message Handler ---
 self.onmessage = function (e) {
@@ -69,14 +88,6 @@ self.onmessage = function (e) {
         case 'UPDATE_SIGNAL_TIME':
             prevSignalTime = latestSignalTime;
             latestSignalTime = payload;
-            
-            // Detect large timestamp jumps (>3s) — invalidate stale pending collections
-            if (prevSignalTime > 0 && Math.abs(latestSignalTime - prevSignalTime) > 3000) {
-                pendingCollections = [];
-            }
-            
-            // Signal-time-based collection: check if any pending windows are ready
-            checkPendingCollections();
             break;
         case 'START_WINDOWING':
             if (payload?.label !== undefined) targetLabel = payload.label;
@@ -113,7 +124,6 @@ self.onmessage = function (e) {
         case 'CLEAR_ALL_WINDOWS':
             markedWindows.forEach((window) => deletedWindowIds.add(window.id));
             markedWindows = [];
-            pendingCollections = [];
             notifyWindowsUpdate();
             break;
         case 'GET_WINDOWS_FULL':
@@ -169,19 +179,23 @@ function startAutoWindowing(options = {}) {
             return;
         }
 
+        // Visual: box slides from right edge to center over timeWindow/2 ms.
+        // Capture timing is handled by chart worker collision detection.
         const delayToCenter = Math.round(timeWindow / 2);
-        const start = latestSignalTime + delayToCenter;
-        const end = start + windowDuration;
+        const visualStart = latestSignalTime + delayToCenter;
+        const visualEnd = visualStart + windowDuration;
 
         const labelForWindow = getLabelForWindow();
+        const winId = Math.random().toString(36).substr(2, 9);
+        const createdAt = Date.now();
 
         const newWindow = {
-            id: Math.random().toString(36).substr(2, 9),
-            createdAtMs: Date.now(),
+            id: winId,
+            createdAtMs: createdAt,
             sensor: activeSensor,
             mode: mode === 'collection' ? 'collection' : 'test',
-            startTime: start,
-            endTime: end,
+            startTime: visualStart,
+            endTime: visualEnd,
             label: labelForWindow,
             channel: activeChannelIndex,
             status: 'pending',
@@ -194,14 +208,8 @@ function startAutoWindowing(options = {}) {
         markedWindows = [...markedWindows, newWindow].slice(-MAX_WINDOWS);
         notifyWindowsUpdate();
 
-        // Queue for signal-time-based collection instead of wall-clock setTimeout.
-        // The window will be collected when latestSignalTime passes endTime + buffer.
-        pendingCollections.push({
-            id: newWindow.id,
-            start,
-            end,
-            createdAt: Date.now()
-        });
+        // Capture scheduling is handled by the chart worker's collision
+        // detection — no setTimeout, no timestamps, no drift.
 
         windowTimer = setTimeout(createNextWindow, cadenceMs);
     };
@@ -214,14 +222,7 @@ function stopAutoWindowing(cancelPending = false) {
         clearTimeout(windowTimer);
         windowTimer = null;
     }
-    // cancelPending=true: explicit user stop or starting a fresh run.
-    //   Wipe pendingCollections so stale windows don't inflate the count on
-    //   resume and map them to error so the produced count stays consistent.
-    // cancelPending=false (default): auto-stop because count reached the limit.
-    //   The windows that were already scheduled MUST be allowed to finish
-    //   collection — do NOT clear pendingCollections or mark them error.
     if (cancelPending) {
-        pendingCollections = [];
         markedWindows = markedWindows.map(w =>
             (w.status === 'pending' || w.status === 'recording')
                 ? { ...w, status: 'aborted' }
@@ -232,44 +233,6 @@ function stopAutoWindowing(cancelPending = false) {
 
 // Signal-time-based collection: fires REQUEST_SAMPLES only when the
 // data stream has actually advanced past the window's endTime.
-// This replaces the old wall-clock setTimeout approach that would fire
-// before data had actually arrived (causing "error" status windows).
-function checkPendingCollections() {
-    if (pendingCollections.length === 0) return;
-    
-    const COLLECTION_BUFFER_MS = 200; // Wait 200ms past endTime for safety
-    const STALE_TIMEOUT_MS = 30000;   // Expire after 30s wall-clock to avoid leaks
-    const now = Date.now();
-    
-    const ready = [];
-    const remaining = [];
-    
-    for (const pc of pendingCollections) {
-        if (deletedWindowIds.has(pc.id)) continue; // Skip deleted
-        
-        if (latestSignalTime >= pc.end + COLLECTION_BUFFER_MS) {
-            ready.push(pc);
-        } else if (now - pc.createdAt > STALE_TIMEOUT_MS) {
-            // Timed out — mark as error
-            self.postMessage({
-                type: 'REQUEST_SAMPLES',
-                payload: { id: pc.id, start: pc.start, end: pc.end, delay: 0 }
-            });
-        } else {
-            remaining.push(pc);
-        }
-    }
-    
-    pendingCollections = remaining;
-    
-    for (const pc of ready) {
-        self.postMessage({
-            type: 'REQUEST_SAMPLES',
-            payload: { id: pc.id, start: pc.start, end: pc.end, delay: 0 }
-        });
-    }
-}
-
 function getLabelForWindow() {
     if (mode === 'test') {
         const LABELS = {
@@ -376,6 +339,12 @@ function toWindowSummary(window) {
     return {
         ...rest,
         samples: Array.isArray(previewSamples) ? previewSamples.slice() : downsampleSamples(samples || []),
+        timestamps: Array.isArray(timestamps) && timestamps.length > 0
+            ? downsampleTimestamps(timestamps)
+            : (Array.isArray(previewSamples) && previewSamples.length > 0 && rest.startTime != null && rest.endTime != null
+                ? Array.from({ length: previewSamples.length }, (_, i) =>
+                    rest.startTime + (i / Math.max(1, previewSamples.length - 1)) * (rest.endTime - rest.startTime))
+                : []),
     };
 }
 
@@ -405,5 +374,19 @@ function downsampleSamples(samples, maxPoints = PREVIEW_POINTS) {
     return Array.from({ length: maxPoints }, (_, index) => {
         const sourceIndex = Math.round((index / (maxPoints - 1)) * lastIndex);
         return Number(samples[sourceIndex] || 0);
+    });
+}
+
+// Mirrors downsampleSamples — uses identical source indices so timestamps[i]
+// always corresponds to the same sample point as previewSamples[i].
+function downsampleTimestamps(timestamps, maxPoints = PREVIEW_POINTS) {
+    if (!Array.isArray(timestamps) || timestamps.length === 0) return [];
+    if (timestamps.length <= maxPoints) return timestamps.slice();
+    if (maxPoints <= 1) return [timestamps[0]];
+
+    const lastIndex = timestamps.length - 1;
+    return Array.from({ length: maxPoints }, (_, index) => {
+        const sourceIndex = Math.round((index / (maxPoints - 1)) * lastIndex);
+        return timestamps[sourceIndex];
     });
 }

@@ -415,12 +415,10 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
                 if (incomingTs && incomingTs > 0) {
                     latestSignalTimeRef.current = incomingTs;
                     setDataLastUpdated(Date.now());
-
-                    const now = Date.now();
-                    if (now - lastTimeUpdateRef.current > 50) {
-                        windowWorkerRef.current?.postMessage({ type: 'UPDATE_SIGNAL_TIME', payload: incomingTs });
-                        lastTimeUpdateRef.current = now;
-                    }
+                    // No throttle: window worker must stay in sync with chart's lastTsHead.
+                    // Throttling here caused latestSignalTime to lag the chart by up to 50ms,
+                    // making captureStart land before the visual center line crossing.
+                    windowWorkerRef.current?.postMessage({ type: 'UPDATE_SIGNAL_TIME', payload: incomingTs });
                 }
             } else if (type === 'STATUS') {
                 if (payload === 'error' && error) {
@@ -894,7 +892,10 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
             setAutoLimit(prev => Math.max(prev, 24));
         } else if (sensor === 'EMG') {
             setWindowDuration(prev => [900, 1200, 1500, 1800].includes(prev) ? prev : 900);
-        } else if (sensor !== 'EEG' && mode === 'recorded') {
+        } else if (sensor === 'EOG') {
+            setWindowDuration(prev => [500, 1000, 1500, 2000].includes(prev) ? prev : 1000);
+        }
+        if (sensor !== 'EEG' && mode === 'recorded') {
             setMode('collection');
         }
         sessionWorkerRef.current?.postMessage({ type: 'SET_SENSOR', payload: sensor });
@@ -1778,12 +1779,8 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
 
         latestSignalTimeRef.current = incomingTs;
 
-        // Throttle the update to the window worker to 10Hz
-        const now = Date.now();
-        if (now - lastTimeUpdateRef.current > 100) {
-            windowWorkerRef.current?.postMessage({ type: 'UPDATE_SIGNAL_TIME', payload: incomingTs });
-            lastTimeUpdateRef.current = now;
-        }
+        // No throttle: window worker must stay in sync with chart's lastTsHead.
+        windowWorkerRef.current?.postMessage({ type: 'UPDATE_SIGNAL_TIME', payload: incomingTs });
     }, [wsData]);
 
     // Sync Windows to Worker
@@ -2735,6 +2732,8 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
                                             progressTotal={autoCalibrate ? numBatches : (isCalibrationMode ? calibrationTotal : autoLimit)}
                                             progressPercent={autoCalibrate ? batchProgressPercent : manualProgressPercent}
                                             currentBatchIndex={currentBatchIndex}
+                                            yMin={currentYDomain[0]}
+                                            yMax={currentYDomain[1]}
                                         />
                                     </div>
                                 </div>
@@ -2756,6 +2755,8 @@ export default function DataCollectionView({ wsData, config: initialConfig, wsUr
                             onAutoCalibrateChange={setAutoCalibrate}
                             onClearSaved={handleAppendSamples}
                             onDeleteAll={handleClearAllWindows}
+                            yMin={currentYDomain[0]}
+                            yMax={currentYDomain[1]}
                             onRunCalibration={runCalibration}
                             runInProgress={runInProgress}
                             progressMode={autoCalibrate ? 'batches' : 'captures'}
