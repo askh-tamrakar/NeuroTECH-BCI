@@ -14,6 +14,7 @@ export default function LiveView({ wsData, wsEvent, config, isPaused, wsUrl, rec
   const showGrid = config?.display?.showGrid ?? true
   const channelMapping = config?.channel_mapping || {}
   const numChannels = 2
+  const defaultColor = ''
 
   // Channel Configuration State (Zoom & Range)
   const [channelConfig, setChannelConfig] = useState(() => {
@@ -121,7 +122,7 @@ export default function LiveView({ wsData, wsEvent, config, isPaused, wsUrl, rec
         if (!next[chIdx]) {
           const sensorDefaults = { EMG: { min: 1, max: 300 }, EEG: { min: 1, max: 50 }, EOG: { min: 1, max: 20 }, ECG: { min: 0, max: 30 } }
           const sensorName = config?.channel_mapping?.[`ch${chIdx}`]?.sensor || 'EEG'
-          
+
           next[chIdx] = {
             zoom: 1,
             manualRange: "",
@@ -165,8 +166,8 @@ export default function LiveView({ wsData, wsEvent, config, isPaused, wsUrl, rec
   }, [])
 
   useEffect(() => {
-    CalibrationApi.togglePrediction('EMG', true).catch(() => {})
-    CalibrationApi.togglePrediction('ECG', true).catch(() => {})
+    CalibrationApi.togglePrediction('EMG', true).catch(() => { })
+    CalibrationApi.togglePrediction('ECG', true).catch(() => { })
     return () => {
       CalibrationApi.togglePrediction('ALL', false).catch(() => { })
     }
