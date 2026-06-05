@@ -2,7 +2,7 @@
   "active_models": {
     "EEG": "Neo",
     "EMG": "Neo",
-    "EOG": "dino-ml"
+    "EOG": "xgBoostedEye"
   },
   "adc_settings": {
     "resolution_bits": 14,
@@ -12,7 +12,7 @@
     "ch0": {
       "enabled": true,
       "label": "Fp1 / Oz (Ref: A1, A2)",
-      "sensor": "EMG"
+      "sensor": "EOG"
     },
     "ch1": {
       "enabled": true,
