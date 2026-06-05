@@ -40,7 +40,7 @@ class RPSExtractor:
         """
         Static method for stateless feature extraction.
         """
-        if not window or len(window) == 0:
+        if window is None or len(window) == 0:
             return {}
 
         # 0. Robustness: Convert to numpy and handle NaN/Inf in raw data

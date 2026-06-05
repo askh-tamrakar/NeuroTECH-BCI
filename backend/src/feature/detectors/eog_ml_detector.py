@@ -26,7 +26,7 @@ class EOGMLDetector:
             # If no model name provided, check config for current active model
             if model_name is None:
                 try:
-                    from data.backend.src.utils.config import config_manager
+                    from src.utils.config import config_manager
                     model_name = config_manager.get_active_model('EOG')
                 except ImportError:
                     model_name = None
@@ -35,7 +35,7 @@ class EOGMLDetector:
                 model_name = "eog_rf"
 
             # Locate model paths via centralized data directory
-            from data.backend.src.utils.paths import get_models_dir
+            from src.utils.paths import get_models_dir
             models_dir = get_models_dir('EOG')
             
             clean_name = "".join([c for c in model_name if c.isalnum() or c in ('_', '-')])

@@ -353,7 +353,7 @@ class FeatureRouter:
     # ── Console Watcher (CSV-based, reads log files for real-time display) ──
 
     def _start_watcher(self, sensor_type: str):
-        """Start the CSV watcher thread for a sensor type."""
+        """Start the CSV watcher thread for a sensor type. Stops any existing watcher first."""
         sensor = sensor_type.upper()
         if sensor == "EMG":
             path = self._pred_log_path
@@ -367,24 +367,27 @@ class FeatureRouter:
             print(f"[cmds] Log file not found: {path}")
             return
 
+        # Stop any existing watcher and wait for its thread to exit
+        old_sensor = self._watch_sensor
+        self._watch_sensor = None
+        time.sleep(0.1)  # let old thread notice and exit its while loop
+
         self._watch_sensor = sensor
         t = threading.Thread(target=self._csv_watch_loop, args=(path, sensor), daemon=True)
         t.start()
-        print(f"\n[cmds] Watching {sensor} — reading {path.name}")
+        print(f"\n[cmds] Watching {sensor} — reading {path.name}  (type 'watch off' to stop)")
 
     def _csv_watch_loop(self, path, sensor):
-        """Background thread: tail the CSV file and ANSI-refresh the display."""
+        """Background thread: tail the CSV file and ANSI-refresh the display in-place."""
         last_pos = path.stat().st_size  # start from current end
         last_lines = []
         max_lines = 5
-
-        # Print header once
-        sys.stdout.write(f"\n═══ {sensor} Detections (live) ═══\n")
-        sys.stdout.flush()
+        prev_line_count = 0  # track how many lines we printed last time for ANSI cursor-up
 
         while self._watch_active and self._watch_sensor == sensor:
             try:
                 current_size = path.stat().st_size
+                new_lines_added = False
                 if current_size > last_pos:
                     with open(path, 'r', encoding='utf-8') as f:
                         f.seek(last_pos)
@@ -393,7 +396,6 @@ class FeatureRouter:
                         for line in new_data.strip().split('\n'):
                             line = line.strip()
                             if line and not line.startswith('iso_time'):
-                                # Shorten timestamp for display
                                 parts = line.split(',')
                                 if len(parts) >= 3:
                                     ts = parts[0].split('T')[1][:12] if 'T' in parts[0] else parts[0][:12]
@@ -403,22 +405,33 @@ class FeatureRouter:
                                     last_lines.append(f"  {ts}  {label:<12}  conf={conf}  {extra}")
                                     if len(last_lines) > max_lines:
                                         last_lines = last_lines[-max_lines:]
+                                    new_lines_added = True
 
-                    # ANSI refresh: clear previous, reprint
-                    self._render_watch(sensor, last_lines)
+                if new_lines_added or last_lines:
+                    prev_line_count = self._render_watch(sensor, last_lines, prev_line_count)
                 time.sleep(0.3)
             except Exception:
                 time.sleep(0.5)
 
-    def _render_watch(self, sensor, lines):
-        """ANSI-refresh the last N lines."""
+        # Watcher stopped — clean up
+        if prev_line_count > 0:
+            sys.stdout.write(f"\n[cmds] Watcher for {sensor} stopped.\n")
+            sys.stdout.flush()
+
+    def _render_watch(self, sensor, lines, prev_count):
+        """ANSI-refresh: move cursor up over previous block, reprint. Returns new line count."""
         with self._watch_lock:
+            # Move cursor up over previous render block
+            if prev_count > 0:
+                sys.stdout.write(f"\033[{prev_count}F")  # F = move to beginning of previous line
+            # Render current block
             out = [f"\r\033[K═══ {sensor} Detections (last {len(lines)}) ═══"]
             for l in lines:
                 out.append(f"\r\033[K{l}")
             out.append(f"\r\033[K{'─' * 50}")
             sys.stdout.write("\n".join(out) + "\n")
             sys.stdout.flush()
+            return len(out)
 
     def _console_cmd_loop(self):
         """Background thread: read stdin for runtime commands."""
@@ -431,15 +444,24 @@ class FeatureRouter:
                     if not cmd:
                         continue
 
+                    # Support both "watch eog" and bare "eog"
                     if cmd.startswith("watch "):
                         target = cmd.split()[1]
+                    elif cmd in ("emg", "eog", "eeg", "ecg"):
+                        target = cmd
+                    else:
+                        target = None
+
+                    if target:
                         if target == "off":
                             self._watch_sensor = None
                             print("\n[cmds] Watching stopped.")
                         elif target in ("emg", "eog"):
                             self._start_watcher(target)
+                        elif target in ("eeg", "ecg"):
+                            print(f"\n[cmds] No CSV log yet for {target.upper()} — use EMG or EOG")
                         else:
-                            print(f"\n[cmds] Unknown sensor: {target}. Try: emg, eog")
+                            print(f"\n[cmds] Unknown: {target}")
 
                     elif cmd.startswith("sensor "):
                         parts = cmd.split()
@@ -451,8 +473,13 @@ class FeatureRouter:
                                 try:
                                     state = config_manager.get_detection_state()
                                     state[stype] = is_on
-                                    from data.backend.src.server.server.config_manager import set_detection_state_map
-                                    set_detection_state_map(state)
+                                    # Write to detection_state.json via stdout-parseable format for pipeline.py
+                                    state_path = PROJECT_ROOT.parent / "data" / "config" / "detection_state.json"
+                                    import json
+                                    state_path.parent.mkdir(parents=True, exist_ok=True)
+                                    with open(state_path, 'w') as f:
+                                        json.dump(state, f)
+                                    self.detection_active = state
                                     print(f"\n[cmds] {stype} → {'ON' if is_on else 'OFF'}")
                                 except Exception as e:
                                     print(f"\n[cmds] Error: {e}")
