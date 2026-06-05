@@ -1,1 +1,1 @@
-{"active": false, "EMG": false, "EOG": false, "EEG": false}
+{"active": true, "EMG": true, "EOG": false, "EEG": false, "ECG": false}
