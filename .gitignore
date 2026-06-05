@@ -27,3 +27,9 @@ DIY-Muscle-BioAmp-Shield-main/
 *.mp4
 rejected_models/
 inspire/
+
+# Local machine scripts and runtime configuration
+support/scripts/
+data/config/
+data/config.backup/
+backend/logs/pipeline.log

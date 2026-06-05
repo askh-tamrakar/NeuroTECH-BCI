@@ -1,0 +1,7 @@
+{
+  "active": true,
+  "EMG": true,
+  "EOG": false,
+  "EEG": false,
+  "ECG": true
+}
