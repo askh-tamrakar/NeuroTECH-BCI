@@ -498,6 +498,10 @@ class FeatureRouter:
                 pass
 
     # ── Event Emission ──────────────────────────────────────────────────
+
+    def _emit_event(self, event_name: str, ch_idx: int, sensor_type: str, features: dict, ts: float, extra_data: dict = None):
+        """Helper to validate, de-duplicate, and emit events."""
+        if not event_name or not isinstance(event_name, str) or not event_name.strip():
             return
 
         state_key = f"{ch_idx}_{sensor_type}"
