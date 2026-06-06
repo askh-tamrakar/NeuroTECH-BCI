@@ -7,8 +7,8 @@ from .frontal_detectors import detect_stress_metrics
 
 
 class StressMonitorModule:
-    def process(self, feature_vector):
+    def process(self, feature_vector, meta=None):
         """
         Indices: 2=alpha, 3=beta, 10=stress_index
         """
-        return detect_stress_metrics(feature_vector)
+        return detect_stress_metrics(feature_vector, meta=meta)

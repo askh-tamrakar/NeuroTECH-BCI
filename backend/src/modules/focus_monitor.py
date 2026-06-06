@@ -10,9 +10,9 @@ class FocusMonitorModule:
     def __init__(self):
         self.history = []
         
-    def process(self, feature_vector):
+    def process(self, feature_vector, meta=None):
         """
         Expects feature_vector list.
         Indices: 3=beta, 5=theta_beta_ratio, 11=engagement_index
         """
-        return detect_focus_metrics(feature_vector, self.history)
+        return detect_focus_metrics(feature_vector, self.history, meta=meta)

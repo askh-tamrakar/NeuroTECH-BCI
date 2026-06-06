@@ -46,6 +46,9 @@ const BubbleGameView = ({ result, isConnected, onBackToMenu }) => {
     if (result && result.eeg_mapped !== undefined) setEegMapped(result.eeg_mapped);
   }, [result]);
 
+  const signalQuality = result?.signal_quality ?? 1.0;
+  const isLowSignal = signalQuality < 0.15;
+
   /* ── IMPERATIVE GAME ENGINE ── */
   useEffect(() => {
     if (!containerRef.current) return;
@@ -164,34 +167,38 @@ const BubbleGameView = ({ result, isConnected, onBackToMenu }) => {
       return Math.max(12, Math.round(80 - currentStress * 0.68));
     }
 
-    /* Read EEG data from result ref */
-    let fetchInterval = null;
-    function startLiveStream() {
-      if (fetchInterval) clearInterval(fetchInterval);
-      fetchInterval = setInterval(() => {
-        const ev = resultRef.current;
-        if (!ev) return;
-        const out = ev.output || ev;
-        currentStress = Math.max(0, Math.min(100, out.stress_score ?? currentStress));
-        currentFocus = Math.max(0, Math.min(100, out.focus_score ?? currentFocus));
+    // Running totals for true session averages
+    let focusSum = 0, stressSum = 0, metricSampleCount = 0;
 
-        if (!window._bubbleThrottle || window._bubbleThrottle > 4) {
-          setStressScore(Math.round(currentStress));
-          setFocusScore(Math.round(currentFocus));
-          window._bubbleThrottle = 0;
-        }
-        window._bubbleThrottle = (window._bubbleThrottle || 0) + 1;
-        updateBandPanel(ev);
-      }, 60);
+    /* ── Reactive EEG ingestion (replaces polling setInterval) ── */
+    function ingestResult(ev) {
+      if (!ev) return;
+      currentStress = Math.max(0, Math.min(100, ev.stress_score ?? currentStress));
+      currentFocus = Math.max(0, Math.min(100, ev.focus_score ?? currentFocus));
+
+      // Accumulate for session averages
+      if (gameRunning) {
+        focusSum += currentFocus;
+        stressSum += currentStress;
+        metricSampleCount++;
+      }
+
+      setStressScore(Math.round(currentStress));
+      setFocusScore(Math.round(currentFocus));
+      updateBandPanel(ev);
     }
+
+    // Expose ingestion function on the container ref for the useEffect
+    container._ingestResult = ingestResult;
 
     function updateBandPanel(res) {
       const ids = ['delta', 'theta', 'alpha', 'beta', 'gamma'];
       let bands = [0, 0, 0, 0, 0];
       if (res?.band_powers?.length >= 5) {
         const bp = res.band_powers;
-        const sum = bp.reduce((a, b) => a + b, 0);
-        bands = bp.map(v => sum > 0 ? Math.round((v / sum) * 100) : 0);
+        // Only use first 5 bands (delta..gamma), exclude total power at index 5
+        const sum = bp[0] + bp[1] + bp[2] + bp[3] + bp[4];
+        bands = [0, 1, 2, 3, 4].map(i => sum > 0 ? Math.round((bp[i] / sum) * 100) : 0);
       }
       for (let i = 0; i < 5; i++) {
         const fill = $(`bf-${ids[i]}`); if (fill) fill.style.width = bands[i] + '%';
@@ -289,12 +296,13 @@ const BubbleGameView = ({ result, isConnected, onBackToMenu }) => {
       score = 0; level = 1; combo = 0; maxCombo = 0;
       bubblesPopped = 0; bubblesMissed = 0; bubbles = []; particles = [];
       spawnTimer = 0; autoPopAccum = 0; sessionStart = Date.now();
+      focusSum = 0; stressSum = 0; metricSampleCount = 0;
       const sc = $('score-val'); if (sc) sc.textContent = '0';
       const lv = $('level-val'); if (lv) lv.textContent = '01';
       ['pk-delta','pk-theta','pk-alpha','pk-beta','pk-gamma'].forEach(id => { const e = $(id); if (e) e.textContent = '0%'; });
       setShowGameOver(false);
       initStars(); gameRunning = true;
-      startLiveStream(); loop(); setGlobalRunning(true);
+      loop(); setGlobalRunning(true);
     };
     container.stopGameHandler = () => endGame();
 
@@ -303,6 +311,8 @@ const BubbleGameView = ({ result, isConnected, onBackToMenu }) => {
       if (animId) cancelAnimationFrame(animId);
       const elapsed = Math.round((Date.now() - sessionStart) / 1000);
       const acc = bubblesPopped + bubblesMissed > 0 ? Math.round(bubblesPopped / (bubblesPopped + bubblesMissed) * 100) : 0;
+      const avgF = metricSampleCount > 0 ? Math.round(focusSum / metricSampleCount) : Math.round(currentFocus);
+      const avgS = metricSampleCount > 0 ? Math.round(stressSum / metricSampleCount) : Math.round(currentStress);
       const sg = $('stat-grid');
       if (sg) sg.innerHTML = `
         <div class="bg-[var(--primary)]/5 border border-[var(--primary)]/20 rounded-lg p-3 text-center"><div class="text-[9px] tracking-[3px] text-[var(--teal)] opacity-70 mb-1">SCORE</div><div class="font-display text-xl font-bold text-white">${score.toLocaleString()}</div></div>
@@ -312,21 +322,28 @@ const BubbleGameView = ({ result, isConnected, onBackToMenu }) => {
         <div class="bg-[var(--primary)]/5 border border-[var(--primary)]/20 rounded-lg p-3 text-center"><div class="text-[9px] tracking-[3px] text-[var(--teal)] opacity-70 mb-1">ACCURACY</div><div class="font-display text-xl font-bold text-white">${acc}%</div></div>
         <div class="bg-[var(--primary)]/5 border border-[var(--primary)]/20 rounded-lg p-3 text-center"><div class="text-[9px] tracking-[3px] text-[var(--teal)] opacity-70 mb-1">TIME</div><div class="font-display text-xl font-bold text-white">${elapsed}s</div></div>`;
       setShowGameOver(true);
-      saveSession({ score, level, accuracy: acc, time: elapsed, avgFocus: Math.round(currentFocus), avgStress: Math.round(currentStress), mode: 'NEURAL' });
+      saveSession({ score, level, accuracy: acc, time: elapsed, avgFocus: avgF, avgStress: avgS, mode: 'NEURAL' });
       renderSessionHistory();
     }
 
     initStars(); renderSessionHistory();
-    if (isConnectedRef.current) startLiveStream();
     drawBackground();
 
     return () => {
       window.removeEventListener('resize', resize);
-      if (fetchInterval) clearInterval(fetchInterval);
       if (animId) cancelAnimationFrame(animId);
       gameRunning = false;
     };
   }, []);
+
+  /* ── Reactive EEG ingestion via useEffect ── */
+  useEffect(() => {
+    if (!result || !containerRef.current) return;
+    // Access ingestResult via the container ref to avoid stale closures
+    if (typeof containerRef.current._ingestResult === 'function') {
+      containerRef.current._ingestResult(result);
+    }
+  }, [result]);
 
   return (
     <div className="w-full h-full flex bg-[var(--bg)] overflow-hidden relative select-none" ref={containerRef}>
@@ -334,6 +351,12 @@ const BubbleGameView = ({ result, isConnected, onBackToMenu }) => {
         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[300] flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-500/20 border border-amber-500/40 backdrop-blur-md">
           <AlertTriangle size={16} className="text-amber-400" />
           <span className="text-xs font-bold text-amber-300 tracking-wider">Please map an EEG sensor in Settings for accurate data</span>
+        </div>
+      )}
+      {eegMapped && isLowSignal && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[300] flex items-center gap-2 px-4 py-2 rounded-xl bg-red-500/20 border border-red-500/40 backdrop-blur-md">
+          <AlertTriangle size={16} className="text-red-400" />
+          <span className="text-xs font-bold text-red-300 tracking-wider">Weak EEG signal — check electrode contact</span>
         </div>
       )}
       <div className="flex-grow flex flex-col items-center justify-center relative transition-all duration-300">

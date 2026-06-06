@@ -189,6 +189,7 @@ const EEGDashboardContent = ({ wsEvent, isConnected, wsUrl }) => {
           band_powers: wsEvent.band_powers,
           eeg_mapped: wsEvent.eeg_mapped,
           features: wsEvent.features,
+          signal_quality: wsEvent.signal_quality ?? output.signal_quality ?? 1.0,
         });
       }
       // Priority 2 & 3: Background Router Events (Predictions or Features)

@@ -20,8 +20,16 @@ def _get_mode_manager():
     global _mode_manager
     if _mode_manager is None:
         from src.core.mode_manager import ModeManager
-        sr = getattr(state, 'sr', 512)
-        _mode_manager = ModeManager(sr=sr)
+        # Prefer state.sr; fall back to sensor_config.json; final fallback 250
+        sr = getattr(state, 'sr', None)
+        if sr is None:
+            try:
+                from src.server.server.config_manager import load_config
+                cfg = load_config()
+                sr = cfg.get("sampling_rate", 250)
+            except Exception:
+                sr = 250
+        _mode_manager = ModeManager(sr=int(sr))
     return _mode_manager
 
 

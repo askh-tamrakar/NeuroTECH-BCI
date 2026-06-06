@@ -91,11 +91,11 @@ class MeditationTrainerModule:
             "peak_calm": max(calm_scores) if calm_scores else 0,
         }
 
-    def process(self, feature_vector):
-        meditation = detect_meditation_metrics(feature_vector)
-        stress = detect_stress_metrics(feature_vector)
-        focus = detect_focus_metrics(feature_vector, self.focus_history)
-        mind_state = detect_mind_state(feature_vector)
+    def process(self, feature_vector, meta=None):
+        meditation = detect_meditation_metrics(feature_vector, meta=meta)
+        stress = detect_stress_metrics(feature_vector, meta=meta)
+        focus = detect_focus_metrics(feature_vector, self.focus_history, meta=meta)
+        mind_state = detect_mind_state(feature_vector, meta=meta)
 
         bp_dict = {
             "delta": float(feature_vector[0]) if len(feature_vector) > 0 else 0,

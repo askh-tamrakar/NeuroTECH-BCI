@@ -19,6 +19,11 @@ class MusicHandler {
         this.currentState = null;
         this._generation = 0; // cancellation token for async playStateTrack
 
+        // Minimum seconds a track must play before a state-driven switch is allowed.
+        // Prevents rapid track-hopping during oscillating mind states.
+        this._minTrackDurationMs = 8000;  // 8 seconds
+        this._trackStartedAt = 0;
+
         // State folder track cache: { state: [url, ...] }
         this.stateTracks = {};
         this.baseAudioPath = '/Resources/audio/eeg_soundtrack';
@@ -119,6 +124,17 @@ class MusicHandler {
 
     /** Load and play a random track from the given state folder */
     async playStateTrack(state, volume) {
+        // Enforce minimum track duration — don't switch too soon
+        if (this.isPlaying && this._trackStartedAt > 0) {
+            const elapsed = Date.now() - this._trackStartedAt;
+            if (elapsed < this._minTrackDurationMs) {
+                // Still within min duration: just adjust volume/effects, no switch
+                this.setStateVolume(volume);
+                this.applyStateEffect(state);
+                return;
+            }
+        }
+
         const tracks = this.getTracksForState(state);
         if (tracks.length === 0) return;
 
@@ -143,6 +159,7 @@ class MusicHandler {
         if (this._generation !== myGen) return;
 
         this.currentState = state;
+        this._trackStartedAt = Date.now();
 
         if (this.buffer) {
             this.source = this.ctx.createBufferSource();
@@ -183,6 +200,7 @@ class MusicHandler {
 
     stop() {
         this._generation++; // cancel any in-flight async playStateTrack
+        this._trackStartedAt = 0;
         if (this.source) {
             try { this.source.stop(); } catch (_) {}
             this.source.disconnect();

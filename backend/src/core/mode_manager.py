@@ -7,7 +7,7 @@ import logging
 
 from .preprocessing import EEGPreprocessor
 from .windowing import EEGWindowBuffer
-from .spectral_features import compute_band_powers
+from .spectral_features import compute_band_powers, BandPowerSmoother
 from .feature_vector import compute_feature_vector
 from .fbcca import fbcca
 from ..utils.config import config_manager
@@ -33,6 +33,7 @@ class ModeManager:
         self.window_buffer = None
         self.app_module = None
         self.channel_index = 0
+        self.band_smoother = BandPowerSmoother(buffer_size=32)
         
         # Stimulus settings (Visual)
         self.ssvep_freqs = [8.0, 9.0, 12.0, 14.4, 16.0, 18.0]
@@ -97,6 +98,7 @@ class ModeManager:
     def set_preset_and_view(self, preset_name, view_name):
         self.preset = preset_name
         self.view = view_name
+        self.band_smoother.reset()
         
         preset_lower = (preset_name or "").lower()
 
@@ -186,11 +188,14 @@ class ModeManager:
                 
             elif self.mode == "frontal" and self.app_module:
                 ch_data = filtered_window[:, 0]
-                band_powers = compute_band_powers(ch_data, self.sr)
-                features = compute_feature_vector(band_powers)
-                
-                result = self.app_module.process(features)
-                
+                raw_powers = compute_band_powers(ch_data, self.sr)
+                band_powers = self.band_smoother.update(raw_powers)
+                # Ensure 'total' is preserved from the raw (unsmoothed) for signal quality
+                band_powers['total'] = raw_powers.get('total', 0.0)
+                features, meta = compute_feature_vector(band_powers)
+
+                result = self.app_module.process(features, meta)
+
                 return {
                     "type": "frontal_result",
                     "features": features,
@@ -199,6 +204,8 @@ class ModeManager:
                     "source_channel": self.channel_index,
                     "preset": self.preset,
                     "eeg_mapped": self.has_eeg_channel(),
+                    "signal_quality": meta.get("signal_quality", 0.0),
+                    "total_power": meta.get("total_power", 0.0),
                 }
                 
         return None

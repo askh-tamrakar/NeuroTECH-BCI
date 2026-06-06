@@ -68,12 +68,13 @@ const MusicView = ({ result, onNavigate, onBackToMenu }) => {
   const [eegMapped, setEegMapped] = useState(true);
   const lastStateRef = useRef(null);
 
-  // Extract output data from result
-  const output = result?.output || result || {};
-  const currentState = output.state || result?.state || 'Neutral';
-  const stateLevel = output.state_level ?? 50;
-  const stressScore = output.stress_score ?? 0;
-  const focusScore = output.focus_score ?? 0;
+  // Extract output data from result (spread into eegResult by EEGDashboard)
+  const currentState = result?.state || 'Neutral';
+  const stateLevel = result?.state_level ?? 50;
+  const stressScore = result?.stress_score ?? 0;
+  const focusScore = result?.focus_score ?? 0;
+  const signalQuality = result?.signal_quality ?? 1.0;
+  const isLowSignal = signalQuality < 0.15;
   // State-to-Color Mapping for Visuals
   const stateTheme = useMemo(() => {
     switch (currentState) {
@@ -82,6 +83,7 @@ const MusicView = ({ result, onNavigate, onBackToMenu }) => {
       case 'Relaxed': return { primary: '#22c55e', secondary: '#4ade80', accent: '#86efac', glow: 'rgba(34, 197, 94, 0.5)' };
       case 'Stressed': return { primary: '#f43f5e', secondary: '#fb7185', accent: '#fda4af', glow: 'rgba(244, 63, 94, 0.5)' };
       case 'Drowsy': return { primary: '#f59e0b', secondary: '#fbbf24', accent: '#fcd34d', glow: 'rgba(245, 158, 11, 0.5)' };
+      case 'No Signal': return { primary: '#ef4444', secondary: '#f87171', accent: '#fca5a5', glow: 'rgba(239, 68, 68, 0.4)' };
       default: return { primary: '#94a3b8', secondary: '#cbd5e1', accent: '#e2e8f0', glow: 'rgba(148, 163, 184, 0.3)' };
     }
   }, [currentState]);
@@ -287,6 +289,12 @@ const MusicView = ({ result, onNavigate, onBackToMenu }) => {
         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[300] flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-500/20 border border-amber-500/40 backdrop-blur-md">
           <AlertTriangle size={16} className="text-amber-400" />
           <span className="text-xs font-bold text-amber-300 tracking-wider">Please map an EEG sensor in Settings for accurate data</span>
+        </div>
+      )}
+      {eegMapped && isLowSignal && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[300] flex items-center gap-2 px-4 py-2 rounded-xl bg-red-500/20 border border-red-500/40 backdrop-blur-md">
+          <AlertTriangle size={16} className="text-red-400" />
+          <span className="text-xs font-bold text-red-300 tracking-wider">Weak EEG signal — check electrode contact</span>
         </div>
       )}
 

@@ -46,7 +46,7 @@ function EEGContent() {
   const navigate = useNavigate()
   const location = useLocation()
   const { sidebarMode, setSidebarMode, sidebarSlot, sidebarMiniSlot } = useSidebar()
-  const { lastEvent, streamConnected, activeWsUrl } = useOutletContext()
+  const { lastEvent, lastMessage, streamConnected, activeWsUrl } = useOutletContext()
   const [eegResult, setEegResult] = useState(null)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
 
@@ -81,6 +81,7 @@ function EEGContent() {
           band_powers: lastEvent.band_powers,
           eeg_mapped: lastEvent.eeg_mapped,
           features: lastEvent.features,
+          signal_quality: lastEvent.signal_quality ?? output.signal_quality ?? 1.0,
         });
       } else if (lastEvent.event === 'eeg_prediction' || lastEvent.output?.event === 'eeg_prediction' || lastEvent.features || lastEvent.band_powers) {
         setEegResult(prev => {
@@ -129,7 +130,7 @@ function EEGContent() {
   if (normalizedView === 'music') {
     content = <MusicView result={eegResult} onNavigate={handleSelectView} onBackToMenu={handleBackToMenu} />
   } else if (normalizedView === 'meditation') {
-    content = <MeditationView result={eegResult} wsEvent={lastEvent} wsUrl={streamConnected ? activeWsUrl : null} currentView={normalizedView} onNavigate={handleSelectView} onBackToMenu={handleBackToMenu} />
+    content = <MeditationView result={eegResult} wsEvent={lastEvent} wsMessage={lastMessage} wsUrl={streamConnected ? activeWsUrl : null} currentView={normalizedView} onNavigate={handleSelectView} onBackToMenu={handleBackToMenu} />
   } else if (normalizedView === 'bubble') {
     content = <BubbleGameView result={eegResult} isConnected={streamConnected} onBackToMenu={handleBackToMenu} />
   } else if (normalizedView === 'ssvep') {
