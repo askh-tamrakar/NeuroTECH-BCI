@@ -25,7 +25,7 @@ let bestFoodEaten = 0;
 let cellsTraversed = 0;  // Running count of cells visited
 let gridCols = 20;
 let gridRows = 20;
-let cellSize = 20;
+let cellSize = 21;
 let gridOffsetX = 0;
 let gridOffsetY = 0;
 let snake = [];
@@ -35,8 +35,8 @@ let food = null;
 let tickAccumulator = 0;
 let tickInterval = 200;
 let lastSentScore = 0;
-let appleSprites = []; // Array of 5 ImageBitmaps
-let appleThemeIndex = 0;
+let appleSprites = []; // Array of 5 ImageBitmaps (red, green, yellow, blue, purple)
+let appleThemeIndex = 0; // Which apple to use based on theme
 
 // Tail rattle burst state
 let tailRattleActive = false;
@@ -70,11 +70,11 @@ function initGame() {
     tickInterval = SETTINGS.TICK_INTERVAL;
 
     // Cell size from height (floor to fit within canvas), extend columns for slight overflow
-    const EDGE_EXTRA = 2;
+    const EDGE_EXTRA = 8; // pixels to extend beyond left/right edges
     cellSize = Math.floor(SETTINGS.CANVAS_HEIGHT / SETTINGS.GRID_ROWS);
     gridCols = Math.floor((SETTINGS.CANVAS_WIDTH + EDGE_EXTRA * 2) / cellSize);
     gridRows = SETTINGS.GRID_ROWS;
-    gridOffsetX = -EDGE_EXTRA;
+    gridOffsetX = EDGE_EXTRA;
     gridOffsetY = 2;
 
     // Pick the right apple based on theme primary color hue
@@ -316,74 +316,101 @@ function drawSnake() {
 
     const primary = COLORS.primary;
     const dark = darkenColor(primary, 0.35);
-    const faceColor = lightenColor(primary, 0.35);
+    const faceColor = lightenColor(primary, 0.35); // brighter for head
 
     const tailLevel = foodEaten >= 16 ? 3 : foodEaten >= 10 ? 2 : foodEaten >= 4 ? 1 : 0;
+
+    // Tail length: up to 6 cells for swing; only 2 when snake is short
     let tailLen = Math.min(6, snake.length - 1);
     if (snake.length <= 4) tailLen = 2;
+
+    // 6 discrete taper levels: from paper-thin tip (25%) to near-full (95%)
     const taperSteps = [0.25, 0.35, 0.50, 0.65, 0.80, 0.95];
 
+    // Tail rattle burst logic (only for snakes > 8 cells)
     const now = Date.now();
     if (snake.length > 8 && !tailRattleActive && now > nextRattleTime) {
-        tailRattleActive = true; tailRattleStart = now;
+        tailRattleActive = true;
+        tailRattleStart = now;
         nextRattleTime = now + 2000 + Math.random() * 3000;
     }
-    if (tailRattleActive && now - tailRattleStart > 450) { tailRattleActive = false; }
+    if (tailRattleActive && now - tailRattleStart > 400) {
+        tailRattleActive = false;
+    }
 
+    // Draw body from tail (last) to neck (second from head)
     for (let i = snake.length - 1; i > 0; i--) {
         const seg = snake[i];
         const idxFromTail = snake.length - 1 - i;
         const isTail = idxFromTail < tailLen;
+
+        // Tail rattle: rapid burst with decay, perpendicular to body direction
         let swayX = 0, swayY = 0;
         if (isTail && snake.length > 8 && tailRattleActive) {
             const elapsed = now - tailRattleStart;
             const fade = 1 - elapsed / 450;
             const rapid = Math.sin(now / 8 + idxFromTail * 2.2) * fade;
+            // Hard shake: tip reaches neighbouring cells (~half cellSize)
             const strength = (1 - idxFromTail / tailLen) * (cellSize * 0.55);
-            if (direction === 'left' || direction === 'right') { swayY = rapid * strength; }
-            else { swayX = rapid * strength; }
+            if (direction === 'left' || direction === 'right') {
+                swayY = rapid * strength;
+            } else {
+                swayX = rapid * strength;
+            }
         }
         const sx = gridOffsetX + seg.x * cellSize + swayX;
         const sy = gridOffsetY + seg.y * cellSize + swayY;
 
         if (isTail) {
+            // 4-level taper: each tail segment has a distinct thickness
             const stepIdx = Math.min(idxFromTail, taperSteps.length - 1);
             const taperRatio = taperSteps[stepIdx];
             const margin = (cellSize * (1 - taperRatio)) / 2;
             const segPad = margin + 1;
+
             if (tailLevel >= 1) {
                 drawTailSegment(sx, sy, idxFromTail, tailLevel, tailLen, dark, faceColor, primary, taperRatio, margin);
             } else {
+                // Level 0: just the taper with body color
                 ctx.fillStyle = primary;
                 ctx.fillRect(sx + segPad, sy + segPad, cellSize - segPad * 2, cellSize - segPad * 2);
-                ctx.strokeStyle = dark; ctx.lineWidth = 0.5;
+                ctx.strokeStyle = dark;
+                ctx.lineWidth = 0.5;
                 ctx.strokeRect(sx + segPad, sy + segPad, cellSize - segPad * 2, cellSize - segPad * 2);
             }
         } else {
+            // Regular body segment — plain primary colour
             const bodyPad = Math.max(2, Math.floor(cellSize * 0.08));
             ctx.fillStyle = primary;
             ctx.fillRect(sx + bodyPad, sy + bodyPad, cellSize - bodyPad * 2, cellSize - bodyPad * 2);
             ctx.fillStyle = lightenColor(primary, 0.1);
             ctx.fillRect(sx + bodyPad, sy + bodyPad, cellSize - bodyPad * 2, Math.max(1, Math.floor(cellSize * 0.1)));
-            ctx.strokeStyle = dark; ctx.lineWidth = 0.5;
+            ctx.strokeStyle = dark;
+            ctx.lineWidth = 0.5;
             ctx.strokeRect(sx + bodyPad, sy + bodyPad, cellSize - bodyPad * 2, cellSize - bodyPad * 2);
         }
     }
 
+    // Draw head — brighter face colour
     const head = snake[0];
     const hx = gridOffsetX + head.x * cellSize;
     const hy = gridOffsetY + head.y * cellSize;
     const headPad = Math.max(1, Math.floor(cellSize * 0.06));
+
     ctx.fillStyle = faceColor;
     ctx.fillRect(hx + headPad, hy + headPad, cellSize - headPad * 2, cellSize - headPad * 2);
-    ctx.strokeStyle = dark; ctx.lineWidth = 1.5;
+    ctx.strokeStyle = dark;
+    ctx.lineWidth = 1.5;
     ctx.strokeRect(hx + headPad, hy + headPad, cellSize - headPad * 2, cellSize - headPad * 2);
     ctx.fillStyle = lightenColor(primary, 0.5);
     ctx.fillRect(hx + headPad + 1, hy + headPad + 1, cellSize - headPad * 2 - 2, Math.max(1, Math.floor(cellSize * 0.1)));
 
+    // Eyes
     const eyeSize = Math.max(2, Math.floor(cellSize * 0.15));
     const eyeOff = Math.floor(cellSize * 0.3);
-    const cx = hx + cellSize / 2, cy = hy + cellSize / 2;
+    const cx = hx + cellSize / 2;
+    const cy = hy + cellSize / 2;
+
     ctx.fillStyle = COLORS.bg;
     let e1x, e1y, e2x, e2y;
     switch (direction) {
@@ -394,6 +421,7 @@ function drawSnake() {
     }
     ctx.fillRect(e1x - eyeSize / 2, e1y - eyeSize / 2, eyeSize, eyeSize);
     ctx.fillRect(e2x - eyeSize / 2, e2y - eyeSize / 2, eyeSize, eyeSize);
+
     const pupilSize = Math.max(1, Math.floor(eyeSize * 0.5));
     ctx.fillStyle = dark;
     ctx.fillRect(e1x - pupilSize / 2, e1y - pupilSize / 2, pupilSize, pupilSize);
@@ -404,32 +432,52 @@ function drawTailSegment(sx, sy, idxFromTail, tailLevel, tailLen, dark, light, b
     const segPad = margin + 1;
     const segSize = cellSize - segPad * 2;
     const mid = cellSize / 2;
+
+    // Tapered base (always drawn)
     ctx.fillStyle = bodyColor;
     ctx.fillRect(sx + segPad, sy + segPad, segSize, segSize);
+
+    // Level-specific decorations
     if (tailLevel === 1) {
-        ctx.strokeStyle = dark; ctx.lineWidth = Math.max(1, Math.floor(cellSize * 0.04));
+        // Level 1: subtle rattle rings (thin stripes)
+        ctx.strokeStyle = dark;
+        ctx.lineWidth = Math.max(1, Math.floor(cellSize * 0.04));
         ctx.strokeRect(sx + segPad + 1, sy + segPad + 1, segSize - 2, segSize - 2);
     } else if (tailLevel === 2) {
+        // Level 2: alternating bands
         const stripeColor = idxFromTail % 2 === 0 ? light : dark;
         ctx.fillStyle = stripeColor;
         ctx.fillRect(sx + segPad + 1, sy + segPad + 1, segSize - 2, segSize - 2);
+        // Rattle button at the very tip
         if (idxFromTail === 0) {
-            ctx.strokeStyle = light; ctx.lineWidth = Math.max(1, Math.floor(cellSize * 0.06));
+            ctx.strokeStyle = light;
+            ctx.lineWidth = Math.max(1, Math.floor(cellSize * 0.06));
             ctx.strokeRect(sx + segPad + 2, sy + segPad + 2, segSize - 4, segSize - 4);
         }
     } else if (tailLevel === 3) {
+        // Level 3: spiked tail
         const spikeColor = idxFromTail % 2 === 0 ? light : dark;
         ctx.fillStyle = spikeColor;
         ctx.fillRect(sx + segPad + 1, sy + segPad + 1, segSize - 2, segSize - 2);
+        // Side spikes
         const spike = Math.max(2, Math.floor(cellSize * 0.1));
         ctx.fillStyle = dark;
-        ctx.fillRect(sx + mid - spike / 2, sy, spike, spike);
-        ctx.fillRect(sx + mid - spike / 2, sy + cellSize - spike, spike, spike);
+        ctx.fillRect(sx + mid - spike / 2, sy, spike, spike);                     // top
+        ctx.fillRect(sx + mid - spike / 2, sy + cellSize - spike, spike, spike);  // bottom
         if (idxFromTail === 0) {
-            ctx.fillRect(sx, sy + mid - spike / 2, spike, spike);
-            ctx.fillRect(sx + cellSize - spike, sy + mid - spike / 2, spike, spike);
+            // Tip spike pointing outward
+            ctx.fillRect(sx, sy + mid - spike / 2, spike, spike);                 // left
+            ctx.fillRect(sx + cellSize - spike, sy + mid - spike / 2, spike, spike); // right
         }
     }
+}
+
+function lightenColor(color, amount) {
+    if (color.startsWith('#')) color = hexToRgb(color);
+    const r = Math.min(255, Math.round(color.r + (255 - color.r) * amount));
+    const g = Math.min(255, Math.round(color.g + (255 - color.g) * amount));
+    const b = Math.min(255, Math.round(color.b + (255 - color.b) * amount));
+    return `rgb(${r},${g},${b})`;
 }
 
 function lerpColor(c1, c2, t) {
@@ -459,17 +507,9 @@ function darkenColor(color, amount) {
     return `rgb(${r},${g},${b})`;
 }
 
-function lightenColor(color, amount) {
-    if (color.startsWith('#')) color = hexToRgb(color);
-    const r = Math.min(255, Math.round(color.r + (255 - color.r) * amount));
-    const g = Math.min(255, Math.round(color.g + (255 - color.g) * amount));
-    const b = Math.min(255, Math.round(color.b + (255 - color.b) * amount));
-    return `rgb(${r},${g},${b})`;
-}
-
 function getAppleIndexForTheme(primaryColor) {
-    // Determine which apple (0=red, 1=green, 2=yellow, 3=blue, 4=purple) matches the primary color best
-    if (!primaryColor || primaryColor === '#3b82f6') return 3; // default blue
+    // Match primary color hue to the closest apple (0=red, 1=green, 2=yellow, 3=blue, 4=purple)
+    if (!primaryColor) return 3;
     let hex = primaryColor.trim();
     if (hex.startsWith('#')) hex = hex.slice(1);
     if (hex.length === 3) hex = hex.split('').map(c => c + c).join('');
@@ -482,41 +522,32 @@ function getAppleIndexForTheme(primaryColor) {
     const max = Math.max(r, g, b);
     const min = Math.min(r, g, b);
     const range = max - min;
-    const isGray = range < 40;
+    if (range < 30) return isNight ? 2 : 3; // gray: yellow for dark, blue for light
 
-    if (isGray) {
-        return isNight ? 2 : 3; // yellow for dark, blue for light
+    // Calculate hue (0-360)
+    let hue = 0;
+    if (max === r) {
+        hue = 60 * ((g - b) / range);
+    } else if (max === g) {
+        hue = 60 * (2 + (b - r) / range);
+    } else {
+        hue = 60 * (4 + (r - g) / range);
     }
+    if (hue < 0) hue += 360;
 
-    // Calculate approximate hue to pick the closest apple color
-    // Normalize rgb to 0-1
-    const rn = r / 255, gn = g / 255, bn = b / 255;
+    // Map hue to apples (approximate ranges)
+    // Red:    340-360, 0-20
+    // Yellow: 30-70
+    // Green:  80-160
+    // Blue:   180-260
+    // Purple: 270-330
 
-    // Check each apple color and compute distance
-    // Target colors: red(1,0,0), green(0,1,0), yellow(1,1,0), blue(0,0,1), purple(0.6,0.2,0.8)
-    const targets = [
-        { idx: 0, cr: 1, cg: 0, cb: 0 },     // Red
-        { idx: 1, cr: 0, cg: 1, cb: 0 },     // Green
-        { idx: 2, cr: 1, cg: 1, cb: 0 },     // Yellow
-        { idx: 3, cr: 0, cg: 0, cb: 1 },     // Blue
-        { idx: 4, cr: 0.6, cg: 0.2, cb: 0.8 } // Purple
-    ];
-
-    let bestIdx = 3; // default blue
-    let bestDist = Infinity;
-
-    for (const t of targets) {
-        const dr = rn - t.cr;
-        const dg = gn - t.cg;
-        const db = bn - t.cb;
-        const dist = dr * dr + dg * dg + db * db;
-        if (dist < bestDist) {
-            bestDist = dist;
-            bestIdx = t.idx;
-        }
-    }
-
-    return bestIdx;
+    if (hue >= 340 || hue < 20)  return 0; // Red
+    if (hue >= 20 && hue < 75)   return 2; // Yellow
+    if (hue >= 75 && hue < 170)  return 1; // Green
+    if (hue >= 170 && hue < 265) return 3; // Blue
+    if (hue >= 265 && hue < 340) return 4; // Purple
+    return 3; // fallback blue
 }
 
 function drawOverlay() {
@@ -526,17 +557,9 @@ function drawOverlay() {
     if (gameState === 'ready') {
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.font = 'bold 24px sans-serif';
+        ctx.font = 'bold 38px sans-serif';
         ctx.fillStyle = COLORS.text;
-        ctx.fillText('Blink or Arrow Keys to Start!', width / 2, height / 2 - 30);
-
-        ctx.font = '16px sans-serif';
-        ctx.fillStyle = COLORS.muted;
-        ctx.fillText('Single Blink = Turn Right  •  Double Blink = Turn Left', width / 2, height / 2 + 10);
-
-        ctx.font = '14px sans-serif';
-        ctx.fillStyle = COLORS.muted;
-        ctx.fillText('Arrow Keys = Direction', width / 2, height / 2 + 40);
+        ctx.fillText('Blink to Start', (width / 2) - 18, (height / 2) - 32);
     } else if (gameState === 'paused') {
         // Semi-transparent overlay
         ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';

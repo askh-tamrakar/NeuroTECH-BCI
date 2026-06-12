@@ -5,8 +5,8 @@ const AuthContext = createContext(null)
 // Remote PHP bridge
 const REMOTE_AUTH_URL = 'https://neurotech.withaspire.in/auth.php'
 
-// Local Flask backend — same origin as the app when served through the Python server
-const LOCAL_AUTH_BASE = `${window.location.protocol}//${window.location.hostname}:5000/api/auth`
+// Local Flask backend — use relative path so it works through Vite proxy (:1972) or same-origin (:5005)
+const LOCAL_AUTH_BASE = '/api/auth'
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
